@@ -1,0 +1,12 @@
+[workspace]
+
+members = [
+    "mla_archive",
+    "ed25519_parser",
+    "mlar",
+    "mla-fuzz-afl",
+]
+
+[profile.release]
+opt-level = 'z'     # Optimize for size.
+lto = true          # Enable Link Time Optimization

@@ -1,0 +1,41 @@
+[package]
+name = "mla_archive"
+version = "1.0.0"
+authors = ["Camille Mougey <camille.mougey@ssi.gouv.fr>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rand = "0.7"
+rand_chacha = "0.2"
+brotli = "3.3"
+aes-ctr = "0"
+bitflags = "1.2"
+byteorder = "1.3"
+serde = { version = "1", features = ["derive"] }
+bincode = "~1.2"
+# Crypto needs
+# Version fixed due to avoid conflict dependencies with `aes`, `aes-ctr` and `ghash`
+generic-array = "0.14"
+ghash = "0"
+aes = "0"
+subtle = "2"
+digest = "0"
+# ECC
+x25519-dalek = "0"
+hkdf = "0"
+sha2 = "0"
+zeroize = "1"
+
+[dev-dependencies]
+hex-literal = "0.1"
+aes-gcm = "0"
+aead = "0"
+criterion = "0.3"
+ed25519_parser = { path = "../ed25519_parser" }
+hex = "0.3" # from 0.4, hex comes with dependencies
+
+[[bench]]
+name = "bench_archive"
+harness = false
