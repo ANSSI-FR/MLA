@@ -20,10 +20,10 @@ Repository
 
 This repository contains:
 
-* `mla_archive`: the Rust library implementing MLA reader and writer
-* `mlar`: a Rust utility wrapping `mla_archive` for common actions (create, list, extract, ...)
+* `mla`: the Rust library implementing MLA reader and writer
+* `mlar`: a Rust utility wrapping `mla` for common actions (create, list, extract, ...)
 * `ed25519_parser`: a Rust library for parsing DER/PEM public and private Ed25519 keys (as made by `openssl`)
-* `mla-fuzz-afl` a Rust utility to fuzz `mla_archive`
+* `mla-fuzz-afl` a Rust utility to fuzz `mla`
 * `Dockerfile`, `.gitlab-ci.yml`: Continuous Integration needs
 
 Quick command-line usage
@@ -60,8 +60,8 @@ Quick API usage
 * Create an archive, with compression and encryption:
 ```rust
 use ed25519_parser::parse_openssl_ed25519_pubkey;
-use mla_archive::config::ArchiveWriterConfig;
-use mla_archive::ArchiveWriter;
+use mla::config::ArchiveWriterConfig;
+use mla::ArchiveWriter;
 
 const PUB_KEY: &[u8] = include_bytes!("samples/test25519_pub.pem");
 
@@ -111,8 +111,8 @@ mla.end_file(id_file2).unwrap();
 * Read files from an archive
 ```rust
 use ed25519_parser::parse_openssl_ed25519_privkey;
-use mla_archive::config::ArchiveReaderConfig;
-use mla_archive::ArchiveReader;
+use mla::config::ArchiveReaderConfig;
+use mla::ArchiveReader;
 use std::io;
 
 const PRIV_KEY: &[u8] = include_bytes!("samples/test25519.pem");
@@ -336,7 +336,7 @@ The API provided by the library is then very simple:
 * Get a file
 * Get a file hash
 
-As the need for a less general API might appear, helpers are available in `mla_archive::helpers`, such as:
+As the need for a less general API might appear, helpers are available in `mla::helpers`, such as:
 * `StreamWriter`: Provides a `Write` interface on a `ArchiveWriter` file (could be used when even file chunk sizes are not known, likely with `io::copy`)
 * `linear_extract`: Extract an Archive linearly. Faster way to extract a whole archive, by reducing the amount of costly `seek` operations
 
@@ -373,10 +373,10 @@ Testing
 
 The repository contains:
 
-* unit tests (for `mla_archive` and `ed25519_parser`), testing separately expected behaviors
+* unit tests (for `mla` and `ed25519_parser`), testing separately expected behaviors
 * integration tests (for `mlar`), testing common scenarios, such as `create`->`list`->`to-tar`, or `create`->truncate->`repair`
-* benchmarking scenarios (for `mla_archive`)
-* [AFL](https://lcamtuf.coredump.cx/afl/) scenario (for `mla_archive`)
+* benchmarking scenarios (for `mla`)
+* [AFL](https://lcamtuf.coredump.cx/afl/) scenario (for `mla`)
 * A [committed archive in format v1](samples/archive_v1.mla), to ensure backward readability over time
 
 Performance
@@ -393,7 +393,7 @@ Several scenarios are already embedded, such as:
 
 On an "Intel(R) Core(TM) i5-7200U CPU @ 2.50GHz":
 ```sh
-$ cd mla_archive/
+$ cd mla/
 $ cargo bench
 ...
 multiple_layers_multiple_block_size/Layers ENCRYPT | COMPRESS | DEFAULT/1048576                                                                           

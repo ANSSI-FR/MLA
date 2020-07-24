@@ -3,10 +3,10 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use criterion::BenchmarkId;
 use criterion::Throughput;
 
-use mla_archive::config::{ArchiveReaderConfig, ArchiveWriterConfig};
-use mla_archive::helpers::linear_extract;
-use mla_archive::Layers;
-use mla_archive::{ArchiveReader, ArchiveWriter};
+use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
+use mla::helpers::linear_extract;
+use mla::Layers;
+use mla::{ArchiveReader, ArchiveWriter};
 use rand::distributions::{Alphanumeric, Distribution};
 use rand::seq::index::sample;
 use rand::SeedableRng;

@@ -1,5 +1,5 @@
 [package]
-name = "mla_archive"
+name = "mla"
 version = "1.0.0"
 authors = ["Camille Mougey <camille.mougey@ssi.gouv.fr>"]
 edition = "2018"
