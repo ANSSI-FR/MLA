@@ -11,8 +11,13 @@ env:
 
 jobs:
   build:
-
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+    runs-on: ${{matrix.os}}
 
     steps:
     - uses: actions/checkout@v2
@@ -56,6 +61,7 @@ jobs:
           components: rustfmt
       - name: Check format
         run: cargo fmt --all -- --check
+
   audit:
     runs-on: ubuntu-latest
     steps:
