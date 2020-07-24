@@ -1,0 +1,66 @@
+name: Rust
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+    - name: Build
+      uses: actions-rs/cargo@v1
+      with:
+        command: build
+        args: --release --all-features --all --exclude mla-fuzz-afl --verbose
+    - name: Run tests
+      run: cargo test --all --exclude mla-fuzz-afl --release --verbose
+
+  afl-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - name: Install dependencies
+        run: sudo apt-get install llvm
+      - name: Install cargo-afl binary crate
+        uses: actions-rs/install@v0.1
+        with:
+          crate: afl
+          version: latest
+          use-tool-cache: true
+      - name: Test AFL build
+        run: cargo afl build
+
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt
+      - name: Check format
+        run: cargo fmt --all -- --check
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Security audit
+        uses: actions-rs/audit-check@v1
+        with:
+         token: ${{ secrets.GITHUB_TOKEN }}
