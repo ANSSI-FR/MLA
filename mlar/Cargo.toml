@@ -10,7 +10,7 @@ edition = "2018"
 [dependencies]
 clap = "2"
 glob = "0.3"
-mla_archive = { path = "../mla_archive" }
+mla = { path = "../mla" }
 ed25519_parser = { path = "../ed25519_parser" }
 rand = "0.7"
 x25519-dalek = "0"
