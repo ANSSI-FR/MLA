@@ -5,10 +5,10 @@ use ed25519_parser::{
 use glob::Pattern;
 use hex;
 use humansize::{file_size_opts, FileSize};
-use mla_archive::config::{ArchiveReaderConfig, ArchiveWriterConfig};
-use mla_archive::errors::{Error, FailSafeReadError};
-use mla_archive::helpers::linear_extract;
-use mla_archive::{ArchiveFailSafeReader, ArchiveFile, ArchiveReader, ArchiveWriter, Layers};
+use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
+use mla::errors::{Error, FailSafeReadError};
+use mla::helpers::linear_extract;
+use mla::{ArchiveFailSafeReader, ArchiveFile, ArchiveReader, ArchiveWriter, Layers};
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use std::collections::{HashMap, HashSet};

@@ -11,4 +11,4 @@ afl = "0"
 bincode = "~1.2"
 serde = { version = "1", features = ["derive"] }
 ed25519_parser = { path = "../ed25519_parser" }
-mla_archive = { path = "../mla_archive" }
+mla = { path = "../mla" }

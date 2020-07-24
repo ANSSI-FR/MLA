@@ -5,9 +5,9 @@ use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{self, Cursor, Read, Write};
 
-use mla_archive::config::{ArchiveReaderConfig, ArchiveWriterConfig};
-use mla_archive::errors::{Error, FailSafeReadError};
-use mla_archive::{ArchiveFailSafeReader, ArchiveFileID, ArchiveReader, ArchiveWriter, Layers};
+use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
+use mla::errors::{Error, FailSafeReadError};
+use mla::{ArchiveFailSafeReader, ArchiveFileID, ArchiveReader, ArchiveWriter, Layers};
 
 use std::collections::HashMap;
 

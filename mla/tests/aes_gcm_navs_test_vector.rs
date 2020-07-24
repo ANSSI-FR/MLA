@@ -3,7 +3,7 @@
 #[macro_use]
 extern crate hex_literal;
 
-use mla_archive::crypto::aesgcm::*;
+use mla::crypto::aesgcm::*;
 
 struct TestVector {
     key: &'static [u8],
