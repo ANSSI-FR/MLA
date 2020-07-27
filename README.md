@@ -1,4 +1,4 @@
-![Build & test](https://github.com/ANSSI-FR/MLA/workflows/Build%20&%20test/badge.svg)
+[![Build & test](https://github.com/ANSSI-FR/MLA/workflows/Build%20&%20test/badge.svg)](https://github.com/ANSSI-FR/MLA/actions)
 
 Multi Layer Archive (MLA)
 =
