@@ -1,6 +1,6 @@
 #[macro_use]
 extern crate afl;
-use ed25519_parser::{parse_openssl_25519_privkey, parse_openssl_25519_pubkey};
+use curve25519_parser::{parse_openssl_25519_privkey, parse_openssl_25519_pubkey};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{self, Cursor, Read, Write};

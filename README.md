@@ -28,7 +28,7 @@ This repository contains:
 
 * `mla`: the Rust library implementing MLA reader and writer
 * `mlar`: a Rust utility wrapping `mla` for common actions (create, list, extract, ...)
-* `ed25519_parser`: a Rust library for parsing DER/PEM public and private Ed25519 keys and X25519 keys (as made by `openssl`)
+* `curve25519_parser`: a Rust library for parsing DER/PEM public and private Ed25519 keys and X25519 keys (as made by `openssl`)
 * `mla-fuzz-afl` a Rust utility to fuzz `mla`
 * `Dockerfile`, `.gitlab-ci.yml`: Continuous Integration needs
 
@@ -65,7 +65,7 @@ Quick API usage
 
 * Create an archive, with compression and encryption:
 ```rust
-use ed25519_parser::parse_openssl_25519_pubkey;
+use curve25519_parser::parse_openssl_25519_pubkey;
 use mla::config::ArchiveWriterConfig;
 use mla::ArchiveWriter;
 
@@ -116,7 +116,7 @@ mla.end_file(id_file2).unwrap();
 ```
 * Read files from an archive
 ```rust
-use ed25519_parser::parse_openssl_25519_privkey;
+use curve25519_parser::parse_openssl_25519_privkey;
 use mla::config::ArchiveReaderConfig;
 use mla::ArchiveReader;
 use std::io;
@@ -236,7 +236,7 @@ position in the flow of files, for indexing purpose.
 
 Implemented in `EncryptionLayer*`.
 
-This layer encrypts data using the symmetric authenticated encryption with associated data (AEAD) algorithm *AES-GCM 256*, and encrypts the symmetric key using an ECIES schema based on Curve *Ed25519*.
+This layer encrypts data using the symmetric authenticated encryption with associated data (AEAD) algorithm *AES-GCM 256*, and encrypts the symmetric key using an ECIES schema based on *Curve25519*.
 
 The ECIES schema is extended to support multiple public keys: A public key is generated and then used to perform `n` Diffie-Hellman exchange with the `n` users public keys. The generated public key is also recorded in the header (to let the user replay the DH exchange). Once derived according to ECIES, we get `n` keys. These keys are then used to encrypt a common key `k`, and the resulting `n` ciphertexts are stored in the layer header.
 This key `k` will later be used for the symmetric encryption of the archive.
@@ -258,8 +258,8 @@ Thus, to seek-and-read at a given position, the layer decrypts the block contain
 
 The authors decided to use elliptic curve over RSA, because:
 * No ready-for-production Rust-based libraries have been found at the date of writing
-* A security-audited Rust library already exists for Curve 25519
-* Curve 25519 is widely used and [respects several criteria](https://safecurves.cr.yp.to/)
+* A security-audited Rust library already exists for Curve25519
+* Curve25519 is widely used and [respects several criteria](https://safecurves.cr.yp.to/)
 * Common arguments, such as the ones of [Trail of bits](https://blog.trailofbits.com/2019/07/08/fuck-rsa/)
 
 AES-GCM is used because it is one of the most commonly used AEAD algorithms and using one avoids a whole class of attacks. In addition, we can rely on hardware acceleration (like AES-NI) to keep reasonable performance.
@@ -379,7 +379,7 @@ Testing
 
 The repository contains:
 
-* unit tests (for `mla` and `ed25519_parser`), testing separately expected behaviors
+* unit tests (for `mla` and `curve25519_parser`), testing separately expected behaviors
 * integration tests (for `mlar`), testing common scenarios, such as `create`->`list`->`to-tar`, or `create`->truncate->`repair`
 * benchmarking scenarios (for `mla`)
 * [AFL](https://lcamtuf.coredump.cx/afl/) scenario (for `mla`)
