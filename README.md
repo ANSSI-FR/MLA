@@ -262,7 +262,7 @@ The authors decided to use elliptic curve over RSA, because:
 * Curve 25519 is widely used and [respects several criteria](https://safecurves.cr.yp.to/)
 * Common arguments, such as the ones of [Trail of bits](https://blog.trailofbits.com/2019/07/08/fuck-rsa/)
 
-AES-GCM is used because it is one of the most commonly used AEAD algorithms and using one avoids a whole class of attacks. In addition, it allows us to rely on hardware acceleration (like AES-NI) to keep reasonable performance.
+AES-GCM is used because it is one of the most commonly used AEAD algorithms and using one avoids a whole class of attacks. In addition, it lets us rely on hardware acceleration (like AES-NI) to keep reasonable performance.
 
 External cryptographic libraries have been reviewed:
 * RustCrypto AES-GCM, reviewed by [NCC Group](https://research.nccgroup.com/wp-content/uploads/2020/02/NCC_Group_MobileCoin_RustCrypto_AESGCM_ChaCha20Poly1305_Implementation_Review_2020-02-12_v1.0.pdf)
