@@ -1227,7 +1227,7 @@ impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use ed25519_parser::{parse_openssl_25519_privkey, parse_openssl_25519_pubkey};
+    use curve25519_parser::{parse_openssl_25519_privkey, parse_openssl_25519_pubkey};
     use hex;
     use rand::SeedableRng;
     use rand_chacha::ChaChaRng;

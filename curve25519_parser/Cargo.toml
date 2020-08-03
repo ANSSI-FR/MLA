@@ -1,5 +1,5 @@
 [package]
-name = "ed25519_parser"
+name = "curve25519_parser"
 version = "0.1.0"
 authors = ["Camille Mougey <camille.mougey@ssi.gouv.fr>"]
 edition = "2018"

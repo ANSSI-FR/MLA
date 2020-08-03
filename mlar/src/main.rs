@@ -1,5 +1,7 @@
 use clap::{App, Arg, ArgMatches, SubCommand};
-use ed25519_parser::{generate_keypair, parse_openssl_25519_privkey, parse_openssl_25519_pubkey};
+use curve25519_parser::{
+    generate_keypair, parse_openssl_25519_privkey, parse_openssl_25519_pubkey,
+};
 use glob::Pattern;
 use hex;
 use humansize::{file_size_opts, FileSize};
