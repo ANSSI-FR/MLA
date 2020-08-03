@@ -1227,7 +1227,7 @@ impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use ed25519_parser::{parse_openssl_ed25519_privkey, parse_openssl_ed25519_pubkey};
+    use ed25519_parser::{parse_openssl_25519_privkey, parse_openssl_25519_pubkey};
     use hex;
     use rand::SeedableRng;
     use rand_chacha::ChaChaRng;
@@ -1876,8 +1876,8 @@ pub(crate) mod tests {
         let file = Vec::new();
 
         // Use committed keys
-        let pem_pub: &'static [u8] = include_bytes!("../../samples/test25519_pub.pem");
-        let pub_key = parse_openssl_ed25519_pubkey(pem_pub).unwrap();
+        let pem_pub: &'static [u8] = include_bytes!("../../samples/test_x25519_archive_v1_pub.pem");
+        let pub_key = parse_openssl_25519_pubkey(pem_pub).unwrap();
 
         let mut config = ArchiveWriterConfig::new();
         config
@@ -1970,7 +1970,7 @@ pub(crate) mod tests {
 
     #[test]
     fn check_archive_format_v1() {
-        let pem_priv: &'static [u8] = include_bytes!("../../samples/test25519.pem");
+        let pem_priv: &'static [u8] = include_bytes!("../../samples/test_x25519_archive_v1.pem");
 
         let mla_data: &'static [u8] = include_bytes!("../../samples/archive_v1.mla");
         let files = make_format_regression_files();
@@ -1978,12 +1978,12 @@ pub(crate) mod tests {
         // Build Reader
         let buf = Cursor::new(mla_data);
         let mut config = ArchiveReaderConfig::new();
-        config.add_private_keys(&[parse_openssl_ed25519_privkey(pem_priv).unwrap()]);
+        config.add_private_keys(&[parse_openssl_25519_privkey(pem_priv).unwrap()]);
         let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
 
         // Build FailSafeReader
         let mut config = ArchiveReaderConfig::new();
-        config.add_private_keys(&[parse_openssl_ed25519_privkey(pem_priv).unwrap()]);
+        config.add_private_keys(&[parse_openssl_25519_privkey(pem_priv).unwrap()]);
         let mut mla_fsread = ArchiveFailSafeReader::from_config(mla_data, config).unwrap();
 
         // Repair the archive (without any damage, but trigger the corresponding code)

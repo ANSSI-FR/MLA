@@ -28,7 +28,7 @@ This repository contains:
 
 * `mla`: the Rust library implementing MLA reader and writer
 * `mlar`: a Rust utility wrapping `mla` for common actions (create, list, extract, ...)
-* `ed25519_parser`: a Rust library for parsing DER/PEM public and private Ed25519 keys (as made by `openssl`)
+* `ed25519_parser`: a Rust library for parsing DER/PEM public and private Ed25519 keys and X25519 keys (as made by `openssl`)
 * `mla-fuzz-afl` a Rust utility to fuzz `mla`
 * `Dockerfile`, `.gitlab-ci.yml`: Continuous Integration needs
 
@@ -38,7 +38,7 @@ Quick command-line usage
 Here are some commands to use ``mlar`` in order to work with archives in MLA format.
 
 ```sh
-# Generate an Ed25519 key pair (OpenSSL could also be used)
+# Generate an X25519 key pair (OpenSSL could also be used)
 mlar keygen key
 
 # Create an archive with some files, using the public key
@@ -65,15 +65,15 @@ Quick API usage
 
 * Create an archive, with compression and encryption:
 ```rust
-use ed25519_parser::parse_openssl_ed25519_pubkey;
+use ed25519_parser::parse_openssl_25519_pubkey;
 use mla::config::ArchiveWriterConfig;
 use mla::ArchiveWriter;
 
-const PUB_KEY: &[u8] = include_bytes!("samples/test25519_pub.pem");
+const PUB_KEY: &[u8] = include_bytes!("samples/test_x25519_pub.pem");
 
 fn main() {
     // Load the needed public key
-    let public_key = parse_openssl_ed25519_pubkey(PUB_KEY).unwrap();
+    let public_key = parse_openssl_25519_pubkey(PUB_KEY).unwrap();
 
     // Create an MLA Archive - Output only needs the Write trait
     let mut buf = Vec::new();
@@ -116,17 +116,17 @@ mla.end_file(id_file2).unwrap();
 ```
 * Read files from an archive
 ```rust
-use ed25519_parser::parse_openssl_ed25519_privkey;
+use ed25519_parser::parse_openssl_25519_privkey;
 use mla::config::ArchiveReaderConfig;
 use mla::ArchiveReader;
 use std::io;
 
-const PRIV_KEY: &[u8] = include_bytes!("samples/test25519.pem");
+const PRIV_KEY: &[u8] = include_bytes!("samples/test_x25519_archive_v1.pem");
 const DATA: &[u8] = include_bytes!("samples/archive_v1.mla");
 
 fn main() {
     // Get the private key
-    let private_key = parse_openssl_ed25519_privkey(PRIV_KEY).unwrap();
+    let private_key = parse_openssl_25519_privkey(PRIV_KEY).unwrap();
 
     // Specify the key for the Reader
     let mut config = ArchiveReaderConfig::new();
