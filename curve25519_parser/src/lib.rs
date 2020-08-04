@@ -356,7 +356,7 @@ mod tests {
     static PEM_PRIV: &[u8] = include_bytes!("../../samples/test_ed25519.pem");
 
     // Many[0] is PEM_PUB
-    static PEM_PUB_MANY: &[u8] = include_bytes!("../../samples/test_ed25519_pub_many.pem");
+    static PEM_PUB_MANY: &[u8] = include_bytes!("../../samples/test_25519_pub_many.pem");
 
     #[test]
     fn parse_and_check_ed_pubkeys_der() {
@@ -399,9 +399,12 @@ mod tests {
         assert_eq!(pub_key_der.as_bytes(), pub_keys_pem[0].as_bytes());
 
         let pub_keys_pem = parse_openssl_25519_pubkeys_pem_many(PEM_PUB_MANY).unwrap();
-        assert_eq!(pub_keys_pem.len(), 2);
+        assert_eq!(pub_keys_pem.len(), 3);
         assert_eq!(pub_key_der.as_bytes(), pub_keys_pem[0].as_bytes());
         assert_ne!(pub_key_der.as_bytes(), pub_keys_pem[1].as_bytes());
+
+        let pub_x_key_der = parse_openssl_25519_pubkey(X_DER_PUB).unwrap();
+        assert_eq!(pub_x_key_der.as_bytes(), pub_keys_pem[2].as_bytes());
     }
 
     #[test]
