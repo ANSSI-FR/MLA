@@ -1,6 +1,6 @@
 use clap::{App, Arg, ArgMatches, SubCommand};
-use ed25519_parser::{
-    generate_keypair, parse_openssl_ed25519_privkey, parse_openssl_ed25519_pubkey,
+use curve25519_parser::{
+    generate_keypair, parse_openssl_25519_privkey, parse_openssl_25519_pubkey,
 };
 use glob::Pattern;
 use hex;
@@ -53,7 +53,7 @@ fn open_ecc_private_keys(matches: &ArgMatches) -> Result<Vec<x25519_dalek::Stati
             // Load the the ECC key in-memory and parse it
             let mut buf = Vec::new();
             file.read_to_end(&mut buf)?;
-            match parse_openssl_ed25519_privkey(&buf) {
+            match parse_openssl_25519_privkey(&buf) {
                 Err(_) => return Err(Error::InvalidECCKeyFormat),
                 Ok(private_key) => private_keys.push(private_key),
             };
@@ -70,7 +70,7 @@ fn open_ecc_public_keys(matches: &ArgMatches) -> Result<Vec<x25519_dalek::Public
             // Load the the ECC key in-memory and parse it
             let mut buf = Vec::new();
             file.read_to_end(&mut buf)?;
-            match parse_openssl_ed25519_pubkey(&buf) {
+            match parse_openssl_25519_pubkey(&buf) {
                 Err(_) => return Err(Error::InvalidECCKeyFormat),
                 Ok(public_key) => public_keys.push(public_key),
             };
