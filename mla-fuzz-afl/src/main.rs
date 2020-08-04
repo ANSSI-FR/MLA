@@ -1,6 +1,6 @@
 #[macro_use]
 extern crate afl;
-use ed25519_parser::{parse_openssl_ed25519_privkey, parse_openssl_ed25519_pubkey};
+use curve25519_parser::{parse_openssl_25519_privkey, parse_openssl_25519_pubkey};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{self, Cursor, Read, Write};
@@ -11,8 +11,8 @@ use mla::{ArchiveFailSafeReader, ArchiveFileID, ArchiveReader, ArchiveWriter, La
 
 use std::collections::HashMap;
 
-static PUB_KEY: &[u8] = include_bytes!("../../samples/test25519_pub.pem");
-static PRIV_KEY: &[u8] = include_bytes!("../../samples/test25519.pem");
+static PUB_KEY: &[u8] = include_bytes!("../../samples/test_x25519_pub.pem");
+static PRIV_KEY: &[u8] = include_bytes!("../../samples/test_x25519.pem");
 
 #[derive(Serialize, Deserialize, Debug)]
 struct TestInput {
@@ -42,7 +42,7 @@ fn run(data: &[u8]) {
     }
 
     // Load the needed public key
-    let public_key = parse_openssl_ed25519_pubkey(PUB_KEY).unwrap();
+    let public_key = parse_openssl_25519_pubkey(PUB_KEY).unwrap();
 
     // Create a MLA Archive
     let mut buf = Vec::new();
@@ -117,7 +117,7 @@ fn run(data: &[u8]) {
     // Parse the created MLA Archive
     let dest = mla.into_raw();
     let buf = Cursor::new(dest.as_slice());
-    let private_key = parse_openssl_ed25519_privkey(PRIV_KEY).unwrap();
+    let private_key = parse_openssl_25519_privkey(PRIV_KEY).unwrap();
     let mut config = ArchiveReaderConfig::new();
     config.add_private_keys(&[private_key]);
     let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
@@ -145,7 +145,7 @@ fn run(data: &[u8]) {
     // Build FailSafeReader
     let buf = Cursor::new(dest.as_slice());
     let mut config = ArchiveReaderConfig::new();
-    let private_key = parse_openssl_ed25519_privkey(PRIV_KEY).unwrap();
+    let private_key = parse_openssl_25519_privkey(PRIV_KEY).unwrap();
     config.add_private_keys(&[private_key]);
     let mut mla_fsread = ArchiveFailSafeReader::from_config(buf, config).unwrap();
 
@@ -192,7 +192,7 @@ fn run(data: &[u8]) {
     // Check the resulting files
     let buf = Cursor::new(dest_mut.as_slice());
     let mut config = ArchiveReaderConfig::new();
-    let private_key = parse_openssl_ed25519_privkey(PRIV_KEY).unwrap();
+    let private_key = parse_openssl_25519_privkey(PRIV_KEY).unwrap();
     config.add_private_keys(&[private_key]);
     let _do_steps = || -> Result<(), Error> {
         let mut mla_read = ArchiveReader::from_config(buf, ArchiveReaderConfig::new())?;
@@ -210,7 +210,7 @@ fn run(data: &[u8]) {
     // Build FailSafeReader
     let buf = Cursor::new(dest_mut.as_slice());
     let mut config = ArchiveReaderConfig::new();
-    let private_key = parse_openssl_ed25519_privkey(PRIV_KEY).unwrap();
+    let private_key = parse_openssl_25519_privkey(PRIV_KEY).unwrap();
     config.add_private_keys(&[private_key]);
     let mut mla_fsread = {
         if let Ok(mla) = ArchiveFailSafeReader::from_config(buf, config) {

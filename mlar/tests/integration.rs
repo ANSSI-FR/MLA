@@ -133,13 +133,13 @@ fn ensure_directory_content(directory: &Path, files: &[NamedTempFile]) {
 fn test_create_list_tar() {
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
     let tar_file = NamedTempFile::new("output.tar").unwrap();
-    let ecc_public = Path::new("../samples/test25519_pub.pem");
-    let ecc_private = Path::new("../samples/test25519.pem");
+    let ecc_public = Path::new("../samples/test_x25519_pub.pem");
+    let ecc_private = Path::new("../samples/test_x25519.pem");
 
     // Create files
     let testfs = setup();
 
-    // `mlar create -o output.mla -p samples/test25519_pub.pem file1.bin file2.bin file3.bin`
+    // `mlar create -o output.mla -p samples/test_x25519_pub.pem file1.bin file2.bin file3.bin`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-o")
@@ -157,7 +157,7 @@ fn test_create_list_tar() {
     let assert = cmd.assert();
     assert.success().stderr(String::from(&file_list));
 
-    // `mlar list -i output.mla -k samples/test25519.pem`
+    // `mlar list -i output.mla -k samples/test_x25519.pem`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
         .arg("-i")
@@ -169,7 +169,7 @@ fn test_create_list_tar() {
     let assert = cmd.assert();
     assert.success().stdout(file_list);
 
-    // `mlar to-tar -i output.mla -k samples/test25519.pem -o output.tar`
+    // `mlar to-tar -i output.mla -k samples/test_x25519.pem -o output.tar`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("to-tar")
         .arg("-i")
@@ -192,13 +192,13 @@ fn test_truncated_repair_list_tar() {
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
     let mlar_repaired_file = NamedTempFile::new("repaired.mla").unwrap();
     let tar_file = NamedTempFile::new("output.tar").unwrap();
-    let ecc_public = Path::new("../samples/test25519_pub.pem");
-    let ecc_private = Path::new("../samples/test25519.pem");
+    let ecc_public = Path::new("../samples/test_x25519_pub.pem");
+    let ecc_private = Path::new("../samples/test_x25519.pem");
 
     // Create files
     let testfs = setup();
 
-    // `mlar create -o output.mla -p samples/test25519_pub.pem file1.bin file2.bin file3.bin`
+    // `mlar create -o output.mla -p samples/test_x25519_pub.pem file1.bin file2.bin file3.bin`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-o")
@@ -233,7 +233,7 @@ fn test_truncated_repair_list_tar() {
         .write_all(&data[..data.len() * 6 / 7])
         .unwrap();
 
-    // `mlar repair -i output.mla -k samples/test25519.pem -p samples/test25519_pub.pem -o repaired.mla`
+    // `mlar repair -i output.mla -k samples/test_x25519.pem -p samples/test_x25519_pub.pem -o repaired.mla`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("repair")
         .arg("-i")
@@ -249,7 +249,7 @@ fn test_truncated_repair_list_tar() {
     let assert = cmd.assert();
     assert.success();
 
-    // `mlar list -i repaired.mla -k samples/test25519.pem`
+    // `mlar list -i repaired.mla -k samples/test_x25519.pem`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
         .arg("-i")
@@ -263,7 +263,7 @@ fn test_truncated_repair_list_tar() {
     // 6 / 7 (last file being really small)
     assert.success().stdout(file_list_no_last);
 
-    // `mlar to-tar -i output.mla -k samples/test25519.pem -o output.tar`
+    // `mlar to-tar -i output.mla -k samples/test_x25519.pem -o output.tar`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("to-tar")
         .arg("-i")
@@ -320,18 +320,18 @@ fn test_multiple_keys() {
     // Key parsing is common for each subcommands, so test only one: `list`
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
     let ecc_publics = vec![
-        Path::new("../samples/test25519_pub.pem"),
-        Path::new("../samples/test25519_3_pub.pem"),
+        Path::new("../samples/test_x25519_pub.pem"),
+        Path::new("../samples/test_x25519_3_pub.pem"),
     ];
     let ecc_privates = vec![
-        Path::new("../samples/test25519.pem"),
-        Path::new("../samples/test25519_2.pem"),
+        Path::new("../samples/test_x25519.pem"),
+        Path::new("../samples/test_x25519_2.pem"),
     ];
 
     // Create files
     let testfs = setup();
 
-    // `mlar create -o output.mla -p samples/test25519_pub.pem -p samples/test25519_3_pub.pem file1.bin file2.bin file3.bin`
+    // `mlar create -o output.mla -p samples/test_x25519_pub.pem -p samples/test_x25519_3_pub.pem file1.bin file2.bin file3.bin`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-o")
@@ -356,7 +356,7 @@ fn test_multiple_keys() {
     // - we can read with only the second correct private key
     // - we cannot read with only a bad private key
 
-    // `mlar list -i output.mla -k samples/test25519.pem -k samples/test25519_2.pem`
+    // `mlar list -i output.mla -k samples/test_x25519.pem -k samples/test_x25519_2.pem`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
         .arg("-i")
@@ -370,19 +370,19 @@ fn test_multiple_keys() {
     let assert = cmd.assert();
     assert.success().stdout(String::from(&file_list));
 
-    // `mlar list -i output.mla -k samples/test25519_3.pem`
+    // `mlar list -i output.mla -k samples/test_x25519_3.pem`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
         .arg("-i")
         .arg(mlar_file.path())
         .arg("-k")
-        .arg(Path::new("../samples/test25519_3.pem"));
+        .arg(Path::new("../samples/test_x25519_3.pem"));
 
     println!("{:?}", cmd);
     let assert = cmd.assert();
     assert.success().stdout(String::from(&file_list));
 
-    // `mlar list -i output.mla -k samples/test25519_2.pem`
+    // `mlar list -i output.mla -k samples/test_x25519_2.pem`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
         .arg("-i")
@@ -457,10 +457,10 @@ fn test_convert() {
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
     let mlar_file_converted = NamedTempFile::new("convert.mla").unwrap();
     let tar_file = NamedTempFile::new("output.tar").unwrap();
-    let ecc_public1 = Path::new("../samples/test25519_pub.pem");
-    let ecc_private1 = Path::new("../samples/test25519.pem");
-    let ecc_public2 = Path::new("../samples/test25519_2_pub.pem");
-    let ecc_private2 = Path::new("../samples/test25519_2.pem");
+    let ecc_public1 = Path::new("../samples/test_x25519_pub.pem");
+    let ecc_private1 = Path::new("../samples/test_x25519.pem");
+    let ecc_public2 = Path::new("../samples/test_x25519_2_pub.pem");
+    let ecc_private2 = Path::new("../samples/test_x25519_2.pem");
 
     // Create files
     let testfs = setup();
@@ -529,13 +529,13 @@ fn test_stdio() {
     // Create an archive on stdout, and check it
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
     let tar_file = NamedTempFile::new("output.tar").unwrap();
-    let ecc_public = Path::new("../samples/test25519_pub.pem");
-    let ecc_private = Path::new("../samples/test25519.pem");
+    let ecc_public = Path::new("../samples/test_x25519_pub.pem");
+    let ecc_private = Path::new("../samples/test_x25519.pem");
 
     // Create files
     let testfs = setup();
 
-    // `mlar create -o - -p samples/test25519_pub.pem file1.bin file2.bin file3.bin`
+    // `mlar create -o - -p samples/test_x25519_pub.pem file1.bin file2.bin file3.bin`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-o")
@@ -558,7 +558,7 @@ fn test_stdio() {
         .unwrap()
         .write_all(&archive_data)
         .unwrap();
-    // `mlar to-tar -i output.mla -k samples/test25519.pem -o output.tar`
+    // `mlar to-tar -i output.mla -k samples/test_x25519.pem -o output.tar`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("to-tar")
         .arg("-i")
@@ -581,8 +581,8 @@ fn test_multi_fileorders() {
     // Create several archive with all possible file order. Result should be the same
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
     let tar_file = NamedTempFile::new("output.tar").unwrap();
-    let ecc_public = Path::new("../samples/test25519_pub.pem");
-    let ecc_private = Path::new("../samples/test25519.pem");
+    let ecc_public = Path::new("../samples/test_x25519_pub.pem");
+    let ecc_private = Path::new("../samples/test_x25519.pem");
 
     // Create files
     let testfs = setup();
@@ -601,7 +601,7 @@ fn test_multi_fileorders() {
             continue;
         }
 
-        // `mlar create -o output.mla -p samples/test25519_pub.pem file1.bin file2.bin file3.bin`
+        // `mlar create -o output.mla -p samples/test_x25519_pub.pem file1.bin file2.bin file3.bin`
         let mut cmd = Command::cargo_bin(UTIL).unwrap();
         cmd.arg("create")
             .arg("-o")
@@ -619,7 +619,7 @@ fn test_multi_fileorders() {
         let assert = cmd.assert();
         assert.success().stderr(String::from(&file_list));
 
-        // `mlar to-tar -i convert.mla -k samples/test25519.pem -o output.tar`
+        // `mlar to-tar -i convert.mla -k samples/test_x25519.pem -o output.tar`
         let mut cmd = Command::cargo_bin(UTIL).unwrap();
         cmd.arg("to-tar")
             .arg("-i")
