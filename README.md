@@ -28,7 +28,7 @@ This repository contains:
 
 * `mla`: the Rust library implementing MLA reader and writer
 * `mlar`: a Rust utility wrapping `mla` for common actions (create, list, extract, ...)
-* `curve25519_parser`: a Rust library for parsing DER/PEM public and private Ed25519 keys and X25519 keys (as made by `openssl`)
+* `curve25519-parser`: a Rust library for parsing DER/PEM public and private Ed25519 keys and X25519 keys (as made by `openssl`)
 * `mla-fuzz-afl` a Rust utility to fuzz `mla`
 * `Dockerfile`, `.gitlab-ci.yml`: Continuous Integration needs
 
@@ -379,7 +379,7 @@ Testing
 
 The repository contains:
 
-* unit tests (for `mla` and `curve25519_parser`), testing separately expected behaviors
+* unit tests (for `mla` and `curve25519-parser`), testing separately expected behaviors
 * integration tests (for `mlar`), testing common scenarios, such as `create`->`list`->`to-tar`, or `create`->truncate->`repair`
 * benchmarking scenarios (for `mla`)
 * [AFL](https://lcamtuf.coredump.cx/afl/) scenario (for `mla`)
