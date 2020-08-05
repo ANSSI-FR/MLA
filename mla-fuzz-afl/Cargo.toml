@@ -10,5 +10,5 @@ edition = "2018"
 afl = "0"
 bincode = "~1.2"
 serde = { version = "1", features = ["derive"] }
-curve25519_parser = { path = "../curve25519_parser" }
+curve25519-parser = { path = "../curve25519-parser" }
 mla = { path = "../mla" }
