@@ -3,6 +3,11 @@ name = "curve25519-parser"
 version = "0.1.0"
 authors = ["Camille Mougey <camille.mougey@ssi.gouv.fr>"]
 edition = "2018"
+license = "LGPL-3.0-only"
+description = "Curve25519 Parser - DER/PEM parser for OpenSSL Ed25519 / X25519 keys"
+homepage = "https://github.com/ANSSI-FR/MLA"
+repository = "https://github.com/ANSSI-FR/MLA"
+readme = "../README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
