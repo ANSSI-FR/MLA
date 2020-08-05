@@ -38,7 +38,7 @@ hex-literal = "0.1"
 aes-gcm = "0"
 aead = "0"
 criterion = "0.3"
-curve25519_parser = { path = "../curve25519_parser" }
+curve25519-parser = { path = "../curve25519-parser" }
 hex = "0.3" # from 0.4, hex comes with dependencies
 
 [[bench]]

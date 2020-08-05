@@ -2,7 +2,7 @@
 
 members = [
     "mla",
-    "curve25519_parser",
+    "curve25519-parser",
     "mlar",
     "mla-fuzz-afl",
 ]
