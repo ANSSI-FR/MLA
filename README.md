@@ -1,8 +1,12 @@
 [![Build & test](https://github.com/ANSSI-FR/MLA/workflows/Build%20&%20test/badge.svg)](https://github.com/ANSSI-FR/MLA/actions)
-[![Cargo](https://img.shields.io/badge/crates.io-mla-red)](
+[![Cargo MLA](https://img.shields.io/badge/crates.io-mla-red)](
 https://crates.io/crates/mla)
-[![Documentation](https://img.shields.io/badge/docs.rs-mla-blue)](
+[![Documentation MLA](https://img.shields.io/badge/docs.rs-mla-blue)](
 https://docs.rs/mla)
+[![Cargo Curve25519-Parser](https://img.shields.io/badge/crates.io-curve25519_parser-red)](
+https://crates.io/crates/curve25519-parser)
+[![Documentation Curve25519-Parser](https://img.shields.io/badge/docs.rs-curve25519_parser-blue)](
+https://docs.rs/curve25519-parser)
 
 Multi Layer Archive (MLA)
 =
