@@ -369,7 +369,7 @@ For instance (from the understanding of the author):
   when unpacking unknown archive
 * `journald` format is not streamable. Also, one writter / multiple reader is
   not needed here, thus releasing some constraints `journald` format have
-* any archive + `age`: [age](https://age-encryption.org/) could be used jointly with an archive format to provide encryption, but lack seeking capabilities and integration with the inner archive format
+* any archive + `age`: [age](https://age-encryption.org/) could be used jointly with an archive format to provide encryption, but would likely lack integration with the inner archive format
 * Backup formats are generally written to avoid things such as duplication,
   hence their need to keep bigger structures in memory, or their not being 
   streamable
