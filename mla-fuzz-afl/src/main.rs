@@ -256,6 +256,7 @@ fn main() {
     produce_samples();
 }
 
+#[allow(dead_code)]
 fn produce_samples() {
     let mut f1 = File::create("in/empty_file").unwrap();
     f1.write_all(
