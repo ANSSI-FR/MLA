@@ -39,7 +39,7 @@ aes-gcm = "0"
 aead = "0"
 criterion = "0.3"
 curve25519-parser = { path = "../curve25519-parser" }
-hex = "0.4" # from 0.4, hex comes with dependencies
+hex = "0.4"
 
 [[bench]]
 name = "bench_archive"
