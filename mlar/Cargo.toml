@@ -15,7 +15,7 @@ curve25519-parser = { path = "../curve25519-parser" }
 rand = "0.7"
 x25519-dalek = "0"
 humansize = "1"
-hex = "0.3" # from 0.4, hex comes with dependencies
+hex = "0.4"
 # Could be made optional / feature to enable (for binary size)
 tar = "0.4"
 rand_chacha = "0.2"
