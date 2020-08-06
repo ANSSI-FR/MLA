@@ -600,8 +600,8 @@ fn to_tar(matches: &ArgMatches) -> Result<(), Error> {
 
     // Safe to use unwrap() because the option is required()
     let output = matches.value_of("output").unwrap();
-    let path = Path::new(&output);
-    let mut tar_file = Builder::new(File::create(&path)?);
+    let destination = destination_from_output_argument(output)?;
+    let mut tar_file = Builder::new(destination);
 
     let iter = mla.list_files()?;
     let fnames: Vec<String> = iter.cloned().collect();
