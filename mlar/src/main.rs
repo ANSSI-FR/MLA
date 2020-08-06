@@ -603,9 +603,9 @@ fn to_tar(matches: &ArgMatches) -> Result<(), Error> {
     let destination = destination_from_output_argument(output)?;
     let mut tar_file = Builder::new(destination);
 
-    let iter = mla.list_files()?;
-    let fnames: Vec<String> = iter.cloned().collect();
-    for fname in fnames {
+    let mut archive_files: Vec<String> = mla.list_files()?.cloned().collect();
+    archive_files.sort();
+    for fname in archive_files {
         let sub_file = match mla.get_file(fname.clone()) {
             Err(err) => {
                 eprintln!(
