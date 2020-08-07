@@ -4,7 +4,6 @@ use der_parser::error::BerError;
 
 use der_parser::oid::Oid;
 use der_parser::*;
-use nom;
 use nom::IResult;
 
 use std::convert::{From, TryInto};
@@ -16,8 +15,6 @@ use sha2::{Digest, Sha512};
 pub use x25519_dalek::{PublicKey, StaticSecret};
 
 use rand_core::{CryptoRng, RngCore};
-
-use pem;
 
 use std::fmt;
 

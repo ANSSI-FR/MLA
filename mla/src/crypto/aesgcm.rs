@@ -4,7 +4,6 @@ use aes::{
     block_cipher::{BlockCipher, NewBlockCipher},
     Aes256,
 };
-use aes_ctr;
 use aes_ctr::stream_cipher::{NewStreamCipher, StreamCipher, SyncStreamCipherSeek};
 use generic_array::{typenum::U16, GenericArray};
 use ghash::{
