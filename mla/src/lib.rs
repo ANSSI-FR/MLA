@@ -730,14 +730,27 @@ pub struct BlocksToFileReader<'a, R: Read + Seek> {
 }
 
 impl<'a, R: Read + Seek> BlocksToFileReader<'a, R> {
-    fn new(src: &mut R, id: ArchiveFileID, offsets: Vec<u64>) -> BlocksToFileReader<R> {
-        BlocksToFileReader {
+    fn new(src: &mut R, offsets: Vec<u64>) -> Result<BlocksToFileReader<R>, Error> {
+        // Set the inner layer at the start of the file
+        src.seek(SeekFrom::Start(offsets[0]))?;
+
+        // Read file information header
+        let id = match ArchiveFileBlock::from(src)? {
+            ArchiveFileBlock::FileStart { id, .. } => id,
+            _ => {
+                return Err(Error::WrongReaderState(
+                    "[BlocksToFileReader] A file must start with a FileStart".to_string(),
+                ));
+            }
+        };
+
+        Ok(BlocksToFileReader {
             src,
             state: BlocksToFileReaderState::Ready,
             id,
             current_offset: 0,
             offsets,
-        }
+        })
     }
 
     /// Move `self.src` to the next continuous block
@@ -929,22 +942,9 @@ impl<'b, R: 'b + Read + Seek> ArchiveReader<'b, R> {
                     "[ArchiveReader] A file must have at least one offset".to_string(),
                 ));
             }
-            // Set the inner layer at the start of the file
-            self.src.seek(SeekFrom::Start(file_info.offsets[0]))?;
-
-            // Read file information header
-            let id_file_block = match ArchiveFileBlock::from(&mut self.src)? {
-                ArchiveFileBlock::FileStart { id, .. } => id,
-                _ => {
-                    return Err(Error::WrongReaderState(
-                        "[ArchiveReader] A file must start with a FileStart".to_string(),
-                    ));
-                }
-            };
 
             // Instantiate the file representation
-            let reader =
-                BlocksToFileReader::new(&mut self.src, id_file_block, file_info.offsets.clone());
+            let reader = BlocksToFileReader::new(&mut self.src, file_info.offsets.clone())?;
             Ok(Some(ArchiveFile {
                 filename,
                 data: reader,
@@ -1287,6 +1287,11 @@ pub(crate) mod tests {
         let id = 0;
         let hash = Sha256Hash::default();
 
+        let mut block = ArchiveFileBlock::FileStart::<&[u8]> {
+            id,
+            filename: String::from("foobar"),
+        };
+        block.dump(&mut buf).unwrap();
         let fake_content = vec![1, 2, 3, 4];
         let mut block = ArchiveFileBlock::FileContent {
             id,
@@ -1308,7 +1313,8 @@ pub(crate) mod tests {
             .unwrap();
 
         let mut data_source = std::io::Cursor::new(buf);
-        let mut reader = BlocksToFileReader::new(&mut data_source, id, vec![0]);
+        let mut reader =
+            BlocksToFileReader::new(&mut data_source, vec![0]).expect("BlockToFileReader failed");
         let mut output = Vec::new();
         reader.read_to_end(&mut output).unwrap();
         assert_eq!(output.len(), fake_content.len() + fake_content2.len());
