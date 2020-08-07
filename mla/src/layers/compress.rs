@@ -1,4 +1,3 @@
-use brotli;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use serde::{Deserialize, Serialize};
 

@@ -3,7 +3,6 @@ use curve25519_parser::{
     generate_keypair, parse_openssl_25519_privkey, parse_openssl_25519_pubkey,
 };
 use glob::Pattern;
-use hex;
 use humansize::{file_size_opts, FileSize};
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
 use mla::errors::{Error, FailSafeReadError};
@@ -17,7 +16,6 @@ use std::io;
 use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
 use tar::{Builder, Header};
-use x25519_dalek;
 
 // ----- Utils ------
 
