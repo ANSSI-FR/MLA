@@ -6,15 +6,23 @@ use glob::Pattern;
 use hex;
 use humansize::{file_size_opts, FileSize};
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
+use mla::crypto::ecc::count_keys;
 use mla::errors::{Error, FailSafeReadError};
 use mla::helpers::linear_extract;
-use mla::{ArchiveFailSafeReader, ArchiveFile, ArchiveReader, ArchiveWriter, Layers};
+use mla::layers::compress::CompressionLayerReader;
+use mla::layers::encrypt::EncryptionLayerReader;
+use mla::layers::raw::RawLayerReader;
+use mla::layers::traits::LayerReader;
+use mla::{
+    ArchiveFailSafeReader, ArchiveFile, ArchiveFooter, ArchiveHeader, ArchiveReader, ArchiveWriter,
+    Layers,
+};
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io;
-use std::io::{Read, Write};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Component, Path, PathBuf};
 use tar::{Builder, Header};
 use x25519_dalek;
@@ -705,6 +713,115 @@ fn keygen(matches: &ArgMatches) -> Result<(), Error> {
     Ok(())
 }
 
+pub struct ArchiveInfoReader<'a, R: 'a + Read + Seek> {
+    /// MLA Archive format Reader
+
+    /// User's reading configuration
+    pub config: ArchiveReaderConfig,
+    /// Source
+    pub src: Box<dyn 'a + LayerReader<'a, R>>,
+    /// Compressed sizes from CompressionLayer
+    pub compressed_sizes: Vec<u32>,
+    /// Metadata (from footer if any)
+    metadata: Option<ArchiveFooter>,
+}
+
+impl<'b, R: 'b + Read + Seek> ArchiveInfoReader<'b, R> {
+    pub fn from_config(mut src: R, mut config: ArchiveReaderConfig) -> Result<Self, Error> {
+        // Make sure we read the archive header from the start
+        src.seek(SeekFrom::Start(0))?;
+        let header = ArchiveHeader::from(&mut src)?;
+        config.load_persistent(header.config)?;
+
+        // Pin the current position (after header) as the new 0
+        let mut raw_src = Box::new(RawLayerReader::new(src));
+        raw_src.reset_position()?;
+
+        let mut compressed_sizes = Vec::new();
+        // Enable layers depending on user option. Order is relevant
+        let mut src: Box<dyn 'b + LayerReader<'b, R>> = raw_src;
+        if config.layers_enabled.contains(Layers::ENCRYPT) {
+            src = Box::new(EncryptionLayerReader::new(src, &config.encrypt)?)
+        }
+        if config.layers_enabled.contains(Layers::COMPRESS) {
+            let mut src_compress = Box::new(CompressionLayerReader::new(src)?);
+            src_compress.initialize()?;
+            match &src_compress.sizes_info {
+                Some(info) => compressed_sizes = info.compressed_sizes.clone(),
+                _ => {}
+            }
+            src = src_compress;
+        } else {
+            src.initialize()?;
+        }
+
+        let metadata = Some(ArchiveFooter::deserialize_from(&mut src)?);
+
+        src.seek(SeekFrom::Start(0))?;
+        Ok(ArchiveInfoReader {
+            config,
+            src,
+            compressed_sizes,
+            metadata,
+        })
+    }
+
+    pub fn get_files_size(&self) -> Result<u64, Error> {
+        if let Some(ArchiveFooter { files_info, .. }) = &self.metadata {
+            Ok(files_info.values().map(|f| f.size).sum())
+        } else {
+            Err(Error::MissingMetadata)
+        }
+    }
+}
+
+fn info(matches: &ArgMatches) -> Result<(), Error> {
+    // Safe to use unwrap() because the option is required()
+    let mla_file = matches.value_of("input").unwrap();
+    let path = Path::new(&mla_file);
+    let mut file = File::open(&path)?;
+
+    // Get Header
+    let header = ArchiveHeader::from(&mut file)?;
+
+    let encryption = header.config.layers_enabled.contains(Layers::ENCRYPT);
+    let compression = header.config.layers_enabled.contains(Layers::COMPRESS);
+
+    // Instantiate reader as needed
+    let mla = if compression {
+        let config = readerconfig_from_matches(matches);
+        Some(ArchiveInfoReader::from_config(file, config)?)
+    } else {
+        None
+    };
+    // src into_inner, loop into inner
+
+    // Format Version
+    println!("Format version: {}", header.format_version);
+
+    // Encryption config
+    println!("Encryption: {}", encryption);
+    if encryption && matches.is_present("verbose") {
+        let encrypt_config = header.config.encrypt.expect("Encryption config not found");
+        println!(
+            "  Recipients: {}",
+            count_keys(&encrypt_config.multi_recipient)
+        );
+    }
+
+    // Compression config
+    println!("Compression: {}", compression);
+    if compression && matches.is_present("verbose") {
+        let mla_ = mla.expect("MLA is required for verbose compression info");
+        let output_size = mla_.get_files_size()?;
+        let compressed_size: u64 = mla_.compressed_sizes.into_iter().map(|v| v as u64).sum();
+        let compression_rate = output_size as f64 / compressed_size as f64;
+        println!("  Compression rate: {:.2}", compression_rate);
+    }
+
+    Ok(())
+}
+
 fn main() {
     // Common arguments list, for homogeneity
     let input_args = vec![
@@ -865,6 +982,18 @@ fn main() {
                         .number_of_values(1)
                         .required(true)
                 )
+        )
+        .subcommand(
+            SubCommand::with_name("info")
+                .about("Get info on a MLA Archive")
+                .args(&input_args)
+                .arg(
+                    Arg::with_name("verbose")
+                        .long("verbose")
+                        .short("-v")
+                        .takes_value(false)
+                        .help("Get extra info for encryption and compression layers"),
+                ),
         );
 
     // Launch sub-command
@@ -887,6 +1016,8 @@ fn main() {
         convert(matches)
     } else if let Some(matches) = matches.subcommand_matches("keygen") {
         keygen(matches)
+    } else if let Some(matches) = matches.subcommand_matches("info") {
+        info(matches)
     } else {
         eprintln!("Error: at least one command required.");
         eprintln!("{}", std::str::from_utf8(&help).unwrap());

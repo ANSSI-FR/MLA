@@ -34,7 +34,7 @@ struct KeyAndTag {
 }
 
 #[derive(Serialize, Deserialize)]
-pub(crate) struct MultiRecipientPersistent {
+pub struct MultiRecipientPersistent {
     /// Ephemeral public key
     public: [u8; 32],
     encrypted_keys: Vec<KeyAndTag>,
@@ -103,6 +103,10 @@ pub(crate) fn retrieve_key(
     Ok(None)
 }
 
+pub fn count_keys(persist: &MultiRecipientPersistent) -> usize {
+    persist.encrypted_keys.len()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -141,6 +145,9 @@ mod tests {
         // Perform multi-recipients ECIES
         let key = csprng.gen::<[u8; KEY_SIZE]>();
         let persist = store_key_for_multi_recipients(&recipients_pub, &key, &mut csprng).unwrap();
+
+        // Count keys
+        assert_eq!(count_keys(&persist), 5);
 
         // Ensure each recipient can retrieve the shared key
         for private_key in recipients_priv.iter() {

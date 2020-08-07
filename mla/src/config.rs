@@ -20,10 +20,10 @@ pub struct ArchiveWriterConfig {
 /// Internal configuration stored in the header, to be reloaded
 #[derive(Serialize, Deserialize)]
 pub struct ArchivePersistentConfig {
-    pub(crate) layers_enabled: Layers,
+    pub layers_enabled: Layers,
 
     // Layers specifics
-    pub(crate) encrypt: Option<EncryptionPersistentConfig>,
+    pub encrypt: Option<EncryptionPersistentConfig>,
 }
 
 pub type ConfigResult<'a> = Result<&'a mut ArchiveWriterConfig, ConfigError>;
