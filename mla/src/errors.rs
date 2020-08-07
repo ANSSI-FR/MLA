@@ -1,6 +1,5 @@
 use crate::ArchiveFileID;
 use aes_ctr::stream_cipher::InvalidKeyNonceLength;
-use bincode;
 use hkdf::InvalidLength;
 use std::error;
 use std::fmt;
