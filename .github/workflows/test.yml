@@ -85,3 +85,24 @@ jobs:
         uses: actions-rs/audit-check@v1
         with:
          token: ${{ secrets.GITHUB_TOKEN }}
+
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          components: clippy
+      - name: Install dependencies
+        run: sudo apt-get install llvm
+      - name: Install cargo-afl binary crate
+        uses: actions-rs/install@v0.1
+        with:
+          crate: afl
+          version: latest
+          use-tool-cache: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: -- -D warnings
