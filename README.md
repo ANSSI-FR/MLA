@@ -64,6 +64,12 @@ mlar cat -k key -i my_archive.mla /etc/os-release
 mlar convert -k key -i my_archive.mla -o longterm.mla -l compress -q 11
 ```
 
+`mlar` can be obtained:
+
+* through Cargo: `cargo install mlar`
+* using the [latest release](https://github.com/ANSSI-FR/MLA/releases) for supported operating systems
+
+
 Quick API usage
 =
 
