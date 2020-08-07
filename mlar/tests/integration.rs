@@ -882,3 +882,68 @@ fn test_keygen() {
     let assert = cmd.assert();
     assert.success().stdout(file_list);
 }
+
+#[test]
+fn test_verbose_info() {
+    let ecc_public = Path::new("../samples/test_x25519_pub.pem");
+    let ecc_private = Path::new("../samples/test_x25519.pem");
+    let ecc_public_2 = Path::new("../samples/test_x25519_2_pub.pem");
+
+    let mlar_file = NamedTempFile::new("output.mla").unwrap();
+    let testfs = setup();
+
+    // `mlar create -l -o output.mla
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("create").arg("-o").arg(mlar_file.path());
+    cmd.arg("-l").arg("compress");
+    cmd.arg("-l").arg("encrypt");
+    cmd.arg("-p").arg(ecc_public);
+    cmd.arg("-p").arg(ecc_public_2);
+
+    let mut file_list = String::new();
+    for file in &testfs.files {
+        cmd.arg(file.path());
+        file_list.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
+    }
+
+    println!("{:?}", cmd);
+    let assert = cmd.assert();
+    assert.success().stderr(String::from(&file_list));
+
+    // `mlar info -k <key> -i output.mla`
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("info")
+        .arg("-k")
+        .arg(ecc_private)
+        .arg("-i")
+        .arg(mlar_file.path());
+
+    println!("{:?}", cmd);
+    let assert = cmd.assert();
+    assert.success().stdout(
+        "Format version: 1
+Encryption: true
+Compression: true
+",
+    );
+
+    // `mlar info -k <key> -v -i output.mla`
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("info")
+        .arg("-k")
+        .arg(ecc_private)
+        .arg("-v")
+        .arg("-i")
+        .arg(mlar_file.path());
+
+    println!("{:?}", cmd);
+    let assert = cmd.assert();
+    assert.success().stdout(
+        "Format version: 1
+Encryption: true
+  Recipients: 2
+Compression: true
+  Compression rate: 1.15
+",
+    );
+}
