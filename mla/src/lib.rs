@@ -657,13 +657,9 @@ impl<'a, W: Write> ArchiveWriter<'a, W> {
                     Error::WrongWriterState("[EndFile] Unable to retrieve the hash".to_string())
                 })?;
                 vec_remove_item(ids, &id);
-                hash.finalize().try_into().or_else(
+                hash.finalize().try_into().map_err(
                     // Never happens, as hash is a Sha256, to a Sha256Hash
-                    |_| {
-                        Err(Error::WrongWriterState(
-                            "[EndFile] Hash with wrong size".to_string(),
-                        ))
-                    },
+                    |_| Error::WrongWriterState("[EndFile] Hash with wrong size".to_string()),
                 )?
             }
             _ => {
