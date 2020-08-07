@@ -21,8 +21,8 @@ use pem;
 
 use std::fmt;
 
-const ED_25519_OID: [u64; 4] = [1, 3, 101, 112];
-const X_25519_OID: [u64; 4] = [1, 3, 101, 110];
+const ED_25519_OID: Oid<'static> = oid!(1.3.101.112);
+const X_25519_OID: Oid<'static> = oid!(1.3.101.110);
 
 // ---- Error handling ----
 
@@ -119,8 +119,6 @@ const TAG_OCTETSTRING: u8 = 4;
 /// Parse a DER ED25519 or X25519 private key, and return the corresponding
 /// `x25519_dalek::StaticSecret`
 pub fn parse_openssl_25519_privkey_der(data: &[u8]) -> Result<StaticSecret, Curve25519ParserError> {
-    let ed25519_oid = Oid::from(&ED_25519_OID);
-    let x25519_oid = Oid::from(&X_25519_OID);
     let (_remain, (_header, private)) = parse_25519_private(data)?;
     let data = private.data.content.as_slice()?;
     // data[0] == TAG_OCTETSTRING(4)
@@ -131,9 +129,9 @@ pub fn parse_openssl_25519_privkey_der(data: &[u8]) -> Result<StaticSecret, Curv
     let mut key_data = [0u8; 32];
 
     let read_oid = private.header.tag.as_oid()?;
-    if read_oid == &ed25519_oid {
+    if read_oid == &ED_25519_OID {
         key_data.copy_from_slice(&Sha512::digest(&data[2..34])[0..32]);
-    } else if read_oid == &x25519_oid {
+    } else if read_oid == &X_25519_OID {
         key_data.copy_from_slice(&data[2..34]);
     } else {
         return Err(Curve25519ParserError::UnknownOid);
@@ -201,21 +199,19 @@ fn parse_25519_public(
 /// Parse a DER Ed25519 or X25519 public key, and return the corresponding
 /// `x25519_dalek::PublicKey`
 pub fn parse_openssl_25519_pubkey_der(data: &[u8]) -> Result<PublicKey, Curve25519ParserError> {
-    let ed25519_oid = Oid::from(&ED_25519_OID);
-    let x25519_oid = Oid::from(&X_25519_OID);
     let (_remain, (_header, ed25519_public)) = parse_25519_public(data)?;
     let data = ed25519_public.data.content.as_slice()?;
     let data: [u8; 32] = data
         .try_into()
         .map_err(|_| Curve25519ParserError::InvalidData)?;
     let read_oid = ed25519_public.header.tag.as_oid()?;
-    if read_oid == &ed25519_oid {
+    if read_oid == &ED_25519_OID {
         if let Some(edwards_val) = CompressedEdwardsY::from_slice(&data).decompress() {
             Ok(PublicKey::from(edwards_val.to_montgomery().to_bytes()))
         } else {
             Err(Curve25519ParserError::InvalidData)
         }
-    } else if read_oid == &x25519_oid {
+    } else if read_oid == &X_25519_OID {
         Ok(PublicKey::from(MontgomeryPoint(data).to_bytes()))
     } else {
         Err(Curve25519ParserError::UnknownOid)
