@@ -726,11 +726,11 @@ pub struct BlocksToFileReader<'a, R: Read + Seek> {
     /// position in `offsets` of the last offset used
     current_offset: usize,
     /// List of offsets of continuous blocks corresponding to where the file can be read
-    offsets: Vec<u64>,
+    offsets: &'a [u64],
 }
 
 impl<'a, R: Read + Seek> BlocksToFileReader<'a, R> {
-    fn new(src: &mut R, offsets: Vec<u64>) -> Result<BlocksToFileReader<R>, Error> {
+    fn new(src: &'a mut R, offsets: &'a [u64]) -> Result<BlocksToFileReader<'a, R>, Error> {
         // Set the inner layer at the start of the file
         src.seek(SeekFrom::Start(offsets[0]))?;
 
@@ -944,7 +944,7 @@ impl<'b, R: 'b + Read + Seek> ArchiveReader<'b, R> {
             }
 
             // Instantiate the file representation
-            let reader = BlocksToFileReader::new(&mut self.src, file_info.offsets.clone())?;
+            let reader = BlocksToFileReader::new(&mut self.src, &file_info.offsets)?;
             Ok(Some(ArchiveFile {
                 filename,
                 data: reader,
@@ -1313,8 +1313,9 @@ pub(crate) mod tests {
             .unwrap();
 
         let mut data_source = std::io::Cursor::new(buf);
+        let offsets = [0];
         let mut reader =
-            BlocksToFileReader::new(&mut data_source, vec![0]).expect("BlockToFileReader failed");
+            BlocksToFileReader::new(&mut data_source, &offsets).expect("BlockToFileReader failed");
         let mut output = Vec::new();
         reader.read_to_end(&mut output).unwrap();
         assert_eq!(output.len(), fake_content.len() + fake_content2.len());
