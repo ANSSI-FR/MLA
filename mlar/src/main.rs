@@ -6,7 +6,6 @@ use glob::Pattern;
 use hex;
 use humansize::{file_size_opts, FileSize};
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
-use mla::crypto::ecc::count_keys;
 use mla::errors::{Error, FailSafeReadError};
 use mla::helpers::linear_extract;
 use mla::layers::compress::CompressionLayerReader;
@@ -805,7 +804,7 @@ fn info(matches: &ArgMatches) -> Result<(), Error> {
         let encrypt_config = header.config.encrypt.expect("Encryption config not found");
         println!(
             "  Recipients: {}",
-            count_keys(&encrypt_config.multi_recipient)
+            encrypt_config.multi_recipient.count_keys()
         );
     }
 
