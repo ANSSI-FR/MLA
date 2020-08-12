@@ -712,21 +712,22 @@ fn keygen(matches: &ArgMatches) -> Result<(), Error> {
     Ok(())
 }
 
-pub struct ArchiveInfoReader<'a, R: 'a + Read + Seek> {
+pub struct ArchiveInfoReader {
     /// MLA Archive format Reader
 
     /// User's reading configuration
     pub config: ArchiveReaderConfig,
-    /// Source
-    pub src: Box<dyn 'a + LayerReader<'a, R>>,
     /// Compressed sizes from CompressionLayer
-    pub compressed_sizes: Vec<u32>,
+    pub compressed_size: Option<u64>,
     /// Metadata (from footer if any)
     metadata: Option<ArchiveFooter>,
 }
 
-impl<'b, R: 'b + Read + Seek> ArchiveInfoReader<'b, R> {
-    pub fn from_config(mut src: R, mut config: ArchiveReaderConfig) -> Result<Self, Error> {
+impl ArchiveInfoReader {
+    pub fn from_config<'a, R>(mut src: R, mut config: ArchiveReaderConfig) -> Result<Self, Error>
+    where
+        R: 'a + Read + Seek,
+    {
         // Make sure we read the archive header from the start
         src.seek(SeekFrom::Start(0))?;
         let header = ArchiveHeader::from(&mut src)?;
@@ -736,31 +737,31 @@ impl<'b, R: 'b + Read + Seek> ArchiveInfoReader<'b, R> {
         let mut raw_src = Box::new(RawLayerReader::new(src));
         raw_src.reset_position()?;
 
-        let mut compressed_sizes = Vec::new();
         // Enable layers depending on user option. Order is relevant
-        let mut src: Box<dyn 'b + LayerReader<'b, R>> = raw_src;
+        let mut src: Box<dyn 'a + LayerReader<'a, R>> = raw_src;
         if config.layers_enabled.contains(Layers::ENCRYPT) {
             src = Box::new(EncryptionLayerReader::new(src, &config.encrypt)?)
         }
-        if config.layers_enabled.contains(Layers::COMPRESS) {
+        let compressed_size = if config.layers_enabled.contains(Layers::COMPRESS) {
             let mut src_compress = Box::new(CompressionLayerReader::new(src)?);
             src_compress.initialize()?;
-            match &src_compress.sizes_info {
-                Some(info) => compressed_sizes = info.compressed_sizes.clone(),
-                _ => {}
-            }
+            let size = src_compress
+                .sizes_info
+                .as_ref()
+                .map(|v| v.get_compressed_size());
             src = src_compress;
+            size
         } else {
             src.initialize()?;
-        }
+            None
+        };
 
         let metadata = Some(ArchiveFooter::deserialize_from(&mut src)?);
 
         src.seek(SeekFrom::Start(0))?;
         Ok(ArchiveInfoReader {
             config,
-            src,
-            compressed_sizes,
+            compressed_size,
             metadata,
         })
     }
@@ -793,7 +794,6 @@ fn info(matches: &ArgMatches) -> Result<(), Error> {
     } else {
         None
     };
-    // src into_inner, loop into inner
 
     // Format Version
     println!("Format version: {}", header.format_version);
@@ -813,7 +813,7 @@ fn info(matches: &ArgMatches) -> Result<(), Error> {
     if compression && matches.is_present("verbose") {
         let mla_ = mla.expect("MLA is required for verbose compression info");
         let output_size = mla_.get_files_size()?;
-        let compressed_size: u64 = mla_.compressed_sizes.into_iter().map(|v| v as u64).sum();
+        let compressed_size: u64 = mla_.compressed_size.expect("Missing compression size");
         let compression_rate = output_size as f64 / compressed_size as f64;
         println!("  Compression rate: {:.2}", compression_rate);
     }

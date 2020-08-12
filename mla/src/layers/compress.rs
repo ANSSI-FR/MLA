@@ -100,6 +100,11 @@ impl SizesInfo {
         (self.compressed_sizes.len() as u64 - 1) * UNCOMPRESSED_DATA_SIZE as u64
             + self.last_block_size as u64
     }
+
+    // Sum the compressed_sizes
+    pub fn get_compressed_size(&self) -> u64 {
+        self.compressed_sizes.iter().map(|v| *v as u64).sum()
+    }
 }
 
 pub struct CompressionLayerReader<'a, R: 'a + Read> {
