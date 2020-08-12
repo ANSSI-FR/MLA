@@ -40,6 +40,12 @@ pub struct MultiRecipientPersistent {
     encrypted_keys: Vec<KeyAndTag>,
 }
 
+impl MultiRecipientPersistent {
+    pub fn count_keys(&self) -> usize {
+        self.encrypted_keys.len()
+    }
+}
+
 /// Perform ECIES with several recipients, to share a common `key`, and return a
 /// serializable structure (Key-wrapping made thanks to AesGcm256)
 pub(crate) fn store_key_for_multi_recipients<T>(
@@ -103,10 +109,6 @@ pub(crate) fn retrieve_key(
     Ok(None)
 }
 
-pub fn count_keys(persist: &MultiRecipientPersistent) -> usize {
-    persist.encrypted_keys.len()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -147,7 +149,7 @@ mod tests {
         let persist = store_key_for_multi_recipients(&recipients_pub, &key, &mut csprng).unwrap();
 
         // Count keys
-        assert_eq!(count_keys(&persist), 5);
+        assert_eq!(persist.count_keys(), 5);
 
         // Ensure each recipient can retrieve the shared key
         for private_key in recipients_priv.iter() {
