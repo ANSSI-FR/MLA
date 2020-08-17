@@ -7,7 +7,7 @@ extern crate bitflags;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use serde::{Deserialize, Serialize};
 
-mod layers;
+pub mod layers;
 use crate::layers::compress::{
     CompressionLayerFailSafeReader, CompressionLayerReader, CompressionLayerWriter,
 };
@@ -73,19 +73,20 @@ pub type ArchiveFileID = u64;
 
 // -------- MLA Format Header --------
 
-struct ArchiveHeader {
-    config: ArchivePersistentConfig,
+pub struct ArchiveHeader {
+    pub format_version: u32,
+    pub config: ArchivePersistentConfig,
 }
 
 impl ArchiveHeader {
-    fn from<T: Read>(src: &mut T) -> Result<Self, Error> {
+    pub fn from<T: Read>(src: &mut T) -> Result<Self, Error> {
         let mut buf = vec![00u8; MLA_MAGIC.len()];
         src.read_exact(buf.as_mut_slice())?;
         if buf != MLA_MAGIC {
             return Err(Error::WrongMagic);
         }
-        let version = src.read_u32::<LittleEndian>()?;
-        if version != MLA_FORMAT_VERSION {
+        let format_version = src.read_u32::<LittleEndian>()?;
+        if format_version != MLA_FORMAT_VERSION {
             return Err(Error::UnsupportedVersion);
         }
         let config: ArchivePersistentConfig = match bincode::config()
@@ -97,12 +98,15 @@ impl ArchiveHeader {
                 return Err(Error::DeserializationError);
             }
         };
-        Ok(ArchiveHeader { config })
+        Ok(ArchiveHeader {
+            format_version,
+            config,
+        })
     }
 
     fn dump<T: Write>(&self, dest: &mut T) -> Result<(), Error> {
         dest.write_all(MLA_MAGIC)?;
-        dest.write_u32::<LittleEndian>(MLA_FORMAT_VERSION)?;
+        dest.write_u32::<LittleEndian>(self.format_version)?;
         if bincode::config()
             .limit(BINCODE_MAX_DESERIALIZE)
             .serialize_into(dest, &self.config)
@@ -116,9 +120,9 @@ impl ArchiveHeader {
 
 // -------- MLA Format Footer --------
 
-struct ArchiveFooter {
+pub struct ArchiveFooter {
     /// Filename -> Corresponding FileInfo
-    files_info: HashMap<String, FileInfo>,
+    pub files_info: HashMap<String, FileInfo>,
 }
 
 impl ArchiveFooter {
@@ -167,7 +171,7 @@ impl ArchiveFooter {
     }
 
     /// Parses and instantiates a footer from serialized data
-    fn deserialize_from<R: Read + Seek>(mut src: R) -> Result<ArchiveFooter, Error> {
+    pub fn deserialize_from<R: Read + Seek>(mut src: R) -> Result<ArchiveFooter, Error> {
         // Read the footer length
         let pos = src.seek(SeekFrom::End(-4))?;
         let len = src.read_u32::<LittleEndian>()? as u64;
@@ -464,6 +468,7 @@ impl<'a, W: Write> ArchiveWriter<'a, W> {
         // Write archive header
         let mut dest: Box<dyn LayerWriter<W>> = Box::new(RawLayerWriter::new(dest));
         ArchiveHeader {
+            format_version: MLA_FORMAT_VERSION,
             config: config.to_persistent()?,
             // TODO public_key hashes for easier decryption
         }
@@ -824,13 +829,13 @@ impl<'a, T: Read + Seek> Read for BlocksToFileReader<'a, T> {
 
 #[derive(Serialize, Deserialize)]
 #[cfg_attr(test, derive(PartialEq, Debug))]
-struct FileInfo {
+pub struct FileInfo {
     /// File information to save in the footer
     ///
     /// Offsets of continuous chunks of `ArchiveFileBlock`
     offsets: Vec<u64>,
     /// Size of the file, in bytes
-    size: u64,
+    pub size: u64,
     /// Offset of the ArchiveFileBlock::EndOfFile
     ///
     /// This offset is used to retrieve information from the EoF tag, such as
@@ -842,10 +847,7 @@ pub struct ArchiveReader<'a, R: 'a + Read + Seek> {
     /// MLA Archive format Reader
 
     /// User's reading configuration
-    // config is not used for now after reader creation,
-    // but it could in the future
-    #[allow(dead_code)]
-    config: ArchiveReaderConfig,
+    pub config: ArchiveReaderConfig,
     /// Source
     src: Box<dyn 'a + LayerReader<'a, R>>,
     /// Metadata (from footer if any)
@@ -854,6 +856,8 @@ pub struct ArchiveReader<'a, R: 'a + Read + Seek> {
 
 impl<'b, R: 'b + Read + Seek> ArchiveReader<'b, R> {
     pub fn from_config(mut src: R, mut config: ArchiveReaderConfig) -> Result<Self, Error> {
+        // Make sure we read the archive header from the start
+        src.seek(SeekFrom::Start(0))?;
         let header = ArchiveHeader::from(&mut src)?;
         config.load_persistent(header.config)?;
 
@@ -1233,6 +1237,7 @@ pub(crate) mod tests {
     #[test]
     fn read_dump_header() {
         let header = ArchiveHeader {
+            format_version: MLA_FORMAT_VERSION,
             config: ArchivePersistentConfig {
                 layers_enabled: Layers::default(),
                 encrypt: None,
