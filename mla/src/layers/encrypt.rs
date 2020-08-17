@@ -47,7 +47,7 @@ fn build_nonce(nonce_prefix: [u8; NONCE_SIZE], current_ctr: u32) -> Nonce {
 /// Configuration stored in the header, to be reloaded
 #[derive(Serialize, Deserialize)]
 pub struct EncryptionPersistentConfig {
-    multi_recipient: MultiRecipientPersistent,
+    pub multi_recipient: MultiRecipientPersistent,
     nonce: [u8; NONCE_SIZE],
 }
 
