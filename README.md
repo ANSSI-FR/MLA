@@ -62,6 +62,9 @@ mlar cat -k key -i my_archive.mla /etc/os-release
 # Convert the archive to a long-term one, removing encryption and using the best
 # and slower compression level
 mlar convert -k key -i my_archive.mla -o longterm.mla -l compress -q 11
+
+# Create an archive with multiple recipient
+mlar create -p archive.pub -p client1.pub -o my_archive.mla ...
 ```
 
 Quick API usage
