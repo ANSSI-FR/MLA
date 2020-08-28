@@ -34,7 +34,7 @@ This repository contains:
 * `mlar`: a Rust utility wrapping `mla` for common actions (create, list, extract, ...)
 * `curve25519-parser`: a Rust library for parsing DER/PEM public and private Ed25519 keys and X25519 keys (as made by `openssl`)
 * `mla-fuzz-afl` a Rust utility to fuzz `mla`
-* `Dockerfile`, `.gitlab-ci.yml`: Continuous Integration needs
+* `.github`: Continuous Integration needs
 
 Quick command-line usage
 =
