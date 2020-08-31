@@ -28,7 +28,7 @@ aes = "0"
 subtle = "2"
 digest = "0"
 # ECC
-x25519-dalek = "0"
+x25519-dalek = "1"
 hkdf = "0"
 sha2 = "0"
 zeroize = "1"

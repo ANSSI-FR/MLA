@@ -15,7 +15,7 @@ readme = "../README.md"
 der-parser = "4"
 # 'nom' dependency from 'der-parser'
 nom = "5"
-x25519-dalek = "0"
+x25519-dalek = "1"
 curve25519-dalek = "2"
 sha2 = "0"
 pem = "0"
