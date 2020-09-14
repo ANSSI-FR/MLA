@@ -67,6 +67,12 @@ mlar convert -k key -i my_archive.mla -o longterm.mla -l compress -q 11
 mlar create -p archive.pub -p client1.pub -o my_archive.mla ...
 ```
 
+`mlar` can be obtained:
+
+* through Cargo: `cargo install mlar`
+* using the [latest release](https://github.com/ANSSI-FR/MLA/releases) for supported operating systems
+
+
 Quick API usage
 =
 
