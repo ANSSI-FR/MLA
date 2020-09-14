@@ -1,6 +1,6 @@
 [package]
 name = "curve25519-parser"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Camille Mougey <camille.mougey@ssi.gouv.fr>"]
 edition = "2018"
 license = "LGPL-3.0-only"
