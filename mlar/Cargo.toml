@@ -15,8 +15,8 @@ readme = "../README.md"
 [dependencies]
 clap = "2"
 glob = "0.3"
-mla = { path = "../mla" }
-curve25519-parser = { path = "../curve25519-parser" }
+mla = { path = "../mla", version = "1" }
+curve25519-parser = { path = "../curve25519-parser", version = "0.2" }
 rand = "0.7"
 x25519-dalek = "1"
 humansize = "1"
