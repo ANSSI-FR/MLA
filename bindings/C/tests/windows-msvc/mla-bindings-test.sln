@@ -9,20 +9,20 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
 		Debug|x64 = Debug|x64
-		Debug|x86 = Debug|x86
+		Release|Win32 = Release|Win32
 		Release|x64 = Release|x64
-		Release|x86 = Release|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{DC24562E-DA24-486A-9196-6F2F73A09E17}.Debug|Win32.ActiveCfg = Debug|Win32
+		{DC24562E-DA24-486A-9196-6F2F73A09E17}.Debug|Win32.Build.0 = Debug|Win32
 		{DC24562E-DA24-486A-9196-6F2F73A09E17}.Debug|x64.ActiveCfg = Debug|x64
 		{DC24562E-DA24-486A-9196-6F2F73A09E17}.Debug|x64.Build.0 = Debug|x64
-		{DC24562E-DA24-486A-9196-6F2F73A09E17}.Debug|x86.ActiveCfg = Debug|Win32
-		{DC24562E-DA24-486A-9196-6F2F73A09E17}.Debug|x86.Build.0 = Debug|Win32
+		{DC24562E-DA24-486A-9196-6F2F73A09E17}.Release|Win32.ActiveCfg = Release|Win32
+		{DC24562E-DA24-486A-9196-6F2F73A09E17}.Release|Win32.Build.0 = Release|Win32
 		{DC24562E-DA24-486A-9196-6F2F73A09E17}.Release|x64.ActiveCfg = Release|x64
 		{DC24562E-DA24-486A-9196-6F2F73A09E17}.Release|x64.Build.0 = Release|x64
-		{DC24562E-DA24-486A-9196-6F2F73A09E17}.Release|x86.ActiveCfg = Release|Win32
-		{DC24562E-DA24-486A-9196-6F2F73A09E17}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

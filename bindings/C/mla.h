@@ -1,3 +1,5 @@
+/* Automatically generated with cbindgen --config cbindgen.toml (do not modify) */
+
 #pragma once
 
 #include <stdarg.h>
@@ -59,6 +61,14 @@ MLAStatus mla_config_default_new(MLAConfigHandle *handle_out);
  * (referenced by the handle returned by mla_config_default_new()).
  */
 MLAStatus mla_config_add_public_keys(MLAConfigHandle config, const char *public_keys);
+
+/**
+ * Sets the compression level in an existing given configuration
+ * (referenced by the handle returned by mla_config_default_new()).
+ * Currently this level can only be an integer N with 0 <= N <= 11,
+ * and bigger values cause denser but slower compression.
+ */
+MLAStatus mla_config_set_compression_level(MLAConfigHandle config, uint32_t level);
 
 /**
  * Open a new MLA archive using the given configuration, which is consumed and freed

@@ -60,25 +60,39 @@ jobs:
     - name: Run C bindings tests on Linux
       working-directory: bindings/C/tests/linux-gcc/
       run: make
-  
+
   test-bindings-C-windows:
+    strategy:
+      matrix:
+        version: [Debug, Release]
+        target: [x86_64-pc-windows-msvc, i686-pc-windows-msvc]
+        include:
+          - version: Debug
+            cargo_arg: ""
+          - version: Release
+            cargo_arg: --release
+          - target: i686-pc-windows-msvc
+            msvc_platform: Win32
+          - target: x86_64-pc-windows-msvc
+            msvc_platform: x64
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v2
     - uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
+        target: ${{ matrix.target }}
     - uses: microsoft/setup-msbuild@v1.0.2
     - name: Build static library for Windows
       uses: actions-rs/cargo@v1
       with:
         command: build
-        args: --manifest-path=bindings/C/Cargo.toml --target=x86_64-pc-windows-msvc
-    - name: Compile C bindings test program on Windows
+        args: ${{ matrix.cargo_arg }} --manifest-path=bindings/C/Cargo.toml --target=${{ matrix.target }}
+    - name: Compile C bindings test program for Windows x86 Debug
       working-directory: bindings/C/tests/windows-msvc/
-      run: msbuild mla-bindings-test.sln -p:Configuration=Debug
+      run: msbuild mla-bindings-test.sln /p:Platform=${{ matrix.msvc_platform }} /p:Configuration=${{ matrix.version }}
     - name: Run C bindings test program on Windows
-      working-directory: bindings/C/tests/windows-msvc/x64/Debug
+      working-directory: bindings/C/tests/windows-msvc/${{ matrix.msvc_platform }}/${{ matrix.version }}/
       run: ./mla-bindings-test.exe
 
   afl-build:
