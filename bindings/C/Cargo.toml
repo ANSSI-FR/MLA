@@ -1,0 +1,13 @@
+[package]
+name = "mla-bindings-c"
+version = "1.0.0"
+authors = ["Matthieu Buffet <matthieu.buffet@ssi.gouv.fr>"]
+edition = "2018"
+
+[lib]
+name = "mla"
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+mla = { path = "../../mla", version = "1" }
+curve25519-parser = { path = "../../curve25519-parser", version = "0.2" }

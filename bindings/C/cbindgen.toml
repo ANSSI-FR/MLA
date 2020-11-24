@@ -1,0 +1,5 @@
+language = "C"
+pragma_once = true
+
+[enum]
+rename_variants = "QualifiedScreamingSnakeCase"
