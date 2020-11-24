@@ -177,6 +177,30 @@ pub extern "C" fn mla_config_add_public_keys(
     res
 }
 
+/// Sets the compression level in an existing given configuration
+/// (referenced by the handle returned by mla_config_default_new()).
+/// Currently this level can only be an integer N with 0 <= N <= 11,
+/// and bigger values cause denser but slower compression.
+#[no_mangle]
+pub extern "C" fn mla_config_set_compression_level(
+    config: MLAConfigHandle,
+    level: u32,
+) -> MLAStatus {
+    if config.is_null() {
+        return MLAStatus::BadAPIArgument;
+    }
+
+    let mut config = unsafe { Box::from_raw(config as *mut ArchiveWriterConfig) };
+
+    let res = match config.with_compression_level(level) {
+        Ok(_) => MLAStatus::Success,
+        Err(e) => MLAStatus::from(MLAError::ConfigError(e)),
+    };
+
+    Box::leak(config);
+    res
+}
+
 /// Open a new MLA archive using the given configuration, which is consumed and freed
 /// (its handle cannot be reused to create another archive). The archive is streamed
 /// through the write_callback, and flushed at least at the end when the last byte is
