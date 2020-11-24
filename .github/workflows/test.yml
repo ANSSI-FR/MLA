@@ -47,15 +47,40 @@ jobs:
 
   long-tests:
     runs-on: ubuntu-latest
+    - name: Run long tests
+      run: cd mla && cargo test --release -- --ignored
 
+  test-bindings-C-linux:
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
     - uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
-    - name: Run long tests
-      run: cd mla && cargo test --release -- --ignored
-        
+    - name: Run C bindings tests on Linux
+      working-directory: bindings/C/tests/linux-gcc/
+      run: make
+  
+  test-bindings-C-windows:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+    - uses: microsoft/setup-msbuild@v1.0.2
+    - name: Build static library for Windows
+      uses: actions-rs/cargo@v1
+      with:
+        command: build
+        args: --manifest-path=bindings/C/Cargo.toml --target=x86_64-pc-windows-msvc
+    - name: Compile C bindings test program on Windows
+      working-directory: bindings/C/tests/windows-msvc/
+      run: msbuild mla-bindings-test.sln -p:Configuration=Debug
+    - name: Run C bindings test program on Windows
+      working-directory: bindings/C/tests/windows-msvc/x64/Debug
+      run: ./mla-bindings-test.exe
+
   afl-build:
     runs-on: ubuntu-latest
 
