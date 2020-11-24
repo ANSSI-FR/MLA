@@ -18,8 +18,8 @@ use rand_core::{CryptoRng, RngCore};
 
 use std::fmt;
 
-const ED_25519_OID: Oid<'static> = oid!(1.3.101.112);
-const X_25519_OID: Oid<'static> = oid!(1.3.101.110);
+const ED_25519_OID: Oid<'static> = oid!(1.3.101 .112);
+const X_25519_OID: Oid<'static> = oid!(1.3.101 .110);
 
 // ---- Error handling ----
 
