@@ -4,7 +4,7 @@ BUILDDIR ?= ../../../../target
 TARGET ?= x86_64-unknown-linux-gnu
 MLAR ?= $(BUILDDIR)/$(TARGET)/debug/mlar
 
-tests: test_create test_create_manykeys test_fail_no_key test_create_interleaved test_create_no_early_close test_create_unicode test_create_stream
+tests: test_create test_create_manykeys test_create_set_compression_level test_create_set_compression_level_fail_invalid test_create_fail_no_key test_create_interleaved test_create_no_early_close test_create_unicode test_create_stream
 
 test_create: $(MLAR) create.elf
 	./create.elf
@@ -15,7 +15,13 @@ test_create_manykeys: $(MLAR) create_manykeys.elf
 	$(MLAR) cat test.txt --input ./test.mla -k ../../../../samples/test_ed25519.pem | grep -E '^Hello, World!$$'
 	$(MLAR) cat test.txt --input ./test.mla -k ../../../../samples/test_x25519.pem | grep -E '^Hello, World!$$'
 
-test_fail_no_key: $(MLAR) create_fail_no_key.elf
+test_create_set_compression_level: $(MLAR) create_set_compression_level.elf
+	./create_set_compression_level.elf
+
+test_create_set_compression_level_fail_invalid: $(MLAR) create_set_compression_level_fail_invalid.elf
+	./create_set_compression_level_fail_invalid.elf
+
+test_create_fail_no_key: $(MLAR) create_fail_no_key.elf
 	./create_fail_no_key.elf
 
 test_create_interleaved: $(MLAR) create_interleaved.elf
