@@ -1229,7 +1229,8 @@ pub(crate) mod tests {
     use super::*;
     use curve25519_parser::{parse_openssl_25519_privkey, parse_openssl_25519_pubkey};
     use hex;
-    use rand::SeedableRng;
+    use rand::distributions::{Distribution, Standard};
+    use rand::{RngCore, SeedableRng};
     use rand_chacha::ChaChaRng;
     use std::io::{Cursor, Empty, Read};
     use x25519_dalek::{PublicKey, StaticSecret};
@@ -2061,5 +2062,93 @@ pub(crate) mod tests {
             .read_to_end(&mut out)
             .unwrap();
         assert_eq!(out.as_slice(), fake_file.as_slice());
+    }
+
+    #[test]
+    fn more_than_u32_file() {
+        // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
+        let mut rng = ChaChaRng::seed_from_u64(0);
+        let mut rng_data = ChaChaRng::seed_from_u64(0);
+
+        const MAX_SIZE: u64 = 6 * 1024 * 1024 * 1024; // 6 GB
+        const MORE_THAN_U32: u64 = 0x100010000; // U32_max + 0x10000
+        const CHUNK_SIZE: usize = 10 * 1024 * 1024; // 10 MB
+
+        let key = StaticSecret::new(&mut rng);
+        let mut config = ArchiveWriterConfig::default();
+        config.add_public_keys(std::slice::from_ref(&PublicKey::from(&key)));
+        let file = Vec::new();
+        let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
+
+        // At least one file will be bigger than 32bits
+        let id1 = mla.start_file("file_0").unwrap();
+        let mut cur_size = 0;
+        while cur_size < MORE_THAN_U32 {
+            let size = std::cmp::min(rng.next_u32() as u64, MORE_THAN_U32 - cur_size);
+            let data: Vec<u8> = Standard
+                .sample_iter(&mut rng_data)
+                .take(size as usize)
+                .collect();
+            mla.append_file_content(id1, size, data.as_slice()).unwrap();
+            cur_size += size;
+        }
+        mla.end_file(id1).unwrap();
+
+        let mut nb_file = 1;
+
+        // Complete up to MAX_SIZE
+        while cur_size < MAX_SIZE {
+            let id = mla
+                .start_file(format!("file_{:}", nb_file).as_str())
+                .unwrap();
+            let size = std::cmp::min(rng.next_u32() as u64, MAX_SIZE - cur_size);
+            let data: Vec<u8> = Standard
+                .sample_iter(&mut rng_data)
+                .take(size as usize)
+                .collect();
+            mla.append_file_content(id, size, data.as_slice()).unwrap();
+            cur_size += size;
+            mla.end_file(id).unwrap();
+            nb_file += 1;
+        }
+        mla.finalize().unwrap();
+
+        // List files and check the list
+        let mla_data = mla.into_raw();
+
+        let buf = Cursor::new(mla_data);
+        let mut config = ArchiveReaderConfig::new();
+        config.add_private_keys(&[key]);
+        let mut mla_read = ArchiveReader::from_config(buf, config).expect("archive reader");
+
+        let file_names: Vec<String> = (0..nb_file).map(|nb| format!("file_{:}", nb)).collect();
+        let mut file_list = mla_read
+            .list_files()
+            .unwrap()
+            .cloned()
+            .collect::<Vec<String>>();
+        file_list.sort();
+        assert_eq!(file_list, file_names);
+
+        // Check files content
+
+        // Using the same seed than the one used for data creation, we can compare expected content
+        let mut rng_data = ChaChaRng::seed_from_u64(0);
+
+        let mut chunk = vec![0u8; CHUNK_SIZE];
+        for file_name in file_names.into_iter() {
+            let mut file_stream = mla_read.get_file(file_name).unwrap().unwrap().data;
+            loop {
+                let read = file_stream.read(&mut chunk).unwrap();
+                let expect: Vec<u8> = Standard
+                    .sample_iter(&mut rng_data)
+                    .take(read as usize)
+                    .collect();
+                assert_eq!(&chunk[..read], expect.as_slice());
+                if read == 0 {
+                    break;
+                }
+            }
+        }
     }
 }
