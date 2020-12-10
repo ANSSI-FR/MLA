@@ -254,8 +254,12 @@ impl<'a, R: 'a + Read> CompressionLayerReader<'a, R> {
                 compressed_sizes, ..
             }) => {
                 // Move the underlayer at the start of the block
-                let start_position: u32 = compressed_sizes.iter().take(block_num as usize).sum();
-                inner.seek(SeekFrom::Start(start_position as u64))?;
+                let start_position = compressed_sizes
+                    .iter()
+                    .take(block_num as usize)
+                    .map(|size| *size as u64)
+                    .sum();
+                inner.seek(SeekFrom::Start(start_position))?;
             }
             None => {
                 return Err(Error::MissingMetadata);
