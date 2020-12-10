@@ -42,7 +42,7 @@ Quick command-line usage
 Here are some commands to use ``mlar`` in order to work with archives in MLA format.
 
 ```sh
-# Generate an X25519 key pair (OpenSSL could also be used)
+# Generate an X25519 key pair {key, key.pub} (OpenSSL could also be used)
 mlar keygen key
 
 # Create an archive with some files, using the public key
