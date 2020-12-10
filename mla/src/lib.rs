@@ -2065,13 +2065,14 @@ pub(crate) mod tests {
     }
 
     #[test]
+    #[ignore]
     fn more_than_u32_file() {
         // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
         let mut rng = ChaChaRng::seed_from_u64(0);
         let mut rng_data = ChaChaRng::seed_from_u64(0);
 
-        const MAX_SIZE: u64 = 6 * 1024 * 1024 * 1024; // 6 GB
         const MORE_THAN_U32: u64 = 0x100010000; // U32_max + 0x10000
+        const MAX_SIZE: u64 = 5 * 1024 * 1024 * 1024; // 5 GB
         const CHUNK_SIZE: usize = 10 * 1024 * 1024; // 10 MB
 
         let key = StaticSecret::new(&mut rng);
