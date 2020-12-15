@@ -23,7 +23,7 @@ humansize = "1"
 hex = "0.4"
 # Could be made optional / feature to enable (for binary size)
 tar = "0.4"
-rand_chacha = "0.2"
+rand_chacha = "0.3"
 
 [dev-dependencies]
 assert_cmd = "1.0"
