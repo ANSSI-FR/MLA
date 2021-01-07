@@ -1,4 +1,3 @@
-language = "C"
 pragma_once = true
 header = "/* Automatically generated with cbindgen --config cbindgen.toml (do not modify) */"
 

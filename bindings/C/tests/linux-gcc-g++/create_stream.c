@@ -1,10 +1,18 @@
 #include <errno.h>
-#include <stdio.h>
 #include <inttypes.h>
+#include <memory.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#ifdef __cplusplus
+#include "mla.hpp"
+#define MLA_STATUS(x) MLAStatus::x
+#else
 #include "mla.h"
+#define MLA_STATUS(x) (x)
+#endif
 
-// from samples/test_ed25519.pem
+// From samples/test_ed25519.pem
 const char *szPubkey = "-----BEGIN PUBLIC KEY-----\n"
    "MCowBQYDK2VwAyEA9md4yIIFx+ftwe0c1p2YsJFrobXWKxan54Bs+/jFagE=\n"
    "-----END PUBLIC KEY-----\n";
@@ -30,32 +38,25 @@ int main()
       return errno;
    }
 
-   MLAStatus status = 0;
+   MLAStatus status;
    MLAConfigHandle hConfig = NULL;
    status = mla_config_default_new(&hConfig);
-   if (status != MLA_STATUS_SUCCESS)
+   if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
    {
       fprintf(stderr, " [!] Config creation failed with code %" PRIX64 "\n", (uint64_t)status);
       return (int)status;
    }
 
    status = mla_config_add_public_keys(hConfig, szPubkey);
-   if (status != MLA_STATUS_SUCCESS)
+   if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
    {
       fprintf(stderr, " [!] Public key set failed with code %" PRIX64 "\n", (uint64_t)status);
       return (int)status;
    }
 
-   status = mla_config_set_compression_level(hConfig, 10);
-   if (status != MLA_STATUS_SUCCESS)
-   {
-      fprintf(stderr, " [!] Compression level set failed with code %" PRIX64 "\n", (uint64_t)status);
-      return (int)status;
-   }
-
    MLAArchiveHandle hArchive = NULL;
    status = mla_archive_new(&hConfig, &callback_write, &callback_flush, f, &hArchive);
-   if (status != MLA_STATUS_SUCCESS)
+   if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
    {
       fprintf(stderr, " [!] Archive creation failed with code %" PRIX64 "\n", (uint64_t)status);
       return (int)status;
@@ -63,28 +64,39 @@ int main()
 
    MLAArchiveFileHandle hFile = NULL;
    status = mla_archive_file_new(hArchive, "test.txt", &hFile);
-   if (status != MLA_STATUS_SUCCESS)
+   if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
    {
       fprintf(stderr, " [!] File creation failed with code %" PRIX64 "\n", (uint64_t)status);
       return (int)status;
    }
 
-   status = mla_archive_file_append(hArchive, hFile, (const uint8_t*)"Hello, World!\n", (uint32_t)strlen("Hello, World!\n"));
-   if (status != MLA_STATUS_SUCCESS)
+   while (!feof(stdin) && !ferror(stdin))
    {
-      fprintf(stderr, " [!] File write failed with code %" PRIX64 "\n", (uint64_t)status);
-      return (int)status;
+      uint8_t buf[1024];
+      size_t bytes_read = fread(buf, 1, sizeof(buf), stdin);
+
+      status = mla_archive_file_append(hArchive, hFile, buf, bytes_read);
+      if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
+      {
+         fprintf(stderr, " [!] File write failed with code %" PRIX64 "\n", (uint64_t)status);
+         return (int)status;
+      }
+   }
+   if (ferror(stdin))
+   {
+      fprintf(stderr, " [!] Error while reading from stdin\n");
+      return 1;
    }
 
    status = mla_archive_file_close(hArchive, &hFile);
-   if (status != MLA_STATUS_SUCCESS)
+   if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
    {
       fprintf(stderr, " [!] File close failed with code %" PRIX64 "\n", (uint64_t)status);
       return (int)status;
    }
 
    status = mla_archive_close(&hArchive);
-   if (status != MLA_STATUS_SUCCESS)
+   if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
    {
       fprintf(stderr, " [!] Archive close failed with code %" PRIX64 "\n", (uint64_t)status);
       return (int)status;
@@ -94,3 +106,4 @@ int main()
 
    return 0;
 }
+
