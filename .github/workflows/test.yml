@@ -47,10 +47,16 @@ jobs:
 
   long-tests:
     runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
     - name: Run long tests
       run: cd mla && cargo test --release -- --ignored
 
-  test-bindings-C-linux:
+  test-bindings-c-cpp-linux:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
@@ -58,18 +64,25 @@ jobs:
       with:
         toolchain: stable
     - name: Run C bindings tests on Linux
-      working-directory: bindings/C/tests/linux-gcc/
-      run: make
+      working-directory: bindings/C/tests/linux-gcc-g++/
+      run: make CC=gcc
+    - name: Run C bindings tests on Linux
+      working-directory: bindings/C/tests/linux-gcc-g++/
+      run: make CC=g++
 
-  test-bindings-C-windows:
+  test-bindings-c-cpp-windows:
     strategy:
       matrix:
-        version: [Debug, Release]
+        version: [Debug-c, Release-c, Debug-cpp, Release-cpp]
         target: [x86_64-pc-windows-msvc, i686-pc-windows-msvc]
         include:
-          - version: Debug
+          - version: Debug-c
             cargo_arg: ""
-          - version: Release
+          - version: Release-c
+            cargo_arg: --release
+          - version: Debug-cpp
+            cargo_arg: ""
+          - version: Release-cpp
             cargo_arg: --release
           - target: i686-pc-windows-msvc
             msvc_platform: Win32
@@ -88,10 +101,10 @@ jobs:
       with:
         command: build
         args: ${{ matrix.cargo_arg }} --manifest-path=bindings/C/Cargo.toml --target=${{ matrix.target }}
-    - name: Compile C bindings test program for Windows x86 Debug
+    - name: Compile C/CPP bindings test program for Windows
       working-directory: bindings/C/tests/windows-msvc/
       run: msbuild mla-bindings-test.sln /p:Platform=${{ matrix.msvc_platform }} /p:Configuration=${{ matrix.version }}
-    - name: Run C bindings test program on Windows
+    - name: Run C/CPP bindings test program on Windows
       working-directory: bindings/C/tests/windows-msvc/${{ matrix.msvc_platform }}/${{ matrix.version }}/
       run: ./mla-bindings-test.exe
 

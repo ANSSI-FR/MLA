@@ -2,7 +2,13 @@
 #include <stdio.h>
 #include <inttypes.h>
 #include <string.h>
+#ifdef __cplusplus
+#include "mla.hpp"
+#define MLA_STATUS(x) MLAStatus::x
+#else
 #include "mla.h"
+#define MLA_STATUS(x) (x)
+#endif
 
 int main()
 {
