@@ -5,6 +5,7 @@ members = [
     "curve25519-parser",
     "mlar",
     "mla-fuzz-afl",
+    "bindings/C",
 ]
 
 [profile.release]
