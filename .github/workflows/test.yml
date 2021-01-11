@@ -108,6 +108,25 @@ jobs:
       working-directory: bindings/C/tests/windows-msvc/${{ matrix.msvc_platform }}/${{ matrix.version }}/
       run: ./mla-bindings-test.exe
 
+  sanity-checks:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+    - uses: actions-rs/cargo@v1
+      with:
+        command: install
+        args: cbindgen
+    # Assert .h and .hpp bindings files are the ones generated
+    - name: Test C header
+      working-directory: bindings/C
+      run: cbindgen --config cbindgen_c.toml | diff - mla.h
+    - name: Test C++ header
+      working-directory: bindings/C
+      run: cbindgen --config cbindgen_cpp.toml | diff - mla.hpp
+
   afl-build:
     runs-on: ubuntu-latest
 
