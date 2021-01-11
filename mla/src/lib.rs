@@ -903,7 +903,7 @@ impl<'b, R: 'b + Read + Seek> ArchiveReader<'b, R> {
         }
     }
 
-    pub fn get_hash<'a>(&'a mut self, filename: &str) -> Result<Option<Sha256Hash>, Error> {
+    pub fn get_hash(&mut self, filename: &str) -> Result<Option<Sha256Hash>, Error> {
         if let Some(ArchiveFooter { files_info }) = &self.metadata {
             // Get file relative information
             let file_info = match files_info.get(filename) {
