@@ -1,0 +1,30 @@
+name: Ensure repository healthy state over time
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  bindings-headers-sync:
+    # Assert .h and .hpp bindings files are the ones generated
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+    - uses: actions-rs/cargo@v1
+      with:
+        command: install
+        args: cbindgen
+    - name: Test C header
+      working-directory: bindings/C
+      run: cbindgen --config cbindgen_c.toml | diff - mla.h
+    - name: Test C++ header
+      working-directory: bindings/C
+      run: cbindgen --config cbindgen_cpp.toml | diff - mla.hpp
