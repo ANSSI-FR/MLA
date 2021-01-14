@@ -28,3 +28,35 @@ jobs:
     - name: Test C++ header
       working-directory: bindings/C
       run: cbindgen --config cbindgen_cpp.toml | diff - mla.hpp
+
+  changelog-format:
+    # Ensure CHANGELOGs respect the KeepAChangelog format
+    strategy:
+      matrix:
+        changelog: [curve25519-parser, mla, mlar]
+        include:
+          - changelog: curve25519-parser
+            path: curve25519-parser
+          - changelog: mla
+            path: mla
+          - changelog: mlar
+            path: mlar
+
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Get ${{ matrix.changelog }} Changelog Entry
+      uses: mindsers/changelog-reader-action@v2
+      id: changelog_reader
+      with:
+        # Check format for the last 10 entries
+        validation_depth: 10
+        path: ${{ matrix.path }}/CHANGELOG.md
+    - name: Information
+      run: |
+          echo -e "\e[1mVersion\e[0m ${{ steps.changelog_reader.outputs.version }}"
+          echo -e "\e[1mStatus\e[0m ${{ steps.changelog_reader.outputs.status }}"
+          echo -en "\e[1mBody\e[0m"
+          cat << 'EOF'
+          ${{ steps.changelog_reader.outputs.changes }}
+          EOF
