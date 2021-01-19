@@ -35,7 +35,8 @@ This repository contains:
 * `mla`: the Rust library implementing MLA reader and writer
 * `mlar`: a Rust utility wrapping `mla` for common actions (create, list, extract, ...)
 * `curve25519-parser`: a Rust library for parsing DER/PEM public and private Ed25519 keys and X25519 keys (as made by `openssl`)
-* `mla-fuzz-afl` a Rust utility to fuzz `mla`
+* `mla-fuzz-afl` : a Rust utility to fuzz `mla`
+* `bindings` : bindings for other languages
 * `.github`: Continuous Integration needs
 
 Quick command-line usage
@@ -170,6 +171,13 @@ fn main() {
 ```
 
 :warning: Filenames are `String`s, which may contain path separator (`/`, `\`, `..`, etc.). Please consider this while using the API, to avoid path traversal issues.
+
+Using MLA with others languages
+=
+
+Bindings are available for:
+
+* [C/CPP](bindings/C/README.md)
 
 Design
 =
