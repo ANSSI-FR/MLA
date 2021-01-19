@@ -4,7 +4,7 @@ This project provides C and CPP bindings for the MLA archive format.
 
 ## How-to
 
-The last version of librairies are available in the [Release section](https://github.com/ANSSI-FR/MLA/releases).
+The last version of libraries are available in the [Release section](https://github.com/ANSSI-FR/MLA/releases).
 
 It provides:
 * `.h` and `.hpp` headers. There are generated, but provided to ease the use of bindings without the Rust toolchain;
@@ -101,9 +101,9 @@ For now, only the writer API is available.
 
 ### Guidelines
 
-* If one wants an archive without encryption, it must explicitly ask for it (ie. default is encrypted)
-* Status and handles are separated, to avoid confusion and the use of a variable for two distinct purposes. As a result, each API always return a `MLAStatus`, and could take or out handles through arguments
-* Output writing is delegate to the library user, thanks to callbacks. That way, she can manage how and when flushing and  actual writes are made (buffering, writing to an external HTTP server, ...)
+* If one wants an archive without encryption, they must explicitly ask for it (ie. default is encrypted)
+* Statuses and handles are separated, to avoid confusion and the use of a variable for two distinct purposes. As a result, each API always returns a `MLAStatus`, and could take or give handles through arguments
+* Output writing is delegated to the library user, through callbacks. That way, she can manage how and when flushing and  actual writes are made (buffering, writing to an external HTTP server, ...)
 
 ## Tests
 
