@@ -51,14 +51,7 @@ int main()
       fprintf(stderr, " [!] Public key set failed with code %" PRIX64 "\n", (uint64_t)status);
       return (int)status;
    }
-
-   status = mla_config_set_compression_level(hConfig, 10);
-   if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
-   {
-      fprintf(stderr, " [!] Compression level set failed with code %" PRIX64 "\n", (uint64_t)status);
-      return (int)status;
-   }
-
+   
    MLAArchiveHandle hArchive = NULL;
    status = mla_archive_new(&hConfig, &callback_write, &callback_flush, f, &hArchive);
    if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
