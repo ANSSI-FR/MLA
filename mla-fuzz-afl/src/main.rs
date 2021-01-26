@@ -1,5 +1,6 @@
 #[macro_use]
 extern crate afl;
+use bincode::Options;
 use curve25519_parser::{parse_openssl_25519_privkey, parse_openssl_25519_pubkey};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
@@ -27,8 +28,9 @@ struct TestInput {
 fn run(data: &[u8]) {
     // Retrieve the input as a configuration
     // => Lot of failed here, but eventually AFL will be able to bypass it
-    let test_case: TestInput = bincode::config()
-        .limit(10 * 1024 * 1024)
+    let test_case: TestInput = bincode::options()
+        .with_limit(10 * 1024 * 1024)
+        .with_fixint_encoding()
         .deserialize_from(data)
         .unwrap_or(TestInput {
             filenames: Vec::new(),
