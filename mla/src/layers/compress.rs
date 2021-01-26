@@ -1,3 +1,4 @@
+use bincode::Options;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use serde::{Deserialize, Serialize};
 
@@ -290,8 +291,9 @@ impl<'a, R: 'a + Read + Seek> LayerReader<'a, R> for CompressionLayerReader<'a, 
 
                 // Read SizesInfo
                 inner.seek(SeekFrom::Start(pos - len))?;
-                self.sizes_info = match bincode::config()
-                    .limit(BINCODE_MAX_DESERIALIZE)
+                self.sizes_info = match bincode::options()
+                    .with_limit(BINCODE_MAX_DESERIALIZE)
+                    .with_fixint_encoding()
                     .deserialize_from(inner.take(len))
                 {
                     Ok(sinfo) => Some(sinfo),
@@ -567,8 +569,9 @@ impl<'a, W: 'a + Write> LayerWriter<'a, W> for CompressionLayerWriter<'a, W> {
             compressed_sizes,
             last_block_size,
         };
-        if bincode::config()
-            .limit(BINCODE_MAX_DESERIALIZE)
+        if bincode::options()
+            .with_limit(BINCODE_MAX_DESERIALIZE)
+            .with_fixint_encoding()
             .serialize_into(&mut inner, &sinfo)
             .is_err()
         {

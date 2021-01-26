@@ -4,6 +4,7 @@ use std::io;
 use std::io::{Read, Seek, SeekFrom, Write};
 #[macro_use]
 extern crate bitflags;
+use bincode::Options;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use serde::{Deserialize, Serialize};
 
@@ -89,8 +90,9 @@ impl ArchiveHeader {
         if format_version != MLA_FORMAT_VERSION {
             return Err(Error::UnsupportedVersion);
         }
-        let config: ArchivePersistentConfig = match bincode::config()
-            .limit(BINCODE_MAX_DESERIALIZE)
+        let config: ArchivePersistentConfig = match bincode::options()
+            .with_limit(BINCODE_MAX_DESERIALIZE)
+            .with_fixint_encoding()
             .deserialize_from(src)
         {
             Ok(config) => config,
@@ -107,8 +109,9 @@ impl ArchiveHeader {
     fn dump<T: Write>(&self, dest: &mut T) -> Result<(), Error> {
         dest.write_all(MLA_MAGIC)?;
         dest.write_u32::<LittleEndian>(self.format_version)?;
-        if bincode::config()
-            .limit(BINCODE_MAX_DESERIALIZE)
+        if bincode::options()
+            .with_limit(BINCODE_MAX_DESERIALIZE)
+            .with_fixint_encoding()
             .serialize_into(dest, &self.config)
             .is_err()
         {
@@ -151,8 +154,9 @@ impl ArchiveFooter {
             tmp.insert(k, v);
         }
 
-        if bincode::config()
-            .limit(BINCODE_MAX_DESERIALIZE)
+        if bincode::options()
+            .with_limit(BINCODE_MAX_DESERIALIZE)
+            .with_fixint_encoding()
             .serialize_into(&mut dest, &tmp)
             .is_err()
         {
@@ -180,8 +184,9 @@ impl ArchiveFooter {
         src.seek(SeekFrom::Start(pos - len))?;
 
         // Read files_info
-        let files_info: HashMap<String, FileInfo> = match bincode::config()
-            .limit(BINCODE_MAX_DESERIALIZE)
+        let files_info: HashMap<String, FileInfo> = match bincode::options()
+            .with_limit(BINCODE_MAX_DESERIALIZE)
+            .with_fixint_encoding()
             .deserialize_from(&mut src.take(len))
         {
             Ok(finfo) => finfo,
