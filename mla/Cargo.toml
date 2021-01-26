@@ -19,7 +19,7 @@ aes-ctr = "0.5"
 bitflags = "1.2"
 byteorder = "1.3"
 serde = { version = "1", features = ["derive"] }
-bincode = "~1.2"
+bincode = "~1.3"
 # Crypto needs
 # Version fixed due to avoid conflict dependencies with `aes`, `aes-ctr` and `ghash`
 generic-array = "0.14"
