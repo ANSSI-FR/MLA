@@ -47,7 +47,13 @@ pub enum MLAStatus {
     HKDFInvalidKeyLength = 0x170000,
     Curve25519ParserError = 0xF10000,
 }
-pub type MLAWriteCallback = extern "C" fn(*const u8, usize, *mut c_void) -> i32;
+/// Implemented by the developper. Takes a buffer of a certain number of bytes of MLA
+/// file, and does whatever it wants with it (e.g. write it to a file, to a HTTP stream, etc.)
+/// If successful, returns 0 and sets the number of bytes actually written to its last
+/// parameter. Otherwise, returns an error code on failure.
+pub type MLAWriteCallback = extern "C" fn(*const u8, u32, *mut c_void, *mut u32) -> i32;
+/// Implemented by the developper. Should ask the underlying medium (file buffering, HTTP
+/// buffering, etc.) to flush any internal buffer.
 pub type MLAFlushCallback = extern "C" fn(*mut c_void) -> i32;
 
 impl From<MLAError> for MLAStatus {
@@ -116,8 +122,18 @@ struct CallbackOutput {
 
 impl Write for CallbackOutput {
     fn write(&mut self, buf: &[u8]) -> Result<usize, std::io::Error> {
-        match (self.write_callback)(buf.as_ptr(), buf.len(), self.context) {
-            0 => Ok(buf.len()),
+        let len = match u32::try_from(buf.len()) {
+            Ok(n) => n,
+            _ => u32::MAX - 1,
+        };
+        let mut len_written: u32 = 0;
+        match (self.write_callback)(
+            buf.as_ptr(),
+            len,
+            self.context,
+            &mut len_written as *mut u32,
+        ) {
+            0 => Ok(len_written as usize),
             e => Err(std::io::Error::from_raw_os_error(e)),
         }
     }
