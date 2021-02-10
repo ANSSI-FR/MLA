@@ -124,7 +124,7 @@ impl Write for CallbackOutput {
     fn write(&mut self, buf: &[u8]) -> Result<usize, std::io::Error> {
         let len = match u32::try_from(buf.len()) {
             Ok(n) => n,
-            _ => u32::MAX - 1,
+            _ => u32::MAX - 1, // only write the first 4GB, the callback will get called multiple times
         };
         let mut len_written: u32 = 0;
         match (self.write_callback)(

@@ -15,15 +15,23 @@ const char *szPubkey = "-----BEGIN PUBLIC KEY-----\n"
    "MCowBQYDK2VwAyEA9md4yIIFx+ftwe0c1p2YsJFrobXWKxan54Bs+/jFagE=\n"
    "-----END PUBLIC KEY-----\n";
 
-static int32_t callback_write(const uint8_t* pBuffer, uintptr_t length, void *context)
+static int32_t callback_write(const uint8_t* pBuffer, uint32_t length, void *context, uint32_t *pBytesWritten)
 {
-   fwrite(pBuffer, length, 1, (FILE*)context);
+   size_t res = fwrite(pBuffer, 1, length, (FILE*)context);
+   *pBytesWritten = (uint32_t)res;
+   if (ferror(context))
+   {
+       return errno;
+   }
    return 0;
 }
 
 static int32_t callback_flush(void *context)
 {
-   fflush((FILE*)context);
+   if (fflush((FILE*)context) != 0)
+   {
+       return errno;
+   }
    return 0;
 }
 
