@@ -623,7 +623,10 @@ fn to_tar(matches: &ArgMatches) -> Result<(), Error> {
             Ok(Some(subfile)) => subfile,
         };
         if let Err(err) = add_file_to_tar(&mut tar_file, sub_file) {
-            eprintln!(" [!] Unable to add subfile \"{}\" to tarball ({:?})", fname, err);
+            eprintln!(
+                " [!] Unable to add subfile \"{}\" to tarball ({:?})",
+                fname, err
+            );
         }
     }
     Ok(())
@@ -680,6 +683,7 @@ fn convert(matches: &ArgMatches) -> Result<(), Error> {
     Ok(())
 }
 
+#[allow(clippy::unnecessary_wraps)]
 fn keygen(matches: &ArgMatches) -> Result<(), Error> {
     // Safe to use unwrap() because of the requirement
     let output_base = matches.value_of_os("output").unwrap();
