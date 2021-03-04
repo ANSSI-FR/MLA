@@ -220,7 +220,7 @@ fn open_failsafe_mla_file<'a>(
 fn add_file_to_tar<R: Read, W: Write>(
     tar_file: &mut Builder<W>,
     sub_file: ArchiveFile<R>,
-) -> Result<(), Error> {
+) -> io::Result<()> {
     // Use indexes to avoid in-memory copy
     let mut header = Header::new_gnu();
     header.set_size(sub_file.size);
@@ -236,13 +236,7 @@ fn add_file_to_tar<R: Read, W: Write>(
         }
     };
 
-    if let Err(why) = tar_file.append_data(&mut header, &filename, sub_file.data) {
-        panic!(
-            "Error while adding file \"{}\" to tarball: {}",
-            filename, why
-        );
-    }
-    Ok(())
+    tar_file.append_data(&mut header, &filename, sub_file.data)
 }
 
 /// Arguments for action 'extract' to match file names in the archive
@@ -629,7 +623,10 @@ fn to_tar(matches: &ArgMatches) -> Result<(), Error> {
             Ok(Some(subfile)) => subfile,
         };
         if let Err(err) = add_file_to_tar(&mut tar_file, sub_file) {
-            eprintln!(" [!] Unable to add subfile \"{}\" ({:?})", fname, err);
+            eprintln!(
+                " [!] Unable to add subfile \"{}\" to tarball ({:?})",
+                fname, err
+            );
         }
     }
     Ok(())
@@ -686,6 +683,7 @@ fn convert(matches: &ArgMatches) -> Result<(), Error> {
     Ok(())
 }
 
+#[allow(clippy::unnecessary_wraps)]
 fn keygen(matches: &ArgMatches) -> Result<(), Error> {
     // Safe to use unwrap() because of the requirement
     let output_base = matches.value_of_os("output").unwrap();
