@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2021-03-04
+
+### Added/Changed
+
+- Bump dependencies
+  - In particular, update `mla` to running state, including a fix for [an issue](https://github.com/ANSSI-FR/MLA/issues/63) which may occurs in archive with more than 2^32 bits data
+
+
 ## [1.1.0] - 2020-09-14
 
 ### Thanks
