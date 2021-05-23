@@ -6,7 +6,7 @@ use rand::distributions::{Alphanumeric, Distribution, Standard};
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use std::collections::{HashMap, HashSet};
-use std::fs::{metadata, File};
+use std::fs::{metadata, read_dir, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use tar::Archive;
@@ -127,6 +127,108 @@ fn ensure_directory_content(directory: &Path, files: &[NamedTempFile]) {
     }
     // Ensure all files have been used
     assert_eq!(fname2content.len(), 0);
+}
+
+fn file_list_append_from_dir(dir: &Path, file_list: &mut Vec<String>) {
+    for entry in read_dir(dir).unwrap() {
+        let new_path = entry.unwrap().path();
+        if new_path.is_dir() {
+            file_list_append_from_dir(&new_path, file_list);
+        } else {
+            file_list.push(new_path.to_string_lossy().to_string());
+        }
+    }
+}
+
+#[test]
+fn test_create_from_dir() {
+    let mlar_file = NamedTempFile::new("output.mla").unwrap();
+    let ecc_public = Path::new("../samples/test_x25519_pub.pem");
+    let ecc_private = Path::new("../samples/test_x25519.pem");
+
+    // Temporary directory to test recursive file addition
+    let tmp_dir = TempDir::new().unwrap();
+    let mut subfile1_path = tmp_dir.path().join("subfile1");
+    let subdir_path = tmp_dir.path().join("subdir");
+    let mut subfile2_path = subdir_path.join("subfile2");
+
+    std::fs::write(&mut subfile1_path, "Test1").unwrap();
+    std::fs::create_dir(subdir_path).unwrap();
+    std::fs::write(&mut subfile2_path, "Test2").unwrap();
+
+    // `mlar create -o output.mla -p samples/test_x25519_pub.pem <tmp_dir>`
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("create")
+        .arg("-o")
+        .arg(mlar_file.path())
+        .arg("-p")
+        .arg(ecc_public);
+
+    cmd.arg(tmp_dir.path());
+
+    let mut file_list: Vec<String> = Vec::new();
+    // The exact order of the files in the archive depends on the order of the
+    // result of `read_dir` which is plateform and filesystem dependent.
+    file_list_append_from_dir(tmp_dir.path(), &mut file_list);
+
+    println!("{:?}", cmd);
+    let assert = cmd.assert();
+    assert.success().stderr(file_list.join("\n") + "\n");
+
+    // `mlar list -i output.mla -k samples/test_x25519.pem`
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("list")
+        .arg("-i")
+        .arg(mlar_file.path())
+        .arg("-k")
+        .arg(ecc_private);
+
+    println!("{:?}", cmd);
+    let assert = cmd.assert();
+    file_list.sort();
+    assert.success().stdout(file_list.join("\n") + "\n");
+}
+
+#[test]
+fn test_create_filelist_stdin() {
+    let mlar_file = NamedTempFile::new("output.mla").unwrap();
+    let ecc_public = Path::new("../samples/test_x25519_pub.pem");
+    let ecc_private = Path::new("../samples/test_x25519.pem");
+
+    // Create files
+    let testfs = setup();
+
+    // `mlar create -o output.mla -p samples/test_x25519_pub.pem -`
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("create")
+        .arg("-o")
+        .arg(mlar_file.path())
+        .arg("-p")
+        .arg(ecc_public);
+
+    cmd.arg("-");
+    println!("{:?}", cmd);
+
+    let mut file_list = String::new();
+    for file in &testfs.files {
+        file_list.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
+    }
+    cmd.write_stdin(String::from(&file_list));
+    println!("{:?}", file_list);
+    let assert = cmd.assert();
+    assert.success().stderr(String::from(&file_list));
+
+    // `mlar list -i output.mla -k samples/test_x25519.pem`
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("list")
+        .arg("-i")
+        .arg(mlar_file.path())
+        .arg("-k")
+        .arg(ecc_private);
+
+    println!("{:?}", cmd);
+    let assert = cmd.assert();
+    assert.success().stdout(file_list);
 }
 
 #[test]
