@@ -13,7 +13,7 @@ readme = "../README.md"
 
 [dependencies]
 rand = "0.7"
-rand_chacha = "0.2"
+rand_chacha = "0.3"
 brotli = "3.3"
 aes-ctr = "0.5"
 bitflags = "1.2"
