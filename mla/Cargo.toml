@@ -12,7 +12,7 @@ readme = "../README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-rand = "0.7"
+rand = "0.8"
 rand_chacha = "0.2"
 brotli = "3.3"
 aes-ctr = "0.5"
