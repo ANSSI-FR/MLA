@@ -21,7 +21,7 @@ sha2 = "0"
 pem = "0"
 
 [dependencies.rand_core]
-version = "0.5"
+version = "0.6"
 default-features = false
 
 [dev-dependencies]
