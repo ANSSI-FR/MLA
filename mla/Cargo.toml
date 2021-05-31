@@ -35,7 +35,7 @@ zeroize = "1"
 
 [dev-dependencies]
 hex-literal = "0.3"
-aes-gcm = "0.7"
+aes-gcm = "0.9"
 aead = "0.3"
 criterion = "0.3"
 curve25519-parser = { path = "../curve25519-parser" }
