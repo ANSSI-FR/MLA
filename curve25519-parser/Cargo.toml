@@ -12,7 +12,7 @@ readme = "../README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-der-parser = "4"
+der-parser = "5"
 # 'nom' dependency from 'der-parser'
 nom = "5"
 x25519-dalek = "1"
