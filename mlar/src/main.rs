@@ -18,8 +18,8 @@ use mla::{
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use std::collections::{HashMap, HashSet};
-use std::fs::{self, File};
-use std::io;
+use std::fs::{self, read_dir, File};
+use std::io::{self, BufRead};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Component, Path, PathBuf};
 use tar::{Builder, Header};
@@ -396,6 +396,40 @@ impl Write for FileWriter {
     }
 }
 
+/// Add whatever is specified by `path`
+fn add_file_or_dir(mla: &mut ArchiveWriter<OutputTypes>, path: &Path) -> Result<(), Error> {
+    if path.is_dir() {
+        add_dir(mla, path)?;
+    } else {
+        // This can lead to some non-obvious DuplicateFilename error (files
+        // that appear with different file names in the filesystem
+        // but mlar raising DuplicateFilename)
+        let filename = path.to_string_lossy();
+        let file = File::open(path)?;
+        let length = file.metadata()?.len();
+        eprintln!("{}", filename);
+        mla.add_file(&filename, length, file)?;
+    }
+    Ok(())
+}
+
+/// Recursively explore a dir to add all the files
+/// Ignore empty directory
+fn add_dir(mut mla: &mut ArchiveWriter<OutputTypes>, dir: &Path) -> Result<(), Error> {
+    for file in read_dir(dir)? {
+        let new_path = file?.path();
+        add_file_or_dir(&mut mla, &new_path)?;
+    }
+    Ok(())
+}
+
+fn add_from_stdin(mut mla: &mut ArchiveWriter<OutputTypes>) -> Result<(), Error> {
+    for line in io::stdin().lock().lines() {
+        add_file_or_dir(&mut mla, Path::new(&line?))?;
+    }
+    Ok(())
+}
+
 // ----- Commands ------
 
 fn create(matches: &ArgMatches) -> Result<(), Error> {
@@ -403,10 +437,12 @@ fn create(matches: &ArgMatches) -> Result<(), Error> {
 
     if let Some(files) = matches.values_of("files") {
         for filename in files {
-            eprintln!("{}", filename);
-            let file = File::open(&Path::new(&filename))?;
-            let length = file.metadata()?.len();
-            mla.add_file(filename, length, file)?;
+            if filename == "-" {
+                add_from_stdin(&mut mla)?;
+            } else {
+                let path = Path::new(&filename);
+                add_file_or_dir(&mut mla, path)?;
+            }
         }
     };
 
