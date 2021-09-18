@@ -1,5 +1,4 @@
 use crate::ArchiveFileID;
-use aes_ctr::stream_cipher::InvalidKeyNonceLength;
 use hkdf::InvalidLength;
 use std::error;
 use std::fmt;
@@ -34,8 +33,6 @@ pub enum Error {
     WrongReaderState(String),
     /// The writer state is not in the expected state for the current operation
     WrongWriterState(String),
-    /// Unable to initialize the cipher
-    InvalidCipherInit(InvalidKeyNonceLength),
     /// Error with the inner random generator
     RandError(rand::Error),
     /// A Private Key is required to decrypt the encrypted cipher key
@@ -84,12 +81,6 @@ impl From<std::string::FromUtf8Error> for Error {
 impl From<rand::Error> for Error {
     fn from(error: rand::Error) -> Self {
         Error::RandError(error)
-    }
-}
-
-impl From<InvalidKeyNonceLength> for Error {
-    fn from(error: InvalidKeyNonceLength) -> Self {
-        Error::InvalidCipherInit(error)
     }
 }
 

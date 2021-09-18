@@ -27,7 +27,8 @@ pub enum MLAStatus {
     AssertionError = 0x090000,
     WrongReaderState = 0x0A0000,
     WrongWriterState = 0x0B0000,
-    InvalidCipherInit = 0x0C0000,
+    // Keep 0x0C0000 slot, for backward compatibility
+    //  InvalidCipherInit = 0x0C0000,
     RandError = 0x0D0000,
     PrivateKeyNeeded = 0x0E0000,
     DeserializationError = 0x0F0000,
@@ -66,7 +67,6 @@ impl From<MLAError> for MLAStatus {
             MLAError::AssertionError(_) => MLAStatus::AssertionError,
             MLAError::WrongReaderState(_) => MLAStatus::WrongReaderState,
             MLAError::WrongWriterState(_) => MLAStatus::WrongWriterState,
-            MLAError::InvalidCipherInit(_) => MLAStatus::InvalidCipherInit,
             MLAError::RandError(_) => MLAStatus::RandError,
             MLAError::PrivateKeyNeeded => MLAStatus::PrivateKeyNeeded,
             MLAError::DeserializationError => MLAStatus::DeserializationError,
