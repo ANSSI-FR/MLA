@@ -1,24 +1,27 @@
 use crate::Error;
 
-use aes::{
-    block_cipher::{BlockCipher, NewBlockCipher},
-    Aes256,
-};
-use aes_ctr::stream_cipher::{NewStreamCipher, StreamCipher, SyncStreamCipherSeek};
+use aes::{Aes256, BlockEncrypt, NewBlockCipher};
+
 use generic_array::{typenum::U16, GenericArray};
 use ghash::{
     universal_hash::{NewUniversalHash, UniversalHash},
     GHash,
 };
-
 pub use subtle::ConstantTimeEq;
+
+use ctr::{
+    cipher::{NewCipher, StreamCipher, StreamCipherSeek},
+    Ctr,
+};
+
+type Aes256Ctr = ctr::Ctr128BE<aes::Aes256>;
 
 pub const BLOCK_SIZE: usize = 128 / 8;
 pub const TAG_LENGTH: usize = BLOCK_SIZE;
 
 // Inspired from RustCrypto's AesGcm implementation
 pub struct AesGcm256 {
-    cipher: aes_ctr::Aes256Ctr,
+    cipher: Ctr<Aes256, ctr::flavors::Ctr128BE>,
     /// Gallois Hash, for data authentication
     ghash: GHash,
     /// Size of the authenticated data, in bits
@@ -58,7 +61,7 @@ impl AesGcm256 {
         ghash.update_padded(associated_data);
 
         // Prepare the cipher for further operations
-        let mut cipher = aes_ctr::Aes256Ctr::new_var(key, &counter_block)?;
+        let mut cipher = Aes256Ctr::new(key.into(), &counter_block.into());
         // First block is ignored, as it has been used for the GHash
         cipher.seek(BLOCK_SIZE as u64);
 
@@ -78,13 +81,13 @@ impl AesGcm256 {
         // Finish the current block, if any
         if !self.current_block.is_empty() {
             if (self.current_block.len() + buffer.len()) < BLOCK_SIZE {
-                self.cipher.encrypt(buffer);
+                self.cipher.apply_keystream(buffer);
                 self.current_block.extend_from_slice(buffer);
                 return;
             } else {
                 let (in_block, out_block) =
                     buffer.split_at_mut(BLOCK_SIZE - self.current_block.len());
-                self.cipher.encrypt(in_block);
+                self.cipher.apply_keystream(in_block);
                 self.current_block.extend_from_slice(in_block);
                 // `current_block` length is now BLOCK_SIZE -> update GHash and
                 // clear it
@@ -101,14 +104,14 @@ impl AesGcm256 {
 
         // Interleaved ghash update
         for chunk in &mut chunks {
-            self.cipher.encrypt(chunk);
+            self.cipher.apply_keystream(chunk);
             self.ghash.update(GenericArray::from_slice(chunk));
         }
 
         // Encrypt and save extra encrypted bytes for further GHash computation
         let rem = chunks.into_remainder();
         if !rem.is_empty() {
-            self.cipher.encrypt(rem);
+            self.cipher.apply_keystream(rem);
             self.current_block.extend_from_slice(rem);
         }
     }
@@ -130,14 +133,14 @@ impl AesGcm256 {
         // Final update
         let mut tag = self.ghash.finalize().into_bytes();
         self.cipher.seek(0);
-        self.cipher.encrypt(tag.as_mut_slice());
+        self.cipher.apply_keystream(tag.as_mut_slice());
         tag
     }
 
     /// Decrypt without considering the associated data
     /// /!\ this mode of decryption is unauthenticated, use it carefully
     pub fn decrypt_unauthenticated(&mut self, buffer: &mut [u8]) {
-        self.cipher.decrypt(buffer);
+        self.cipher.apply_keystream(buffer);
     }
 
     /// Decrypt and compute the associated tag
@@ -147,13 +150,13 @@ impl AesGcm256 {
         // Interleaved ghash update
         for chunk in &mut chunks {
             self.ghash.update(GenericArray::from_slice(chunk));
-            self.cipher.decrypt(chunk);
+            self.cipher.apply_keystream(chunk);
         }
 
         let rem = chunks.into_remainder();
         if !rem.is_empty() {
             self.ghash.update_padded(rem);
-            self.cipher.decrypt(rem);
+            self.cipher.apply_keystream(rem);
         }
 
         // Compute "len(associated data) || len(bytes encrypted)"
@@ -167,7 +170,7 @@ impl AesGcm256 {
         // Final update
         let mut tag = self.ghash.clone().finalize().into_bytes();
         self.cipher.seek(0);
-        self.cipher.encrypt(tag.as_mut_slice());
+        self.cipher.apply_keystream(tag.as_mut_slice());
         tag
     }
 }
