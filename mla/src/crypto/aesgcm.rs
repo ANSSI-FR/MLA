@@ -9,10 +9,7 @@ use ghash::{
 };
 pub use subtle::ConstantTimeEq;
 
-use ctr::{
-    cipher::{NewCipher, StreamCipher, StreamCipherSeek},
-    Ctr,
-};
+use ctr::cipher::{NewCipher, StreamCipher, StreamCipherSeek};
 
 type Aes256Ctr = ctr::Ctr128BE<aes::Aes256>;
 
@@ -21,7 +18,7 @@ pub const TAG_LENGTH: usize = BLOCK_SIZE;
 
 // Inspired from RustCrypto's AesGcm implementation
 pub struct AesGcm256 {
-    cipher: Ctr<Aes256, ctr::flavors::Ctr128BE>,
+    cipher: Aes256Ctr,
     /// Gallois Hash, for data authentication
     ghash: GHash,
     /// Size of the authenticated data, in bits
