@@ -268,7 +268,7 @@ where
                     return Err(Error::FilenameTooLong);
                 }
                 dest.write_u64::<LittleEndian>(length)?;
-                dest.write_all(&bytes)?;
+                dest.write_all(bytes)?;
                 Ok(())
             }
             ArchiveFileBlock::FileContent { length, data, id } => {

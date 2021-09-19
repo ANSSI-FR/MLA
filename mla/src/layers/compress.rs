@@ -564,7 +564,7 @@ impl<'a, W: 'a + Write> LayerWriter<'a, W> for CompressionLayerWriter<'a, W> {
         // The values is restored just after the operation (non-thread safe, but
         // in a multi-thread env, we will already required a lock for the
         // writing)
-        let compressed_sizes = std::mem::replace(&mut self.compressed_sizes, Vec::new());
+        let compressed_sizes = std::mem::take(&mut self.compressed_sizes);
         let sinfo = SizesInfo {
             compressed_sizes,
             last_block_size,
