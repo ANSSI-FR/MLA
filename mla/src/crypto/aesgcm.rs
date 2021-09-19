@@ -43,7 +43,7 @@ pub struct AesGcm256 {
 pub type Tag = GenericArray<u8, U16>;
 
 impl AesGcm256 {
-    pub fn new(key: &[u8], nonce: &[u8], associated_data: &[u8]) -> Result<AesGcm256, Error> {
+    pub fn new(key: &[u8; KEY_SIZE], nonce: &[u8], associated_data: &[u8]) -> Result<AesGcm256, Error> {
         // Convert the nonce (96 bits) to the AES-GCM form
         let mut counter_block = [0u8; BLOCK_SIZE];
         counter_block[..12].copy_from_slice(nonce);
@@ -179,13 +179,12 @@ mod tests {
     use aead::Payload;
     use aes_gcm::{
         aead::{Aead, NewAead},
-        Aes256Gcm, Key,
+        Aes256Gcm,
     };
 
-    fn test_against_aesgcm(key: &[u8], nonce: &[u8], associated_data: &[u8], msg: &[u8]) {
+    fn test_against_aesgcm(key: &[u8; KEY_SIZE], nonce: &[u8], associated_data: &[u8], msg: &[u8]) {
         // Full (all at once)
-        let key = Key::from_slice(key);
-        let extern_cipher = Aes256Gcm::new(key);
+        let extern_cipher = Aes256Gcm::new(key.into());
         let extern_ciphertext = extern_cipher
             .encrypt(
                 &GenericArray::clone_from_slice(nonce),
@@ -262,9 +261,8 @@ mod tests {
         let nonce = b"\x12\x15\x35\x24\xc0\x89\x5e\x81\xb2\xc2\x84\x65";
         let associated_data = b"\xd6\x09\xb1\xf0\x56\x63\x7a\x0d\x46\xdf\x99\x8d\x88\xe5\x2e\x00\xb2\xc2\x84\x65\x12\x15\x35\x24\xc0\x89\x5e\x81";
         let msg = b"\x08\x00\x0f\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f\x20\x21\x22\x23\x24\x25\x26\x27\x28\x29\x2a\x2b\x2c\x2d\x2e\x2f\x30\x31\x32\x33\x34\x35\x36\x37\x38\x39\x3a\x00\x02";
-        let key = Key::from_slice(key);
 
-        let extern_cipher = Aes256Gcm::new(key);
+        let extern_cipher = Aes256Gcm::new(key.into());
         let extern_ciphertext = extern_cipher
             .encrypt(
                 &GenericArray::clone_from_slice(nonce),
