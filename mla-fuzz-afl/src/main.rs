@@ -99,7 +99,7 @@ fn run(data: &[u8]) {
         if !filename2content.contains_key(fname) {
             num2id.insert(
                 i as u8,
-                match mla.start_file(&fname) {
+                match mla.start_file(fname) {
                     Err(Error::DuplicateFilename) => {
                         return;
                     }
