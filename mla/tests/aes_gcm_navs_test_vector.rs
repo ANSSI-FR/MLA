@@ -3026,7 +3026,7 @@ const TEST_VECTORS: &[TestVector] = &[
 fn test_nist_cavs_vectors() {
     for tv in TEST_VECTORS {
         // Full (all at once)
-        let mut key = [0u8; 32];
+        let mut key = Key::default();
         key.copy_from_slice(&tv.key);
         let mut nonce = Nonce::default();
         nonce.copy_from_slice(&tv.nonce);

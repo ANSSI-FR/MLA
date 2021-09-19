@@ -17,7 +17,9 @@ pub const BLOCK_SIZE: usize = 128 / 8;
 pub const TAG_LENGTH: usize = BLOCK_SIZE;
 pub const KEY_SIZE: usize = 32;
 pub const NONCE_AES_SIZE: usize = 96 / 8;
+
 pub type Nonce = [u8; NONCE_AES_SIZE];
+pub type Key = [u8; KEY_SIZE];
 
 // Inspired from RustCrypto's AesGcm implementation
 pub struct AesGcm256 {
@@ -45,7 +47,7 @@ pub struct AesGcm256 {
 pub type Tag = GenericArray<u8, U16>;
 
 impl AesGcm256 {
-    pub fn new(key: &[u8; KEY_SIZE], nonce: &Nonce, associated_data: &[u8]) -> Result<AesGcm256, Error> {
+    pub fn new(key: &Key, nonce: &Nonce, associated_data: &[u8]) -> Result<AesGcm256, Error> {
         // Convert the nonce (96 bits) to the AES-GCM form
         let mut counter_block = [0u8; BLOCK_SIZE];
         counter_block[..12].copy_from_slice(nonce);
@@ -184,7 +186,7 @@ mod tests {
         Aes256Gcm,
     };
 
-    fn test_against_aesgcm(key: &[u8; KEY_SIZE], nonce: &Nonce, associated_data: &[u8], msg: &[u8]) {
+    fn test_against_aesgcm(key: &Key, nonce: &Nonce, associated_data: &[u8], msg: &[u8]) {
         // Full (all at once)
         let extern_cipher = Aes256Gcm::new(key.into());
         let extern_ciphertext = extern_cipher
