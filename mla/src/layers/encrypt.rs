@@ -1,4 +1,4 @@
-use crate::crypto::aesgcm::{AesGcm256, ConstantTimeEq, Tag, TAG_LENGTH};
+use crate::crypto::aesgcm::{AesGcm256, ConstantTimeEq, Key, Nonce, Tag, TAG_LENGTH};
 use crate::crypto::ecc::{retrieve_key, store_key_for_multi_recipients, MultiRecipientPersistent};
 
 use crate::layers::traits::{LayerFailSafeReader, LayerReader, LayerWriter};
@@ -15,14 +15,9 @@ use x25519_dalek::{PublicKey, StaticSecret};
 use serde::{Deserialize, Serialize};
 
 const CIPHER_BUF_SIZE: u64 = 4096;
-const KEY_SIZE: usize = 32;
 // This is the size of the nonce taken as input
 const NONCE_SIZE: usize = 8;
 const CHUNK_SIZE: u64 = 128 * 1024;
-
-// This is the Nonce as expected by AesGcm
-const NONCE_AES_SIZE: usize = 96 / 8;
-type Nonce = [u8; NONCE_AES_SIZE];
 
 /// Build nonce according to a given state
 ///
@@ -36,7 +31,8 @@ type Nonce = [u8; NONCE_AES_SIZE];
 /// Inspired from the construction in TLS or STREAM from "Online
 /// Authenticated-Encryption and its Nonce-Reuse Misuse-Resistance"
 fn build_nonce(nonce_prefix: [u8; NONCE_SIZE], current_ctr: u32) -> Nonce {
-    let mut nonce = [0u8; NONCE_AES_SIZE];
+    // This is the Nonce as expected by AesGcm
+    let mut nonce = Nonce::default();
     nonce[..NONCE_SIZE].copy_from_slice(&nonce_prefix);
     nonce[NONCE_SIZE..].copy_from_slice(&current_ctr.to_be_bytes());
     nonce
@@ -55,7 +51,7 @@ pub struct EncryptionConfig {
     /// Public keys with which to encrypt the symmetric encryption key below
     ecc_keys: Vec<PublicKey>,
     /// Symmetric encryption Key
-    key: [u8; KEY_SIZE],
+    key: Key,
     /// Symmetric encryption nonce
     nonce: [u8; NONCE_SIZE],
 }
@@ -78,7 +74,7 @@ impl std::default::Default for EncryptionConfig {
         // and this function is documented as "secure" in
         // https://docs.rs/rand/0.7.3/rand/trait.SeedableRng.html#method.from_entropy
         let mut csprng = ChaChaRng::from_entropy();
-        let key = csprng.gen::<[u8; KEY_SIZE]>();
+        let key = csprng.gen::<Key>();
         let nonce = csprng.gen::<[u8; NONCE_SIZE]>();
         EncryptionConfig {
             ecc_keys: Vec::new(),
@@ -121,7 +117,7 @@ impl ArchiveWriterConfig {
     }
 
     /// Return the key used for encryption
-    pub fn encryption_key(&self) -> &[u8; KEY_SIZE] {
+    pub fn encryption_key(&self) -> &Key {
         &self.encrypt.key
     }
 
@@ -135,7 +131,7 @@ pub struct EncryptionReaderConfig {
     /// Private key(s) to use
     private_keys: Vec<StaticSecret>,
     /// Symmetric encryption key and nonce, if decrypted successfully from header
-    encrypt_parameters: Option<([u8; KEY_SIZE], [u8; NONCE_SIZE])>,
+    encrypt_parameters: Option<(Key, [u8; NONCE_SIZE])>,
 }
 
 impl std::default::Default for EncryptionReaderConfig {
@@ -182,7 +178,7 @@ impl ArchiveReaderConfig {
     }
 
     /// Retrieve key and nonce used for encryption
-    pub fn get_encrypt_parameters(&self) -> Option<([u8; KEY_SIZE], [u8; NONCE_SIZE])> {
+    pub fn get_encrypt_parameters(&self) -> Option<(Key, [u8; NONCE_SIZE])> {
         self.encrypt.encrypt_parameters
     }
 }
@@ -193,7 +189,7 @@ pub struct EncryptionLayerWriter<'a, W: 'a + Write> {
     inner: Box<dyn 'a + LayerWriter<'a, W>>,
     cipher: AesGcm256,
     /// Symmetric encryption Key
-    key: [u8; KEY_SIZE],
+    key: Key,
     /// Symmetric encryption nonce prefix, see `build_nonce`
     nonce_prefix: [u8; NONCE_SIZE],
     current_chunk_offset: u64,
@@ -289,7 +285,7 @@ impl<'a, W: Write> Write for EncryptionLayerWriter<'a, W> {
 pub struct EncryptionLayerReader<'a, R: Read + Seek> {
     inner: Box<dyn 'a + LayerReader<'a, R>>,
     cipher: AesGcm256,
-    key: [u8; KEY_SIZE],
+    key: Key,
     nonce: [u8; NONCE_SIZE],
     chunk_cache: Cursor<Vec<u8>>,
     current_chunk_number: u32,
@@ -473,7 +469,7 @@ impl<'a, R: 'a + Read + Seek> Seek for EncryptionLayerReader<'a, R> {
 pub struct EncryptionLayerFailSafeReader<'a, R: Read> {
     inner: Box<dyn 'a + LayerFailSafeReader<'a, R>>,
     cipher: AesGcm256,
-    key: [u8; KEY_SIZE],
+    key: Key,
     nonce: [u8; NONCE_SIZE],
     current_chunk_number: u32,
     current_chunk_offset: u64,
@@ -548,10 +544,11 @@ mod tests {
     use rand::SeedableRng;
     use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 
+    use crate::crypto::aesgcm::KEY_SIZE;
     use crate::layers::raw::{RawLayerFailSafeReader, RawLayerReader, RawLayerWriter};
 
     static FAKE_FILE: [u8; 26] = *b"abcdefghijklmnopqrstuvwxyz";
-    static KEY: [u8; KEY_SIZE] = [2u8; KEY_SIZE];
+    static KEY: Key = [2u8; KEY_SIZE];
     static NONCE: [u8; NONCE_SIZE] = [3u8; NONCE_SIZE];
 
     fn encrypt_write(file: Vec<u8>) -> Vec<u8> {
