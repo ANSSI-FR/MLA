@@ -278,7 +278,7 @@ impl ExtractFileNameMatcher {
                 files.is_empty() || files.contains(file_name)
             }
             ExtractFileNameMatcher::GlobPatterns(ref patterns) => {
-                patterns.is_empty() || patterns.iter().any(|pat| pat.matches(&file_name))
+                patterns.is_empty() || patterns.iter().any(|pat| pat.matches(file_name))
             }
             ExtractFileNameMatcher::Anything => true,
         }
@@ -320,7 +320,7 @@ fn create_file<P1: AsRef<Path>>(
     output_dir: P1,
     fname: &str,
 ) -> Result<Option<(File, PathBuf)>, Error> {
-    let extracted_path = match get_extracted_path(output_dir.as_ref(), &fname) {
+    let extracted_path = match get_extracted_path(output_dir.as_ref(), fname) {
         Some(p) => p,
         None => return Ok(None),
     };
@@ -477,7 +477,7 @@ fn list(matches: &ArgMatches) -> Result<(), Error> {
 }
 
 fn extract(matches: &ArgMatches) -> Result<(), Error> {
-    let file_name_matcher = ExtractFileNameMatcher::from_matches(&matches);
+    let file_name_matcher = ExtractFileNameMatcher::from_matches(matches);
     let output_dir = Path::new(matches.value_of_os("outputdir").unwrap());
     let verbose = matches.is_present("verbose");
 
@@ -734,7 +734,7 @@ fn keygen(matches: &ArgMatches) -> Result<(), Error> {
     // Output the public key in PEM format, to ease integration in text based
     // configs
     output_pub
-        .write_all(&key_pair.public_as_pem().as_bytes())
+        .write_all(key_pair.public_as_pem().as_bytes())
         .expect("Error writing the public key");
 
     // Output the private key in DER format, to avoid common mistakes

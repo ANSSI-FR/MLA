@@ -19,7 +19,7 @@ fn derive_key(
     public_key: &PublicKey,
     length: usize,
 ) -> Result<Vec<u8>, Error> {
-    let mut shared_secret = private_key.diffie_hellman(&public_key);
+    let mut shared_secret = private_key.diffie_hellman(public_key);
     let hkdf: Hkdf<Sha256> = Hkdf::new(None, shared_secret.as_bytes());
     let mut output = vec![0u8; length];
     hkdf.expand(DERIVE_KEY_INFO, output.as_mut_slice())?;
