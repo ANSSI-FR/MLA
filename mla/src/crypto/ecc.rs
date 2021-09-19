@@ -16,12 +16,11 @@ const ECIES_NONCE: &[u8; 12] = b"ECIES NONCE0";
 fn derive_key(
     private_key: &StaticSecret,
     public_key: &PublicKey,
-    length: usize,
-) -> Result<Vec<u8>, Error> {
+) -> Result<[u8; KEY_SIZE], Error> {
     let mut shared_secret = private_key.diffie_hellman(public_key);
     let hkdf: Hkdf<Sha256> = Hkdf::new(None, shared_secret.as_bytes());
-    let mut output = vec![0u8; length];
-    hkdf.expand(DERIVE_KEY_INFO, output.as_mut_slice())?;
+    let mut output = [0u8; KEY_SIZE];
+    hkdf.expand(DERIVE_KEY_INFO, &mut output)?;
     shared_secret.zeroize();
     Ok(output)
 }
@@ -63,12 +62,12 @@ where
     let mut encrypted_keys = Vec::new();
     for recipient in recipients.iter() {
         // Perform an ECIES to obtain the common key
-        let dh_key = derive_key(&ephemeral, recipient, KEY_SIZE)?;
+        let dh_key = derive_key(&ephemeral, recipient)?;
 
         // Encrypt the final shared key with it
         // As the key is completely random and use only once, no need for a
         // random NONCE
-        let mut cipher = aesgcm::AesGcm256::new(dh_key.as_slice(), ECIES_NONCE, b"")?;
+        let mut cipher = aesgcm::AesGcm256::new(&dh_key, ECIES_NONCE, b"")?;
         let mut encrypted_key = [0u8; KEY_SIZE];
         encrypted_key.copy_from_slice(key);
         cipher.encrypt(&mut encrypted_key);
@@ -93,11 +92,11 @@ pub(crate) fn retrieve_key(
     private_key: &StaticSecret,
 ) -> Result<Option<[u8; KEY_SIZE]>, Error> {
     // Perform an ECIES to obtain the common key
-    let key = derive_key(private_key, &PublicKey::from(persist.public), KEY_SIZE)?;
+    let key = derive_key(private_key, &PublicKey::from(persist.public))?;
 
     // Try to find the correct key using the tag validation
     for keytag in persist.encrypted_keys.iter() {
-        let mut cipher = aesgcm::AesGcm256::new(key.as_slice(), ECIES_NONCE, b"")?;
+        let mut cipher = aesgcm::AesGcm256::new(&key, ECIES_NONCE, b"")?;
         let mut data = [0u8; KEY_SIZE];
         data.copy_from_slice(&keytag.key);
         let tag = cipher.decrypt(&mut data);
@@ -124,9 +123,9 @@ mod tests {
         let receiver_private = StaticSecret::new(&mut csprng);
         let receiver_public = PublicKey::from(&receiver_private);
 
-        let symmetric_key = derive_key(&ephemeral_scalar, &receiver_public, 32).unwrap();
+        let symmetric_key = derive_key(&ephemeral_scalar, &receiver_public).unwrap();
 
-        let receiver_key = derive_key(&receiver_private, &ephemeral_public, 32).unwrap();
+        let receiver_key = derive_key(&receiver_private, &ephemeral_public).unwrap();
 
         assert_eq!(symmetric_key, receiver_key);
     }

@@ -3026,7 +3026,9 @@ const TEST_VECTORS: &[TestVector] = &[
 fn test_nist_cavs_vectors() {
     for tv in TEST_VECTORS {
         // Full (all at once)
-        let mut cipher = AesGcm256::new(tv.key, tv.nonce, tv.aad).unwrap();
+        let mut key = [0u8; 32];
+        key.copy_from_slice(&tv.key);
+        let mut cipher = AesGcm256::new(&key, tv.nonce, tv.aad).unwrap();
         let mut buffer = tv.plaintext.to_vec();
         cipher.encrypt(&mut buffer);
         let tag = cipher.into_tag();
@@ -3038,7 +3040,7 @@ fn test_nist_cavs_vectors() {
             1,              // Byte per byte, forcing unaligned
             BLOCK_SIZE + 1, // BLOCK_SIZE + 1, forcing unaligned with extra data
         ] {
-            let mut cipher = AesGcm256::new(tv.key, tv.nonce, tv.aad).unwrap();
+            let mut cipher = AesGcm256::new(&key, tv.nonce, tv.aad).unwrap();
             let mut buffer = tv.plaintext.to_vec();
             let mut chunks = buffer.as_mut_slice().chunks_mut(*size);
 
@@ -3052,13 +3054,13 @@ fn test_nist_cavs_vectors() {
         }
 
         // Unauthenticated decryption
-        let mut cipher = AesGcm256::new(tv.key, tv.nonce, tv.aad).unwrap();
+        let mut cipher = AesGcm256::new(&key, tv.nonce, tv.aad).unwrap();
         let mut buffer = tv.ciphertext.to_vec();
         cipher.decrypt_unauthenticated(&mut buffer);
         assert_eq!(buffer.as_slice(), tv.plaintext);
 
         // Authenticated decryption
-        let mut cipher = AesGcm256::new(tv.key, tv.nonce, tv.aad).unwrap();
+        let mut cipher = AesGcm256::new(&key, tv.nonce, tv.aad).unwrap();
         let mut buffer = tv.ciphertext.to_vec();
         let tag = cipher.decrypt(&mut buffer);
         assert_eq!(buffer.as_slice(), tv.plaintext);
