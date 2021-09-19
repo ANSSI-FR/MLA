@@ -13,10 +13,7 @@ const ECIES_NONCE: &[u8; 12] = b"ECIES NONCE0";
 
 // Implementation inspired from XSTREAM/x25519hkdf.rs
 // /!\ in XSTREAM/x25519hkdf.rs, the arguments of Hkdf::new seem inverted
-fn derive_key(
-    private_key: &StaticSecret,
-    public_key: &PublicKey,
-) -> Result<[u8; KEY_SIZE], Error> {
+fn derive_key(private_key: &StaticSecret, public_key: &PublicKey) -> Result<[u8; KEY_SIZE], Error> {
     let mut shared_secret = private_key.diffie_hellman(public_key);
     let hkdf: Hkdf<Sha256> = Hkdf::new(None, shared_secret.as_bytes());
     let mut output = [0u8; KEY_SIZE];
