@@ -1,4 +1,4 @@
-use crate::crypto::aesgcm::{AesGcm256, ConstantTimeEq, Tag, TAG_LENGTH, KEY_SIZE};
+use crate::crypto::aesgcm::{AesGcm256, ConstantTimeEq, Tag, TAG_LENGTH, KEY_SIZE, Nonce};
 use crate::crypto::ecc::{retrieve_key, store_key_for_multi_recipients, MultiRecipientPersistent};
 
 use crate::layers::traits::{LayerFailSafeReader, LayerReader, LayerWriter};
@@ -19,9 +19,6 @@ const CIPHER_BUF_SIZE: u64 = 4096;
 const NONCE_SIZE: usize = 8;
 const CHUNK_SIZE: u64 = 128 * 1024;
 
-// This is the Nonce as expected by AesGcm
-const NONCE_AES_SIZE: usize = 96 / 8;
-type Nonce = [u8; NONCE_AES_SIZE];
 
 /// Build nonce according to a given state
 ///
@@ -35,7 +32,8 @@ type Nonce = [u8; NONCE_AES_SIZE];
 /// Inspired from the construction in TLS or STREAM from "Online
 /// Authenticated-Encryption and its Nonce-Reuse Misuse-Resistance"
 fn build_nonce(nonce_prefix: [u8; NONCE_SIZE], current_ctr: u32) -> Nonce {
-    let mut nonce = [0u8; NONCE_AES_SIZE];
+    // This is the Nonce as expected by AesGcm
+    let mut nonce = Nonce::default();
     nonce[..NONCE_SIZE].copy_from_slice(&nonce_prefix);
     nonce[NONCE_SIZE..].copy_from_slice(&current_ctr.to_be_bytes());
     nonce
