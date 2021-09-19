@@ -1,4 +1,4 @@
-use crate::crypto::aesgcm::{AesGcm256, ConstantTimeEq, Tag, TAG_LENGTH, Key, Nonce};
+use crate::crypto::aesgcm::{AesGcm256, ConstantTimeEq, Key, Nonce, Tag, TAG_LENGTH};
 use crate::crypto::ecc::{retrieve_key, store_key_for_multi_recipients, MultiRecipientPersistent};
 
 use crate::layers::traits::{LayerFailSafeReader, LayerReader, LayerWriter};
@@ -18,7 +18,6 @@ const CIPHER_BUF_SIZE: u64 = 4096;
 // This is the size of the nonce taken as input
 const NONCE_SIZE: usize = 8;
 const CHUNK_SIZE: u64 = 128 * 1024;
-
 
 /// Build nonce according to a given state
 ///
@@ -545,8 +544,8 @@ mod tests {
     use rand::SeedableRng;
     use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 
-    use crate::layers::raw::{RawLayerFailSafeReader, RawLayerReader, RawLayerWriter};
     use crate::crypto::aesgcm::KEY_SIZE;
+    use crate::layers::raw::{RawLayerFailSafeReader, RawLayerReader, RawLayerWriter};
 
     static FAKE_FILE: [u8; 26] = *b"abcdefghijklmnopqrstuvwxyz";
     static KEY: Key = [2u8; KEY_SIZE];
