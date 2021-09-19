@@ -15,6 +15,7 @@ type Aes256Ctr = ctr::Ctr128BE<aes::Aes256>;
 
 pub const BLOCK_SIZE: usize = 128 / 8;
 pub const TAG_LENGTH: usize = BLOCK_SIZE;
+pub const KEY_SIZE: usize = 32;
 
 // Inspired from RustCrypto's AesGcm implementation
 pub struct AesGcm256 {

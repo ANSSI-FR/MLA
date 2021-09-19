@@ -1,5 +1,5 @@
 use crate::crypto::aesgcm;
-use crate::crypto::aesgcm::ConstantTimeEq;
+use crate::crypto::aesgcm::{ConstantTimeEq, KEY_SIZE, TAG_LENGTH};
 use crate::errors::Error;
 use hkdf::Hkdf;
 use rand::{CryptoRng, RngCore};
@@ -8,7 +8,6 @@ use sha2::Sha256;
 use x25519_dalek::{PublicKey, StaticSecret};
 use zeroize::Zeroize;
 
-const KEY_SIZE: usize = 32;
 const DERIVE_KEY_INFO: &[u8; 14] = b"KEY DERIVATION";
 const ECIES_NONCE: &[u8; 12] = b"ECIES NONCE0";
 
@@ -30,7 +29,7 @@ fn derive_key(
 #[derive(Serialize, Deserialize)]
 struct KeyAndTag {
     key: [u8; KEY_SIZE],
-    tag: [u8; aesgcm::TAG_LENGTH],
+    tag: [u8; TAG_LENGTH],
 }
 
 #[derive(Serialize, Deserialize)]
@@ -73,7 +72,7 @@ where
         let mut encrypted_key = [0u8; KEY_SIZE];
         encrypted_key.copy_from_slice(key);
         cipher.encrypt(&mut encrypted_key);
-        let mut tag = [0u8; aesgcm::TAG_LENGTH];
+        let mut tag = [0u8; TAG_LENGTH];
         tag.copy_from_slice(&cipher.into_tag());
         // Save it for later serialization
         encrypted_keys.push(KeyAndTag {
