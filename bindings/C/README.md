@@ -35,17 +35,25 @@ cargo build --release --target ...
 
 ```C
 // Called to out Archive content to the actual output
-static int32_t callback_write(const uint8_t* pBuffer, uintptr_t length, void *context)
+static int32_t callback_write(const uint8_t* pBuffer, uint32_t length, void *context, uint32_t *pBytesWritten)
 {
-   fwrite(pBuffer, length, 1, (FILE*)context);
-   return 0;
+    size_t res = fwrite(pBuffer, 1, length, (FILE*)context);
+    *pBytesWritten = (uint32_t)res;
+    if (ferror(context))
+    {
+        return errno;
+    }
+    return 0;
 }
 
 // Called to flush the actual output
 static int32_t callback_flush(void *context)
 {
-   fflush((FILE*)context);
-   return 0;
+    if (fflush((FILE*)context) != 0)
+    {
+        return errno;
+    }
+    return 0;
 }
 
 [...]
