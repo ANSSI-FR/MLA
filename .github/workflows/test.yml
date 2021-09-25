@@ -96,11 +96,6 @@ jobs:
         toolchain: stable
         target: ${{ matrix.target }}
     - uses: microsoft/setup-msbuild@v1.0.2
-    - name: Build static library for Windows
-      uses: actions-rs/cargo@v1
-      with:
-        command: build
-        args: ${{ matrix.cargo_arg }} --manifest-path=bindings/C/Cargo.toml --target=${{ matrix.target }}
     - name: Compile C/CPP bindings test program for Windows
       working-directory: bindings/C/tests/windows-msvc/
       run: msbuild mla-bindings-test.sln /p:Platform=${{ matrix.msvc_platform }} /p:Configuration=${{ matrix.version }}
