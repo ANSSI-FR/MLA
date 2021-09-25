@@ -48,13 +48,13 @@ typedef void *MLAConfigHandle;
  * If successful, returns 0 and sets the number of bytes actually written to its last
  * parameter. Otherwise, returns an error code on failure.
  */
-typedef int32_t (*MLAWriteCallback)(const uint8_t*, uint32_t, void*, uint32_t*);
+typedef int32_t (*MLAWriteCallback)(const uint8_t *buffer, uint32_t buffer_len, void *context, uint32_t *bytes_written);
 
 /**
  * Implemented by the developper. Should ask the underlying medium (file buffering, HTTP
  * buffering, etc.) to flush any internal buffer.
  */
-typedef int32_t (*MLAFlushCallback)(void*);
+typedef int32_t (*MLAFlushCallback)(void *context);
 
 typedef void *MLAArchiveHandle;
 
