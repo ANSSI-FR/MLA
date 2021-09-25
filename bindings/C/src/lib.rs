@@ -51,10 +51,15 @@ pub enum MLAStatus {
 /// file, and does whatever it wants with it (e.g. write it to a file, to a HTTP stream, etc.)
 /// If successful, returns 0 and sets the number of bytes actually written to its last
 /// parameter. Otherwise, returns an error code on failure.
-pub type MLAWriteCallback = extern "C" fn(*const u8, u32, *mut c_void, *mut u32) -> i32;
+pub type MLAWriteCallback = extern "C" fn(
+    buffer: *const u8,
+    buffer_len: u32,
+    context: *mut c_void,
+    bytes_written: *mut u32,
+) -> i32;
 /// Implemented by the developper. Should ask the underlying medium (file buffering, HTTP
 /// buffering, etc.) to flush any internal buffer.
-pub type MLAFlushCallback = extern "C" fn(*mut c_void) -> i32;
+pub type MLAFlushCallback = extern "C" fn(context: *mut c_void) -> i32;
 
 impl From<MLAError> for MLAStatus {
     fn from(err: MLAError) -> Self {
