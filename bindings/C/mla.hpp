@@ -42,9 +42,15 @@ enum class MLAStatus : uint64_t {
 
 using MLAConfigHandle = void*;
 
-using MLAWriteCallback = int32_t(*)(const uint8_t*, uintptr_t, void*);
+/// Implemented by the developper. Takes a buffer of a certain number of bytes of MLA
+/// file, and does whatever it wants with it (e.g. write it to a file, to a HTTP stream, etc.)
+/// If successful, returns 0 and sets the number of bytes actually written to its last
+/// parameter. Otherwise, returns an error code on failure.
+using MLAWriteCallback = int32_t(*)(const uint8_t *buffer, uint32_t buffer_len, void *context, uint32_t *bytes_written);
 
-using MLAFlushCallback = int32_t(*)(void*);
+/// Implemented by the developper. Should ask the underlying medium (file buffering, HTTP
+/// buffering, etc.) to flush any internal buffer.
+using MLAFlushCallback = int32_t(*)(void *context);
 
 using MLAArchiveHandle = void*;
 
