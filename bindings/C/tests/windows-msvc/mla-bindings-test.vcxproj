@@ -176,6 +176,9 @@
       <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);Ws2_32.lib;Userenv.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(SolutionDir)\..\..\..\..\target\i686-pc-windows-msvc\debug</AdditionalLibraryDirectories>
     </Link>
+    <PreBuildEvent>
+      <Command>if not exist "$(SolutionDir)\..\..\..\..\target\i686-pc-windows-msvc\debug\mla.lib" cargo build --target=i686-pc-windows-msvc</Command>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug-cpp|Win32'">
     <ClCompile>
@@ -193,6 +196,9 @@
       <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);Ws2_32.lib;Userenv.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(SolutionDir)\..\..\..\..\target\i686-pc-windows-msvc\debug</AdditionalLibraryDirectories>
     </Link>
+    <PreBuildEvent>
+      <Command>if not exist "$(SolutionDir)\..\..\..\..\target\i686-pc-windows-msvc\debug\mla.lib" cargo build --target=i686-pc-windows-msvc</Command>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release-c|Win32'">
     <ClCompile>
@@ -212,6 +218,9 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(SolutionDir)\..\..\..\..\target\i686-pc-windows-msvc\release</AdditionalLibraryDirectories>
     </Link>
+    <PreBuildEvent>
+      <Command>if not exist "$(SolutionDir)\..\..\..\..\target\i686-pc-windows-msvc\release\mla.lib" cargo build --target=i686-pc-windows-msvc --release</Command>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release-cpp|Win32'">
     <ClCompile>
@@ -231,6 +240,9 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(SolutionDir)\..\..\..\..\target\i686-pc-windows-msvc\release</AdditionalLibraryDirectories>
     </Link>
+    <PreBuildEvent>
+      <Command>if not exist "$(SolutionDir)\..\..\..\..\target\i686-pc-windows-msvc\release\mla.lib" cargo build --target=i686-pc-windows-msvc --release</Command>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug-c|x64'">
     <ClCompile>
@@ -248,6 +260,9 @@
       <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);Ws2_32.lib;Userenv.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(SolutionDir)\..\..\..\..\target\x86_64-pc-windows-msvc\debug</AdditionalLibraryDirectories>
     </Link>
+    <PreBuildEvent>
+      <Command>if not exist "$(SolutionDir)\..\..\..\..\target\x86_64-pc-windows-msvc\debug\mla.lib" cargo build --target=x86_64-pc-windows-msvc</Command>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug-cpp|x64'">
     <ClCompile>
@@ -265,6 +280,9 @@
       <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);Ws2_32.lib;Userenv.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(SolutionDir)\..\..\..\..\target\x86_64-pc-windows-msvc\debug</AdditionalLibraryDirectories>
     </Link>
+    <PreBuildEvent>
+      <Command>if not exist "$(SolutionDir)\..\..\..\..\target\x86_64-pc-windows-msvc\debug\mla.lib" cargo build --target=x86_64-pc-windows-msvc</Command>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release-c|x64'">
     <ClCompile>
@@ -284,6 +302,9 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(SolutionDir)\..\..\..\..\target\x86_64-pc-windows-msvc\release</AdditionalLibraryDirectories>
     </Link>
+    <PreBuildEvent>
+      <Command>if not exist "$(SolutionDir)\..\..\..\..\target\x86_64-pc-windows-msvc\release\mla.lib" cargo build --target=x86_64-pc-windows-msvc --release</Command>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release-cpp|x64'">
     <ClCompile>
@@ -303,6 +324,9 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(SolutionDir)\..\..\..\..\target\x86_64-pc-windows-msvc\release</AdditionalLibraryDirectories>
     </Link>
+    <PreBuildEvent>
+      <Command>if not exist "$(SolutionDir)\..\..\..\..\target\x86_64-pc-windows-msvc\release\mla.lib" cargo build --target=x86_64-pc-windows-msvc --release</Command>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

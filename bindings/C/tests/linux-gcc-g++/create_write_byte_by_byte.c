@@ -1,7 +1,7 @@
-#pragma comment(lib, "mla.lib")
-#include <Windows.h>
+#include <errno.h>
 #include <stdio.h>
 #include <inttypes.h>
+#include <string.h>
 #ifdef __cplusplus
 #include "mla.hpp"
 #define MLA_STATUS(x) MLAStatus::x
@@ -10,45 +10,39 @@
 #define MLA_STATUS(x) (x)
 #endif
 
-// From samples/test_ed25519_pub.pem
-PCSTR szPubkey = "-----BEGIN PUBLIC KEY-----\n"
+// from samples/test_ed25519.pem
+const char *szPubkey = "-----BEGIN PUBLIC KEY-----\n"
    "MCowBQYDK2VwAyEA9md4yIIFx+ftwe0c1p2YsJFrobXWKxan54Bs+/jFagE=\n"
    "-----END PUBLIC KEY-----\n";
 
 static int32_t callback_write(const uint8_t* pBuffer, uint32_t length, void *context, uint32_t *pBytesWritten)
 {
-   HANDLE hOutFile = (HANDLE)context;
-
-   if (!WriteFile(hOutFile, pBuffer, length, (PDWORD)pBytesWritten, NULL))
+   (void)(length);
+   fwrite(pBuffer, 1, 1, (FILE*)context);
+   *pBytesWritten = (uint32_t)1;
+   if (ferror(context))
    {
-      int32_t err = GetLastError();
-      fprintf(stderr, " [!] Could not write to output file: error %lu\n", err);
-      return err;
+       return errno;
    }
    return 0;
 }
 
 static int32_t callback_flush(void *context)
 {
-   HANDLE hOutFile = (HANDLE)context;
-   if (!FlushFileBuffers(hOutFile))
+   if (fflush((FILE*)context) != 0)
    {
-      int32_t err = GetLastError();
-      fprintf(stderr, " [!] Could not flush to output file: error %lu\n", err);
-      return err;
+       return errno;
    }
    return 0;
 }
 
 int main()
 {
-   HANDLE hOutFile = INVALID_HANDLE_VALUE;
-
-   hOutFile = CreateFileA("test.mla", GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
-   if (hOutFile == INVALID_HANDLE_VALUE)
+   FILE* f = fopen("test.mla", "w");
+   if (f == NULL)
    {
-      fprintf(stderr, " [!] Could not create output file: error %lu\n", GetLastError());
-      return 1;
+      fprintf(stderr, " [!] Could not create output file\n");
+      return errno;
    }
 
    MLAStatus status;
@@ -66,9 +60,16 @@ int main()
       fprintf(stderr, " [!] Public key set failed with code %" PRIX64 "\n", (uint64_t)status);
       return (int)status;
    }
-   
+
+   status = mla_config_set_compression_level(hConfig, 10);
+   if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
+   {
+      fprintf(stderr, " [!] Compression level set failed with code %" PRIX64 "\n", (uint64_t)status);
+      return (int)status;
+   }
+
    MLAArchiveHandle hArchive = NULL;
-   status = mla_archive_new(&hConfig, &callback_write, &callback_flush, (void*)hOutFile, &hArchive);
+   status = mla_archive_new(&hConfig, &callback_write, &callback_flush, f, &hArchive);
    if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
    {
       fprintf(stderr, " [!] Archive creation failed with code %" PRIX64 "\n", (uint64_t)status);
@@ -80,30 +81,31 @@ int main()
    if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
    {
       fprintf(stderr, " [!] File creation failed with code %" PRIX64 "\n", (uint64_t)status);
-      return 1;
+      return (int)status;
    }
 
    status = mla_archive_file_append(hArchive, hFile, (const uint8_t*)"Hello, World!\n", (uint32_t)strlen("Hello, World!\n"));
    if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
    {
       fprintf(stderr, " [!] File write failed with code %" PRIX64 "\n", (uint64_t)status);
-      return 1;
+      return (int)status;
    }
 
    status = mla_archive_file_close(hArchive, &hFile);
    if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
    {
       fprintf(stderr, " [!] File close failed with code %" PRIX64 "\n", (uint64_t)status);
-      return 1;
+      return (int)status;
    }
 
    status = mla_archive_close(&hArchive);
    if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
    {
       fprintf(stderr, " [!] Archive close failed with code %" PRIX64 "\n", (uint64_t)status);
-      return 1;
+      return (int)status;
    }
 
-   CloseHandle(hOutFile);
+   fclose(f);
+
    return 0;
 }

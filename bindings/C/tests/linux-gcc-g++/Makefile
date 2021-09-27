@@ -4,7 +4,7 @@ BUILDDIR ?= ../../../../target
 TARGET ?= x86_64-unknown-linux-gnu
 MLAR ?= $(BUILDDIR)/$(TARGET)/debug/mlar
 
-tests: test_create test_create_manykeys test_create_set_compression_level test_create_set_compression_level_fail_invalid test_create_fail_no_key test_create_interleaved test_create_no_early_close test_create_unicode test_create_stream
+tests: test_create test_create_manykeys test_create_set_compression_level test_create_set_compression_level_fail_invalid test_create_fail_no_key test_create_interleaved test_create_no_early_close test_create_unicode test_create_stream test_create_write_byte_by_byte
 
 test_create: $(MLAR) create.elf
 	./create.elf
@@ -41,6 +41,10 @@ test_create_stream: $(MLAR) create_stream.elf
 	bash -c "$(MLAR) cat test.txt --input ./test.mla -k ../../../../samples/test_ed25519.pem | sha256sum -c <(echo \"132f5f1a403697b63eec77930cb1ab38414c82ca4c7d415d8dc6e3d3eb6a8b98 -\")"
 	yes "All work and no play makes Jack a dull boy" | dd bs=1M count=20 iflag=fullblock | ./create_stream.elf
 	bash -c "$(MLAR) cat test.txt --input ./test.mla -k ../../../../samples/test_ed25519.pem | sha256sum -c <(echo \"e667ca14e52cbea16f6e0413e5fdfb7e789a3f1af80c2a795c36e2523195a20d -\")"
+
+test_create_write_byte_by_byte: $(MLAR) create_write_byte_by_byte.elf
+	./create_write_byte_by_byte.elf
+	$(MLAR) cat test.txt --input ./test.mla -k ../../../../samples/test_ed25519.pem | grep -E '^Hello, World!$$'
 
 %.elf: %.c $(BUILDDIR)/$(TARGET)/debug/libmla.a
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
