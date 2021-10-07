@@ -18,7 +18,7 @@ nom = "5"
 x25519-dalek = "1"
 curve25519-dalek = "3"
 sha2 = "0"
-pem = "0"
+pem = "1"
 
 [dependencies.rand_core]
 version = "0.5"
