@@ -27,6 +27,8 @@ const X_25519_OID: Oid<'static> = oid!(1.3.101 .110);
 pub enum Curve25519ParserError {
     /// BER Parsing error (wrong tag, not enough DER elements, etc.)
     BerError(der_parser::error::BerError),
+    /// PEM Parsing error
+    PemError(pem::PemError),
     /// Nom parsing error (wrong format, unexpected elements, etc.)
     NomError(nom::Err<der_parser::error::BerError>),
     UnknownOid,
@@ -36,6 +38,12 @@ pub enum Curve25519ParserError {
 impl From<der_parser::error::BerError> for Curve25519ParserError {
     fn from(error: der_parser::error::BerError) -> Self {
         Curve25519ParserError::BerError(error)
+    }
+}
+
+impl From<pem::PemError> for Curve25519ParserError {
+    fn from(error: pem::PemError) -> Self {
+        Curve25519ParserError::PemError(error)
     }
 }
 
@@ -253,7 +261,7 @@ pub fn parse_openssl_25519_pubkeys_pem_many(
     data: &[u8],
 ) -> Result<Vec<PublicKey>, Curve25519ParserError> {
     let mut output = Vec::new();
-    for pem_data in pem::parse_many(data) {
+    for pem_data in pem::parse_many(data)? {
         if pem_data.tag.as_bytes() != PUBLIC_TAG {
             return Err(Curve25519ParserError::InvalidPEMTag);
         }
