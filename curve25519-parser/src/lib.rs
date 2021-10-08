@@ -1,9 +1,9 @@
-use der_parser::ber::BerObjectHeader;
 use der_parser::der::*;
 use der_parser::error::BerError;
 
 use der_parser::oid::Oid;
 use der_parser::*;
+use nom::combinator::{complete, eof};
 use nom::IResult;
 
 use std::convert::{From, TryInto};
@@ -95,28 +95,28 @@ struct Der25519PrivateStruct<'a> {
     data: DerObject<'a>,
 }
 
-fn parse_25519_private_header(
-    i: &[u8],
-) -> IResult<&[u8], (BerObjectHeader, Der25519PrivateHeader), BerError> {
-    parse_der_struct!(
-        i,
-        TAG DerTag::Sequence,
-        tag: parse_der_oid >> eof!() >> (Der25519PrivateHeader { tag })
-    )
+fn parse_25519_private_header(i: &[u8]) -> IResult<&[u8], Der25519PrivateHeader, BerError> {
+    parse_der_container(|i: &[u8], hdr| {
+        if hdr.tag != DerTag::Sequence {
+            return Err(nom::Err::Error(BerError::InvalidTag));
+        }
+        let (i, tag) = parse_der_oid(i)?;
+        eof(i)?;
+        Ok((i, Der25519PrivateHeader { tag }))
+    })(i)
 }
 
-fn parse_25519_private(
-    i: &[u8],
-) -> IResult<&[u8], (BerObjectHeader, Der25519PrivateStruct), BerError> {
-    parse_der_struct!(
-        i,
-        TAG DerTag::Sequence,
-        _unk: parse_der_integer >>
-        header: complete!(parse_25519_private_header) >>
-        data: parse_der_octetstring >>
-           eof!() >>
-        ( Der25519PrivateStruct{ header: header.1, data } )
-    )
+fn parse_25519_private(i: &[u8]) -> IResult<&[u8], Der25519PrivateStruct, BerError> {
+    parse_der_container(|i: &[u8], hdr| {
+        if hdr.tag != DerTag::Sequence {
+            return Err(nom::Err::Error(BerError::InvalidTag));
+        }
+        let (i, _unk) = parse_der_integer(i)?;
+        let (i, header) = complete(parse_25519_private_header)(i)?;
+        let (i, data) = parse_der_octetstring(i)?;
+        eof(i)?;
+        Ok((i, Der25519PrivateStruct { header, data }))
+    })(i)
 }
 
 const TAG_OCTETSTRING: u8 = 4;
@@ -124,7 +124,7 @@ const TAG_OCTETSTRING: u8 = 4;
 /// Parse a DER ED25519 or X25519 private key, and return the corresponding
 /// `x25519_dalek::StaticSecret`
 pub fn parse_openssl_25519_privkey_der(data: &[u8]) -> Result<StaticSecret, Curve25519ParserError> {
-    let (_remain, (_header, private)) = parse_25519_private(data)?;
+    let (_remain, private) = parse_25519_private(data)?;
     let data = private.data.content.as_slice()?;
     // data[0] == TAG_OCTETSTRING(4)
     // data[1] == LENGTH
@@ -178,33 +178,33 @@ struct DerEd25519PublicStruct<'a> {
     data: DerObject<'a>,
 }
 
-fn parse_25519_public_header(
-    i: &[u8],
-) -> IResult<&[u8], (BerObjectHeader, DerEd25519PublicHeader), BerError> {
-    parse_der_struct!(
-        i,
-        TAG DerTag::Sequence,
-        tag: parse_der_oid >> eof!() >> (DerEd25519PublicHeader { tag })
-    )
+fn parse_25519_public_header(i: &[u8]) -> IResult<&[u8], DerEd25519PublicHeader, BerError> {
+    parse_der_container(|i: &[u8], hdr| {
+        if hdr.tag != DerTag::Sequence {
+            return Err(nom::Err::Error(BerError::InvalidTag));
+        }
+        let (i, tag) = parse_der_oid(i)?;
+        eof(i)?;
+        Ok((i, DerEd25519PublicHeader { tag }))
+    })(i)
 }
 
-fn parse_25519_public(
-    i: &[u8],
-) -> IResult<&[u8], (BerObjectHeader, DerEd25519PublicStruct), BerError> {
-    parse_der_struct!(
-        i,
-        TAG DerTag::Sequence,
-        header: complete!(parse_25519_public_header) >>
-        data: parse_der_bitstring >>
-           eof!() >>
-        ( DerEd25519PublicStruct{ header: header.1, data } )
-    )
+fn parse_25519_public(i: &[u8]) -> IResult<&[u8], DerEd25519PublicStruct, BerError> {
+    parse_der_container(|i: &[u8], hdr| {
+        if hdr.tag != DerTag::Sequence {
+            return Err(nom::Err::Error(BerError::InvalidTag));
+        }
+        let (i, header) = complete(parse_25519_public_header)(i)?;
+        let (i, data) = parse_der_bitstring(i)?;
+        eof(i)?;
+        Ok((i, DerEd25519PublicStruct { header, data }))
+    })(i)
 }
 
 /// Parse a DER Ed25519 or X25519 public key, and return the corresponding
 /// `x25519_dalek::PublicKey`
 pub fn parse_openssl_25519_pubkey_der(data: &[u8]) -> Result<PublicKey, Curve25519ParserError> {
-    let (_remain, (_header, ed25519_public)) = parse_25519_public(data)?;
+    let (_remain, ed25519_public) = parse_25519_public(data)?;
     let data = ed25519_public.data.content.as_slice()?;
     let data: [u8; 32] = data
         .try_into()
