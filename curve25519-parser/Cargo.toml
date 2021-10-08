@@ -14,7 +14,7 @@ readme = "../README.md"
 [dependencies]
 der-parser = { version = "4", default-features = false}
 # 'nom' dependency from 'der-parser'
-nom = { version = "5", default-features = false}
+nom = { version = "7", default-features = false}
 x25519-dalek = { version = "1", default-features = false}
 curve25519-dalek = { version = "3", default-features = false, features = ["u64_backend"]}
 sha2 = { version = "0", default-features = false}
