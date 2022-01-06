@@ -1031,7 +1031,7 @@ fn app() -> clap::App<'static> {
 
 fn main() {
     let mut app = app();
-    
+
     // Launch sub-command
     let mut help = Vec::new();
     app.write_long_help(&mut help).unwrap();
