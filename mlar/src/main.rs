@@ -868,6 +868,7 @@ fn main() {
             .help("Candidates ED25519 private key paths (DER or PEM format)")
             .number_of_values(1)
             .multiple_occurrences(true)
+            .allow_invalid_utf8(true)
             .takes_value(true),
     ];
     let output_args = vec![
@@ -882,6 +883,7 @@ fn main() {
             .long("pubkey")
             .short('p')
             .number_of_values(1)
+            .allow_invalid_utf8(true)
             .multiple_occurrences(true),
         Arg::new("layers")
             .long("layers")
