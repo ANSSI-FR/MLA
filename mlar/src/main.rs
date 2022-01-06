@@ -1065,3 +1065,13 @@ fn main() {
         std::process::exit(1);
     }
 }
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use super::*;
+
+    #[test]
+    fn verify_app() {
+        app().debug_assert();
+    }
+}
