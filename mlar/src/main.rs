@@ -1,4 +1,4 @@
-use clap::{App, Arg, ArgMatches, SubCommand};
+use clap::{App, Arg, ArgMatches};
 use curve25519_parser::{
     generate_keypair, parse_openssl_25519_privkey, parse_openssl_25519_pubkey,
 };
@@ -415,17 +415,17 @@ fn add_file_or_dir(mla: &mut ArchiveWriter<OutputTypes>, path: &Path) -> Result<
 
 /// Recursively explore a dir to add all the files
 /// Ignore empty directory
-fn add_dir(mut mla: &mut ArchiveWriter<OutputTypes>, dir: &Path) -> Result<(), Error> {
+fn add_dir(mla: &mut ArchiveWriter<OutputTypes>, dir: &Path) -> Result<(), Error> {
     for file in read_dir(dir)? {
         let new_path = file?.path();
-        add_file_or_dir(&mut mla, &new_path)?;
+        add_file_or_dir(mla, &new_path)?;
     }
     Ok(())
 }
 
-fn add_from_stdin(mut mla: &mut ArchiveWriter<OutputTypes>) -> Result<(), Error> {
+fn add_from_stdin(mla: &mut ArchiveWriter<OutputTypes>) -> Result<(), Error> {
     for line in io::stdin().lock().lines() {
-        add_file_or_dir(&mut mla, Path::new(&line?))?;
+        add_file_or_dir(mla, Path::new(&line?))?;
     }
     Ok(())
 }
@@ -856,45 +856,46 @@ fn info(matches: &ArgMatches) -> Result<(), Error> {
 fn main() {
     // Common arguments list, for homogeneity
     let input_args = vec![
-        Arg::with_name("input")
+        Arg::new("input")
             .help("Archive path")
             .long("input")
-            .short("i")
+            .short('i')
             .number_of_values(1)
             .required(true),
-        Arg::with_name("private_keys")
+        Arg::new("private_keys")
             .long("private_keys")
-            .short("k")
+            .short('k')
             .help("Candidates ED25519 private key paths (DER or PEM format)")
             .number_of_values(1)
-            .multiple(true)
+            .multiple_occurrences(true)
+            .allow_invalid_utf8(true)
             .takes_value(true),
     ];
-    let layers = ["compress", "encrypt"];
     let output_args = vec![
-        Arg::with_name("output")
+        Arg::new("output")
             .help("Output file path. Use - for stdout")
             .long("output")
-            .short("o")
+            .short('o')
             .takes_value(true)
             .required(true),
-        Arg::with_name("public_keys")
+        Arg::new("public_keys")
             .help("ED25519 Public key paths (DER or PEM format)")
             .long("pubkey")
-            .short("p")
+            .short('p')
             .number_of_values(1)
-            .multiple(true),
-        Arg::with_name("layers")
+            .allow_invalid_utf8(true)
+            .multiple_occurrences(true),
+        Arg::new("layers")
             .long("layers")
-            .short("l")
+            .short('l')
             .help("Layers to use. Default is 'compress,encrypt'")
-            .possible_values(&layers)
+            .possible_values(["compress", "encrypt"])
             .number_of_values(1)
-            .multiple(true)
+            .multiple_occurrences(true)
             .min_values(0),
-        Arg::with_name("compression_level")
+        Arg::new("compression_level")
             .group("Compression layer")
-            .short("-q")
+            .short('q')
             .long("compression_level")
             .help("Compression level (0-11); ; bigger values cause denser, but slower compression")
             .takes_value(true),
@@ -905,97 +906,97 @@ fn main() {
         .version(env!("CARGO_PKG_VERSION"))
         .about(env!("CARGO_PKG_DESCRIPTION"))
         .subcommand(
-            SubCommand::with_name("create")
+            App::new("create")
                 .about("Create a new MLA Archive")
                 .args(&output_args)
-                .arg(Arg::with_name("files").help("Files to add").multiple(true)),
+                .arg(Arg::new("files").help("Files to add").multiple_occurrences(true)),
         )
         .subcommand(
-            SubCommand::with_name("list")
+            App::new("list")
                 .about("List files inside a MLA Archive")
                 .args(&input_args)
                 .arg(
-                    Arg::with_name("verbose")
-                        .short("-v")
-                        .multiple(true)
+                    Arg::new("verbose")
+                        .short('v')
+                        .multiple_occurrences(true)
                         .takes_value(false)
                         .help("Verbose listing, with additional information"),
                 ),
         )
         .subcommand(
-            SubCommand::with_name("extract")
+            App::new("extract")
                 .about("Extract files from a MLA Archive")
                 .args(&input_args)
                 .arg(
-                    Arg::with_name("outputdir")
+                    Arg::new("outputdir")
                         .help("Output directory where files are extracted")
                         .long("output")
-                        .short("o")
+                        .short('o')
                         .number_of_values(1)
                         .default_value("."),
                 )
                 .arg(
-                    Arg::with_name("glob")
+                    Arg::new("glob")
                         .long("glob")
-                        .short("-g")
+                        .short('g')
                         .takes_value(false)
                         .help("Treat specified files as glob patterns"),
                 )
-                .arg(Arg::with_name("files").help("List of extracted files (all if none given)"))
+                .arg(Arg::new("files").help("List of extracted files (all if none given)"))
                 .arg(
-                    Arg::with_name("verbose")
+                    Arg::new("verbose")
                         .long("verbose")
-                        .short("-v")
+                        .short('v')
                         .takes_value(false)
                         .help("List files as they are extracted"),
                 ),
         )
         .subcommand(
-            SubCommand::with_name("cat")
+            App::new("cat")
                 .about("Display files from a MLA Archive, like 'cat'")
                 .args(&input_args)
                 .arg(
-                    Arg::with_name("output")
+                    Arg::new("output")
                         .help("Output file where files are displayed")
                         .long("output")
-                        .short("o")
+                        .short('o')
                         .number_of_values(1)
                         .default_value("-"),
                 )
                 .arg(
-                    Arg::with_name("glob")
+                    Arg::new("glob")
                         .long("glob")
-                        .short("-g")
+                        .short('g')
                         .takes_value(false)
                         .help("Treat given files as glob patterns"),
                 )
                 .arg(
-                    Arg::with_name("files")
+                    Arg::new("files")
                         .required(true)
                         .help("List of displayed files"),
                 ),
         )
         .subcommand(
-            SubCommand::with_name("to-tar")
+            App::new("to-tar")
                 .about("Convert a MLA Archive to a TAR Archive")
                 .args(&input_args)
                 .arg(
-                    Arg::with_name("output")
+                    Arg::new("output")
                         .help("Tar Archive path")
                         .long("output")
-                        .short("o")
+                        .short('o')
                         .number_of_values(1)
                         .required(true),
                 ),
         )
         .subcommand(
-            SubCommand::with_name("repair")
+            App::new("repair")
                 .about("Try to repair a MLA Archive into a fresh MLA Archive")
                 .args(&input_args)
                 .args(&output_args),
         )
         .subcommand(
-            SubCommand::with_name("convert")
+            App::new("convert")
                 .about(
                     "Convert a MLA Archive to a fresh new one, with potentially different options",
                 )
@@ -1003,25 +1004,25 @@ fn main() {
                 .args(&output_args),
         )
         .subcommand(
-            SubCommand::with_name("keygen")
+            App::new("keygen")
                 .about(
                     "Generate a public/private keypair, in OpenSSL Ed25519 format, to be used by mlar",
                 )
                 .arg(
-                    Arg::with_name("output")
+                    Arg::new("output")
                         .help("Output file for the private key. The public key is in {output}.pub")
                         .number_of_values(1)
                         .required(true)
                 )
         )
         .subcommand(
-            SubCommand::with_name("info")
+            App::new("info")
                 .about("Get info on a MLA Archive")
                 .args(&input_args)
                 .arg(
-                    Arg::with_name("verbose")
+                    Arg::new("verbose")
                         .long("verbose")
-                        .short("-v")
+                        .short('v')
                         .takes_value(false)
                         .help("Get extra info for encryption and compression layers"),
                 ),
