@@ -415,17 +415,17 @@ fn add_file_or_dir(mla: &mut ArchiveWriter<OutputTypes>, path: &Path) -> Result<
 
 /// Recursively explore a dir to add all the files
 /// Ignore empty directory
-fn add_dir(mut mla: &mut ArchiveWriter<OutputTypes>, dir: &Path) -> Result<(), Error> {
+fn add_dir(mla: &mut ArchiveWriter<OutputTypes>, dir: &Path) -> Result<(), Error> {
     for file in read_dir(dir)? {
         let new_path = file?.path();
-        add_file_or_dir(&mut mla, &new_path)?;
+        add_file_or_dir(mla, &new_path)?;
     }
     Ok(())
 }
 
-fn add_from_stdin(mut mla: &mut ArchiveWriter<OutputTypes>) -> Result<(), Error> {
+fn add_from_stdin(mla: &mut ArchiveWriter<OutputTypes>) -> Result<(), Error> {
     for line in io::stdin().lock().lines() {
-        add_file_or_dir(&mut mla, Path::new(&line?))?;
+        add_file_or_dir(mla, Path::new(&line?))?;
     }
     Ok(())
 }

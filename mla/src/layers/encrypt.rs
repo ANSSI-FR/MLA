@@ -127,20 +127,12 @@ impl ArchiveWriterConfig {
     }
 }
 
+#[derive(Default)]
 pub struct EncryptionReaderConfig {
     /// Private key(s) to use
     private_keys: Vec<StaticSecret>,
     /// Symmetric encryption key and nonce, if decrypted successfully from header
     encrypt_parameters: Option<(Key, [u8; NONCE_SIZE])>,
-}
-
-impl std::default::Default for EncryptionReaderConfig {
-    fn default() -> Self {
-        Self {
-            private_keys: Vec::new(),
-            encrypt_parameters: None,
-        }
-    }
 }
 
 impl EncryptionReaderConfig {
