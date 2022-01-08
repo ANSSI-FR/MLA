@@ -853,7 +853,7 @@ fn info(matches: &ArgMatches) -> Result<(), Error> {
     Ok(())
 }
 
-fn main() {
+fn app() -> clap::App<'static> {
     // Common arguments list, for homogeneity
     let input_args = vec![
         Arg::new("input")
@@ -902,7 +902,7 @@ fn main() {
     ];
 
     // Main parsing
-    let mut app = App::new(env!("CARGO_PKG_NAME"))
+    App::new(env!("CARGO_PKG_NAME"))
         .version(env!("CARGO_PKG_VERSION"))
         .about(env!("CARGO_PKG_DESCRIPTION"))
         .subcommand(
@@ -1026,7 +1026,11 @@ fn main() {
                         .takes_value(false)
                         .help("Get extra info for encryption and compression layers"),
                 ),
-        );
+        )
+}
+
+fn main() {
+    let mut app = app();
 
     // Launch sub-command
     let mut help = Vec::new();
@@ -1059,5 +1063,15 @@ fn main() {
     if let Err(err) = res {
         eprintln!("[!] Command ended with error: {:?}", err);
         std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use super::*;
+
+    #[test]
+    fn verify_app() {
+        app().debug_assert();
     }
 }
