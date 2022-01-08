@@ -26,6 +26,6 @@ tar = "0.4"
 rand_chacha = "0.2"
 
 [dev-dependencies]
-assert_cmd = "1.0"
+assert_cmd = "2.0"
 assert_fs = "1.0"
 permutate = "0.3"
