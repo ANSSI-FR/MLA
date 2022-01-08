@@ -39,7 +39,7 @@ aes-gcm = { version = "0.9", default-features = false, features = ["aes"]}
 aead = { version = "0.4", default-features = false, features = ["alloc"]}
 criterion = { version = "0.3", default-features = false}
 curve25519-parser = { path = "../curve25519-parser" }
-hex = { version = "0.4", default-features = false}
+hex = { version = "0.4", default-features = false, features = ["alloc"]}
 
 [[bench]]
 name = "bench_archive"
