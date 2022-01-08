@@ -141,6 +141,18 @@ fn file_list_append_from_dir(dir: &Path, file_list: &mut Vec<String>) {
 }
 
 #[test]
+fn test_help() {
+    // `mlar --help`
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("--help");
+
+    // Ensure the basic help display is working
+    println!("{:?}", cmd);
+    let assert = cmd.assert();
+    assert.success();
+}
+
+#[test]
 fn test_create_from_dir() {
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
     let ecc_public = Path::new("../samples/test_x25519_pub.pem");
