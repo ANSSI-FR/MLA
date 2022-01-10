@@ -1338,7 +1338,9 @@ pub(crate) mod tests {
         let file = Vec::new();
         // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
         let mut rng = ChaChaRng::seed_from_u64(0);
-        let key = StaticSecret::new(&mut rng);
+        let mut bytes = [0u8; 32];
+        rng.fill_bytes(&mut bytes);
+        let key = StaticSecret::from(bytes);
         let mut mla = ArchiveWriter::new(file, std::slice::from_ref(&PublicKey::from(&key)))
             .expect("Writer init failed");
 
@@ -1393,7 +1395,9 @@ pub(crate) mod tests {
         let file = Vec::new();
         // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
         let mut rng = ChaChaRng::seed_from_u64(0);
-        let key = StaticSecret::new(&mut rng);
+        let mut bytes = [0u8; 32];
+        rng.fill_bytes(&mut bytes);
+        let key = StaticSecret::from(bytes);
         let mut config = ArchiveWriterConfig::new();
         config
             .set_layers(layers.unwrap_or_default())
@@ -1502,7 +1506,9 @@ pub(crate) mod tests {
 
             // Build initial file in a stream
             let file = Vec::new();
-            let key = StaticSecret::new(&mut rng);
+            let mut bytes = [0u8; 32];
+            rng.fill_bytes(&mut bytes);
+            let key = StaticSecret::from(bytes);
             let mut config = ArchiveWriterConfig::new();
             config
                 .set_layers(*layering)
@@ -2080,7 +2086,9 @@ pub(crate) mod tests {
         const MAX_SIZE: u64 = 5 * 1024 * 1024 * 1024; // 5 GB
         const CHUNK_SIZE: usize = 10 * 1024 * 1024; // 10 MB
 
-        let key = StaticSecret::new(&mut rng);
+        let mut bytes = [0u8; 32];
+        rng.fill_bytes(&mut bytes);
+        let key = StaticSecret::from(bytes);
         let mut config = ArchiveWriterConfig::default();
         config.add_public_keys(std::slice::from_ref(&PublicKey::from(&key)));
         let file = Vec::new();
