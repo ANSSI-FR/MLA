@@ -17,13 +17,13 @@ clap = "3"
 glob = "0.3"
 mla = { path = "../mla", version = "1" }
 curve25519-parser = { path = "../curve25519-parser", version = "0.2" }
-rand = "0.7"
+rand = "0.8"
 x25519-dalek = "1"
 humansize = "1"
 hex = "0.4"
 # Could be made optional / feature to enable (for binary size)
 tar = "0.4"
-rand_chacha = "0.2"
+rand_chacha = "0.3"
 
 [dev-dependencies]
 assert_cmd = "2.0"

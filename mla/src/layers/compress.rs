@@ -749,7 +749,6 @@ mod tests {
 
     use crate::layers::raw::{RawLayerFailSafeReader, RawLayerReader, RawLayerWriter};
     use rand::distributions::{Alphanumeric, Distribution, Standard};
-    use rand::rngs::StdRng;
     use rand::SeedableRng;
     use std::io::{Cursor, Read, Write};
     use std::time::Instant;
@@ -761,7 +760,7 @@ mod tests {
     // Return a vector of data of size SIZE
     fn get_data() -> Vec<u8> {
         // Use only alphanumeric charset to allow for compression
-        let mut rng: StdRng = SeedableRng::from_seed([0u8; 32]);
+        let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(0);
         let data: Vec<u8> = Alphanumeric
             .sample_iter(&mut rng)
             .take(SIZE)
@@ -774,7 +773,7 @@ mod tests {
     // Return a vector of uncompressable data (ie. purely random) of size SIZE
     fn get_uncompressable_data() -> Vec<u8> {
         // Use only alphanumeric charset to allow for compression
-        let mut rng: StdRng = SeedableRng::from_seed([0u8; 32]);
+        let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(0);
         let data: Vec<u8> = Standard.sample_iter(&mut rng).take(SIZE).collect();
         assert_eq!(data.len(), SIZE);
         data
@@ -973,8 +972,8 @@ mod tests {
             // Ensure the obtained bytes are correct
             assert_eq!(buf.as_slice(), &bytes[..buf.len()]);
             // We hope still having enough data (keeping half of the compressed
-            // stream should give us at least half of the uncompressed stream)
-            assert!(buf.len() >= bytes.len() / 2);
+            // stream should give us at least a third of the uncompressed stream)
+            assert!(buf.len() >= bytes.len() / 3);
         }
     }
 
