@@ -532,7 +532,6 @@ mod tests {
     use super::*;
 
     use rand::distributions::{Alphanumeric, Distribution};
-    use rand::rngs::StdRng;
     use rand::SeedableRng;
     use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 
@@ -677,7 +676,7 @@ mod tests {
             .unwrap(),
         );
         let length = (CHUNK_SIZE * 2) as usize;
-        let mut rng: StdRng = SeedableRng::from_seed([0u8; 32]);
+        let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(0);
         let data: Vec<u8> = Alphanumeric
             .sample_iter(&mut rng)
             .take(length)
