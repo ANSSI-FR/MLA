@@ -972,8 +972,8 @@ mod tests {
             // Ensure the obtained bytes are correct
             assert_eq!(buf.as_slice(), &bytes[..buf.len()]);
             // We hope still having enough data (keeping half of the compressed
-            // stream should give us at least half of the uncompressed stream)
-            assert!(buf.len() >= bytes.len() / 2);
+            // stream should give us at least a third of the uncompressed stream)
+            assert!(buf.len() >= bytes.len() / 3);
         }
     }
 
