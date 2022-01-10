@@ -53,7 +53,9 @@ where
 {
     // A `StaticSecret` is used instead of an `EphemeralSecret` to allow for
     // multiple diffie-hellman computation
-    let ephemeral = StaticSecret::new(csprng);
+    let mut bytes = [0u8; 32];
+    csprng.fill_bytes(&mut bytes);
+    let ephemeral = StaticSecret::from(bytes);
 
     let public = PublicKey::from(&ephemeral);
     let mut encrypted_keys = Vec::new();
@@ -114,10 +116,13 @@ mod tests {
     #[test]
     fn ecies() {
         let mut csprng = ChaChaRng::from_entropy();
-        let ephemeral_scalar = StaticSecret::new(&mut csprng);
+        let mut bytes = [0u8; 32];
+        csprng.fill_bytes(&mut bytes);
+        let ephemeral_scalar = StaticSecret::from(bytes);
         let ephemeral_public = PublicKey::from(&ephemeral_scalar);
 
-        let receiver_private = StaticSecret::new(&mut csprng);
+        csprng.fill_bytes(&mut bytes);
+        let receiver_private = StaticSecret::from(bytes);
         let receiver_public = PublicKey::from(&receiver_private);
 
         let symmetric_key = derive_key(&ephemeral_scalar, &receiver_public).unwrap();
@@ -131,10 +136,12 @@ mod tests {
     fn multi_recipients() {
         // Create fake recipients
         let mut csprng = ChaChaRng::from_entropy();
+        let mut bytes = [0u8; 32];
         let mut recipients_priv = Vec::new();
         let mut recipients_pub = Vec::new();
         for _ in 0..5 {
-            let skey = StaticSecret::new(&mut csprng);
+            csprng.fill_bytes(&mut bytes);
+            let skey = StaticSecret::from(bytes);
             recipients_pub.push(PublicKey::from(&skey));
             recipients_priv.push(skey);
         }
@@ -153,7 +160,8 @@ mod tests {
         }
 
         // Ensure another recipient does not obtain the shared key
-        let fake_recipient = StaticSecret::new(&mut csprng);
+        csprng.fill_bytes(&mut bytes);
+        let fake_recipient = StaticSecret::from(bytes);
         assert!(retrieve_key(&persist, &fake_recipient).unwrap().is_none());
     }
 }
