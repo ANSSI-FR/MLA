@@ -478,7 +478,7 @@ fn list(matches: &ArgMatches) -> Result<(), Error> {
 
 fn extract(matches: &ArgMatches) -> Result<(), Error> {
     let file_name_matcher = ExtractFileNameMatcher::from_matches(matches);
-    let output_dir = Path::new(matches.value_of_os("outputdir").unwrap());
+    let output_dir = Path::new(matches.value_of("outputdir").unwrap());
     let verbose = matches.is_present("verbose");
 
     let mut mla = open_mla_file(matches)?;
@@ -722,7 +722,7 @@ fn convert(matches: &ArgMatches) -> Result<(), Error> {
 #[allow(clippy::unnecessary_wraps)]
 fn keygen(matches: &ArgMatches) -> Result<(), Error> {
     // Safe to use unwrap() because of the requirement
-    let output_base = matches.value_of_os("output").unwrap();
+    let output_base = matches.value_of("output").unwrap();
 
     let mut output_pub = File::create(Path::new(output_base).with_extension("pub"))
         .expect("Unable to create the public file");
