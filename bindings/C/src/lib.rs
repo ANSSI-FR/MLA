@@ -1,14 +1,22 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
+use curve25519_parser::parse_openssl_25519_privkey;
 use curve25519_parser::parse_openssl_25519_pubkeys_pem_many;
+use mla::config::ArchiveReaderConfig;
 use mla::config::ArchiveWriterConfig;
 use mla::errors::ConfigError;
 use mla::errors::Error as MLAError;
+use mla::helpers::linear_extract;
+use mla::ArchiveHeader;
+use mla::ArchiveReader;
 use mla::ArchiveWriter;
 use mla::{ArchiveFileID, Layers};
+use std::collections::HashMap;
 use std::convert::TryFrom;
-use std::ffi::{c_void, CStr};
-use std::io::Write;
+use std::ffi::{c_void, CStr, CString};
+use std::fs::{self, File};
+use std::io::{self, Write};
 use std::os::raw::c_char;
+use std::path::{Path, PathBuf};
 use std::ptr::null_mut;
 
 // Types the caller must understand for error handling and I/O
@@ -60,6 +68,11 @@ pub type MLAWriteCallback = extern "C" fn(
 /// Implemented by the developper. Should ask the underlying medium (file buffering, HTTP
 /// buffering, etc.) to flush any internal buffer.
 pub type MLAFlushCallback = extern "C" fn(context: *mut c_void) -> i32;
+/// Implemented by the developper
+/// Return the desired output path which is expected to be writable.
+/// The callback developper is responsible all security checks and parent path creation.
+pub type MLAReadCallback =
+    extern "C" fn(context: *mut c_void, filename: *const c_char) -> *const c_char;
 
 impl From<MLAError> for MLAStatus {
     fn from(err: MLAError) -> Self {
@@ -216,6 +229,52 @@ pub extern "C" fn mla_config_set_compression_level(
     let res = match config.with_compression_level(level) {
         Ok(_) => MLAStatus::Success,
         Err(e) => MLAStatus::from(MLAError::ConfigError(e)),
+    };
+
+    Box::leak(config);
+    res
+}
+
+/// Create an empty ReaderConfig
+#[no_mangle]
+pub extern "C" fn mla_reader_config_new(handle_out: *mut MLAConfigHandle) -> MLAStatus {
+    if handle_out.is_null() {
+        return MLAStatus::BadAPIArgument;
+    }
+
+    let config = ArchiveReaderConfig::new();
+
+    let ptr = Box::into_raw(Box::new(config));
+    unsafe {
+        *handle_out = ptr as MLAConfigHandle;
+    }
+    MLAStatus::Success
+}
+
+/// Appends the given private key to an existing given configuration
+/// (referenced by the handle returned by mla_reader_config_new()).
+#[no_mangle]
+pub extern "C" fn mla_reader_config_add_private_key(
+    config: MLAConfigHandle,
+    private_key: *const c_char,
+) -> MLAStatus {
+    if config.is_null() || private_key.is_null() {
+        return MLAStatus::BadAPIArgument;
+    }
+
+    let mut config = unsafe { Box::from_raw(config as *mut ArchiveReaderConfig) };
+    let mut private_keys = Vec::new();
+
+    // Create a slice from the NULL-terminated string
+    let private_key = unsafe { CStr::from_ptr(private_key as *const i8) }.to_bytes();
+    // Parse as OpenSSL Ed25519 private key(s)
+    let res = match parse_openssl_25519_privkey(private_key) {
+        Ok(v) => {
+            private_keys.push(v);
+            config.add_private_keys(&private_keys);
+            MLAStatus::Success
+        }
+        _ => MLAStatus::Curve25519ParserError,
     };
 
     Box::leak(config);
@@ -406,4 +465,141 @@ pub extern "C" fn mla_archive_close(archive: *mut MLAArchiveHandle) -> MLAStatus
         Ok(_) => MLAStatus::Success,
         Err(e) => MLAStatus::from(e),
     }
+}
+
+/// Wrapper with Write, to append data to a file
+///
+/// This wrapper is used to avoid opening all files simultaneously, potentially
+/// reaching the filesystem limit, but rather appending to file on-demand
+/// This could be enhanced with a limited pool of active file, but this
+/// optimisation doesn't seems necessary for now
+struct FileWriter {
+    /// Target file for data appending
+    path: PathBuf,
+}
+
+impl Write for FileWriter {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        fs::OpenOptions::new()
+            .append(true)
+            .open(&self.path)?
+            .write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+/// Open an existing MLA archive using the given duration.
+/// The caller is responsible of all security checks related to callback provided paths
+#[no_mangle]
+pub extern "C" fn mla_roarchive_walk<'a>(
+    config: *mut MLAConfigHandle,
+    archive_path: *const c_char,
+    read_callback: MLAReadCallback,
+    context: *mut c_void,
+) -> MLAStatus {
+    if config.is_null() || archive_path.is_null() || (read_callback as *mut c_void).is_null() {
+        return MLAStatus::BadAPIArgument;
+    }
+
+    let config_ptr = unsafe { *(config as *mut *mut ArchiveReaderConfig) };
+    // Avoid any use-after-free of this handle by the caller
+    unsafe {
+        *config = null_mut();
+    }
+    let config = unsafe { Box::from_raw(config_ptr) };
+
+    let archive_path = unsafe { CStr::from_ptr(archive_path) }
+        .to_string_lossy()
+        .to_string();
+    let path = Path::new(&archive_path);
+    let file = match File::open(&path) {
+        Ok(v) => v,
+        Err(_) => return MLAStatus::BadAPIArgument,
+    };
+
+    let mut mla: ArchiveReader<'a, File> = match ArchiveReader::from_config(file, *config) {
+        Ok(mla) => mla,
+        Err(e) => {
+            return MLAStatus::from(e);
+        }
+    };
+
+    let mut iter: Vec<String> = match mla.list_files() {
+        Ok(v) => v.cloned().collect(),
+        Err(_) => return MLAStatus::BadAPIArgument,
+    };
+    iter.sort();
+
+    let mut export: HashMap<&String, FileWriter> = HashMap::new();
+    for fname in &iter {
+        // Convert fname to CString to ensure C will receive a null terminated char*
+        match CString::new(fname.as_str()) {
+            Ok(v) => {
+                let result =
+                    read_callback(context, v.as_bytes_with_nul().as_ptr() as *const c_char);
+                if result.is_null() {
+                    // Skip this file
+                    continue;
+                }
+                let result = unsafe { CStr::from_ptr(result) }
+                    .to_string_lossy()
+                    .to_string();
+                let path = Path::new(&result);
+                let _file = File::create(&path);
+                export.insert(
+                    fname,
+                    FileWriter {
+                        path: path.to_path_buf(),
+                    },
+                );
+            }
+            Err(_) => continue,
+        }
+    }
+    match linear_extract(&mut mla, &mut export) {
+        Ok(()) => MLAStatus::Success,
+        Err(e) => MLAStatus::from(e),
+    }
+}
+
+/// Structure for MLA archive info
+#[repr(C)]
+pub struct ArchiveInfo {
+    version: u32,
+    layers: u8,
+}
+
+/// Get info on an existing MLA archive
+#[no_mangle]
+pub extern "C" fn mla_roarchive_info(
+    archive_path: *const c_char,
+    info_out: *mut ArchiveInfo,
+) -> MLAStatus {
+    if archive_path.is_null() || info_out.is_null() {
+        return MLAStatus::BadAPIArgument;
+    }
+
+    let archive_path = unsafe { CStr::from_ptr(archive_path) }
+        .to_string_lossy()
+        .to_string();
+    let path = Path::new(&archive_path);
+    let mut src = match File::open(&path) {
+        Ok(v) => v,
+        Err(_) => return MLAStatus::IOError,
+    };
+
+    let header = match ArchiveHeader::from(&mut src) {
+        Ok(header) => header,
+        Err(e) => return MLAStatus::from(e),
+    };
+    let layers = header.config.layers_enabled;
+
+    unsafe {
+        (*info_out).version = header.format_version;
+        (*info_out).layers = layers.bits();
+    }
+    MLAStatus::Success
 }

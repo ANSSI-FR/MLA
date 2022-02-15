@@ -61,6 +61,21 @@ typedef void *MLAArchiveHandle;
 typedef void *MLAArchiveFileHandle;
 
 /**
+ * Implemented by the developper
+ * Return the desired output path which is expected to be writable.
+ * The callback developper is responsible all security checks and parent path creation.
+ */
+typedef const char *(*MLAReadCallback)(void *context, const char *filename);
+
+/**
+ * Structure for MLA archive info
+ */
+typedef struct ArchiveInfo {
+  uint32_t version;
+  uint8_t layers;
+} ArchiveInfo;
+
+/**
  * Create a new configuration with default options, and return a handle to it.
  */
 MLAStatus mla_config_default_new(MLAConfigHandle *handle_out);
@@ -78,6 +93,17 @@ MLAStatus mla_config_add_public_keys(MLAConfigHandle config, const char *public_
  * and bigger values cause denser but slower compression.
  */
 MLAStatus mla_config_set_compression_level(MLAConfigHandle config, uint32_t level);
+
+/**
+ * Create an empty ReaderConfig
+ */
+MLAStatus mla_reader_config_new(MLAConfigHandle *handle_out);
+
+/**
+ * Appends the given private key to an existing given configuration
+ * (referenced by the handle returned by mla_reader_config_new()).
+ */
+MLAStatus mla_reader_config_add_private_key(MLAConfigHandle config, const char *private_key);
 
 /**
  * Open a new MLA archive using the given configuration, which is consumed and freed
@@ -135,3 +161,17 @@ MLAStatus mla_archive_file_close(MLAArchiveHandle archive, MLAArchiveFileHandle 
  * or an error code.
  */
 MLAStatus mla_archive_close(MLAArchiveHandle *archive);
+
+/**
+ * Open an existing MLA archive using the given duration.
+ * The caller is responsible of all security checks related to callback provided paths
+ */
+MLAStatus mla_roarchive_walk(MLAConfigHandle *config,
+                             const char *archive_path,
+                             MLAReadCallback read_callback,
+                             void *context);
+
+/**
+ * Get info on an existing MLA archive
+ */
+MLAStatus mla_roarchive_info(const char *archive_path, struct ArchiveInfo *info_out);
