@@ -4,7 +4,7 @@ BUILDDIR ?= ../../../../target
 TARGET ?= x86_64-unknown-linux-gnu
 MLAR ?= $(BUILDDIR)/$(TARGET)/debug/mlar
 
-tests: test_create test_create_manykeys test_create_set_compression_level test_create_set_compression_level_fail_invalid test_create_fail_no_key test_create_interleaved test_create_no_early_close test_create_unicode test_create_stream test_create_write_byte_by_byte
+tests: test_create test_create_manykeys test_create_set_compression_level test_create_set_compression_level_fail_invalid test_create_fail_no_key test_create_interleaved test_create_no_early_close test_create_unicode test_create_stream test_create_write_byte_by_byte test_open test_info
 
 test_create: $(MLAR) create.elf
 	./create.elf
@@ -45,6 +45,13 @@ test_create_stream: $(MLAR) create_stream.elf
 test_create_write_byte_by_byte: $(MLAR) create_write_byte_by_byte.elf
 	./create_write_byte_by_byte.elf
 	$(MLAR) cat test.txt --input ./test.mla -k ../../../../samples/test_ed25519.pem | grep -E '^Hello, World!$$'
+
+test_open: $(MLAR) open.elf
+	./open.elf
+	bash -c "cd extracted; sha256sum --quiet -c sha256sum"
+
+test_info: $(MLAR) info.elf
+	./info.elf
 
 %.elf: %.c $(BUILDDIR)/$(TARGET)/debug/libmla.a
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
