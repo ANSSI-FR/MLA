@@ -1,6 +1,6 @@
 use crate::Error;
 
-use aes::{Aes256, BlockEncrypt, NewBlockCipher};
+use aes::Aes256;
 
 use generic_array::{typenum::U16, GenericArray};
 use ghash::{
@@ -9,7 +9,7 @@ use ghash::{
 };
 pub use subtle::ConstantTimeEq;
 
-use ctr::cipher::{NewCipher, StreamCipher, StreamCipherSeek};
+use ctr::cipher::{BlockEncrypt, KeyInit, KeyIvInit, StreamCipher, StreamCipherSeek};
 
 type Aes256Ctr = ctr::Ctr128BE<aes::Aes256>;
 
