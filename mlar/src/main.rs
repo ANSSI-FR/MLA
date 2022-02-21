@@ -1,4 +1,4 @@
-use clap::{App, Arg, ArgMatches};
+use clap::{Arg, ArgMatches, Command};
 use curve25519_parser::{
     generate_keypair, parse_openssl_25519_privkey, parse_openssl_25519_pubkey,
 };
@@ -853,7 +853,7 @@ fn info(matches: &ArgMatches) -> Result<(), Error> {
     Ok(())
 }
 
-fn app() -> clap::App<'static> {
+fn app() -> clap::Command<'static> {
     // Common arguments list, for homogeneity
     let input_args = vec![
         Arg::new("input")
@@ -902,17 +902,17 @@ fn app() -> clap::App<'static> {
     ];
 
     // Main parsing
-    App::new(env!("CARGO_PKG_NAME"))
+    Command::new(env!("CARGO_PKG_NAME"))
         .version(env!("CARGO_PKG_VERSION"))
         .about(env!("CARGO_PKG_DESCRIPTION"))
         .subcommand(
-            App::new("create")
+            Command::new("create")
                 .about("Create a new MLA Archive")
                 .args(&output_args)
                 .arg(Arg::new("files").help("Files to add").multiple_occurrences(true)),
         )
         .subcommand(
-            App::new("list")
+            Command::new("list")
                 .about("List files inside a MLA Archive")
                 .args(&input_args)
                 .arg(
@@ -924,7 +924,7 @@ fn app() -> clap::App<'static> {
                 ),
         )
         .subcommand(
-            App::new("extract")
+            Command::new("extract")
                 .about("Extract files from a MLA Archive")
                 .args(&input_args)
                 .arg(
@@ -952,7 +952,7 @@ fn app() -> clap::App<'static> {
                 ),
         )
         .subcommand(
-            App::new("cat")
+            Command::new("cat")
                 .about("Display files from a MLA Archive, like 'cat'")
                 .args(&input_args)
                 .arg(
@@ -977,7 +977,7 @@ fn app() -> clap::App<'static> {
                 ),
         )
         .subcommand(
-            App::new("to-tar")
+            Command::new("to-tar")
                 .about("Convert a MLA Archive to a TAR Archive")
                 .args(&input_args)
                 .arg(
@@ -990,13 +990,13 @@ fn app() -> clap::App<'static> {
                 ),
         )
         .subcommand(
-            App::new("repair")
+            Command::new("repair")
                 .about("Try to repair a MLA Archive into a fresh MLA Archive")
                 .args(&input_args)
                 .args(&output_args),
         )
         .subcommand(
-            App::new("convert")
+            Command::new("convert")
                 .about(
                     "Convert a MLA Archive to a fresh new one, with potentially different options",
                 )
@@ -1004,7 +1004,7 @@ fn app() -> clap::App<'static> {
                 .args(&output_args),
         )
         .subcommand(
-            App::new("keygen")
+            Command::new("keygen")
                 .about(
                     "Generate a public/private keypair, in OpenSSL Ed25519 format, to be used by mlar",
                 )
@@ -1016,7 +1016,7 @@ fn app() -> clap::App<'static> {
                 )
         )
         .subcommand(
-            App::new("info")
+            Command::new("info")
                 .about("Get info on a MLA Archive")
                 .args(&input_args)
                 .arg(
