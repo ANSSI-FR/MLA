@@ -18,6 +18,7 @@ use mla::{
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use std::collections::{HashMap, HashSet};
+use std::ffi::OsStr;
 use std::fs::{self, read_dir, File};
 use std::io::{self, BufRead};
 use std::io::{Read, Seek, SeekFrom, Write};
@@ -148,7 +149,7 @@ fn config_from_matches(matches: &ArgMatches) -> ArchiveWriterConfig {
     config
 }
 
-fn destination_from_output_argument(output_argument: &str) -> Result<OutputTypes, Error> {
+fn destination_from_output_argument(output_argument: &OsStr) -> Result<OutputTypes, Error> {
     let destination = if output_argument != "-" {
         let path = Path::new(&output_argument);
         OutputTypes::File {
@@ -165,7 +166,7 @@ fn writer_from_matches<'a>(matches: &ArgMatches) -> Result<ArchiveWriter<'a, Out
     let config = config_from_matches(matches);
 
     // Safe to use unwrap() because the option is required()
-    let output = matches.value_of("output").unwrap();
+    let output = matches.value_of_os("output").unwrap();
 
     let destination = destination_from_output_argument(output)?;
 
@@ -194,7 +195,7 @@ fn open_mla_file<'a>(matches: &ArgMatches) -> Result<ArchiveReader<'a, File>, Er
     let config = readerconfig_from_matches(matches);
 
     // Safe to use unwrap() because the option is required()
-    let mla_file = matches.value_of("input").unwrap();
+    let mla_file = matches.value_of_os("input").unwrap();
     let path = Path::new(&mla_file);
     let file = File::open(&path)?;
 
@@ -209,7 +210,7 @@ fn open_failsafe_mla_file<'a>(
     let config = readerconfig_from_matches(matches);
 
     // Safe to use unwrap() because the option is required()
-    let mla_file = matches.value_of("input").unwrap();
+    let mla_file = matches.value_of_os("input").unwrap();
     let path = Path::new(&mla_file);
     let file = File::open(&path)?;
 
@@ -435,7 +436,7 @@ fn add_from_stdin(mla: &mut ArchiveWriter<OutputTypes>) -> Result<(), Error> {
 fn create(matches: &ArgMatches) -> Result<(), Error> {
     let mut mla = writer_from_matches(matches)?;
 
-    if let Some(files) = matches.values_of("files") {
+    if let Some(files) = matches.values_of_os("files") {
         for filename in files {
             if filename == "-" {
                 add_from_stdin(&mut mla)?;
@@ -565,7 +566,7 @@ fn extract(matches: &ArgMatches) -> Result<(), Error> {
 
 fn cat(matches: &ArgMatches) -> Result<(), Error> {
     let files_values = matches.values_of("files").unwrap();
-    let output = matches.value_of("output").unwrap();
+    let output = matches.value_of_os("output").unwrap();
     let mut destination = destination_from_output_argument(output)?;
 
     let mut mla = open_mla_file(matches)?;
@@ -634,7 +635,7 @@ fn to_tar(matches: &ArgMatches) -> Result<(), Error> {
     let mut mla = open_mla_file(matches)?;
 
     // Safe to use unwrap() because the option is required()
-    let output = matches.value_of("output").unwrap();
+    let output = matches.value_of_os("output").unwrap();
     let destination = destination_from_output_argument(output)?;
     let mut tar_file = Builder::new(destination);
 
@@ -809,7 +810,7 @@ impl ArchiveInfoReader {
 
 fn info(matches: &ArgMatches) -> Result<(), Error> {
     // Safe to use unwrap() because the option is required()
-    let mla_file = matches.value_of("input").unwrap();
+    let mla_file = matches.value_of_os("input").unwrap();
     let path = Path::new(&mla_file);
     let mut file = File::open(&path)?;
 
@@ -861,6 +862,7 @@ fn app() -> clap::Command<'static> {
             .long("input")
             .short('i')
             .number_of_values(1)
+            .allow_invalid_utf8(true)
             .required(true),
         Arg::new("private_keys")
             .long("private_keys")
@@ -877,6 +879,7 @@ fn app() -> clap::Command<'static> {
             .long("output")
             .short('o')
             .takes_value(true)
+            .allow_invalid_utf8(true)
             .required(true),
         Arg::new("public_keys")
             .help("ED25519 Public key paths (DER or PEM format)")
@@ -909,7 +912,12 @@ fn app() -> clap::Command<'static> {
             Command::new("create")
                 .about("Create a new MLA Archive")
                 .args(&output_args)
-                .arg(Arg::new("files").help("Files to add").multiple_occurrences(true)),
+                .arg(
+                    Arg::new("files")
+                    .help("Files to add")
+                    .allow_invalid_utf8(true)
+                    .multiple_occurrences(true)
+                ),
         )
         .subcommand(
             Command::new("list")
@@ -933,6 +941,7 @@ fn app() -> clap::Command<'static> {
                         .long("output")
                         .short('o')
                         .number_of_values(1)
+                        .allow_invalid_utf8(true)
                         .default_value("."),
                 )
                 .arg(
@@ -961,6 +970,7 @@ fn app() -> clap::Command<'static> {
                         .long("output")
                         .short('o')
                         .number_of_values(1)
+                        .allow_invalid_utf8(true)
                         .default_value("-"),
                 )
                 .arg(
@@ -986,6 +996,7 @@ fn app() -> clap::Command<'static> {
                         .long("output")
                         .short('o')
                         .number_of_values(1)
+                        .allow_invalid_utf8(true)
                         .required(true),
                 ),
         )
@@ -1012,6 +1023,7 @@ fn app() -> clap::Command<'static> {
                     Arg::new("output")
                         .help("Output file for the private key. The public key is in {output}.pub")
                         .number_of_values(1)
+                        .allow_invalid_utf8(true)
                         .required(true)
                 )
         )
