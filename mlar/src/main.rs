@@ -18,12 +18,64 @@ use mla::{
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use std::collections::{HashMap, HashSet};
+use std::error;
 use std::ffi::OsStr;
+use std::fmt;
 use std::fs::{self, read_dir, File};
 use std::io::{self, BufRead};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Component, Path, PathBuf};
 use tar::{Builder, Header};
+
+// ----- Error ------
+
+#[derive(Debug)]
+pub enum MlarError {
+    /// Wrap a MLA error
+    MlaError(Error),
+    /// IO Error (not enough data, etc.)
+    IOError(io::Error),
+    /// A private key has been provided, but it is not required
+    PrivateKeyProvidedButNotUsed,
+    /// Configuration error
+    ConfigError(mla::errors::ConfigError),
+}
+
+impl fmt::Display for MlarError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // For now, use the debug derived version
+        write!(f, "{:?}", self)
+    }
+}
+
+impl From<Error> for MlarError {
+    fn from(error: Error) -> Self {
+        MlarError::MlaError(error)
+    }
+}
+
+impl From<io::Error> for MlarError {
+    fn from(error: io::Error) -> Self {
+        MlarError::IOError(error)
+    }
+}
+
+impl From<mla::errors::ConfigError> for MlarError {
+    fn from(error: mla::errors::ConfigError) -> Self {
+        MlarError::ConfigError(error)
+    }
+}
+
+impl error::Error for MlarError {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match &self {
+            MlarError::IOError(err) => Some(err),
+            MlarError::MlaError(err) => Some(err),
+            MlarError::ConfigError(err) => Some(err),
+            _ => None,
+        }
+    }
+}
 
 // ----- Utils ------
 
@@ -149,7 +201,7 @@ fn config_from_matches(matches: &ArgMatches) -> ArchiveWriterConfig {
     config
 }
 
-fn destination_from_output_argument(output_argument: &OsStr) -> Result<OutputTypes, Error> {
+fn destination_from_output_argument(output_argument: &OsStr) -> Result<OutputTypes, MlarError> {
     let destination = if output_argument != "-" {
         let path = Path::new(&output_argument);
         OutputTypes::File {
@@ -162,7 +214,9 @@ fn destination_from_output_argument(output_argument: &OsStr) -> Result<OutputTyp
 }
 
 /// Return an ArchiveWriter corresponding to provided arguments
-fn writer_from_matches<'a>(matches: &ArgMatches) -> Result<ArchiveWriter<'a, OutputTypes>, Error> {
+fn writer_from_matches<'a>(
+    matches: &ArgMatches,
+) -> Result<ArchiveWriter<'a, OutputTypes>, MlarError> {
     let config = config_from_matches(matches);
 
     // Safe to use unwrap() because the option is required()
@@ -171,7 +225,7 @@ fn writer_from_matches<'a>(matches: &ArgMatches) -> Result<ArchiveWriter<'a, Out
     let destination = destination_from_output_argument(output)?;
 
     // Instantiate output writer
-    ArchiveWriter::from_config(destination, config)
+    Ok(ArchiveWriter::from_config(destination, config)?)
 }
 
 /// Return the ArchiveReaderConfig corresponding to provided arguments and set
@@ -193,7 +247,7 @@ fn readerconfig_from_matches(matches: &ArgMatches) -> ArchiveReaderConfig {
     config
 }
 
-fn open_mla_file<'a>(matches: &ArgMatches) -> Result<ArchiveReader<'a, File>, Error> {
+fn open_mla_file<'a>(matches: &ArgMatches) -> Result<ArchiveReader<'a, File>, MlarError> {
     let config = readerconfig_from_matches(matches);
 
     // Safe to use unwrap() because the option is required()
@@ -209,18 +263,18 @@ fn open_mla_file<'a>(matches: &ArgMatches) -> Result<ArchiveReader<'a, File>, Er
         && !header.config.layers_enabled.contains(Layers::ENCRYPT)
     {
         eprintln!("[-] A private key has been provided, but the archive is not encrypted");
-        return Err(Error::PrivateKeyNeeded);
+        return Err(MlarError::PrivateKeyProvidedButNotUsed);
     }
     file.seek(SeekFrom::Start(0))?;
 
     // Instantiate reader
-    ArchiveReader::from_config(file, config)
+    Ok(ArchiveReader::from_config(file, config)?)
 }
 
 // Utils: common code to load a mla_file from arguments, fail-safe mode
 fn open_failsafe_mla_file<'a>(
     matches: &ArgMatches,
-) -> Result<ArchiveFailSafeReader<'a, File>, Error> {
+) -> Result<ArchiveFailSafeReader<'a, File>, MlarError> {
     let config = readerconfig_from_matches(matches);
 
     // Safe to use unwrap() because the option is required()
@@ -229,7 +283,7 @@ fn open_failsafe_mla_file<'a>(
     let file = File::open(&path)?;
 
     // Instantiate reader
-    ArchiveFailSafeReader::from_config(file, config)
+    Ok(ArchiveFailSafeReader::from_config(file, config)?)
 }
 
 fn add_file_to_tar<R: Read, W: Write>(
@@ -334,7 +388,7 @@ fn get_extracted_path(output_dir: &Path, file_name: &str) -> Option<PathBuf> {
 fn create_file<P1: AsRef<Path>>(
     output_dir: P1,
     fname: &str,
-) -> Result<Option<(File, PathBuf)>, Error> {
+) -> Result<Option<(File, PathBuf)>, MlarError> {
     let extracted_path = match get_extracted_path(output_dir.as_ref(), fname) {
         Some(p) => p,
         None => return Ok(None),
@@ -412,7 +466,7 @@ impl Write for FileWriter {
 }
 
 /// Add whatever is specified by `path`
-fn add_file_or_dir(mla: &mut ArchiveWriter<OutputTypes>, path: &Path) -> Result<(), Error> {
+fn add_file_or_dir(mla: &mut ArchiveWriter<OutputTypes>, path: &Path) -> Result<(), MlarError> {
     if path.is_dir() {
         add_dir(mla, path)?;
     } else {
@@ -430,7 +484,7 @@ fn add_file_or_dir(mla: &mut ArchiveWriter<OutputTypes>, path: &Path) -> Result<
 
 /// Recursively explore a dir to add all the files
 /// Ignore empty directory
-fn add_dir(mla: &mut ArchiveWriter<OutputTypes>, dir: &Path) -> Result<(), Error> {
+fn add_dir(mla: &mut ArchiveWriter<OutputTypes>, dir: &Path) -> Result<(), MlarError> {
     for file in read_dir(dir)? {
         let new_path = file?.path();
         add_file_or_dir(mla, &new_path)?;
@@ -438,7 +492,7 @@ fn add_dir(mla: &mut ArchiveWriter<OutputTypes>, dir: &Path) -> Result<(), Error
     Ok(())
 }
 
-fn add_from_stdin(mla: &mut ArchiveWriter<OutputTypes>) -> Result<(), Error> {
+fn add_from_stdin(mla: &mut ArchiveWriter<OutputTypes>) -> Result<(), MlarError> {
     for line in io::stdin().lock().lines() {
         add_file_or_dir(mla, Path::new(&line?))?;
     }
@@ -447,7 +501,7 @@ fn add_from_stdin(mla: &mut ArchiveWriter<OutputTypes>) -> Result<(), Error> {
 
 // ----- Commands ------
 
-fn create(matches: &ArgMatches) -> Result<(), Error> {
+fn create(matches: &ArgMatches) -> Result<(), MlarError> {
     let mut mla = writer_from_matches(matches)?;
 
     if let Some(files) = matches.values_of_os("files") {
@@ -465,7 +519,7 @@ fn create(matches: &ArgMatches) -> Result<(), Error> {
     Ok(())
 }
 
-fn list(matches: &ArgMatches) -> Result<(), Error> {
+fn list(matches: &ArgMatches) -> Result<(), MlarError> {
     let mut mla = open_mla_file(matches)?;
 
     let mut iter: Vec<String> = mla.list_files()?.cloned().collect();
@@ -491,7 +545,7 @@ fn list(matches: &ArgMatches) -> Result<(), Error> {
     Ok(())
 }
 
-fn extract(matches: &ArgMatches) -> Result<(), Error> {
+fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
     let file_name_matcher = ExtractFileNameMatcher::from_matches(matches);
     let output_dir = Path::new(matches.value_of_os("outputdir").unwrap());
     let verbose = matches.is_present("verbose");
@@ -535,7 +589,7 @@ fn extract(matches: &ArgMatches) -> Result<(), Error> {
                 None => continue,
             }
         }
-        return linear_extract(&mut mla, &mut export);
+        return Ok(linear_extract(&mut mla, &mut export)?);
     }
 
     for fname in iter {
@@ -578,7 +632,7 @@ fn extract(matches: &ArgMatches) -> Result<(), Error> {
     Ok(())
 }
 
-fn cat(matches: &ArgMatches) -> Result<(), Error> {
+fn cat(matches: &ArgMatches) -> Result<(), MlarError> {
     let files_values = matches.values_of("files").unwrap();
     let output = matches.value_of_os("output").unwrap();
     let mut destination = destination_from_output_argument(output)?;
@@ -645,7 +699,7 @@ fn cat(matches: &ArgMatches) -> Result<(), Error> {
     Ok(())
 }
 
-fn to_tar(matches: &ArgMatches) -> Result<(), Error> {
+fn to_tar(matches: &ArgMatches) -> Result<(), MlarError> {
     let mut mla = open_mla_file(matches)?;
 
     // Safe to use unwrap() because the option is required()
@@ -683,7 +737,7 @@ fn to_tar(matches: &ArgMatches) -> Result<(), Error> {
     Ok(())
 }
 
-fn repair(matches: &ArgMatches) -> Result<(), Error> {
+fn repair(matches: &ArgMatches) -> Result<(), MlarError> {
     let mut mla = open_failsafe_mla_file(matches)?;
     let mut mla_out = writer_from_matches(matches)?;
 
@@ -701,7 +755,7 @@ fn repair(matches: &ArgMatches) -> Result<(), Error> {
     Ok(())
 }
 
-fn convert(matches: &ArgMatches) -> Result<(), Error> {
+fn convert(matches: &ArgMatches) -> Result<(), MlarError> {
     let mut mla = open_mla_file(matches)?;
     let mut fnames: Vec<String> = if let Ok(iter) = mla.list_files() {
         // Read the file list using metadata
@@ -735,7 +789,7 @@ fn convert(matches: &ArgMatches) -> Result<(), Error> {
 }
 
 #[allow(clippy::unnecessary_wraps)]
-fn keygen(matches: &ArgMatches) -> Result<(), Error> {
+fn keygen(matches: &ArgMatches) -> Result<(), MlarError> {
     // Safe to use unwrap() because of the requirement
     let output_base = matches.value_of_os("output").unwrap();
 
@@ -771,7 +825,10 @@ pub struct ArchiveInfoReader {
 }
 
 impl ArchiveInfoReader {
-    pub fn from_config<'a, R>(mut src: R, mut config: ArchiveReaderConfig) -> Result<Self, Error>
+    pub fn from_config<'a, R>(
+        mut src: R,
+        mut config: ArchiveReaderConfig,
+    ) -> Result<Self, MlarError>
     where
         R: 'a + Read + Seek,
     {
@@ -813,16 +870,16 @@ impl ArchiveInfoReader {
         })
     }
 
-    pub fn get_files_size(&self) -> Result<u64, Error> {
+    pub fn get_files_size(&self) -> Result<u64, MlarError> {
         if let Some(ArchiveFooter { files_info, .. }) = &self.metadata {
             Ok(files_info.values().map(|f| f.size).sum())
         } else {
-            Err(Error::MissingMetadata)
+            Err(Error::MissingMetadata.into())
         }
     }
 }
 
-fn info(matches: &ArgMatches) -> Result<(), Error> {
+fn info(matches: &ArgMatches) -> Result<(), MlarError> {
     // Safe to use unwrap() because the option is required()
     let mla_file = matches.value_of_os("input").unwrap();
     let path = Path::new(&mla_file);
