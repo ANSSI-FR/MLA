@@ -174,7 +174,8 @@ fn writer_from_matches<'a>(matches: &ArgMatches) -> Result<ArchiveWriter<'a, Out
     ArchiveWriter::from_config(destination, config)
 }
 
-/// Return the ArchiveReaderConfig corresponding to provided arguments
+/// Return the ArchiveReaderConfig corresponding to provided arguments and set
+/// Layers::ENCRYPT if a key is provided
 fn readerconfig_from_matches(matches: &ArgMatches) -> ArchiveReaderConfig {
     let mut config = ArchiveReaderConfig::new();
 
@@ -186,6 +187,7 @@ fn readerconfig_from_matches(matches: &ArgMatches) -> ArchiveReaderConfig {
             }
         };
         config.add_private_keys(&private_keys);
+        config.layers_enabled.insert(Layers::ENCRYPT);
     }
 
     config
@@ -197,7 +199,19 @@ fn open_mla_file<'a>(matches: &ArgMatches) -> Result<ArchiveReader<'a, File>, Er
     // Safe to use unwrap() because the option is required()
     let mla_file = matches.value_of_os("input").unwrap();
     let path = Path::new(&mla_file);
-    let file = File::open(&path)?;
+    let mut file = File::open(&path)?;
+
+    // If a decryption key is provided, assume the user expects the file to be encrypted
+    // If not, avoid opening it
+    file.seek(SeekFrom::Start(0))?;
+    let header = ArchiveHeader::from(&mut file)?;
+    if config.layers_enabled.contains(Layers::ENCRYPT)
+        && !header.config.layers_enabled.contains(Layers::ENCRYPT)
+    {
+        eprintln!("[-] A private key has been provided, but the archive is not encrypted");
+        return Err(Error::PrivateKeyNeeded);
+    }
+    file.seek(SeekFrom::Start(0))?;
 
     // Instantiate reader
     ArchiveReader::from_config(file, config)
