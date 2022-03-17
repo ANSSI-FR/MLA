@@ -1054,3 +1054,46 @@ Compression: true
     let assert = cmd.assert();
     assert.success();
 }
+
+#[test]
+fn test_no_open_on_encrypt() {
+    // Create an unencrypted archive
+    let mlar_file = NamedTempFile::new("output.mla").unwrap();
+    let ecc_private = Path::new("../samples/test_x25519.pem");
+
+    // Create files
+    let testfs = setup();
+
+    // `mlar create -o output.mla -l compress file1.bin file2.bin file3.bin`
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("create")
+        .arg("-l")
+        .arg("compress")
+        .arg("-o")
+        .arg(mlar_file.path());
+
+    let mut file_list = String::new();
+    for file in &testfs.files {
+        cmd.arg(file.path());
+        file_list.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
+    }
+
+    println!("{:?}", cmd);
+    let assert = cmd.assert();
+    assert.success().stderr(String::from(&file_list));
+
+    // Ensure:
+    // - mlar refuse to open the MLA file if a private key is provided
+
+    // `mlar list -i output.mla -k samples/test_x25519.pem`
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("list")
+        .arg("-i")
+        .arg(mlar_file.path())
+        .arg("-k")
+        .arg(&ecc_private);
+
+    println!("{:?}", cmd);
+    let assert = cmd.assert();
+    assert.failure();
+}
