@@ -12,7 +12,7 @@ readme = "../README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-der-parser = { version = "6", default-features = false}
+der-parser = { version = "8", default-features = false}
 x25519-dalek = { version = "1", default-features = false}
 curve25519-dalek = { version = "3", default-features = false, features = ["u64_backend"]}
 sha2 = { version = "0", default-features = false}
