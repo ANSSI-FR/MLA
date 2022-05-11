@@ -1,7 +1,7 @@
 use std::io;
 use std::io::{Read, Seek, SeekFrom, Write};
 
-use crate::layers::traits::{LayerFailSafeReader, LayerReader, LayerWriter};
+use crate::layers::traits::{LayerFailSafeReader, LayerReader, LayerWriter, InnerWriterType};
 use crate::Error;
 
 // ---------- Writer ----------
@@ -18,7 +18,7 @@ impl<W: Write> RawLayerWriter<W> {
 }
 
 impl<'a, W: Write> LayerWriter<'a, W> for RawLayerWriter<W> {
-    fn into_inner(self) -> Option<Box<dyn 'a + LayerWriter<'a, W>>> {
+    fn into_inner(self) -> Option<InnerWriterType<'a, W>> {
         None
     }
 

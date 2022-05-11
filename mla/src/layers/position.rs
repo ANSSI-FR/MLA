@@ -1,19 +1,19 @@
 use std::io;
 use std::io::Write;
 
-use crate::layers::traits::LayerWriter;
+use crate::layers::traits::{LayerWriter, InnerWriterType};
 use crate::Error;
 
 // ---------- Writer ----------
 
 /// Layer used to track how many bytes have been written
 pub struct PositionLayerWriter<'a, W: 'a + Write> {
-    inner: Box<dyn 'a + LayerWriter<'a, W>>,
+    inner: InnerWriterType<'a, W>,
     pos: u64,
 }
 
 impl<'a, W: 'a + Write> PositionLayerWriter<'a, W> {
-    pub fn new(inner: Box<dyn 'a + LayerWriter<'a, W>>) -> Self {
+    pub fn new(inner: InnerWriterType<'a, W>) -> Self {
         Self { inner, pos: 0 }
     }
 
@@ -31,7 +31,7 @@ impl<'a, W: 'a + Write> PositionLayerWriter<'a, W> {
 }
 
 impl<'a, W: 'a + Write> LayerWriter<'a, W> for PositionLayerWriter<'a, W> {
-    fn into_inner(self) -> Option<Box<dyn 'a + LayerWriter<'a, W>>> {
+    fn into_inner(self) -> Option<InnerWriterType<'a, W>> {
         Some(self.inner)
     }
 

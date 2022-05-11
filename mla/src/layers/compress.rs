@@ -2,7 +2,7 @@ use bincode::Options;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use serde::{Deserialize, Serialize};
 
-use crate::layers::traits::{LayerFailSafeReader, LayerReader, LayerWriter};
+use crate::layers::traits::{LayerFailSafeReader, LayerReader, LayerWriter, InnerWriterType};
 use crate::{Error, BINCODE_MAX_DESERIALIZE};
 use std::io;
 use std::io::{Read, Seek, SeekFrom, Write};
@@ -489,7 +489,7 @@ enum CompressionLayerWriterState<W: Write> {
 /// * if the index is lost, a slow decompression with a block size of 1 is
 /// needed to found the CompressedBlock boundaries
 pub struct CompressionLayerWriter<'a, W: 'a + Write> {
-    state: CompressionLayerWriterState<Box<dyn 'a + LayerWriter<'a, W>>>,
+    state: CompressionLayerWriterState<InnerWriterType<'a, W>>,
     // Ordered list of compressed size of block of `UNCOMPRESSED_DATA_SIZE`
     // bytes
     //
@@ -518,7 +518,7 @@ impl<W: Write> CompressionLayerWriterState<W> {
 
 impl<'a, W: 'a + Write> CompressionLayerWriter<'a, W> {
     pub fn new(
-        inner: Box<dyn 'a + LayerWriter<'a, W>>,
+        inner: InnerWriterType<'a, W>,
         config: &CompressionConfig,
     ) -> CompressionLayerWriter<'a, W> {
         Self {
@@ -530,7 +530,7 @@ impl<'a, W: 'a + Write> CompressionLayerWriter<'a, W> {
 }
 
 impl<'a, W: 'a + Write> LayerWriter<'a, W> for CompressionLayerWriter<'a, W> {
-    fn into_inner(self) -> Option<Box<dyn 'a + LayerWriter<'a, W>>> {
+    fn into_inner(self) -> Option<InnerWriterType<'a,W>> {
         Some(self.state.into_inner())
     }
 

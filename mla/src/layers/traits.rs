@@ -1,10 +1,12 @@
 use crate::Error;
 use std::io::{Read, Seek, Write};
 
+/// Type alias for Layer Writer inner type
+pub type InnerWriterType<'a, W> = Box<dyn 'a + LayerWriter<'a, W>>;
 /// Trait to be implemented by layer writers
 pub trait LayerWriter<'a, W: Write>: Write {
     /// Unwraps the inner writer
-    fn into_inner(self) -> Option<Box<dyn 'a + LayerWriter<'a, W>>>;
+    fn into_inner(self) -> Option<InnerWriterType<'a, W>>;
 
     /// Unwraps the original I/O writer
     // Use a Box<Self> to be able to move out the inner value; without it, self
