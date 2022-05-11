@@ -17,7 +17,7 @@ use crate::layers::encrypt::{
 };
 use crate::layers::position::PositionLayerWriter;
 use crate::layers::raw::{RawLayerFailSafeReader, RawLayerReader, RawLayerWriter};
-use crate::layers::traits::{LayerFailSafeReader, LayerReader, LayerWriter};
+use crate::layers::traits::{LayerFailSafeReader, LayerReader, LayerWriter, InnerWriterType};
 pub mod errors;
 use crate::errors::{Error, FailSafeReadError};
 
@@ -471,7 +471,7 @@ impl<'a, W: Write> ArchiveWriter<'a, W> {
         config.check()?;
 
         // Write archive header
-        let mut dest: Box<dyn LayerWriter<W>> = Box::new(RawLayerWriter::new(dest));
+        let mut dest: InnerWriterType<W> = Box::new(RawLayerWriter::new(dest));
         ArchiveHeader {
             format_version: MLA_FORMAT_VERSION,
             config: config.to_persistent()?,
