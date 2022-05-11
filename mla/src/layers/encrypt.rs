@@ -1,7 +1,7 @@
 use crate::crypto::aesgcm::{AesGcm256, ConstantTimeEq, Key, Nonce, Tag, TAG_LENGTH};
 use crate::crypto::ecc::{retrieve_key, store_key_for_multi_recipients, MultiRecipientPersistent};
 
-use crate::layers::traits::{LayerFailSafeReader, LayerReader, LayerWriter};
+use crate::layers::traits::{LayerFailSafeReader, LayerReader, LayerWriter, InnerWriterType};
 use crate::Error;
 use std::io;
 use std::io::{BufReader, Cursor, Read, Seek, SeekFrom, Write};
@@ -178,7 +178,7 @@ impl ArchiveReaderConfig {
 // ---------- Writer ----------
 
 pub struct EncryptionLayerWriter<'a, W: 'a + Write> {
-    inner: Box<dyn 'a + LayerWriter<'a, W>>,
+    inner: InnerWriterType<'a, W>,
     cipher: AesGcm256,
     /// Symmetric encryption Key
     key: Key,
@@ -190,7 +190,7 @@ pub struct EncryptionLayerWriter<'a, W: 'a + Write> {
 
 impl<'a, W: 'a + Write> EncryptionLayerWriter<'a, W> {
     pub fn new(
-        inner: Box<dyn 'a + LayerWriter<'a, W>>,
+        inner: InnerWriterType<'a, W>,
         config: &EncryptionConfig,
     ) -> Result<Self, Error> {
         Ok(Self {
@@ -218,7 +218,7 @@ impl<'a, W: 'a + Write> EncryptionLayerWriter<'a, W> {
 }
 
 impl<'a, W: 'a + Write> LayerWriter<'a, W> for EncryptionLayerWriter<'a, W> {
-    fn into_inner(self) -> Option<Box<dyn 'a + LayerWriter<'a, W>>> {
+    fn into_inner(self) -> Option<InnerWriterType<'a, W>> {
         Some(self.inner)
     }
 
