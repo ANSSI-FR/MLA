@@ -1239,6 +1239,10 @@ pub(crate) mod tests {
     use rand::distributions::{Distribution, Standard};
     use rand::{RngCore, SeedableRng};
     use rand_chacha::ChaChaRng;
+    #[cfg(feature = "send")]
+    use static_assertions;
+    #[cfg(feature = "send")]
+    use std::fs::File;
     use std::io::{Cursor, Empty, Read};
     use x25519_dalek::{PublicKey, StaticSecret};
 
@@ -2166,5 +2170,13 @@ pub(crate) mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    #[cfg(feature = "send")]
+    fn test_send() {
+        static_assertions::assert_cfg!(feature = "send");
+        static_assertions::assert_impl_all!(File: Send);
+        static_assertions::assert_impl_all!(ArchiveWriter<File>: Send);
     }
 }

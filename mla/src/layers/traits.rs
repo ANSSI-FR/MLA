@@ -1,14 +1,31 @@
 use crate::Error;
 use std::io::{Read, Seek, Write};
 
+// Here, feature `send` is used to force `Send` on Box<dyn> type
+// Indeed, the auto-derivation of Send is not able to automatically propagates it
+// As a result, forcing `Send` on the Layers forces it on the initial `W` (writable) type
+// To avoid this restriction when `Send` is not required, a feature is used
+
 /// Type alias for Layer Writer inner type
+#[cfg(not(feature = "send"))]
 pub type InnerWriterType<'a, W> = Box<dyn 'a + LayerWriter<'a, W>>;
+#[cfg(feature = "send")]
+pub type InnerWriterType<'a, W> = Box<dyn 'a + LayerWriter<'a, W> + Send>;
+
 /// Trait alias for Layer Writer writable destination
 // Type aliases are not yet stable
 // See https://github.com/rust-lang/rust/issues/41517
 // -> use a dummy trait instead
+#[cfg(not(feature = "send"))]
 pub trait InnerWriterTrait: Write {}
+#[cfg(not(feature = "send"))]
 impl<T: Write> InnerWriterTrait for T {}
+
+#[cfg(feature = "send")]
+pub trait InnerWriterTrait: Write + Send {}
+#[cfg(feature = "send")]
+impl<T: Write + Send> InnerWriterTrait for T {}
+
 /// Trait to be implemented by layer writers
 pub trait LayerWriter<'a, W: InnerWriterTrait>: Write {
     /// Unwraps the inner writer
