@@ -17,7 +17,9 @@ use crate::layers::encrypt::{
 };
 use crate::layers::position::PositionLayerWriter;
 use crate::layers::raw::{RawLayerFailSafeReader, RawLayerReader, RawLayerWriter};
-use crate::layers::traits::{LayerFailSafeReader, LayerReader, LayerWriter, InnerWriterType};
+use crate::layers::traits::{
+    InnerWriterTrait, InnerWriterType, LayerFailSafeReader, LayerReader, LayerWriter,
+};
 pub mod errors;
 use crate::errors::{Error, FailSafeReadError};
 
@@ -421,7 +423,7 @@ macro_rules! check_state_file_opened {
     }};
 }
 
-pub struct ArchiveWriter<'a, W: 'a + Write> {
+pub struct ArchiveWriter<'a, W: 'a + InnerWriterTrait> {
     /// MLA Archive format writer
     ///
     /// Configuration
@@ -465,7 +467,7 @@ pub fn vec_remove_item<T: std::cmp::PartialEq>(vec: &mut Vec<T>, item: &T) -> Op
     Some(vec.remove(pos))
 }
 
-impl<'a, W: Write> ArchiveWriter<'a, W> {
+impl<'a, W: InnerWriterTrait> ArchiveWriter<'a, W> {
     pub fn from_config(dest: W, config: ArchiveWriterConfig) -> Result<Self, Error> {
         // Ensure config is correct
         config.check()?;
@@ -1020,7 +1022,7 @@ impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
     /// one. On success, returns the reason conversion terminates (ideally,
     /// EndOfOriginalArchiveData)
     #[allow(clippy::cognitive_complexity)]
-    pub fn convert_to_archive<W: Write>(
+    pub fn convert_to_archive<W: InnerWriterTrait>(
         &mut self,
         output: &mut ArchiveWriter<W>,
     ) -> Result<FailSafeReadError, Error> {

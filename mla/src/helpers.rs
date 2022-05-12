@@ -1,3 +1,4 @@
+use super::layers::traits::InnerWriterTrait;
 /// Helpers for common operation with MLA Archives
 use super::{ArchiveFileBlock, ArchiveFileID, ArchiveReader, ArchiveWriter, Error};
 use std::collections::HashMap;
@@ -18,7 +19,7 @@ use std::io::{self, Read, Seek, SeekFrom, Write};
 /// encryption tag).
 /// Linear extraction avoids these costs by reading once and only once each byte,
 /// and by reducing the amount of seeks.
-pub fn linear_extract<W1: Write, R: Read + Seek, S: BuildHasher>(
+pub fn linear_extract<W1: InnerWriterTrait, R: Read + Seek, S: BuildHasher>(
     archive: &mut ArchiveReader<R>,
     export: &mut HashMap<&String, W1, S>,
 ) -> Result<(), Error> {
@@ -77,18 +78,18 @@ pub fn linear_extract<W1: Write, R: Read + Seek, S: BuildHasher>(
 /// This interface is meant to be used in situations where length of the data
 /// source is unknown, such as a stream. One can then use the `io::copy`
 /// facilities to perform multiples block addition in the archive
-pub struct StreamWriter<'a, 'b, W: Write> {
+pub struct StreamWriter<'a, 'b, W: InnerWriterTrait> {
     archive: &'b mut ArchiveWriter<'a, W>,
     file_id: ArchiveFileID,
 }
 
-impl<'a, 'b, W: Write> StreamWriter<'a, 'b, W> {
+impl<'a, 'b, W: InnerWriterTrait> StreamWriter<'a, 'b, W> {
     pub fn new(archive: &'b mut ArchiveWriter<'a, W>, file_id: ArchiveFileID) -> Self {
         Self { archive, file_id }
     }
 }
 
-impl<'a, 'b, W: Write> Write for StreamWriter<'a, 'b, W> {
+impl<'a, 'b, W: InnerWriterTrait> Write for StreamWriter<'a, 'b, W> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.archive
             .append_file_content(self.file_id, buf.len() as u64, buf)?;

@@ -2,7 +2,9 @@ use bincode::Options;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use serde::{Deserialize, Serialize};
 
-use crate::layers::traits::{LayerFailSafeReader, LayerReader, LayerWriter, InnerWriterType};
+use crate::layers::traits::{
+    InnerWriterTrait, InnerWriterType, LayerFailSafeReader, LayerReader, LayerWriter,
+};
 use crate::{Error, BINCODE_MAX_DESERIALIZE};
 use std::io;
 use std::io::{Read, Seek, SeekFrom, Write};
@@ -488,7 +490,7 @@ enum CompressionLayerWriterState<W: Write> {
 /// Cons:
 /// * if the index is lost, a slow decompression with a block size of 1 is
 /// needed to found the CompressedBlock boundaries
-pub struct CompressionLayerWriter<'a, W: 'a + Write> {
+pub struct CompressionLayerWriter<'a, W: 'a + InnerWriterTrait> {
     state: CompressionLayerWriterState<InnerWriterType<'a, W>>,
     // Ordered list of compressed size of block of `UNCOMPRESSED_DATA_SIZE`
     // bytes
@@ -501,7 +503,7 @@ pub struct CompressionLayerWriter<'a, W: 'a + Write> {
     compression_level: u32,
 }
 
-impl<W: Write> CompressionLayerWriterState<W> {
+impl<W: InnerWriterTrait> CompressionLayerWriterState<W> {
     fn into_inner(self) -> W {
         match self {
             CompressionLayerWriterState::Ready(inner) => inner,
@@ -516,7 +518,7 @@ impl<W: Write> CompressionLayerWriterState<W> {
     }
 }
 
-impl<'a, W: 'a + Write> CompressionLayerWriter<'a, W> {
+impl<'a, W: 'a + InnerWriterTrait> CompressionLayerWriter<'a, W> {
     pub fn new(
         inner: InnerWriterType<'a, W>,
         config: &CompressionConfig,
@@ -529,8 +531,8 @@ impl<'a, W: 'a + Write> CompressionLayerWriter<'a, W> {
     }
 }
 
-impl<'a, W: 'a + Write> LayerWriter<'a, W> for CompressionLayerWriter<'a, W> {
-    fn into_inner(self) -> Option<InnerWriterType<'a,W>> {
+impl<'a, W: 'a + InnerWriterTrait> LayerWriter<'a, W> for CompressionLayerWriter<'a, W> {
+    fn into_inner(self) -> Option<InnerWriterType<'a, W>> {
         Some(self.state.into_inner())
     }
 
@@ -595,7 +597,7 @@ impl<'a, W: 'a + Write> LayerWriter<'a, W> for CompressionLayerWriter<'a, W> {
     }
 }
 
-impl<'a, W: 'a + Write> Write for CompressionLayerWriter<'a, W> {
+impl<'a, W: 'a + InnerWriterTrait> Write for CompressionLayerWriter<'a, W> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         // Use this mem::replace trick to be able to get back the compressor
         // inner and freely move from CompressionLayerWriterState to others

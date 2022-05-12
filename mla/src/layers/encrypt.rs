@@ -1,7 +1,9 @@
 use crate::crypto::aesgcm::{AesGcm256, ConstantTimeEq, Key, Nonce, Tag, TAG_LENGTH};
 use crate::crypto::ecc::{retrieve_key, store_key_for_multi_recipients, MultiRecipientPersistent};
 
-use crate::layers::traits::{LayerFailSafeReader, LayerReader, LayerWriter, InnerWriterType};
+use crate::layers::traits::{
+    InnerWriterTrait, InnerWriterType, LayerFailSafeReader, LayerReader, LayerWriter,
+};
 use crate::Error;
 use std::io;
 use std::io::{BufReader, Cursor, Read, Seek, SeekFrom, Write};
@@ -177,7 +179,7 @@ impl ArchiveReaderConfig {
 
 // ---------- Writer ----------
 
-pub struct EncryptionLayerWriter<'a, W: 'a + Write> {
+pub struct EncryptionLayerWriter<'a, W: 'a + InnerWriterTrait> {
     inner: InnerWriterType<'a, W>,
     cipher: AesGcm256,
     /// Symmetric encryption Key
@@ -188,11 +190,8 @@ pub struct EncryptionLayerWriter<'a, W: 'a + Write> {
     current_ctr: u32,
 }
 
-impl<'a, W: 'a + Write> EncryptionLayerWriter<'a, W> {
-    pub fn new(
-        inner: InnerWriterType<'a, W>,
-        config: &EncryptionConfig,
-    ) -> Result<Self, Error> {
+impl<'a, W: 'a + InnerWriterTrait> EncryptionLayerWriter<'a, W> {
+    pub fn new(inner: InnerWriterType<'a, W>, config: &EncryptionConfig) -> Result<Self, Error> {
         Ok(Self {
             inner,
             key: config.key,
@@ -217,7 +216,7 @@ impl<'a, W: 'a + Write> EncryptionLayerWriter<'a, W> {
     }
 }
 
-impl<'a, W: 'a + Write> LayerWriter<'a, W> for EncryptionLayerWriter<'a, W> {
+impl<'a, W: 'a + InnerWriterTrait> LayerWriter<'a, W> for EncryptionLayerWriter<'a, W> {
     fn into_inner(self) -> Option<InnerWriterType<'a, W>> {
         Some(self.inner)
     }
@@ -236,7 +235,7 @@ impl<'a, W: 'a + Write> LayerWriter<'a, W> for EncryptionLayerWriter<'a, W> {
     }
 }
 
-impl<'a, W: Write> Write for EncryptionLayerWriter<'a, W> {
+impl<'a, W: InnerWriterTrait> Write for EncryptionLayerWriter<'a, W> {
     #[allow(clippy::comparison_chain)]
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         if self.current_chunk_offset > CHUNK_SIZE {

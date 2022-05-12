@@ -3,8 +3,14 @@ use std::io::{Read, Seek, Write};
 
 /// Type alias for Layer Writer inner type
 pub type InnerWriterType<'a, W> = Box<dyn 'a + LayerWriter<'a, W>>;
+/// Trait alias for Layer Writer writable destination
+// Type aliases are not yet stable
+// See https://github.com/rust-lang/rust/issues/41517
+// -> use a dummy trait instead
+pub trait InnerWriterTrait: Write {}
+impl<T: Write> InnerWriterTrait for T {}
 /// Trait to be implemented by layer writers
-pub trait LayerWriter<'a, W: Write>: Write {
+pub trait LayerWriter<'a, W: InnerWriterTrait>: Write {
     /// Unwraps the inner writer
     fn into_inner(self) -> Option<InnerWriterType<'a, W>>;
 
