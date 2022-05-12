@@ -1,23 +1,25 @@
 use std::io;
 use std::io::{Read, Seek, SeekFrom, Write};
 
-use crate::layers::traits::{LayerFailSafeReader, LayerReader, LayerWriter, InnerWriterType};
+use crate::layers::traits::{
+    InnerWriterTrait, InnerWriterType, LayerFailSafeReader, LayerReader, LayerWriter,
+};
 use crate::Error;
 
 // ---------- Writer ----------
 
 /// Dummy layer, standing for the last layer (wrapping I/O)
-pub struct RawLayerWriter<W: Write> {
+pub struct RawLayerWriter<W: InnerWriterTrait> {
     inner: W,
 }
 
-impl<W: Write> RawLayerWriter<W> {
+impl<W: InnerWriterTrait> RawLayerWriter<W> {
     pub fn new(inner: W) -> Self {
         Self { inner }
     }
 }
 
-impl<'a, W: Write> LayerWriter<'a, W> for RawLayerWriter<W> {
+impl<'a, W: InnerWriterTrait> LayerWriter<'a, W> for RawLayerWriter<W> {
     fn into_inner(self) -> Option<InnerWriterType<'a, W>> {
         None
     }
@@ -32,7 +34,7 @@ impl<'a, W: Write> LayerWriter<'a, W> for RawLayerWriter<W> {
     }
 }
 
-impl<W: Write> Write for RawLayerWriter<W> {
+impl<W: InnerWriterTrait> Write for RawLayerWriter<W> {
     /// Wrapper on inner
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.inner.write(buf)
