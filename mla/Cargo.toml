@@ -40,6 +40,10 @@ aead = { version = "0.4", default-features = false, features = ["alloc"]}
 criterion = { version = "0.3", default-features = false}
 curve25519-parser = { path = "../curve25519-parser" }
 hex = { version = "0.4", default-features = false, features = ["alloc"]}
+static_assertions = { version = "1", default-features = false }
+
+[features]
+send = []
 
 [[bench]]
 name = "bench_archive"
