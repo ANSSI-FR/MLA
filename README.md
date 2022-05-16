@@ -475,3 +475,15 @@ If you have found crashes, try to replay them with either:
 * Debugging: uncomment the "Replay sample" part of `mla-fuzz-afl/src/main.rs`, and add `dbg!()` when it's needed
 
 :warning: The stability is quite low, likely due to the process used for the scenario (deserialization from the data provided by AFL) and variability of inner algorithms, such as brotli. Crashes, if any, might not be reproducible or due to the `mla-fuzz-afl` inner working, which is a bit complex (and therefore likely buggy). One can comment unrelevant parts in `mla-fuzz-afl/src/main.rs` to ensure a better experience.
+
+FAQ
+-
+
+**Is `MLAArchiveWriter` `Send`?**
+
+By default, `MLAArchiveWriter` is not `Send`. If the inner writable type is also `Send`, one can enable the feature `send` for `mla` in `Cargo.toml`, such as:
+
+```toml
+[dependencies]
+mla = { version = "...", default-features = false, features = ["send"]}
+```
