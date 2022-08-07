@@ -381,9 +381,9 @@ impl ArchiveWriterState {
 }
 
 /// Used to check whether the current state is the one expected
-/// ```
+/// ```text
 /// check_state!(self.state, ArchiveWriterState::XXX)
-/// ``̀
+/// ```
 macro_rules! check_state {
     ( $x:expr, $y:ident ) => {{
         match $x {
@@ -399,9 +399,9 @@ macro_rules! check_state {
 }
 
 /// Used to check whether the current state is `OpenedFiles`, with the expected file opened
-/// ```
+/// ```text
 /// check_state_file_opened!(self.state, file_id)
-/// ``̀
+/// ```
 macro_rules! check_state_file_opened {
     ( $x:expr, $y:expr ) => {{
         match $x {
@@ -981,9 +981,9 @@ pub struct ArchiveFailSafeReader<'a, R: 'a + Read> {
 const CACHE_SIZE: usize = 8 * 1024 * 1024; // 8MB
 
 /// Used to update the error state only if it was NoError
-/// ```
+/// ```text
 /// update_error!(error_var, FailSafeReadError::...)
-/// ``̀
+/// ```
 macro_rules! update_error {
     ( $x:ident = $y:expr ) => {
         #[allow(clippy::single_match)]
