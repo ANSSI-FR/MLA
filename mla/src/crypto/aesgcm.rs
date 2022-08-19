@@ -1,3 +1,5 @@
+use core::slice;
+
 use crate::Error;
 
 use aes::Aes256;
@@ -90,9 +92,8 @@ impl AesGcm256 {
                 self.current_block.extend_from_slice(in_block);
                 // `current_block` length is now BLOCK_SIZE -> update GHash and
                 // clear it
-                self.ghash.update(&[GenericArray::clone_from_slice(
-                    self.current_block.as_slice(),
-                )]);
+                self.ghash
+                    .update(slice::from_ref(self.current_block.as_slice().into()));
                 self.current_block.clear();
 
                 // Deals with the rest of the data, now aligned on BLOCK_SIZE
@@ -105,7 +106,8 @@ impl AesGcm256 {
         // Interleaved ghash update
         for chunk in &mut chunks {
             self.cipher.apply_keystream(chunk);
-            self.ghash.update(&[GenericArray::clone_from_slice(chunk)]);
+            self.ghash
+                .update(slice::from_ref(GenericArray::from_slice(chunk)));
         }
 
         // Encrypt and save extra encrypted bytes for further GHash computation
@@ -149,7 +151,8 @@ impl AesGcm256 {
 
         // Interleaved ghash update
         for chunk in &mut chunks {
-            self.ghash.update(&[GenericArray::clone_from_slice(chunk)]);
+            self.ghash
+                .update(slice::from_ref(GenericArray::from_slice(chunk)));
             self.cipher.apply_keystream(chunk);
         }
 
