@@ -9,6 +9,7 @@ use mla::Layers;
 use mla::{ArchiveReader, ArchiveWriter};
 use rand::distributions::{Alphanumeric, Distribution};
 use rand::seq::index::sample;
+use rand::RngCore;
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use std::collections::HashMap;
@@ -34,7 +35,9 @@ pub fn multiple_layers_multiple_block_size(c: &mut Criterion) {
     // Setup
     // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
     let mut rng = ChaChaRng::seed_from_u64(0);
-    let key = StaticSecret::new(&mut rng);
+    let mut bytes = [0u8; 32];
+    rng.fill_bytes(&mut bytes);
+    let key = StaticSecret::from(bytes);
 
     let mut group = c.benchmark_group("multiple_layers_multiple_block_size");
     group.measurement_time(Duration::from_secs(10));
@@ -128,7 +131,9 @@ pub fn multiple_compression_quality(c: &mut Criterion) {
 fn iter_decompress(iters: u64, size: u64, layers: Layers) -> Duration {
     // Prepare data
     let mut rng = ChaChaRng::seed_from_u64(0);
-    let key = StaticSecret::new(&mut rng);
+    let mut bytes = [0u8; 32];
+    rng.fill_bytes(&mut bytes);
+    let key = StaticSecret::from(bytes);
     let data: Vec<u8> = Alphanumeric
         .sample_iter(&mut rng)
         .take((size * iters) as usize)
@@ -198,7 +203,9 @@ fn build_archive<'a>(
 ) -> ArchiveReader<'a, io::Cursor<Vec<u8>>> {
     // Setup
     let mut rng = ChaChaRng::seed_from_u64(0);
-    let key = StaticSecret::new(&mut rng);
+    let mut bytes = [0u8; 32];
+    rng.fill_bytes(&mut bytes);
+    let key = StaticSecret::from(bytes);
     let file = Vec::new();
 
     // Create the initial archive with `iters` files of `size` bytes
