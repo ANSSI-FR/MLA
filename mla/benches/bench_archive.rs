@@ -47,7 +47,7 @@ pub fn multiple_layers_multiple_block_size(c: &mut Criterion) {
 
         let data: Vec<u8> = Alphanumeric
             .sample_iter(&mut rng)
-            .take(size.clone())
+            .take(*size)
             .map(|c| c as u8)
             .collect();
 
@@ -98,7 +98,7 @@ pub fn multiple_compression_quality(c: &mut Criterion) {
 
         let data: Vec<u8> = Alphanumeric
             .sample_iter(&mut rng)
-            .take(size.clone())
+            .take(size)
             .map(|c| c as u8)
             .collect();
 
