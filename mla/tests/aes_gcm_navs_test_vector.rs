@@ -3027,9 +3027,9 @@ fn test_nist_cavs_vectors() {
     for tv in TEST_VECTORS {
         // Full (all at once)
         let mut key = Key::default();
-        key.copy_from_slice(&tv.key);
+        key.copy_from_slice(tv.key);
         let mut nonce = Nonce::default();
-        nonce.copy_from_slice(&tv.nonce);
+        nonce.copy_from_slice(tv.nonce);
         let mut cipher = AesGcm256::new(&key, &nonce, tv.aad).unwrap();
         let mut buffer = tv.plaintext.to_vec();
         cipher.encrypt(&mut buffer);

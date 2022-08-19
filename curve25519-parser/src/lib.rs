@@ -422,14 +422,14 @@ mod tests {
 
         let pub_pem_key = keypair.public_as_pem();
         assert_eq!(
-            parse_openssl_25519_pubkey(&pub_pem_key.as_bytes())
+            parse_openssl_25519_pubkey(pub_pem_key.as_bytes())
                 .unwrap()
                 .as_bytes(),
             pub_key.as_bytes()
         );
         let priv_pem_key = keypair.private_as_pem();
         assert_eq!(
-            &parse_openssl_25519_privkey(&priv_pem_key.as_bytes())
+            &parse_openssl_25519_privkey(priv_pem_key.as_bytes())
                 .unwrap()
                 .to_bytes(),
             &priv_key.to_bytes()
