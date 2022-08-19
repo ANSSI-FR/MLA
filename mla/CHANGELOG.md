@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2022-08-22
+
+### Thanks
+
+- [Jean-Baptiste Galet](https://github.com/jbgalet)
+- [@sashaconway](https://github.com/sashaconway)
+
+### Added/Changed
+
+- Introduce `"send"` feature, to provide `ArchiveWriter` with `Send` bound ([#120](https://github.com/ANSSI-FR/MLA/issues/120))
+- Bump dependencies
+- Dependencies: disable default features
+- Code cleaning
+
+### Fixed
+
+- Internalize `StaticSecret` generation, due to [dependency issue](https://github.com/ANSSI-FR/MLA/pull/112)
+- Tests: use `rand_chacha::ChaCha8Rng` (reliable accross achitectures) instead of `StdRng`
+- Tests: fix a bug [due to a wrong assumption](https://github.com/ANSSI-FR/MLA/pull/112)
+- Typo in comments
+- CI: testing with different features
+
 ## [1.2.0] - 2021-09-28
 
 ### Thanks
