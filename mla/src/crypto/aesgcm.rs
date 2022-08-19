@@ -179,10 +179,7 @@ impl AesGcm256 {
 mod tests {
     use super::*;
     use aead::Payload;
-    use aes_gcm::{
-        aead::{Aead, NewAead},
-        Aes256Gcm,
-    };
+    use aes_gcm::{aead::Aead, Aes256Gcm};
 
     fn test_against_aesgcm(key: &Key, nonce: &Nonce, associated_data: &[u8], msg: &[u8]) {
         // Full (all at once)
