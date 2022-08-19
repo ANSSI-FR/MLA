@@ -1,6 +1,5 @@
 use assert_cmd::Command;
 use assert_fs::fixture::{FileWriteBin, NamedTempFile, TempDir};
-use glob;
 use permutate::Permutator;
 use rand::distributions::{Alphanumeric, Distribution, Standard};
 use rand::rngs::StdRng;
@@ -298,7 +297,7 @@ fn test_create_list_tar() {
     assert.success();
 
     // Inspect the created TAR file
-    ensure_tar_content(&tar_file.path(), &testfs.files);
+    ensure_tar_content(tar_file.path(), &testfs.files);
 }
 
 #[test]
@@ -560,8 +559,8 @@ fn test_multiple_compression_level() {
         let assert = cmd.assert();
         assert.success();
     }
-    ensure_tar_content(&tar_file_q0.path(), &testfs.files);
-    ensure_tar_content(&tar_file_q5.path(), &testfs.files);
+    ensure_tar_content(tar_file_q0.path(), &testfs.files);
+    ensure_tar_content(tar_file_q5.path(), &testfs.files);
 }
 
 #[test]
@@ -635,7 +634,7 @@ fn test_convert() {
     assert.success();
 
     // Inspect the created TAR file
-    ensure_tar_content(&tar_file.path(), &testfs.files);
+    ensure_tar_content(tar_file.path(), &testfs.files);
 }
 
 #[test]
@@ -687,7 +686,7 @@ fn test_stdio() {
     assert.success();
 
     // Inspect the created TAR file
-    ensure_tar_content(&tar_file.path(), &testfs.files);
+    ensure_tar_content(tar_file.path(), &testfs.files);
 }
 
 #[test]
@@ -748,7 +747,7 @@ fn test_multi_fileorders() {
         assert.success();
 
         // Inspect the created TAR file
-        ensure_tar_content(&tar_file.path(), &testfs.files);
+        ensure_tar_content(tar_file.path(), &testfs.files);
     }
 }
 

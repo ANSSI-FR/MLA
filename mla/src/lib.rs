@@ -835,7 +835,7 @@ impl<'a, T: Read + Seek> Read for BlocksToFileReader<'a, T> {
 }
 
 #[derive(Serialize, Deserialize)]
-#[cfg_attr(test, derive(PartialEq, Debug))]
+#[cfg_attr(test, derive(PartialEq, Eq, Debug))]
 pub struct FileInfo {
     /// File information to save in the footer
     ///
@@ -1235,7 +1235,6 @@ impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
 pub(crate) mod tests {
     use super::*;
     use curve25519_parser::{parse_openssl_25519_privkey, parse_openssl_25519_pubkey};
-    use hex;
     use rand::distributions::{Distribution, Standard};
     use rand::{RngCore, SeedableRng};
     use rand_chacha::ChaChaRng;
@@ -1938,7 +1937,7 @@ pub(crate) mod tests {
             .rev()
             .map(|i| {
                 let id = name2id.get(&fnames[i]).unwrap();
-                mla.append_file_content(id.clone(), 32, &files.get(&fnames[i]).unwrap()[..32])
+                mla.append_file_content(*id, 32, &files.get(&fnames[i]).unwrap()[..32])
                     .unwrap();
             })
             .for_each(drop);
@@ -1948,7 +1947,7 @@ pub(crate) mod tests {
             .map(|i| {
                 let id = name2id.get(&fnames[i]).unwrap();
                 let data = &files.get(&fnames[i]).unwrap()[32..];
-                mla.append_file_content(id.clone(), data.len() as u64, data)
+                mla.append_file_content(*id, data.len() as u64, data)
                     .unwrap();
             })
             .for_each(drop);
@@ -1958,7 +1957,7 @@ pub(crate) mod tests {
             .rev()
             .map(|i| {
                 let id = name2id.get(&fnames[i]).unwrap();
-                mla.end_file(id.clone()).unwrap();
+                mla.end_file(*id).unwrap();
             })
             .for_each(drop);
 
