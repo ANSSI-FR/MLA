@@ -3,10 +3,7 @@ use crate::Error;
 use aes::Aes256;
 
 use generic_array::{typenum::U16, GenericArray};
-use ghash::{
-    universal_hash::{NewUniversalHash, UniversalHash},
-    GHash,
-};
+use ghash::{universal_hash::UniversalHash, GHash};
 pub use subtle::ConstantTimeEq;
 
 use ctr::cipher::{BlockEncrypt, KeyInit, KeyIvInit, StreamCipher, StreamCipherSeek};
@@ -93,8 +90,9 @@ impl AesGcm256 {
                 self.current_block.extend_from_slice(in_block);
                 // `current_block` length is now BLOCK_SIZE -> update GHash and
                 // clear it
-                self.ghash
-                    .update(GenericArray::from_slice(self.current_block.as_slice()));
+                self.ghash.update(&[GenericArray::clone_from_slice(
+                    self.current_block.as_slice(),
+                )]);
                 self.current_block.clear();
 
                 // Deals with the rest of the data, now aligned on BLOCK_SIZE
@@ -107,7 +105,7 @@ impl AesGcm256 {
         // Interleaved ghash update
         for chunk in &mut chunks {
             self.cipher.apply_keystream(chunk);
-            self.ghash.update(GenericArray::from_slice(chunk));
+            self.ghash.update(&[GenericArray::clone_from_slice(chunk)]);
         }
 
         // Encrypt and save extra encrypted bytes for further GHash computation
@@ -130,10 +128,10 @@ impl AesGcm256 {
         block[..8].copy_from_slice(&self.associated_data_bits_len.to_be_bytes());
         block[8..].copy_from_slice(&buffer_bits.to_be_bytes());
 
-        self.ghash.update(&block);
+        self.ghash.update(&[block]);
 
         // Final update
-        let mut tag = self.ghash.finalize().into_bytes();
+        let mut tag = self.ghash.finalize();
         self.cipher.seek(0);
         self.cipher.apply_keystream(tag.as_mut_slice());
         tag
@@ -151,7 +149,7 @@ impl AesGcm256 {
 
         // Interleaved ghash update
         for chunk in &mut chunks {
-            self.ghash.update(GenericArray::from_slice(chunk));
+            self.ghash.update(&[GenericArray::clone_from_slice(chunk)]);
             self.cipher.apply_keystream(chunk);
         }
 
@@ -167,10 +165,10 @@ impl AesGcm256 {
         block[..8].copy_from_slice(&self.associated_data_bits_len.to_be_bytes());
         block[8..].copy_from_slice(&buffer_bits.to_be_bytes());
 
-        self.ghash.update(&block);
+        self.ghash.update(&[block]);
 
         // Final update
-        let mut tag = self.ghash.clone().finalize().into_bytes();
+        let mut tag = self.ghash.clone().finalize();
         self.cipher.seek(0);
         self.cipher.apply_keystream(tag.as_mut_slice());
         tag
