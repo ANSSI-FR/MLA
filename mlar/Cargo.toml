@@ -16,7 +16,7 @@ readme = "../README.md"
 clap = "3"
 glob = "0.3"
 mla = { path = "../mla", version = "1" }
-curve25519-parser = { path = "../curve25519-parser", version = "0.2" }
+curve25519-parser = { path = "../curve25519-parser", version = "0.3" }
 rand = "0.8"
 x25519-dalek = "1"
 humansize = "1"
