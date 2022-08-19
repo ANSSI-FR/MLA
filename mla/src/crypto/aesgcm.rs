@@ -3,10 +3,7 @@ use crate::Error;
 use aes::Aes256;
 
 use generic_array::{typenum::U16, GenericArray};
-use ghash::{
-    universal_hash::{NewUniversalHash, UniversalHash},
-    GHash,
-};
+use ghash::{universal_hash::UniversalHash, GHash};
 pub use subtle::ConstantTimeEq;
 
 use ctr::cipher::{BlockEncrypt, KeyInit, KeyIvInit, StreamCipher, StreamCipherSeek};
