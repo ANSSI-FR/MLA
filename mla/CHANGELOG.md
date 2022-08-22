@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added/Changed
 
 - Introduce `"send"` feature, to provide `ArchiveWriter` with `Send` bound ([#120](https://github.com/ANSSI-FR/MLA/issues/120))
+- Enable `x25519-dalek`'s `"u64_backend"` feature by default, to have a default working compilation
 - Bump dependencies
 - Dependencies: disable default features
 - Code cleaning
