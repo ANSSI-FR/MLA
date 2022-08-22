@@ -494,6 +494,7 @@ impl Write for FileWriter {
 /// Open an existing MLA archive using the given duration.
 /// The caller is responsible of all security checks related to callback provided paths
 #[no_mangle]
+#[allow(clippy::extra_unused_lifetimes)]
 pub extern "C" fn mla_roarchive_walk<'a>(
     config: *mut MLAConfigHandle,
     archive_path: *const c_char,
