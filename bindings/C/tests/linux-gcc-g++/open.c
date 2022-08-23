@@ -1,3 +1,5 @@
+#include <fcntl.h>
+#include <unistd.h>
 #include <errno.h>
 #include <stdio.h>
 #include <sys/stat.h>
@@ -63,15 +65,25 @@ int main()
       return (int)status;
    }
    
-   status = mla_roarchive_walk(&hConfig, "../../../../samples/archive_v1.mla", callback_read, NULL);
+   int fd = open("../../../../samples/archive_v1.mla", O_RDONLY);
+   if (fd == -1)
+   {
+      fprintf(stderr, " [!] Cannot open file: %d\n", errno);
+      return 1;
+   }
+
+   status = mla_roarchive_walk(&hConfig, fd, callback_read, NULL);
    if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
    {
       fprintf(stderr, " [!] Archive read failed with code %" PRIX64 "\n", (uint64_t)status);
+      close(fd);
       return (int)status;
    }
 
    fclose(f);
    free(szPrivateKey);
+   close(fd);
 
+   printf("SUCCESS\n");
    return 0;
 }

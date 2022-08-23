@@ -1,4 +1,10 @@
-/* Automatically generated with cbindgen --config cbindgen.toml (do not modify) */
+/* Automatically generated with cbindgen --config cbindgen_cpp.toml (do not modify) */
+#if defined(_WIN32)
+#ifndef RawHandle
+#define RawHandle HANDLE
+#endif
+#endif
+
 
 #pragma once
 
@@ -134,14 +140,32 @@ MLAStatus mla_archive_file_close(MLAArchiveHandle archive, MLAArchiveFileHandle 
 /// or an error code.
 MLAStatus mla_archive_close(MLAArchiveHandle *archive);
 
+#if defined(__unix__)
 /// Open an existing MLA archive using the given duration.
 /// The caller is responsible of all security checks related to callback provided paths
 MLAStatus mla_roarchive_walk(MLAConfigHandle *config,
-                             const char *archive_path,
+                             int archive_fd,
                              MLAReadCallback read_callback,
                              void *context);
+#endif
 
+#if defined(_WIN32)
+/// Open an existing MLA archive using the given duration.
+/// The caller is responsible of all security checks related to callback provided paths
+MLAStatus mla_roarchive_walk(MLAConfigHandle *config,
+                             RawHandle archive_handle,
+                             MLAReadCallback read_callback,
+                             void *context);
+#endif
+
+#if defined(__unix__)
 /// Get info on an existing MLA archive
-MLAStatus mla_roarchive_info(const char *archive_path, ArchiveInfo *info_out);
+MLAStatus mla_roarchive_info(int archive_fd, ArchiveInfo *info_out);
+#endif
+
+#if defined(_WIN32)
+/// Get info on an existing MLA archive
+MLAStatus mla_roarchive_info(RawHandle archive_handle, ArchiveInfo *info_out);
+#endif
 
 } // extern "C"
