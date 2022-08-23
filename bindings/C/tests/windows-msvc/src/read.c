@@ -14,7 +14,7 @@ static const char* callback_read(void* context, const char* szFilename)
     context = context; //ignore
     if (szFilename == NULL)
         return NULL;
-    char* szOutput = malloc(strlen(szFilename) + 11); // len("extracted/") + 1
+    char* szOutput = (char *)malloc(strlen(szFilename) + 11); // len("extracted/") + 1
     sprintf_s(szOutput, strlen(szFilename) + 11, "extracted/%s", szFilename);
     // The pointer leak is assumed for this test
     return szOutput;
@@ -73,10 +73,10 @@ int test_reader_extract()
         return errno;
     }
 
-    _mkdir("extracted");
+    CreateDirectory(TEXT("extracted"), NULL);
 
     long keySize = ftell(f);
-    char* szPrivateKey = malloc((size_t)keySize);
+    char* szPrivateKey = (char *)malloc((size_t)keySize);
     rewind(f);
     if (keySize != (long)fread(szPrivateKey, sizeof * szPrivateKey, keySize, f))
     {
