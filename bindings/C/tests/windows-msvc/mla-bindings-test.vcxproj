@@ -35,9 +35,9 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="read.c" />
+    <ClCompile Include="src\read.c" />
     <ClCompile Include="src\main.c" />
-    <ClCompile Include="write.c" />
+    <ClCompile Include="src\write.c" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
