@@ -14,8 +14,12 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::ffi::{c_void, CStr, CString};
 use std::fs::{self, File};
-use std::io::{self, Write};
+use std::io::{self, Read, Seek, Write};
 use std::os::raw::c_char;
+#[cfg(unix)]
+use std::os::unix::io::{FromRawFd, RawFd};
+#[cfg(windows)]
+use std::os::windows::io::{FromRawHandle, RawHandle};
 use std::path::{Path, PathBuf};
 use std::ptr::null_mut;
 
@@ -494,14 +498,39 @@ impl Write for FileWriter {
 /// Open an existing MLA archive using the given duration.
 /// The caller is responsible of all security checks related to callback provided paths
 #[no_mangle]
-#[allow(clippy::extra_unused_lifetimes)]
-pub extern "C" fn mla_roarchive_walk<'a>(
+#[cfg(unix)]
+pub extern "C" fn mla_roarchive_walk(
     config: *mut MLAConfigHandle,
-    archive_path: *const c_char,
+    archive_fd: RawFd,
     read_callback: MLAReadCallback,
     context: *mut c_void,
 ) -> MLAStatus {
-    if config.is_null() || archive_path.is_null() || (read_callback as *mut c_void).is_null() {
+    let file = unsafe { File::from_raw_fd(archive_fd) };
+    _mla_roarchive_walk(config, file, read_callback, context)
+}
+
+/// Open an existing MLA archive using the given duration.
+/// The caller is responsible of all security checks related to callback provided paths
+#[no_mangle]
+#[cfg(windows)]
+pub extern "C" fn mla_roarchive_walk(
+    config: *mut MLAConfigHandle,
+    archive_handle: RawHandle,
+    read_callback: MLAReadCallback,
+    context: *mut c_void,
+) -> MLAStatus {
+    let file = unsafe { File::from_raw_handle(archive_handle) };
+    _mla_roarchive_walk(config, file, read_callback, context)
+}
+
+#[allow(clippy::extra_unused_lifetimes)]
+fn _mla_roarchive_walk<'a, R: Read + Seek + 'a>(
+    config: *mut MLAConfigHandle,
+    file: R,
+    read_callback: MLAReadCallback,
+    context: *mut c_void,
+) -> MLAStatus {
+    if config.is_null() || (read_callback as *mut c_void).is_null() {
         return MLAStatus::BadAPIArgument;
     }
 
@@ -512,16 +541,7 @@ pub extern "C" fn mla_roarchive_walk<'a>(
     }
     let config = unsafe { Box::from_raw(config_ptr) };
 
-    let archive_path = unsafe { CStr::from_ptr(archive_path) }
-        .to_string_lossy()
-        .to_string();
-    let path = Path::new(&archive_path);
-    let file = match File::open(&path) {
-        Ok(v) => v,
-        Err(_) => return MLAStatus::BadAPIArgument,
-    };
-
-    let mut mla: ArchiveReader<'a, File> = match ArchiveReader::from_config(file, *config) {
+    let mut mla: ArchiveReader<'a, R> = match ArchiveReader::from_config(file, *config) {
         Ok(mla) => mla,
         Err(e) => {
             return MLAStatus::from(e);
@@ -575,24 +595,29 @@ pub struct ArchiveInfo {
 
 /// Get info on an existing MLA archive
 #[no_mangle]
+#[cfg(unix)]
+pub extern "C" fn mla_roarchive_info(archive_fd: RawFd, info_out: *mut ArchiveInfo) -> MLAStatus {
+    let mut file = unsafe { File::from_raw_fd(archive_fd) };
+    _mla_roarchive_info(&mut file, info_out)
+}
+
+/// Get info on an existing MLA archive
+#[no_mangle]
+#[cfg(windows)]
 pub extern "C" fn mla_roarchive_info(
-    archive_path: *const c_char,
+    archive_handle: RawHandle,
     info_out: *mut ArchiveInfo,
 ) -> MLAStatus {
-    if archive_path.is_null() || info_out.is_null() {
+    let mut file = unsafe { File::from_raw_handle(archive_handle) };
+    _mla_roarchive_info(&mut file, info_out)
+}
+
+fn _mla_roarchive_info<R: Read>(src: &mut R, info_out: *mut ArchiveInfo) -> MLAStatus {
+    if info_out.is_null() {
         return MLAStatus::BadAPIArgument;
     }
 
-    let archive_path = unsafe { CStr::from_ptr(archive_path) }
-        .to_string_lossy()
-        .to_string();
-    let path = Path::new(&archive_path);
-    let mut src = match File::open(&path) {
-        Ok(v) => v,
-        Err(_) => return MLAStatus::IOError,
-    };
-
-    let header = match ArchiveHeader::from(&mut src) {
+    let header = match ArchiveHeader::from(src) {
         Ok(header) => header,
         Err(e) => return MLAStatus::from(e),
     };
