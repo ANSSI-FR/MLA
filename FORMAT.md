@@ -274,7 +274,7 @@ Off5: [EndOfFile ID 1]
 ...
 ```
 
-The `offsets` for the file with ID 1 will be ̀`Off0`, `Off2`, `Off5`.
+The `offsets` for the file with ID 1 will be ̀`Off0`, `Off2`, `Off3`, `Off5`.
 Additionally, for faster `hash` retrieval, `files_info.eof_offset` is the offset of the `EndOfFile` block for the corresponding file. In this example, `eof_offset = Off5` for ID 1.
 
 Finally, the `files_info.size` is the size in bytes of the corresponding file content.
