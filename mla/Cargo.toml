@@ -1,6 +1,6 @@
 [package]
 name = "mla"
-version = "1.2.0"
+version = "1.3.0"
 authors = ["Camille Mougey <camille.mougey@ssi.gouv.fr>"]
 edition = "2018"
 license = "LGPL-3.0-only"
@@ -43,6 +43,9 @@ hex = { version = "0.4", default-features = false, features = ["alloc"]}
 static_assertions = { version = "1", default-features = false }
 
 [features]
+# x25519-dalek depends on curve25519-dalek, which requires at least one feature to be enabled
+# -> use default u64_backend (x25519-dalek's default) to have a working default compilation
+default = ["x25519-dalek/u64_backend"]
 send = []
 
 [[bench]]
