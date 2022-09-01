@@ -12,15 +12,10 @@ use mla::ArchiveWriter;
 use mla::{ArchiveFileID, Layers};
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use std::ffi::{c_void, CStr, CString};
-use std::fs::{self, File};
-use std::io::{self, Read, Seek, Write};
+use std::ffi::{c_void, CStr};
+use std::io::{Read, Seek, Write};
+use std::mem::MaybeUninit;
 use std::os::raw::c_char;
-#[cfg(unix)]
-use std::os::unix::io::{FromRawFd, RawFd};
-#[cfg(windows)]
-use std::os::windows::io::{FromRawHandle, RawHandle};
-use std::path::{Path, PathBuf};
 use std::ptr::null_mut;
 
 // Types the caller must understand for error handling and I/O
@@ -72,11 +67,36 @@ pub type MLAWriteCallback = extern "C" fn(
 /// Implemented by the developper. Should ask the underlying medium (file buffering, HTTP
 /// buffering, etc.) to flush any internal buffer.
 pub type MLAFlushCallback = extern "C" fn(context: *mut c_void) -> i32;
+
+#[repr(C)]
+pub struct FileWriter {
+    write_callback: MLAWriteCallback,
+    flush_callback: MLAFlushCallback,
+    context: *mut c_void,
+}
 /// Implemented by the developper
 /// Return the desired output path which is expected to be writable.
 /// The callback developper is responsible all security checks and parent path creation.
-pub type MLAReadCallback =
-    extern "C" fn(context: *mut c_void, filename: *const c_char) -> *const c_char;
+pub type MlaFileCalback = extern "C" fn(
+    context: *mut c_void,
+    filename: *const u8,
+    filename_len: usize,
+    file_writer: *mut FileWriter,
+) -> i32;
+/// Implemented by the developper. Read between 0 and buffer_len into buffer.
+/// If successful, returns 0 and sets the number of bytes actually read to its last
+/// parameter. Otherwise, returns an error code on failure.
+pub type MlaReadCallback = extern "C" fn(
+    buffer: *mut u8,
+    buffer_len: u32,
+    context: *mut c_void,
+    bytes_read: *mut u32,
+) -> i32;
+/// Implemented by the developper. Seek in the source data.
+/// If successful, returns 0 and sets the new position to its last
+/// parameter. Otherwise, returns an error code on failure.
+pub type MlaSeekCallback =
+    extern "C" fn(offset: i64, whence: i32, context: *mut c_void, new_pos: *mut u64) -> i32;
 
 impl From<MLAError> for MLAStatus {
     fn from(err: MLAError) -> Self {
@@ -471,66 +491,77 @@ pub extern "C" fn mla_archive_close(archive: *mut MLAArchiveHandle) -> MLAStatus
     }
 }
 
-/// Wrapper with Write, to append data to a file
-///
-/// This wrapper is used to avoid opening all files simultaneously, potentially
-/// reaching the filesystem limit, but rather appending to file on-demand
-/// This could be enhanced with a limited pool of active file, but this
-/// optimisation doesn't seems necessary for now
-struct FileWriter {
-    /// Target file for data appending
-    path: PathBuf,
+struct CallbackInputRead {
+    read_callback: MlaReadCallback,
+    seek_callback: Option<MlaSeekCallback>,
+    context: *mut c_void,
 }
 
-impl Write for FileWriter {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        fs::OpenOptions::new()
-            .append(true)
-            .open(&self.path)?
-            .write(buf)
+impl Read for CallbackInputRead {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, std::io::Error> {
+        let len = match u32::try_from(buf.len()) {
+            Ok(n) => n,
+            _ => u32::MAX - 1, // only read the first 4GB, the callback will get called multiple times
+        };
+        let mut len_read: u32 = 0;
+        match (self.read_callback)(
+            buf.as_mut_ptr(),
+            len,
+            self.context,
+            &mut len_read as *mut u32,
+        ) {
+            0 => Ok(len_read as usize),
+            e => Err(std::io::Error::from_raw_os_error(e)),
+        }
     }
+}
 
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
+impl Seek for CallbackInputRead {
+    fn seek(&mut self, style: std::io::SeekFrom) -> Result<u64, std::io::Error> {
+        let mut new_pos: u64 = 0;
+        let (whence, offset) = match style {
+            std::io::SeekFrom::Start(n) => (0, n as i64), // SEEK_SET
+            std::io::SeekFrom::Current(n) => (1, n),      // SEEK_CUR
+            std::io::SeekFrom::End(n) => (2, n),          // SEEK_END
+        };
+        match (self.seek_callback.unwrap())(offset, whence, self.context, &mut new_pos as *mut u64)
+        {
+            0 => Ok(new_pos as u64),
+            e => Err(std::io::Error::from_raw_os_error(e)),
+        }
     }
 }
 
 /// Open an existing MLA archive using the given duration.
 /// The caller is responsible of all security checks related to callback provided paths
 #[no_mangle]
-#[cfg(unix)]
 pub extern "C" fn mla_roarchive_walk(
     config: *mut MLAConfigHandle,
-    archive_fd: RawFd,
-    read_callback: MLAReadCallback,
+    read_callback: MlaReadCallback,
+    seek_callback: MlaSeekCallback,
+    file_callback: MlaFileCalback,
     context: *mut c_void,
 ) -> MLAStatus {
-    let file = unsafe { File::from_raw_fd(archive_fd) };
-    _mla_roarchive_walk(config, file, read_callback, context)
-}
+    if (read_callback as *mut c_void).is_null() || (seek_callback as *mut c_void).is_null() {
+        return MLAStatus::BadAPIArgument;
+    }
 
-/// Open an existing MLA archive using the given duration.
-/// The caller is responsible of all security checks related to callback provided paths
-#[no_mangle]
-#[cfg(windows)]
-pub extern "C" fn mla_roarchive_walk(
-    config: *mut MLAConfigHandle,
-    archive_handle: RawHandle,
-    read_callback: MLAReadCallback,
-    context: *mut c_void,
-) -> MLAStatus {
-    let file = unsafe { File::from_raw_handle(archive_handle) };
-    _mla_roarchive_walk(config, file, read_callback, context)
+    let reader = CallbackInputRead {
+        read_callback,
+        seek_callback: Some(seek_callback),
+        context,
+    };
+    _mla_roarchive_walk(config, reader, file_callback, context)
 }
 
 #[allow(clippy::extra_unused_lifetimes)]
 fn _mla_roarchive_walk<'a, R: Read + Seek + 'a>(
     config: *mut MLAConfigHandle,
-    file: R,
-    read_callback: MLAReadCallback,
+    src: R,
+    file_callback: MlaFileCalback,
     context: *mut c_void,
 ) -> MLAStatus {
-    if config.is_null() || (read_callback as *mut c_void).is_null() {
+    if config.is_null() || (file_callback as *mut c_void).is_null() {
         return MLAStatus::BadAPIArgument;
     }
 
@@ -541,7 +572,7 @@ fn _mla_roarchive_walk<'a, R: Read + Seek + 'a>(
     }
     let config = unsafe { Box::from_raw(config_ptr) };
 
-    let mut mla: ArchiveReader<'a, R> = match ArchiveReader::from_config(file, *config) {
+    let mut mla: ArchiveReader<'a, R> = match ArchiveReader::from_config(src, *config) {
         Ok(mla) => mla,
         Err(e) => {
             return MLAStatus::from(e);
@@ -554,31 +585,28 @@ fn _mla_roarchive_walk<'a, R: Read + Seek + 'a>(
     };
     iter.sort();
 
-    let mut export: HashMap<&String, FileWriter> = HashMap::new();
+    let mut export: HashMap<&String, CallbackOutput> = HashMap::new();
     for fname in &iter {
-        // Convert fname to CString to ensure C will receive a null terminated char*
-        match CString::new(fname.as_str()) {
-            Ok(v) => {
-                let result =
-                    read_callback(context, v.as_bytes_with_nul().as_ptr() as *const c_char);
-                if result.is_null() {
-                    // Skip this file
-                    continue;
-                }
-                let result = unsafe { CStr::from_ptr(result) }
-                    .to_string_lossy()
-                    .to_string();
-                let path = Path::new(&result);
-                let _file = File::create(&path);
+        let mut file_writer: MaybeUninit<FileWriter> = MaybeUninit::uninit();
+        match (file_callback)(
+            context,
+            fname.as_ptr(),
+            fname.len(),
+            file_writer.as_mut_ptr(),
+        ) {
+            0 => {
+                let file_writer = unsafe { file_writer.assume_init() };
                 export.insert(
                     fname,
-                    FileWriter {
-                        path: path.to_path_buf(),
+                    CallbackOutput {
+                        write_callback: file_writer.write_callback,
+                        flush_callback: file_writer.flush_callback,
+                        context: file_writer.context,
                     },
                 );
             }
-            Err(_) => continue,
-        }
+            _ => continue,
+        };
     }
     match linear_extract(&mut mla, &mut export) {
         Ok(()) => MLAStatus::Success,
@@ -595,21 +623,20 @@ pub struct ArchiveInfo {
 
 /// Get info on an existing MLA archive
 #[no_mangle]
-#[cfg(unix)]
-pub extern "C" fn mla_roarchive_info(archive_fd: RawFd, info_out: *mut ArchiveInfo) -> MLAStatus {
-    let mut file = unsafe { File::from_raw_fd(archive_fd) };
-    _mla_roarchive_info(&mut file, info_out)
-}
-
-/// Get info on an existing MLA archive
-#[no_mangle]
-#[cfg(windows)]
 pub extern "C" fn mla_roarchive_info(
-    archive_handle: RawHandle,
+    read_callback: MlaReadCallback,
+    context: *mut c_void,
     info_out: *mut ArchiveInfo,
 ) -> MLAStatus {
-    let mut file = unsafe { File::from_raw_handle(archive_handle) };
-    _mla_roarchive_info(&mut file, info_out)
+    if (read_callback as *mut c_void).is_null() {
+        return MLAStatus::BadAPIArgument;
+    }
+    let mut reader = CallbackInputRead {
+        read_callback,
+        seek_callback: None,
+        context,
+    };
+    _mla_roarchive_info(&mut reader, info_out)
 }
 
 fn _mla_roarchive_info<R: Read>(src: &mut R, info_out: *mut ArchiveInfo) -> MLAStatus {

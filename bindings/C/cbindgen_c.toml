@@ -1,16 +1,6 @@
 language = "c"
 pragma_once = true
-header = """/* Automatically generated with cbindgen --config cbindgen_c.toml (do not modify) */
-#if defined(_WIN32)
-#ifndef RawHandle
-#define RawHandle HANDLE
-#endif
-#endif
-"""
-
-[defines]
-"unix" = "__unix__"
-"windows" = "_WIN32"
+header = "/* Automatically generated with cbindgen --config cbindgen_c.toml (do not modify) */"
 
 [enum]
 rename_variants = "QualifiedScreamingSnakeCase"
