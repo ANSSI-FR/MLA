@@ -1,10 +1,4 @@
 /* Automatically generated with cbindgen --config cbindgen_cpp.toml (do not modify) */
-#if defined(_WIN32)
-#ifndef RawHandle
-#define RawHandle HANDLE
-#endif
-#endif
-
 
 #pragma once
 
@@ -62,10 +56,26 @@ using MLAArchiveHandle = void*;
 
 using MLAArchiveFileHandle = void*;
 
+/// Implemented by the developper. Read between 0 and buffer_len into buffer.
+/// If successful, returns 0 and sets the number of bytes actually read to its last
+/// parameter. Otherwise, returns an error code on failure.
+using MlaReadCallback = int32_t(*)(uint8_t *buffer, uint32_t buffer_len, void *context, uint32_t *bytes_read);
+
+/// Implemented by the developper. Seek in the source data.
+/// If successful, returns 0 and sets the new position to its last
+/// parameter. Otherwise, returns an error code on failure.
+using MlaSeekCallback = int32_t(*)(int64_t offset, int32_t whence, void *context, uint64_t *new_pos);
+
+struct FileWriter {
+  MLAWriteCallback write_callback;
+  MLAFlushCallback flush_callback;
+  void *context;
+};
+
 /// Implemented by the developper
 /// Return the desired output path which is expected to be writable.
 /// The callback developper is responsible all security checks and parent path creation.
-using MLAReadCallback = const char*(*)(void *context, const char *filename);
+using MlaFileCalback = int32_t(*)(void *context, const uint8_t *filename, uintptr_t filename_len, FileWriter *file_writer);
 
 /// Structure for MLA archive info
 struct ArchiveInfo {
@@ -140,32 +150,15 @@ MLAStatus mla_archive_file_close(MLAArchiveHandle archive, MLAArchiveFileHandle 
 /// or an error code.
 MLAStatus mla_archive_close(MLAArchiveHandle *archive);
 
-#if defined(__unix__)
 /// Open an existing MLA archive using the given duration.
 /// The caller is responsible of all security checks related to callback provided paths
 MLAStatus mla_roarchive_walk(MLAConfigHandle *config,
-                             int archive_fd,
-                             MLAReadCallback read_callback,
+                             MlaReadCallback read_callback,
+                             MlaSeekCallback seek_callback,
+                             MlaFileCalback file_callback,
                              void *context);
-#endif
 
-#if defined(_WIN32)
-/// Open an existing MLA archive using the given duration.
-/// The caller is responsible of all security checks related to callback provided paths
-MLAStatus mla_roarchive_walk(MLAConfigHandle *config,
-                             RawHandle archive_handle,
-                             MLAReadCallback read_callback,
-                             void *context);
-#endif
-
-#if defined(__unix__)
 /// Get info on an existing MLA archive
-MLAStatus mla_roarchive_info(int archive_fd, ArchiveInfo *info_out);
-#endif
-
-#if defined(_WIN32)
-/// Get info on an existing MLA archive
-MLAStatus mla_roarchive_info(RawHandle archive_handle, ArchiveInfo *info_out);
-#endif
+MLAStatus mla_roarchive_info(MlaReadCallback read_callback, void *context, ArchiveInfo *info_out);
 
 } // extern "C"
