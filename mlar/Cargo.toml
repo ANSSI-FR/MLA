@@ -19,7 +19,7 @@ mla = { path = "../mla", version = "1" }
 curve25519-parser = { path = "../curve25519-parser", version = "0.3" }
 rand = "0.8"
 x25519-dalek = "1"
-humansize = "2"
+humansize = {version = "2", features = ["impl_style"]}
 hex = "0.4"
 # Could be made optional / feature to enable (for binary size)
 tar = "0.4"
