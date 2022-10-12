@@ -183,14 +183,16 @@ MLAStatus mla_archive_file_close(MLAArchiveHandle archive, MLAArchiveFileHandle 
 MLAStatus mla_archive_close(MLAArchiveHandle *archive);
 
 /**
- * Open an existing MLA archive using the given duration.
+ * Open and extract an existing MLA archive, using the given configuration.
+ * read_callback and seek_callback are used to read the archive data
+ * file_callback is used to convert each archive file's name to pathes where extract the data
  * The caller is responsible of all security checks related to callback provided paths
  */
-MLAStatus mla_roarchive_walk(MLAConfigHandle *config,
-                             MlaReadCallback read_callback,
-                             MlaSeekCallback seek_callback,
-                             MlaFileCalback file_callback,
-                             void *context);
+MLAStatus mla_roarchive_extract(MLAConfigHandle *config,
+                                MlaReadCallback read_callback,
+                                MlaSeekCallback seek_callback,
+                                MlaFileCalback file_callback,
+                                void *context);
 
 /**
  * Get info on an existing MLA archive

@@ -532,17 +532,23 @@ impl Seek for CallbackInputRead {
     }
 }
 
-/// Open an existing MLA archive using the given duration.
+/// Open and extract an existing MLA archive, using the given configuration.
+/// read_callback and seek_callback are used to read the archive data
+/// file_callback is used to convert each archive file's name to pathes where extract the data
 /// The caller is responsible of all security checks related to callback provided paths
 #[no_mangle]
-pub extern "C" fn mla_roarchive_walk(
+pub extern "C" fn mla_roarchive_extract(
     config: *mut MLAConfigHandle,
     read_callback: MlaReadCallback,
     seek_callback: MlaSeekCallback,
     file_callback: MlaFileCalback,
     context: *mut c_void,
 ) -> MLAStatus {
-    if (read_callback as *mut c_void).is_null() || (seek_callback as *mut c_void).is_null() {
+    if (read_callback as *mut c_void).is_null()
+        || (seek_callback as *mut c_void).is_null()
+        || config.is_null()
+        || (file_callback as *mut c_void).is_null()
+    {
         return MLAStatus::BadAPIArgument;
     }
 
@@ -551,20 +557,16 @@ pub extern "C" fn mla_roarchive_walk(
         seek_callback: Some(seek_callback),
         context,
     };
-    _mla_roarchive_walk(config, reader, file_callback, context)
+    _mla_roarchive_extract(config, reader, file_callback, context)
 }
 
 #[allow(clippy::extra_unused_lifetimes)]
-fn _mla_roarchive_walk<'a, R: Read + Seek + 'a>(
+fn _mla_roarchive_extract<'a, R: Read + Seek + 'a>(
     config: *mut MLAConfigHandle,
     src: R,
     file_callback: MlaFileCalback,
     context: *mut c_void,
 ) -> MLAStatus {
-    if config.is_null() || (file_callback as *mut c_void).is_null() {
-        return MLAStatus::BadAPIArgument;
-    }
-
     let config_ptr = unsafe { *(config as *mut *mut ArchiveReaderConfig) };
     // Avoid any use-after-free of this handle by the caller
     unsafe {
@@ -628,7 +630,7 @@ pub extern "C" fn mla_roarchive_info(
     context: *mut c_void,
     info_out: *mut ArchiveInfo,
 ) -> MLAStatus {
-    if (read_callback as *mut c_void).is_null() {
+    if (read_callback as *mut c_void).is_null() || info_out.is_null() {
         return MLAStatus::BadAPIArgument;
     }
     let mut reader = CallbackInputRead {
@@ -640,10 +642,6 @@ pub extern "C" fn mla_roarchive_info(
 }
 
 fn _mla_roarchive_info<R: Read>(src: &mut R, info_out: *mut ArchiveInfo) -> MLAStatus {
-    if info_out.is_null() {
-        return MLAStatus::BadAPIArgument;
-    }
-
     let header = match ArchiveHeader::from(src) {
         Ok(header) => header,
         Err(e) => return MLAStatus::from(e),
