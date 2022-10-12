@@ -424,7 +424,7 @@ impl<'a, R: Read + Seek> Seek for CompressionLayerReader<'a, R> {
                             return Err(Error::EndOfStream.into());
                         }
 
-                        let end_pos = (&self.sizes_info).as_ref().unwrap().max_uncompressed_pos();
+                        let end_pos = self.sizes_info.as_ref().unwrap().max_uncompressed_pos();
                         let distance_from_end = -pos;
                         self.seek(SeekFrom::Start(end_pos - distance_from_end as u64))
                     }
