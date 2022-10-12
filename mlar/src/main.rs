@@ -3,7 +3,7 @@ use curve25519_parser::{
     generate_keypair, parse_openssl_25519_privkey, parse_openssl_25519_pubkey,
 };
 use glob::Pattern;
-use humansize::{file_size_opts, FileSize};
+use humansize::{FormatSize, DECIMAL};
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
 use mla::errors::{Error, FailSafeReadError};
 use mla::helpers::linear_extract;
@@ -528,10 +528,7 @@ fn list(matches: &ArgMatches) -> Result<(), MlarError> {
         if matches.is_present("verbose") {
             let mla_file = mla.get_file(fname)?.expect("Unable to get the file");
             let filename = mla_file.filename;
-            let size = mla_file
-                .size
-                .file_size(file_size_opts::CONVENTIONAL)
-                .unwrap();
+            let size = mla_file.size.format_size(DECIMAL);
             if matches.occurrences_of("verbose") == 1 {
                 println!("{} - {}", filename, size);
             } else if matches.occurrences_of("verbose") >= 2 {
