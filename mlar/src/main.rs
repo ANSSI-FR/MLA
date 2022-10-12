@@ -1,4 +1,4 @@
-use clap::{Arg, ArgMatches, Command};
+use clap::{value_parser, Arg, ArgAction, ArgMatches, Command};
 use curve25519_parser::{
     generate_keypair, parse_openssl_25519_privkey, parse_openssl_25519_pubkey,
 };
@@ -19,7 +19,6 @@ use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use std::collections::{HashMap, HashSet};
 use std::error;
-use std::ffi::OsStr;
 use std::fmt;
 use std::fs::{self, read_dir, File};
 use std::io::{self, BufRead};
@@ -105,7 +104,7 @@ impl Write for OutputTypes {
 
 fn open_ecc_private_keys(matches: &ArgMatches) -> Result<Vec<x25519_dalek::StaticSecret>, Error> {
     let mut private_keys = Vec::new();
-    if let Some(private_key_args) = matches.values_of_os("private_keys") {
+    if let Some(private_key_args) = matches.get_many::<PathBuf>("private_keys") {
         for private_key_arg in private_key_args {
             let mut file = File::open(private_key_arg)?;
             // Load the the ECC key in-memory and parse it
@@ -122,7 +121,8 @@ fn open_ecc_private_keys(matches: &ArgMatches) -> Result<Vec<x25519_dalek::Stati
 
 fn open_ecc_public_keys(matches: &ArgMatches) -> Result<Vec<x25519_dalek::PublicKey>, Error> {
     let mut public_keys = Vec::new();
-    if let Some(public_key_args) = matches.values_of_os("public_keys") {
+
+    if let Some(public_key_args) = matches.get_many::<PathBuf>("public_keys") {
         for public_key_arg in public_key_args {
             let mut file = File::open(public_key_arg)?;
             // Load the the ECC key in-memory and parse it
@@ -143,10 +143,10 @@ fn config_from_matches(matches: &ArgMatches) -> ArchiveWriterConfig {
 
     // Get layers
     let mut layers = Vec::new();
-    if matches.is_present("layers") {
+    if matches.contains_id("layers") {
         // Safe to use unwrap() because of the is_present() test
-        for layer in matches.values_of("layers").unwrap() {
-            layers.push(layer);
+        for layer in matches.get_many::<String>("layers").unwrap() {
+            layers.push(layer.as_str());
         }
     } else {
         // Default
@@ -165,7 +165,7 @@ fn config_from_matches(matches: &ArgMatches) -> ArchiveWriterConfig {
     }
 
     // Encryption specifics
-    if matches.is_present("public_keys") {
+    if matches.contains_id("public_keys") {
         if !config.is_layers_enabled(Layers::ENCRYPT) {
             eprintln!(
                 "[WARNING] 'public_keys' argument ignored, because 'encrypt' layer is not enabled"
@@ -182,14 +182,12 @@ fn config_from_matches(matches: &ArgMatches) -> ArchiveWriterConfig {
     }
 
     // Compression specifics
-    if matches.is_present("compression_level") {
+    if matches.contains_id("compression_level") {
         if !config.is_layers_enabled(Layers::COMPRESS) {
             eprintln!("[WARNING] 'compression_level' argument ignored, because 'compress' layer is not enabled");
         } else {
-            let comp_level: u32 = matches
-                .value_of("compression_level")
-                .unwrap()
-                .parse()
+            let comp_level: u32 = *matches
+                .get_one::<u32>("compression_level")
                 .expect("compression_level must be an int");
             if comp_level > 11 {
                 panic!("compression_level must be in [0 .. 11]");
@@ -201,8 +199,8 @@ fn config_from_matches(matches: &ArgMatches) -> ArchiveWriterConfig {
     config
 }
 
-fn destination_from_output_argument(output_argument: &OsStr) -> Result<OutputTypes, MlarError> {
-    let destination = if output_argument != "-" {
+fn destination_from_output_argument(output_argument: &PathBuf) -> Result<OutputTypes, MlarError> {
+    let destination = if output_argument.as_os_str() != "-" {
         let path = Path::new(&output_argument);
         OutputTypes::File {
             file: File::create(&path)?,
@@ -220,7 +218,7 @@ fn writer_from_matches<'a>(
     let config = config_from_matches(matches);
 
     // Safe to use unwrap() because the option is required()
-    let output = matches.value_of_os("output").unwrap();
+    let output = matches.get_one::<PathBuf>("output").unwrap();
 
     let destination = destination_from_output_argument(output)?;
 
@@ -233,7 +231,7 @@ fn writer_from_matches<'a>(
 fn readerconfig_from_matches(matches: &ArgMatches) -> ArchiveReaderConfig {
     let mut config = ArchiveReaderConfig::new();
 
-    if matches.is_present("private_keys") {
+    if matches.contains_id("private_keys") {
         let private_keys = match open_ecc_private_keys(matches) {
             Ok(private_keys) => private_keys,
             Err(error) => {
@@ -251,7 +249,7 @@ fn open_mla_file<'a>(matches: &ArgMatches) -> Result<ArchiveReader<'a, File>, Ml
     let config = readerconfig_from_matches(matches);
 
     // Safe to use unwrap() because the option is required()
-    let mla_file = matches.value_of_os("input").unwrap();
+    let mla_file = matches.get_one::<PathBuf>("input").unwrap();
     let path = Path::new(&mla_file);
     let mut file = File::open(&path)?;
 
@@ -278,7 +276,7 @@ fn open_failsafe_mla_file<'a>(
     let config = readerconfig_from_matches(matches);
 
     // Safe to use unwrap() because the option is required()
-    let mla_file = matches.value_of_os("input").unwrap();
+    let mla_file = matches.get_one::<PathBuf>("input").unwrap();
     let path = Path::new(&mla_file);
     let file = File::open(&path)?;
 
@@ -319,11 +317,11 @@ enum ExtractFileNameMatcher {
 }
 impl ExtractFileNameMatcher {
     fn from_matches(matches: &ArgMatches) -> Self {
-        let files = match matches.values_of("files") {
+        let files = match matches.get_many::<String>("files") {
             Some(values) => values,
             None => return ExtractFileNameMatcher::Anything,
         };
-        if matches.is_present("glob") {
+        if matches.get_flag("glob") {
             // Use glob patterns
             ExtractFileNameMatcher::GlobPatterns(
                 files
@@ -504,9 +502,9 @@ fn add_from_stdin(mla: &mut ArchiveWriter<OutputTypes>) -> Result<(), MlarError>
 fn create(matches: &ArgMatches) -> Result<(), MlarError> {
     let mut mla = writer_from_matches(matches)?;
 
-    if let Some(files) = matches.values_of_os("files") {
+    if let Some(files) = matches.get_many::<PathBuf>("files") {
         for filename in files {
-            if filename == "-" {
+            if filename.as_os_str() == "-" {
                 add_from_stdin(&mut mla)?;
             } else {
                 let path = Path::new(&filename);
@@ -525,18 +523,18 @@ fn list(matches: &ArgMatches) -> Result<(), MlarError> {
     let mut iter: Vec<String> = mla.list_files()?.cloned().collect();
     iter.sort();
     for fname in iter {
-        if matches.is_present("verbose") {
+        if matches.get_count("verbose") == 0 {
+            println!("{}", fname);
+        } else {
             let mla_file = mla.get_file(fname)?.expect("Unable to get the file");
             let filename = mla_file.filename;
             let size = mla_file.size.format_size(DECIMAL);
-            if matches.occurrences_of("verbose") == 1 {
+            if matches.get_count("verbose") == 1 {
                 println!("{} - {}", filename, size);
-            } else if matches.occurrences_of("verbose") >= 2 {
+            } else if matches.get_count("verbose") >= 2 {
                 let hash = mla.get_hash(&filename)?.expect("Unable to get the hash");
                 println!("{} - {} ({})", filename, size, hex::encode(hash),);
             }
-        } else {
-            println!("{}", fname);
         }
     }
     Ok(())
@@ -544,8 +542,8 @@ fn list(matches: &ArgMatches) -> Result<(), MlarError> {
 
 fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
     let file_name_matcher = ExtractFileNameMatcher::from_matches(matches);
-    let output_dir = Path::new(matches.value_of_os("outputdir").unwrap());
-    let verbose = matches.is_present("verbose");
+    let output_dir = Path::new(matches.get_one::<PathBuf>("outputdir").unwrap());
+    let verbose = matches.get_flag("verbose");
 
     let mut mla = open_mla_file(matches)?;
 
@@ -630,12 +628,12 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
 }
 
 fn cat(matches: &ArgMatches) -> Result<(), MlarError> {
-    let files_values = matches.values_of("files").unwrap();
-    let output = matches.value_of_os("output").unwrap();
+    let files_values = matches.get_many::<String>("files").unwrap();
+    let output = matches.get_one::<PathBuf>("output").unwrap();
     let mut destination = destination_from_output_argument(output)?;
 
     let mut mla = open_mla_file(matches)?;
-    if matches.is_present("glob") {
+    if matches.get_flag("glob") {
         // For each glob patterns, enumerate matching files and display them
         let mut archive_files: Vec<String> = mla.list_files()?.cloned().collect();
         archive_files.sort();
@@ -700,7 +698,7 @@ fn to_tar(matches: &ArgMatches) -> Result<(), MlarError> {
     let mut mla = open_mla_file(matches)?;
 
     // Safe to use unwrap() because the option is required()
-    let output = matches.value_of_os("output").unwrap();
+    let output = matches.get_one::<PathBuf>("output").unwrap();
     let destination = destination_from_output_argument(output)?;
     let mut tar_file = Builder::new(destination);
 
@@ -788,7 +786,7 @@ fn convert(matches: &ArgMatches) -> Result<(), MlarError> {
 #[allow(clippy::unnecessary_wraps)]
 fn keygen(matches: &ArgMatches) -> Result<(), MlarError> {
     // Safe to use unwrap() because of the requirement
-    let output_base = matches.value_of_os("output").unwrap();
+    let output_base = matches.get_one::<PathBuf>("output").unwrap();
 
     let mut output_pub = File::create(Path::new(output_base).with_extension("pub"))
         .expect("Unable to create the public file");
@@ -878,7 +876,7 @@ impl ArchiveInfoReader {
 
 fn info(matches: &ArgMatches) -> Result<(), MlarError> {
     // Safe to use unwrap() because the option is required()
-    let mla_file = matches.value_of_os("input").unwrap();
+    let mla_file = matches.get_one::<PathBuf>("input").unwrap();
     let path = Path::new(&mla_file);
     let mut file = File::open(&path)?;
 
@@ -901,7 +899,7 @@ fn info(matches: &ArgMatches) -> Result<(), MlarError> {
 
     // Encryption config
     println!("Encryption: {}", encryption);
-    if encryption && matches.is_present("verbose") {
+    if encryption && matches.get_flag("verbose") {
         let encrypt_config = header.config.encrypt.expect("Encryption config not found");
         println!(
             "  Recipients: {}",
@@ -911,7 +909,7 @@ fn info(matches: &ArgMatches) -> Result<(), MlarError> {
 
     // Compression config
     println!("Compression: {}", compression);
-    if compression && matches.is_present("verbose") {
+    if compression && matches.get_flag("verbose") {
         let mla_ = mla.expect("MLA is required for verbose compression info");
         let output_size = mla_.get_files_size()?;
         let compressed_size: u64 = mla_.compressed_size.expect("Missing compression size");
@@ -922,54 +920,51 @@ fn info(matches: &ArgMatches) -> Result<(), MlarError> {
     Ok(())
 }
 
-fn app() -> clap::Command<'static> {
+fn app() -> clap::Command {
     // Common arguments list, for homogeneity
     let input_args = vec![
         Arg::new("input")
             .help("Archive path")
             .long("input")
             .short('i')
-            .number_of_values(1)
-            .allow_invalid_utf8(true)
+            .num_args(1)
+            .value_parser(value_parser!(PathBuf))
             .required(true),
         Arg::new("private_keys")
             .long("private_keys")
             .short('k')
             .help("Candidates ED25519 private key paths (DER or PEM format)")
-            .number_of_values(1)
-            .multiple_occurrences(true)
-            .allow_invalid_utf8(true)
-            .takes_value(true),
+            .num_args(1)
+            .action(ArgAction::Append)
+            .value_parser(value_parser!(PathBuf)),
     ];
     let output_args = vec![
         Arg::new("output")
             .help("Output file path. Use - for stdout")
             .long("output")
             .short('o')
-            .takes_value(true)
-            .allow_invalid_utf8(true)
+            .value_parser(value_parser!(PathBuf))
             .required(true),
         Arg::new("public_keys")
             .help("ED25519 Public key paths (DER or PEM format)")
             .long("pubkey")
             .short('p')
-            .number_of_values(1)
-            .allow_invalid_utf8(true)
-            .multiple_occurrences(true),
+            .num_args(1)
+            .action(ArgAction::Append)
+            .value_parser(value_parser!(PathBuf)),
         Arg::new("layers")
             .long("layers")
             .short('l')
             .help("Layers to use. Default is 'compress,encrypt'")
-            .possible_values(["compress", "encrypt"])
-            .number_of_values(1)
-            .multiple_occurrences(true)
-            .min_values(0),
+            .value_parser(["compress", "encrypt"])
+            .num_args(0..=1)
+            .action(ArgAction::Append),
         Arg::new("compression_level")
             .group("Compression layer")
             .short('q')
             .long("compression_level")
-            .help("Compression level (0-11); ; bigger values cause denser, but slower compression")
-            .takes_value(true),
+            .value_parser(value_parser!(u32).range(0..=11))
+            .help("Compression level (0-11); ; bigger values cause denser, but slower compression"),
     ];
 
     // Main parsing
@@ -983,8 +978,8 @@ fn app() -> clap::Command<'static> {
                 .arg(
                     Arg::new("files")
                     .help("Files to add")
-                    .allow_invalid_utf8(true)
-                    .multiple_occurrences(true)
+                    .value_parser(value_parser!(PathBuf))
+                    .action(ArgAction::Append)
                 ),
         )
         .subcommand(
@@ -994,8 +989,7 @@ fn app() -> clap::Command<'static> {
                 .arg(
                     Arg::new("verbose")
                         .short('v')
-                        .multiple_occurrences(true)
-                        .takes_value(false)
+                        .action(ArgAction::Count)
                         .help("Verbose listing, with additional information"),
                 ),
         )
@@ -1008,15 +1002,15 @@ fn app() -> clap::Command<'static> {
                         .help("Output directory where files are extracted")
                         .long("output")
                         .short('o')
-                        .number_of_values(1)
-                        .allow_invalid_utf8(true)
+                        .num_args(1)
+                        .value_parser(value_parser!(PathBuf))
                         .default_value("."),
                 )
                 .arg(
                     Arg::new("glob")
                         .long("glob")
                         .short('g')
-                        .takes_value(false)
+                        .action(ArgAction::SetTrue)
                         .help("Treat specified files as glob patterns"),
                 )
                 .arg(Arg::new("files").help("List of extracted files (all if none given)"))
@@ -1024,7 +1018,7 @@ fn app() -> clap::Command<'static> {
                     Arg::new("verbose")
                         .long("verbose")
                         .short('v')
-                        .takes_value(false)
+                        .action(ArgAction::SetTrue)
                         .help("List files as they are extracted"),
                 ),
         )
@@ -1037,15 +1031,15 @@ fn app() -> clap::Command<'static> {
                         .help("Output file where files are displayed")
                         .long("output")
                         .short('o')
-                        .number_of_values(1)
-                        .allow_invalid_utf8(true)
+                        .num_args(1)
+                        .value_parser(value_parser!(PathBuf))
                         .default_value("-"),
                 )
                 .arg(
                     Arg::new("glob")
                         .long("glob")
                         .short('g')
-                        .takes_value(false)
+                        .action(ArgAction::SetTrue)
                         .help("Treat given files as glob patterns"),
                 )
                 .arg(
@@ -1063,8 +1057,8 @@ fn app() -> clap::Command<'static> {
                         .help("Tar Archive path")
                         .long("output")
                         .short('o')
-                        .number_of_values(1)
-                        .allow_invalid_utf8(true)
+                        .num_args(1)
+                        .value_parser(value_parser!(PathBuf))
                         .required(true),
                 ),
         )
@@ -1090,8 +1084,8 @@ fn app() -> clap::Command<'static> {
                 .arg(
                     Arg::new("output")
                         .help("Output file for the private key. The public key is in {output}.pub")
-                        .number_of_values(1)
-                        .allow_invalid_utf8(true)
+                        .num_args(1)
+                        .value_parser(value_parser!(PathBuf))
                         .required(true)
                 )
         )
@@ -1103,7 +1097,7 @@ fn app() -> clap::Command<'static> {
                     Arg::new("verbose")
                         .long("verbose")
                         .short('v')
-                        .takes_value(false)
+                        .action(ArgAction::SetTrue)
                         .help("Get extra info for encryption and compression layers"),
                 ),
         )
@@ -1113,8 +1107,7 @@ fn main() {
     let mut app = app();
 
     // Launch sub-command
-    let mut help = Vec::new();
-    app.write_long_help(&mut help).unwrap();
+    let help = app.render_long_help();
     let matches = app.get_matches();
     let res = if let Some(matches) = matches.subcommand_matches("create") {
         create(matches)
@@ -1136,7 +1129,7 @@ fn main() {
         info(matches)
     } else {
         eprintln!("Error: at least one command required.");
-        eprintln!("{}", std::str::from_utf8(&help).unwrap());
+        eprintln!("{}", &help);
         std::process::exit(1);
     };
 
