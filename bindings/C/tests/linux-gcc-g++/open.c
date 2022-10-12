@@ -118,7 +118,7 @@ int main()
     status = mla_reader_config_add_private_key(hConfig, szPrivateKey);
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
     {
-        fprintf(stderr, " [!] Public key set failed with code %" PRIX64 "\n", (uint64_t)status);
+        fprintf(stderr, " [!] Private key set failed with code %" PRIX64 "\n", (uint64_t)status);
         return (int)status;
     }
 
@@ -129,7 +129,7 @@ int main()
         return 1;
     }
 
-    status = mla_roarchive_walk(&hConfig, read_cb, seek_cb, file_cb, f);
+    status = mla_roarchive_extract(&hConfig, read_cb, seek_cb, file_cb, f);
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
     {
         fprintf(stderr, " [!] Archive read failed with code %" PRIX64 "\n", (uint64_t)status);
