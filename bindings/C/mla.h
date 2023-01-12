@@ -1,4 +1,4 @@
-/* Automatically generated with cbindgen --config cbindgen.toml (do not modify) */
+/* Automatically generated with cbindgen --config cbindgen_c.toml (do not modify) */
 
 #pragma once
 
@@ -61,6 +61,41 @@ typedef void *MLAArchiveHandle;
 typedef void *MLAArchiveFileHandle;
 
 /**
+ * Implemented by the developper. Read between 0 and buffer_len into buffer.
+ * If successful, returns 0 and sets the number of bytes actually read to its last
+ * parameter. Otherwise, returns an error code on failure.
+ */
+typedef int32_t (*MlaReadCallback)(uint8_t *buffer, uint32_t buffer_len, void *context, uint32_t *bytes_read);
+
+/**
+ * Implemented by the developper. Seek in the source data.
+ * If successful, returns 0 and sets the new position to its last
+ * parameter. Otherwise, returns an error code on failure.
+ */
+typedef int32_t (*MlaSeekCallback)(int64_t offset, int32_t whence, void *context, uint64_t *new_pos);
+
+typedef struct FileWriter {
+  MLAWriteCallback write_callback;
+  MLAFlushCallback flush_callback;
+  void *context;
+} FileWriter;
+
+/**
+ * Implemented by the developper
+ * Return the desired output path which is expected to be writable.
+ * The callback developper is responsible all security checks and parent path creation.
+ */
+typedef int32_t (*MlaFileCalback)(void *context, const uint8_t *filename, uintptr_t filename_len, struct FileWriter *file_writer);
+
+/**
+ * Structure for MLA archive info
+ */
+typedef struct ArchiveInfo {
+  uint32_t version;
+  uint8_t layers;
+} ArchiveInfo;
+
+/**
  * Create a new configuration with default options, and return a handle to it.
  */
 MLAStatus mla_config_default_new(MLAConfigHandle *handle_out);
@@ -78,6 +113,17 @@ MLAStatus mla_config_add_public_keys(MLAConfigHandle config, const char *public_
  * and bigger values cause denser but slower compression.
  */
 MLAStatus mla_config_set_compression_level(MLAConfigHandle config, uint32_t level);
+
+/**
+ * Create an empty ReaderConfig
+ */
+MLAStatus mla_reader_config_new(MLAConfigHandle *handle_out);
+
+/**
+ * Appends the given private key to an existing given configuration
+ * (referenced by the handle returned by mla_reader_config_new()).
+ */
+MLAStatus mla_reader_config_add_private_key(MLAConfigHandle config, const char *private_key);
 
 /**
  * Open a new MLA archive using the given configuration, which is consumed and freed
@@ -135,3 +181,22 @@ MLAStatus mla_archive_file_close(MLAArchiveHandle archive, MLAArchiveFileHandle 
  * or an error code.
  */
 MLAStatus mla_archive_close(MLAArchiveHandle *archive);
+
+/**
+ * Open and extract an existing MLA archive, using the given configuration.
+ * read_callback and seek_callback are used to read the archive data
+ * file_callback is used to convert each archive file's name to pathes where extract the data
+ * The caller is responsible of all security checks related to callback provided paths
+ */
+MLAStatus mla_roarchive_extract(MLAConfigHandle *config,
+                                MlaReadCallback read_callback,
+                                MlaSeekCallback seek_callback,
+                                MlaFileCalback file_callback,
+                                void *context);
+
+/**
+ * Get info on an existing MLA archive
+ */
+MLAStatus mla_roarchive_info(MlaReadCallback read_callback,
+                             void *context,
+                             struct ArchiveInfo *info_out);

@@ -18,5 +18,11 @@
     <ClCompile Include="src\main.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\write.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\read.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>
