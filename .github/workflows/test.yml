@@ -111,8 +111,8 @@ jobs:
       working-directory: bindings/C/tests/windows-msvc/
       run: msbuild mla-bindings-test.sln /p:Platform=${{ matrix.msvc_platform }} /p:Configuration=${{ matrix.version }}
     - name: Run C/CPP bindings test program on Windows
-      working-directory: bindings/C/tests/windows-msvc/${{ matrix.msvc_platform }}/${{ matrix.version }}/
-      run: ./mla-bindings-test.exe
+      working-directory: bindings/C/tests/windows-msvc/
+      run: ./${{ matrix.msvc_platform }}/${{ matrix.version }}/mla-bindings-test.exe
 
   afl-build:
     runs-on: ubuntu-latest

@@ -1,13 +1,20 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
+use curve25519_parser::parse_openssl_25519_privkey;
 use curve25519_parser::parse_openssl_25519_pubkeys_pem_many;
+use mla::config::ArchiveReaderConfig;
 use mla::config::ArchiveWriterConfig;
 use mla::errors::ConfigError;
 use mla::errors::Error as MLAError;
+use mla::helpers::linear_extract;
+use mla::ArchiveHeader;
+use mla::ArchiveReader;
 use mla::ArchiveWriter;
 use mla::{ArchiveFileID, Layers};
+use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::ffi::{c_void, CStr};
-use std::io::Write;
+use std::io::{Read, Seek, Write};
+use std::mem::MaybeUninit;
 use std::os::raw::c_char;
 use std::ptr::null_mut;
 
@@ -60,6 +67,36 @@ pub type MLAWriteCallback = extern "C" fn(
 /// Implemented by the developper. Should ask the underlying medium (file buffering, HTTP
 /// buffering, etc.) to flush any internal buffer.
 pub type MLAFlushCallback = extern "C" fn(context: *mut c_void) -> i32;
+
+#[repr(C)]
+pub struct FileWriter {
+    write_callback: MLAWriteCallback,
+    flush_callback: MLAFlushCallback,
+    context: *mut c_void,
+}
+/// Implemented by the developper
+/// Return the desired output path which is expected to be writable.
+/// The callback developper is responsible all security checks and parent path creation.
+pub type MlaFileCalback = extern "C" fn(
+    context: *mut c_void,
+    filename: *const u8,
+    filename_len: usize,
+    file_writer: *mut FileWriter,
+) -> i32;
+/// Implemented by the developper. Read between 0 and buffer_len into buffer.
+/// If successful, returns 0 and sets the number of bytes actually read to its last
+/// parameter. Otherwise, returns an error code on failure.
+pub type MlaReadCallback = extern "C" fn(
+    buffer: *mut u8,
+    buffer_len: u32,
+    context: *mut c_void,
+    bytes_read: *mut u32,
+) -> i32;
+/// Implemented by the developper. Seek in the source data.
+/// If successful, returns 0 and sets the new position to its last
+/// parameter. Otherwise, returns an error code on failure.
+pub type MlaSeekCallback =
+    extern "C" fn(offset: i64, whence: i32, context: *mut c_void, new_pos: *mut u64) -> i32;
 
 impl From<MLAError> for MLAStatus {
     fn from(err: MLAError) -> Self {
@@ -216,6 +253,52 @@ pub extern "C" fn mla_config_set_compression_level(
     let res = match config.with_compression_level(level) {
         Ok(_) => MLAStatus::Success,
         Err(e) => MLAStatus::from(MLAError::ConfigError(e)),
+    };
+
+    Box::leak(config);
+    res
+}
+
+/// Create an empty ReaderConfig
+#[no_mangle]
+pub extern "C" fn mla_reader_config_new(handle_out: *mut MLAConfigHandle) -> MLAStatus {
+    if handle_out.is_null() {
+        return MLAStatus::BadAPIArgument;
+    }
+
+    let config = ArchiveReaderConfig::new();
+
+    let ptr = Box::into_raw(Box::new(config));
+    unsafe {
+        *handle_out = ptr as MLAConfigHandle;
+    }
+    MLAStatus::Success
+}
+
+/// Appends the given private key to an existing given configuration
+/// (referenced by the handle returned by mla_reader_config_new()).
+#[no_mangle]
+pub extern "C" fn mla_reader_config_add_private_key(
+    config: MLAConfigHandle,
+    private_key: *const c_char,
+) -> MLAStatus {
+    if config.is_null() || private_key.is_null() {
+        return MLAStatus::BadAPIArgument;
+    }
+
+    let mut config = unsafe { Box::from_raw(config as *mut ArchiveReaderConfig) };
+    let mut private_keys = Vec::new();
+
+    // Create a slice from the NULL-terminated string
+    let private_key = unsafe { CStr::from_ptr(private_key as *const i8) }.to_bytes();
+    // Parse as OpenSSL Ed25519 private key(s)
+    let res = match parse_openssl_25519_privkey(private_key) {
+        Ok(v) => {
+            private_keys.push(v);
+            config.add_private_keys(&private_keys);
+            MLAStatus::Success
+        }
+        _ => MLAStatus::Curve25519ParserError,
     };
 
     Box::leak(config);
@@ -406,4 +489,168 @@ pub extern "C" fn mla_archive_close(archive: *mut MLAArchiveHandle) -> MLAStatus
         Ok(_) => MLAStatus::Success,
         Err(e) => MLAStatus::from(e),
     }
+}
+
+struct CallbackInputRead {
+    read_callback: MlaReadCallback,
+    seek_callback: Option<MlaSeekCallback>,
+    context: *mut c_void,
+}
+
+impl Read for CallbackInputRead {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, std::io::Error> {
+        let len = match u32::try_from(buf.len()) {
+            Ok(n) => n,
+            _ => u32::MAX - 1, // only read the first 4GB, the callback will get called multiple times
+        };
+        let mut len_read: u32 = 0;
+        match (self.read_callback)(
+            buf.as_mut_ptr(),
+            len,
+            self.context,
+            &mut len_read as *mut u32,
+        ) {
+            0 => Ok(len_read as usize),
+            e => Err(std::io::Error::from_raw_os_error(e)),
+        }
+    }
+}
+
+impl Seek for CallbackInputRead {
+    fn seek(&mut self, style: std::io::SeekFrom) -> Result<u64, std::io::Error> {
+        let mut new_pos: u64 = 0;
+        let (whence, offset) = match style {
+            std::io::SeekFrom::Start(n) => (0, n as i64), // SEEK_SET
+            std::io::SeekFrom::Current(n) => (1, n),      // SEEK_CUR
+            std::io::SeekFrom::End(n) => (2, n),          // SEEK_END
+        };
+        match (self.seek_callback.unwrap())(offset, whence, self.context, &mut new_pos as *mut u64)
+        {
+            0 => Ok(new_pos as u64),
+            e => Err(std::io::Error::from_raw_os_error(e)),
+        }
+    }
+}
+
+/// Open and extract an existing MLA archive, using the given configuration.
+/// read_callback and seek_callback are used to read the archive data
+/// file_callback is used to convert each archive file's name to pathes where extract the data
+/// The caller is responsible of all security checks related to callback provided paths
+#[no_mangle]
+pub extern "C" fn mla_roarchive_extract(
+    config: *mut MLAConfigHandle,
+    read_callback: MlaReadCallback,
+    seek_callback: MlaSeekCallback,
+    file_callback: MlaFileCalback,
+    context: *mut c_void,
+) -> MLAStatus {
+    if (read_callback as *mut c_void).is_null()
+        || (seek_callback as *mut c_void).is_null()
+        || config.is_null()
+        || (file_callback as *mut c_void).is_null()
+    {
+        return MLAStatus::BadAPIArgument;
+    }
+
+    let reader = CallbackInputRead {
+        read_callback,
+        seek_callback: Some(seek_callback),
+        context,
+    };
+    _mla_roarchive_extract(config, reader, file_callback, context)
+}
+
+#[allow(clippy::extra_unused_lifetimes)]
+fn _mla_roarchive_extract<'a, R: Read + Seek + 'a>(
+    config: *mut MLAConfigHandle,
+    src: R,
+    file_callback: MlaFileCalback,
+    context: *mut c_void,
+) -> MLAStatus {
+    let config_ptr = unsafe { *(config as *mut *mut ArchiveReaderConfig) };
+    // Avoid any use-after-free of this handle by the caller
+    unsafe {
+        *config = null_mut();
+    }
+    let config = unsafe { Box::from_raw(config_ptr) };
+
+    let mut mla: ArchiveReader<'a, R> = match ArchiveReader::from_config(src, *config) {
+        Ok(mla) => mla,
+        Err(e) => {
+            return MLAStatus::from(e);
+        }
+    };
+
+    let mut iter: Vec<String> = match mla.list_files() {
+        Ok(v) => v.cloned().collect(),
+        Err(_) => return MLAStatus::BadAPIArgument,
+    };
+    iter.sort();
+
+    let mut export: HashMap<&String, CallbackOutput> = HashMap::new();
+    for fname in &iter {
+        let mut file_writer: MaybeUninit<FileWriter> = MaybeUninit::uninit();
+        match (file_callback)(
+            context,
+            fname.as_ptr(),
+            fname.len(),
+            file_writer.as_mut_ptr(),
+        ) {
+            0 => {
+                let file_writer = unsafe { file_writer.assume_init() };
+                export.insert(
+                    fname,
+                    CallbackOutput {
+                        write_callback: file_writer.write_callback,
+                        flush_callback: file_writer.flush_callback,
+                        context: file_writer.context,
+                    },
+                );
+            }
+            _ => continue,
+        };
+    }
+    match linear_extract(&mut mla, &mut export) {
+        Ok(()) => MLAStatus::Success,
+        Err(e) => MLAStatus::from(e),
+    }
+}
+
+/// Structure for MLA archive info
+#[repr(C)]
+pub struct ArchiveInfo {
+    version: u32,
+    layers: u8,
+}
+
+/// Get info on an existing MLA archive
+#[no_mangle]
+pub extern "C" fn mla_roarchive_info(
+    read_callback: MlaReadCallback,
+    context: *mut c_void,
+    info_out: *mut ArchiveInfo,
+) -> MLAStatus {
+    if (read_callback as *mut c_void).is_null() || info_out.is_null() {
+        return MLAStatus::BadAPIArgument;
+    }
+    let mut reader = CallbackInputRead {
+        read_callback,
+        seek_callback: None,
+        context,
+    };
+    _mla_roarchive_info(&mut reader, info_out)
+}
+
+fn _mla_roarchive_info<R: Read>(src: &mut R, info_out: *mut ArchiveInfo) -> MLAStatus {
+    let header = match ArchiveHeader::from(src) {
+        Ok(header) => header,
+        Err(e) => return MLAStatus::from(e),
+    };
+    let layers = header.config.layers_enabled;
+
+    unsafe {
+        (*info_out).version = header.format_version;
+        (*info_out).layers = layers.bits();
+    }
+    MLAStatus::Success
 }
