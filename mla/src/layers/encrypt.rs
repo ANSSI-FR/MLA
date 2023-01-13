@@ -679,7 +679,7 @@ mod tests {
         let data: Vec<u8> = Alphanumeric
             .sample_iter(&mut rng)
             .take(length)
-            .map(|c| c as u8)
+            .map(|c| c)
             .collect();
         encrypt_w.write_all(&data).unwrap();
         encrypt_w.finalize().unwrap();

@@ -31,7 +31,7 @@ fn setup() -> TestFS {
     let data: Vec<u8> = Alphanumeric
         .sample_iter(&mut rng)
         .take(SIZE_FILE1)
-        .map(|c| c as u8)
+        .map(|c| c)
         .collect();
     tmp_file1.write_binary(data.as_slice()).unwrap();
 

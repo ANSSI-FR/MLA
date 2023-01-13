@@ -148,7 +148,7 @@ impl<R: Read> CompressionLayerReaderState<R> {
 
 impl<'a, R: 'a + Read> CompressionLayerReader<'a, R> {
     pub fn new(mut inner: Box<dyn 'a + LayerReader<'a, R>>) -> Result<Self, Error> {
-        let underlayer_pos = inner.seek(SeekFrom::Current(0))? as u64;
+        let underlayer_pos = inner.seek(SeekFrom::Current(0))?;
         Ok(Self {
             state: CompressionLayerReaderState::Ready(inner),
             sizes_info: None,
@@ -766,7 +766,7 @@ mod tests {
         let data: Vec<u8> = Alphanumeric
             .sample_iter(&mut rng)
             .take(SIZE)
-            .map(|c| c as u8)
+            .map(|c| c)
             .collect();
         assert_eq!(data.len(), SIZE);
         data
@@ -850,7 +850,7 @@ mod tests {
         );
 
         let mut reader = brotli::Decompressor::new(&mut src, 1);
-        let mut buf3 = vec![0; SIZE - buf.len() - buf2.len() as usize];
+        let mut buf3 = vec![0; SIZE - buf.len() - buf2.len()];
         reader.read_exact(&mut buf3).expect("Last buffer");
         assert_eq!(buf.len() + buf2.len() + buf3.len(), SIZE);
         assert_eq!(
