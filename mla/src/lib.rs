@@ -786,7 +786,7 @@ impl<'a, T: Read + Seek> Read for BlocksToFileReader<'a, T> {
                             self.move_to_next_block()?;
                             return self.read(into);
                         }
-                        let count = self.src.by_ref().take(length as u64).read(into)?;
+                        let count = self.src.by_ref().take(length).read(into)?;
                         let length_usize = length as usize;
                         (length_usize - count, count)
                     }
@@ -1105,7 +1105,7 @@ impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
                                 "`id_failsafe2hash` not more sync with `id_failsafe2id_output`",
                             );
 
-                            let src = &mut (&mut self.src).take(length as u64);
+                            let src = &mut (&mut self.src).take(length);
                             'content: loop {
                                 let mut buf = Vec::with_capacity(CACHE_SIZE);
                                 'buf_fill: loop {
@@ -2161,7 +2161,7 @@ pub(crate) mod tests {
                 let read = file_stream.read(&mut chunk).unwrap();
                 let expect: Vec<u8> = Standard
                     .sample_iter(&mut rng_data)
-                    .take(read as usize)
+                    .take(read)
                     .collect();
                 assert_eq!(&chunk[..read], expect.as_slice());
                 if read == 0 {

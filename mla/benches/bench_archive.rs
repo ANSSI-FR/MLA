@@ -48,7 +48,7 @@ pub fn multiple_layers_multiple_block_size(c: &mut Criterion) {
         let data: Vec<u8> = Alphanumeric
             .sample_iter(&mut rng)
             .take(*size)
-            .map(|c| c as u8)
+            .map(|c| c)
             .collect();
 
         for layers in &[
@@ -99,7 +99,7 @@ pub fn multiple_compression_quality(c: &mut Criterion) {
         let data: Vec<u8> = Alphanumeric
             .sample_iter(&mut rng)
             .take(size)
-            .map(|c| c as u8)
+            .map(|c| c)
             .collect();
 
         // Create an archive
@@ -137,7 +137,7 @@ fn iter_decompress(iters: u64, size: u64, layers: Layers) -> Duration {
     let data: Vec<u8> = Alphanumeric
         .sample_iter(&mut rng)
         .take((size * iters) as usize)
-        .map(|c| c as u8)
+        .map(|c| c)
         .collect();
 
     // Create an archive with one file
@@ -218,7 +218,7 @@ fn build_archive<'a>(
         let data: Vec<u8> = Alphanumeric
             .sample_iter(&mut rng)
             .take(size as usize)
-            .map(|c| c as u8)
+            .map(|c| c)
             .collect();
         let id = mla.start_file(&format!("file_{}", i)).unwrap();
         mla.append_file_content(id, data.len() as u64, data.as_slice())

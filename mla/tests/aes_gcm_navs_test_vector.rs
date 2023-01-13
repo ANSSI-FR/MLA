@@ -3034,7 +3034,7 @@ fn test_nist_cavs_vectors() {
         let mut buffer = tv.plaintext.to_vec();
         cipher.encrypt(&mut buffer);
         let tag = cipher.into_tag();
-        assert_eq!(tag.len() as usize, TAG_LENGTH);
+        assert_eq!(tag.len(), TAG_LENGTH);
         assert_eq!(tag.as_slice(), tv.tag);
         assert_eq!(buffer.as_slice(), tv.ciphertext);
 
@@ -3050,7 +3050,7 @@ fn test_nist_cavs_vectors() {
                 cipher.encrypt(chunk);
             }
             let tag = cipher.into_tag();
-            assert_eq!(tag.len() as usize, TAG_LENGTH);
+            assert_eq!(tag.len(), TAG_LENGTH);
             assert_eq!(tag.as_slice(), tv.tag);
             assert_eq!(buffer.as_slice(), tv.ciphertext);
         }

@@ -201,7 +201,7 @@ mod tests {
         let mut buf = msg.to_vec();
         crate_cipher.encrypt(&mut buf);
         let tag = crate_cipher.into_tag();
-        assert_eq!(tag.len() as usize, TAG_LENGTH);
+        assert_eq!(tag.len(), TAG_LENGTH);
 
         assert_eq!(
             &extern_ciphertext[..extern_ciphertext.len() - TAG_LENGTH],
@@ -224,7 +224,7 @@ mod tests {
                 crate_cipher.encrypt(chunk);
             }
             let tag = crate_cipher.into_tag();
-            assert_eq!(tag.len() as usize, TAG_LENGTH);
+            assert_eq!(tag.len(), TAG_LENGTH);
 
             assert_eq!(
                 &extern_ciphertext[..extern_ciphertext.len() - TAG_LENGTH],
@@ -279,7 +279,7 @@ mod tests {
         let mut buf = msg.to_vec();
         crate_cipher.encrypt(&mut buf);
         let tag = crate_cipher.into_tag();
-        assert_eq!(tag.len() as usize, TAG_LENGTH);
+        assert_eq!(tag.len(), TAG_LENGTH);
 
         // Unauthenticated decryption
         let mut crate_cipher = AesGcm256::new(key, nonce, b"").unwrap();
