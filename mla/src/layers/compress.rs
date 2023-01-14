@@ -67,7 +67,8 @@ enum CompressionLayerReaderState<R: Read> {
     InData {
         read: u32,
         uncompressed_size: u32,
-        decompressor: brotli::Decompressor<R>,
+        // Use a Box to avoid a too big enum
+        decompressor: Box<brotli::Decompressor<R>>,
     },
     /// Empty is a placeholder to allow state replacement
     Empty,
@@ -148,7 +149,7 @@ impl<R: Read> CompressionLayerReaderState<R> {
 
 impl<'a, R: 'a + Read> CompressionLayerReader<'a, R> {
     pub fn new(mut inner: Box<dyn 'a + LayerReader<'a, R>>) -> Result<Self, Error> {
-        let underlayer_pos = inner.seek(SeekFrom::Current(0))? as u64;
+        let underlayer_pos = inner.seek(SeekFrom::Current(0))?;
         Ok(Self {
             state: CompressionLayerReaderState::Ready(inner),
             sizes_info: None,
@@ -329,7 +330,7 @@ impl<'a, R: 'a + Read + Seek> Read for CompressionLayerReader<'a, R> {
         match old_state {
             CompressionLayerReaderState::Ready(mut inner) => {
                 self.sync_inner_with_uncompressed_pos(&mut inner, self.underlayer_pos)?;
-                let decompressor = self.new_decompressor_at(inner, self.underlayer_pos)?;
+                let decompressor = Box::new(self.new_decompressor_at(inner, self.underlayer_pos)?);
                 let uncompressed_size = self.uncompressed_block_size_at(self.underlayer_pos)?;
                 self.state = CompressionLayerReaderState::InData {
                     read: 0,
@@ -401,7 +402,7 @@ impl<'a, R: Read + Seek> Seek for CompressionLayerReader<'a, R> {
                         self.state = CompressionLayerReaderState::InData {
                             read: inside_block as u32,
                             uncompressed_size,
-                            decompressor,
+                            decompressor: Box::new(decompressor),
                         };
                         self.underlayer_pos = pos;
                         Ok(pos)
@@ -471,7 +472,8 @@ enum CompressionLayerWriterState<W: Write> {
     Ready(W),
     /// How many uncompressed bytes have already been written for the current
     /// block
-    InData(u32, brotli::CompressorWriter<WriterWithCount<W>>),
+    // Use a Box to avoid a too big enum
+    InData(u32, Box<brotli::CompressorWriter<WriterWithCount<W>>>),
     /// Empty is a placeholder to allow state replacement
     Empty,
 }
@@ -613,7 +615,7 @@ impl<'a, W: 'a + InnerWriterTrait> Write for CompressionLayerWriter<'a, W> {
                 );
                 let size = std::cmp::min(UNCOMPRESSED_DATA_SIZE as usize, buf.len());
                 let written = compress.write(&buf[..size])?;
-                self.state = CompressionLayerWriterState::InData(written as u32, compress);
+                self.state = CompressionLayerWriterState::InData(written as u32, Box::new(compress));
                 Ok(written)
             }
             CompressionLayerWriterState::InData(written, mut compress) => {
@@ -695,7 +697,7 @@ impl<'a, R: 'a + Read> Read for CompressionLayerFailSafeReader<'a, R> {
                 // will stop on the first byte of the next CompressionBlock.
                 // This is slower, but we don't have index, and
                 // therefore we don't know the compressed block size
-                let decompressor = brotli::Decompressor::new(inner, 1);
+                let decompressor = Box::new(brotli::Decompressor::new(inner, 1));
                 self.state = CompressionLayerReaderState::InData {
                     read: 0,
                     // Default values, for "repair" mode
@@ -763,11 +765,7 @@ mod tests {
     fn get_data() -> Vec<u8> {
         // Use only alphanumeric charset to allow for compression
         let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(0);
-        let data: Vec<u8> = Alphanumeric
-            .sample_iter(&mut rng)
-            .take(SIZE)
-            .map(|c| c as u8)
-            .collect();
+        let data: Vec<u8> = Alphanumeric.sample_iter(&mut rng).take(SIZE).collect();
         assert_eq!(data.len(), SIZE);
         data
     }
@@ -850,7 +848,7 @@ mod tests {
         );
 
         let mut reader = brotli::Decompressor::new(&mut src, 1);
-        let mut buf3 = vec![0; SIZE - buf.len() - buf2.len() as usize];
+        let mut buf3 = vec![0; SIZE - buf.len() - buf2.len()];
         reader.read_exact(&mut buf3).expect("Last buffer");
         assert_eq!(buf.len() + buf2.len() + buf3.len(), SIZE);
         assert_eq!(

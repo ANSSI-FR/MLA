@@ -786,7 +786,7 @@ impl<'a, T: Read + Seek> Read for BlocksToFileReader<'a, T> {
                             self.move_to_next_block()?;
                             return self.read(into);
                         }
-                        let count = self.src.by_ref().take(length as u64).read(into)?;
+                        let count = self.src.by_ref().take(length).read(into)?;
                         let length_usize = length as usize;
                         (length_usize - count, count)
                     }
@@ -1105,7 +1105,7 @@ impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
                                 "`id_failsafe2hash` not more sync with `id_failsafe2id_output`",
                             );
 
-                            let src = &mut (&mut self.src).take(length as u64);
+                            let src = &mut (&mut self.src).take(length);
                             'content: loop {
                                 let mut buf = Vec::with_capacity(CACHE_SIZE);
                                 'buf_fill: loop {
@@ -1558,7 +1558,7 @@ pub(crate) mod tests {
             let mut rez3 = Vec::new();
             let mut final_rez = Vec::new();
             file2.data.read_to_end(&mut rez3).unwrap();
-            final_rez.extend(&rez2);
+            final_rez.extend(rez2);
             final_rez.extend(rez3);
             assert_eq!(final_rez, vec![5, 6, 7, 8, 9, 10, 11, 12]);
         }
@@ -2159,10 +2159,7 @@ pub(crate) mod tests {
             let mut file_stream = mla_read.get_file(file_name).unwrap().unwrap().data;
             loop {
                 let read = file_stream.read(&mut chunk).unwrap();
-                let expect: Vec<u8> = Standard
-                    .sample_iter(&mut rng_data)
-                    .take(read as usize)
-                    .collect();
+                let expect: Vec<u8> = Standard.sample_iter(&mut rng_data).take(read).collect();
                 assert_eq!(&chunk[..read], expect.as_slice());
                 if read == 0 {
                     break;

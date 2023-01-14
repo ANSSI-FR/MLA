@@ -526,7 +526,7 @@ impl Seek for CallbackInputRead {
         };
         match (self.seek_callback.unwrap())(offset, whence, self.context, &mut new_pos as *mut u64)
         {
-            0 => Ok(new_pos as u64),
+            0 => Ok(new_pos),
             e => Err(std::io::Error::from_raw_os_error(e)),
         }
     }
