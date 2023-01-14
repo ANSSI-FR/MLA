@@ -203,7 +203,7 @@ fn destination_from_output_argument(output_argument: &PathBuf) -> Result<OutputT
     let destination = if output_argument.as_os_str() != "-" {
         let path = Path::new(&output_argument);
         OutputTypes::File {
-            file: File::create(&path)?,
+            file: File::create(path)?,
         }
     } else {
         OutputTypes::Stdout
@@ -251,7 +251,7 @@ fn open_mla_file<'a>(matches: &ArgMatches) -> Result<ArchiveReader<'a, File>, Ml
     // Safe to use unwrap() because the option is required()
     let mla_file = matches.get_one::<PathBuf>("input").unwrap();
     let path = Path::new(&mla_file);
-    let mut file = File::open(&path)?;
+    let mut file = File::open(path)?;
 
     // If a decryption key is provided, assume the user expects the file to be encrypted
     // If not, avoid opening it
@@ -278,7 +278,7 @@ fn open_failsafe_mla_file<'a>(
     // Safe to use unwrap() because the option is required()
     let mla_file = matches.get_one::<PathBuf>("input").unwrap();
     let path = Path::new(&mla_file);
-    let file = File::open(&path)?;
+    let file = File::open(path)?;
 
     // Instantiate reader
     Ok(ArchiveFailSafeReader::from_config(file, config)?)
@@ -404,7 +404,7 @@ fn create_file<P1: AsRef<Path>>(
         }
     };
     if !containing_directory.exists() {
-        fs::create_dir_all(&containing_directory).map_err(|err| {
+        fs::create_dir_all(containing_directory).map_err(|err| {
             eprintln!(
                 " [!] Error while creating output directory path for \"{}\" ({:?})",
                 output_dir.as_ref().display(),
@@ -415,7 +415,7 @@ fn create_file<P1: AsRef<Path>>(
     }
 
     // Ensure that the containing directory is in the output dir
-    let containing_directory = fs::canonicalize(&containing_directory).map_err(|err| {
+    let containing_directory = fs::canonicalize(containing_directory).map_err(|err| {
         eprintln!(
             " [!] Error while canonicalizing extracted file output directory path \"{}\" ({:?})",
             containing_directory.display(),
@@ -549,7 +549,7 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
 
     // Create the output directory, if it does not exist
     if !output_dir.exists() {
-        fs::create_dir(&output_dir).map_err(|err| {
+        fs::create_dir(output_dir).map_err(|err| {
             eprintln!(
                 " [!] Error while creating output directory \"{}\" ({:?})",
                 output_dir.display(),
@@ -558,7 +558,7 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
             err
         })?;
     }
-    let output_dir = fs::canonicalize(&output_dir).map_err(|err| {
+    let output_dir = fs::canonicalize(output_dir).map_err(|err| {
         eprintln!(
             " [!] Error while canonicalizing output directory path \"{}\" ({:?})",
             output_dir.display(),
@@ -878,7 +878,7 @@ fn info(matches: &ArgMatches) -> Result<(), MlarError> {
     // Safe to use unwrap() because the option is required()
     let mla_file = matches.get_one::<PathBuf>("input").unwrap();
     let path = Path::new(&mla_file);
-    let mut file = File::open(&path)?;
+    let mut file = File::open(path)?;
 
     // Get Header
     let header = ArchiveHeader::from(&mut file)?;
