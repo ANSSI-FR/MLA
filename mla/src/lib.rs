@@ -1558,7 +1558,7 @@ pub(crate) mod tests {
             let mut rez3 = Vec::new();
             let mut final_rez = Vec::new();
             file2.data.read_to_end(&mut rez3).unwrap();
-            final_rez.extend(&rez2);
+            final_rez.extend(rez2);
             final_rez.extend(rez3);
             assert_eq!(final_rez, vec![5, 6, 7, 8, 9, 10, 11, 12]);
         }
