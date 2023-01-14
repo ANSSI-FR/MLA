@@ -676,11 +676,7 @@ mod tests {
         );
         let length = (CHUNK_SIZE * 2) as usize;
         let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(0);
-        let data: Vec<u8> = Alphanumeric
-            .sample_iter(&mut rng)
-            .take(length)
-            .map(|c| c)
-            .collect();
+        let data: Vec<u8> = Alphanumeric.sample_iter(&mut rng).take(length).collect();
         encrypt_w.write_all(&data).unwrap();
         encrypt_w.finalize().unwrap();
 

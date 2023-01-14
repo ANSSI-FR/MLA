@@ -2159,10 +2159,7 @@ pub(crate) mod tests {
             let mut file_stream = mla_read.get_file(file_name).unwrap().unwrap().data;
             loop {
                 let read = file_stream.read(&mut chunk).unwrap();
-                let expect: Vec<u8> = Standard
-                    .sample_iter(&mut rng_data)
-                    .take(read)
-                    .collect();
+                let expect: Vec<u8> = Standard.sample_iter(&mut rng_data).take(read).collect();
                 assert_eq!(&chunk[..read], expect.as_slice());
                 if read == 0 {
                     break;

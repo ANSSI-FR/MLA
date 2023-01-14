@@ -765,11 +765,7 @@ mod tests {
     fn get_data() -> Vec<u8> {
         // Use only alphanumeric charset to allow for compression
         let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(0);
-        let data: Vec<u8> = Alphanumeric
-            .sample_iter(&mut rng)
-            .take(SIZE)
-            .map(|c| c)
-            .collect();
+        let data: Vec<u8> = Alphanumeric.sample_iter(&mut rng).take(SIZE).collect();
         assert_eq!(data.len(), SIZE);
         data
     }
