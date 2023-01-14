@@ -163,9 +163,9 @@ fn test_create_from_dir() {
     let subdir_path = tmp_dir.path().join("subdir");
     let mut subfile2_path = subdir_path.join("subfile2");
 
-    std::fs::write(&mut subfile1_path, "Test1").unwrap();
+    std::fs::write(subfile1_path, "Test1").unwrap();
     std::fs::create_dir(subdir_path).unwrap();
-    std::fs::write(&mut subfile2_path, "Test2").unwrap();
+    std::fs::write(subfile2_path, "Test2").unwrap();
 
     // `mlar create -o output.mla -p samples/test_x25519_pub.pem <tmp_dir>`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
@@ -475,9 +475,9 @@ fn test_multiple_keys() {
         .arg("-i")
         .arg(mlar_file.path())
         .arg("-k")
-        .arg(&ecc_privates[0])
+        .arg(ecc_privates[0])
         .arg("-k")
-        .arg(&ecc_privates[1]);
+        .arg(ecc_privates[1]);
 
     println!("{:?}", cmd);
     let assert = cmd.assert();
@@ -501,7 +501,7 @@ fn test_multiple_keys() {
         .arg("-i")
         .arg(mlar_file.path())
         .arg("-k")
-        .arg(&ecc_privates[1]);
+        .arg(ecc_privates[1]);
 
     println!("{:?}", cmd);
     let assert = cmd.assert();
@@ -1090,7 +1090,7 @@ fn test_no_open_on_encrypt() {
         .arg("-i")
         .arg(mlar_file.path())
         .arg("-k")
-        .arg(&ecc_private);
+        .arg(ecc_private);
 
     println!("{:?}", cmd);
     let assert = cmd.assert();
