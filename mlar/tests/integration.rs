@@ -158,9 +158,9 @@ fn test_create_from_dir() {
 
     // Temporary directory to test recursive file addition
     let tmp_dir = TempDir::new().unwrap();
-    let mut subfile1_path = tmp_dir.path().join("subfile1");
+    let subfile1_path = tmp_dir.path().join("subfile1");
     let subdir_path = tmp_dir.path().join("subdir");
-    let mut subfile2_path = subdir_path.join("subfile2");
+    let subfile2_path = subdir_path.join("subfile2");
 
     std::fs::write(subfile1_path, "Test1").unwrap();
     std::fs::create_dir(subdir_path).unwrap();
