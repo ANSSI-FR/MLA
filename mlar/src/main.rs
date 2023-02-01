@@ -5,6 +5,7 @@ use curve25519_parser::{
 use glob::Pattern;
 use hkdf::Hkdf;
 use humansize::{FormatSize, DECIMAL};
+use lru::LruCache;
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
 use mla::errors::{Error, FailSafeReadError};
 use mla::helpers::linear_extract;
@@ -30,8 +31,6 @@ use std::num::NonZeroUsize;
 use std::path::{Component, Path, PathBuf};
 use tar::{Builder, Header};
 use zeroize::Zeroize;
-
-use lru::LruCache;
 
 // ----- Error ------
 
@@ -452,6 +451,7 @@ fn create_file<P1: AsRef<Path>>(
 struct FileWriter<'a> {
     /// Target file for data appending
     path: PathBuf,
+    /// Reference on the cache
     cache: &'a RefCell<LruCache<PathBuf, File>>,
 }
 
@@ -465,9 +465,11 @@ impl<'a> Write for FileWriter<'a> {
             let file = fs::OpenOptions::new().append(true).open(&self.path)?;
             cache.put(self.path.clone(), file);
         }
-        // Safe to `unwrap` here cause we ensure the element is in the cache
+        // Safe to `unwrap` here cause we ensure the element is in the cache (mono-threaded)
         let file = cache.get_mut(&self.path).unwrap();
         file.write(buf)
+
+        // `file` will be closed on deletion from the cache
     }
 
     fn flush(&mut self) -> io::Result<()> {
