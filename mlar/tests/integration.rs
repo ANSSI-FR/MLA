@@ -10,9 +10,11 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use tar::Archive;
 
+
 const SIZE_FILE1: usize = 10 * 1024 * 1024;
 const SIZE_FILE2: usize = 10 * 1024 * 1024;
 const UTIL: &str = "mlar";
+
 
 struct TestFS {
     // Files ordered by names
@@ -1247,4 +1249,134 @@ fn test_no_open_on_encrypt() {
     println!("{cmd:?}");
     let assert = cmd.assert();
     assert.failure();
+}
+
+// This value should be bigger than FILE_WRITER_POOL_SIZE
+const TEST_MANY_FILES_NB: usize = 2000;
+
+#[test]
+fn test_extract_lot_files() {
+    let mlar_file = NamedTempFile::new("output.mla").unwrap();
+    let mut rng: StdRng = SeedableRng::from_seed([0u8; 32]);
+    let mut files_archive_order = vec![];
+    let mut files = vec![];
+    const SIZE_FILE: usize = 10;
+
+    // Create many files, filled with a few alphanumeric characters
+    for i in 1..TEST_MANY_FILES_NB {
+        let tmp_file = NamedTempFile::new(format!("file{}.bin", i)).unwrap();
+        let data: Vec<u8> = Alphanumeric
+            .sample_iter(&mut rng)
+            .take(SIZE_FILE)
+            .collect();
+        tmp_file.write_binary(data.as_slice()).unwrap();
+
+        files_archive_order.push(tmp_file.path().to_path_buf());
+        files.push(tmp_file);
+    }
+    
+    files.sort_by(|i1, i2| Ord::cmp(&i1.path(), &i2.path()));
+
+    let mut testfs = TestFS {
+        files,
+        files_archive_order,
+    };
+
+    // `mlar create -l -o output.mla -
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("create")
+        .arg("-l")
+        .arg("-o")
+        .arg(mlar_file.path())
+        .arg("-");
+
+    // Use "-" to avoid large command line (Windows limitation is about 8191 char)
+    let mut file_list = String::new();
+    for file in &testfs.files {
+        file_list.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
+    }
+    cmd.write_stdin(String::from(&file_list));
+
+    println!("{:?}", cmd);
+    let assert = cmd.assert();
+    assert.success().stderr(String::from(&file_list));
+
+    let mut file_list = String::new();
+    for file in &testfs.files {
+        file_list.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
+    }
+
+    // Test global (with all files)
+
+    // `mlar extract -v -i output.mla -o ouput_dir -g '*'`
+    let output_dir = TempDir::new().unwrap();
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("extract")
+        .arg("-v")
+        .arg("-i")
+        .arg(mlar_file.path())
+        .arg("-o")
+        .arg(output_dir.path())
+        .arg("-g")
+        .arg("*");
+
+    println!("{:?}", cmd);
+    let assert = cmd.assert();
+    assert.success().stdout(file_list);
+
+    ensure_directory_content(output_dir.path(), &testfs.files);
+
+    // Test linear extraction of all files
+
+    // `mlar extract -v -i output.mla -o ouput_dir`
+    let output_dir = TempDir::new().unwrap();
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("extract")
+        .arg("-v")
+        .arg("-i")
+        .arg(mlar_file.path())
+        .arg("-o")
+        .arg(output_dir.path());
+
+    println!("{:?}", cmd);
+    let assert = cmd.assert();
+    assert
+        .success()
+        .stdout("Extracting the whole archive using a linear extraction\n");
+
+    ensure_directory_content(output_dir.path(), &testfs.files);
+
+    // Test extraction of one file explicitly
+    // `mlar extract -v -i output.mla -o ouput_dir file1`
+    let one_filename = &testfs.files_archive_order[0];
+    let mut one_file = Vec::new();
+    loop {
+        match testfs.files.pop() {
+            None => {
+                break;
+            }
+            Some(ntf) => {
+                if ntf.path() == one_filename {
+                    one_file.push(ntf);
+                }
+            }
+        }
+    }
+    let output_dir = TempDir::new().unwrap();
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("extract")
+        .arg("-v")
+        .arg("-i")
+        .arg(mlar_file.path())
+        .arg("-o")
+        .arg(output_dir.path())
+        .arg(one_filename);
+
+    println!("{:?}", cmd);
+    let assert = cmd.assert();
+    assert
+        .success()
+        .stdout(format!("{}\n", one_filename.to_string_lossy()));
+
+    ensure_directory_content(output_dir.path(), &one_file);
 }
