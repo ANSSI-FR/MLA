@@ -447,7 +447,7 @@ fn create_file<P1: AsRef<Path>>(
 ///
 /// This wrapper is used to avoid opening all files simultaneously, potentially
 /// reaching the filesystem limit, but rather appending to file on-demand
-/// 
+///
 /// A limited pool of active file, in a LRU cache, is used to avoid too many open-close
 struct FileWriter<'a> {
     /// Target file for data appending
@@ -462,9 +462,7 @@ impl<'a> Write for FileWriter<'a> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let mut cache = self.cache.borrow_mut();
         if !cache.contains(&self.path) {
-            let file = fs::OpenOptions::new()
-            .append(true)
-            .open(&self.path)?; 
+            let file = fs::OpenOptions::new().append(true).open(&self.path)?;
             cache.put(self.path.clone(), file);
         }
         // Safe to `unwrap` here cause we ensure the element is in the cache
@@ -589,12 +587,20 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
         if verbose {
             println!("Extracting the whole archive using a linear extraction");
         }
-        let cache = RefCell::new(LruCache::new(NonZeroUsize::new(FILE_WRITER_POOL_SIZE).unwrap()));
+        let cache = RefCell::new(LruCache::new(
+            NonZeroUsize::new(FILE_WRITER_POOL_SIZE).unwrap(),
+        ));
         let mut export: HashMap<&String, FileWriter> = HashMap::new();
         for fname in &iter {
             match create_file(&output_dir, fname)? {
                 Some((_file, path)) => {
-                    export.insert(fname, FileWriter { path, cache: &cache });
+                    export.insert(
+                        fname,
+                        FileWriter {
+                            path,
+                            cache: &cache,
+                        },
+                    );
                 }
                 None => continue,
             }

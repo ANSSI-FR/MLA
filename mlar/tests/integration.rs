@@ -10,11 +10,9 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use tar::Archive;
 
-
 const SIZE_FILE1: usize = 10 * 1024 * 1024;
 const SIZE_FILE2: usize = 10 * 1024 * 1024;
 const UTIL: &str = "mlar";
-
 
 struct TestFS {
     // Files ordered by names
@@ -1265,16 +1263,13 @@ fn test_extract_lot_files() {
     // Create many files, filled with a few alphanumeric characters
     for i in 1..TEST_MANY_FILES_NB {
         let tmp_file = NamedTempFile::new(format!("file{}.bin", i)).unwrap();
-        let data: Vec<u8> = Alphanumeric
-            .sample_iter(&mut rng)
-            .take(SIZE_FILE)
-            .collect();
+        let data: Vec<u8> = Alphanumeric.sample_iter(&mut rng).take(SIZE_FILE).collect();
         tmp_file.write_binary(data.as_slice()).unwrap();
 
         files_archive_order.push(tmp_file.path().to_path_buf());
         files.push(tmp_file);
     }
-    
+
     files.sort_by(|i1, i2| Ord::cmp(&i1.path(), &i2.path()));
 
     let mut testfs = TestFS {
