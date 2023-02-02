@@ -864,7 +864,7 @@ pub struct ArchiveReader<'a, R: 'a + Read + Seek> {
 impl<'b, R: 'b + Read + Seek> ArchiveReader<'b, R> {
     pub fn from_config(mut src: R, mut config: ArchiveReaderConfig) -> Result<Self, Error> {
         // Make sure we read the archive header from the start
-        src.seek(SeekFrom::Start(0))?;
+        src.rewind()?;
         let header = ArchiveHeader::from(&mut src)?;
         config.load_persistent(header.config)?;
 
@@ -886,7 +886,7 @@ impl<'b, R: 'b + Read + Seek> ArchiveReader<'b, R> {
         let metadata = Some(ArchiveFooter::deserialize_from(&mut src)?);
 
         // Reset the position for further uses
-        src.seek(SeekFrom::Start(0))?;
+        src.rewind()?;
 
         Ok(ArchiveReader {
             config,
@@ -1256,7 +1256,7 @@ pub(crate) mod tests {
         };
         let mut buf = Vec::new();
         header.dump(&mut buf).unwrap();
-        println!("{:?}", buf);
+        println!("{buf:?}");
 
         let header_rebuild = ArchiveHeader::from(&mut buf.as_slice()).unwrap();
         assert_eq!(header_rebuild.config.layers_enabled, Layers::default());
@@ -1289,7 +1289,7 @@ pub(crate) mod tests {
             .dump(&mut buf)
             .unwrap();
 
-        println!("{:?}", buf);
+        println!("{buf:?}");
     }
 
     #[test]
@@ -1507,7 +1507,7 @@ pub(crate) mod tests {
             Layers::COMPRESS,
             Layers::default(),
         ] {
-            println!("Layering: {:?}", layering);
+            println!("Layering: {layering:?}");
 
             // Build initial file in a stream
             let file = Vec::new();
@@ -1873,7 +1873,7 @@ pub(crate) mod tests {
         // Some constant files
         for i in 0..=255 {
             files.insert(
-                format!("file_{}", i).to_string(),
+                format!("file_{i}").to_string(),
                 std::iter::repeat(i).take(0x1000).collect::<Vec<u8>>(),
             );
         }
@@ -1921,7 +1921,7 @@ pub(crate) mod tests {
         .unwrap();
 
         // Second, add interleaved files
-        let fnames: Vec<String> = (0..=255).map(|i| format!("file_{}", i)).collect();
+        let fnames: Vec<String> = (0..=255).map(|i| format!("file_{i}")).collect();
         let mut name2id: HashMap<_, _> = HashMap::new();
 
         // Start files in normal order
@@ -2117,9 +2117,7 @@ pub(crate) mod tests {
 
         // Complete up to MAX_SIZE
         while cur_size < MAX_SIZE {
-            let id = mla
-                .start_file(format!("file_{:}", nb_file).as_str())
-                .unwrap();
+            let id = mla.start_file(format!("file_{nb_file:}").as_str()).unwrap();
             let size = std::cmp::min(rng.next_u32() as u64, MAX_SIZE - cur_size);
             let data: Vec<u8> = Standard
                 .sample_iter(&mut rng_data)
@@ -2140,7 +2138,7 @@ pub(crate) mod tests {
         config.add_private_keys(&[key]);
         let mut mla_read = ArchiveReader::from_config(buf, config).expect("archive reader");
 
-        let file_names: Vec<String> = (0..nb_file).map(|nb| format!("file_{:}", nb)).collect();
+        let file_names: Vec<String> = (0..nb_file).map(|nb| format!("file_{nb:}")).collect();
         let mut file_list = mla_read
             .list_files()
             .unwrap()

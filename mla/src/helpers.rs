@@ -3,7 +3,7 @@ use super::layers::traits::InnerWriterTrait;
 use super::{ArchiveFileBlock, ArchiveFileID, ArchiveReader, ArchiveWriter, Error};
 use std::collections::HashMap;
 use std::hash::BuildHasher;
-use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::io::{self, Read, Seek, Write};
 
 /// Extract an Archive linearly.
 ///
@@ -24,7 +24,7 @@ pub fn linear_extract<W1: InnerWriterTrait, R: Read + Seek, S: BuildHasher>(
     export: &mut HashMap<&String, W1, S>,
 ) -> Result<(), Error> {
     // Seek at the beginning
-    archive.src.seek(SeekFrom::Start(0))?;
+    archive.src.rewind()?;
 
     // Use a BufReader to cache, by merging them into one bigger read, small
     // read calls (like the ones on ArchiveFileBlock reading)

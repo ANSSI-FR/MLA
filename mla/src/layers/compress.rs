@@ -149,7 +149,7 @@ impl<R: Read> CompressionLayerReaderState<R> {
 
 impl<'a, R: 'a + Read> CompressionLayerReader<'a, R> {
     pub fn new(mut inner: Box<dyn 'a + LayerReader<'a, R>>) -> Result<Self, Error> {
-        let underlayer_pos = inner.seek(SeekFrom::Current(0))?;
+        let underlayer_pos = inner.stream_position()?;
         Ok(Self {
             state: CompressionLayerReaderState::Ready(inner),
             sizes_info: None,
@@ -797,7 +797,7 @@ mod tests {
         let mut reader = brotli::Decompressor::new(&mut src, 0);
         let mut buf = Vec::new();
         reader.read_to_end(&mut buf).unwrap();
-        println!("{:?}", buf);
+        println!("{buf:?}");
         fake_data.extend(fake_data2);
         assert_eq!(fake_data, buf);
     }
