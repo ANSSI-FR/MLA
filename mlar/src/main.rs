@@ -22,7 +22,7 @@ use std::error;
 use std::fmt;
 use std::fs::{self, read_dir, File};
 use std::io::{self, BufRead};
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{Read, Seek, Write};
 use std::path::{Component, Path, PathBuf};
 use tar::{Builder, Header};
 
@@ -255,7 +255,7 @@ fn open_mla_file<'a>(matches: &ArgMatches) -> Result<ArchiveReader<'a, File>, Ml
 
     // If a decryption key is provided, assume the user expects the file to be encrypted
     // If not, avoid opening it
-    file.seek(SeekFrom::Start(0))?;
+    file.rewind()?;
     let header = ArchiveHeader::from(&mut file)?;
     if config.layers_enabled.contains(Layers::ENCRYPT)
         && !header.config.layers_enabled.contains(Layers::ENCRYPT)
@@ -263,7 +263,7 @@ fn open_mla_file<'a>(matches: &ArgMatches) -> Result<ArchiveReader<'a, File>, Ml
         eprintln!("[-] A private key has been provided, but the archive is not encrypted");
         return Err(MlarError::PrivateKeyProvidedButNotUsed);
     }
-    file.seek(SeekFrom::Start(0))?;
+    file.rewind()?;
 
     // Instantiate reader
     Ok(ArchiveReader::from_config(file, config)?)
@@ -821,7 +821,7 @@ impl ArchiveInfoReader {
         R: 'a + Read + Seek,
     {
         // Make sure we read the archive header from the start
-        src.seek(SeekFrom::Start(0))?;
+        src.rewind()?;
         let header = ArchiveHeader::from(&mut src)?;
         config.load_persistent(header.config)?;
 
@@ -850,7 +850,7 @@ impl ArchiveInfoReader {
 
         let metadata = Some(ArchiveFooter::deserialize_from(&mut src)?);
 
-        src.seek(SeekFrom::Start(0))?;
+        src.rewind()?;
         Ok(ArchiveInfoReader {
             config,
             compressed_size,

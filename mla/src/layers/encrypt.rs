@@ -356,7 +356,7 @@ impl<'a, R: 'a + Read + Seek> LayerReader<'a, R> for EncryptionLayerReader<'a, R
         self.inner.initialize()?;
 
         // Load the current buffer in cache
-        self.seek(SeekFrom::Start(0))?;
+        self.rewind()?;
         Ok(())
     }
 }
@@ -645,7 +645,7 @@ mod tests {
         assert_eq!(output, FAKE_FILE);
 
         // Seek and decrypt twice the same thing
-        let pos = encrypt_r.seek(SeekFrom::Current(0)).unwrap();
+        let pos = encrypt_r.stream_position().unwrap();
         // test the current position retrievial
         assert_eq!(pos, tag_position_to_no_tag_position(FAKE_FILE.len() as u64));
         // decrypt twice the same thing, with an offset
