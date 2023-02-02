@@ -63,7 +63,7 @@ pub fn multiple_layers_multiple_block_size(c: &mut Criterion) {
 
             let id = mla.start_file("file").unwrap();
             group.bench_with_input(
-                BenchmarkId::new(format!("Layers {:?}", layers), size),
+                BenchmarkId::new(format!("Layers {layers:?}"), size),
                 size,
                 |b, &_size| {
                     b.iter(|| mla.append_file_content(id, data.len() as u64, data.as_slice()));
@@ -105,7 +105,7 @@ pub fn multiple_compression_quality(c: &mut Criterion) {
 
         let id = mla.start_file("file").unwrap();
         group.bench_with_input(
-            BenchmarkId::new(format!("CompressionLevel {}", quality), size),
+            BenchmarkId::new(format!("CompressionLevel {quality}"), size),
             &size,
             |b, &_size| {
                 b.iter(|| mla.append_file_content(id, data.len() as u64, data.as_slice()));
@@ -179,7 +179,7 @@ pub fn multiple_layers_multiple_block_size_decompress(c: &mut Criterion) {
             Layers::COMPRESS | Layers::ENCRYPT,
         ] {
             group.bench_function(
-                BenchmarkId::new(format!("Layers {:?}", layers), size),
+                BenchmarkId::new(format!("Layers {layers:?}"), size),
                 move |b| b.iter_custom(|iters| iter_decompress(iters, *size as u64, *layers)),
             );
         }
@@ -210,7 +210,7 @@ fn build_archive<'a>(
             .sample_iter(&mut rng)
             .take(size as usize)
             .collect();
-        let id = mla.start_file(&format!("file_{}", i)).unwrap();
+        let id = mla.start_file(&format!("file_{i}")).unwrap();
         mla.append_file_content(id, data.len() as u64, data.as_slice())
             .unwrap();
         mla.end_file(id).unwrap();
@@ -238,7 +238,7 @@ fn iter_decompress_multifiles_random(iters: u64, size: u64, layers: Layers) -> D
     let start = Instant::now();
     for i in sample(&mut rng, iters as usize, iters as usize).iter() {
         let subfile = mla_read
-            .get_file(format!("file_{}", i).to_string())
+            .get_file(format!("file_{i}").to_string())
             .unwrap()
             .unwrap();
         let mut src = subfile.data;
@@ -267,7 +267,7 @@ pub fn multiple_layers_multiple_block_size_decompress_multifiles_random(c: &mut 
             Layers::COMPRESS | Layers::ENCRYPT,
         ] {
             group.bench_function(
-                BenchmarkId::new(format!("Layers {:?}", layers), size),
+                BenchmarkId::new(format!("Layers {layers:?}"), size),
                 move |b| {
                     b.iter_custom(|iters| {
                         iter_decompress_multifiles_random(iters, *size as u64, *layers)
@@ -319,7 +319,7 @@ pub fn linear_vs_normal_extract(c: &mut Criterion) {
             Layers::COMPRESS | Layers::ENCRYPT,
         ] {
             group.bench_function(
-                BenchmarkId::new(format!("NORMAL / Layers {:?}", layers), size),
+                BenchmarkId::new(format!("NORMAL / Layers {layers:?}"), size),
                 move |b| {
                     b.iter_custom(|iters| {
                         iter_decompress_multifiles_random(iters, *size as u64, *layers)
@@ -327,7 +327,7 @@ pub fn linear_vs_normal_extract(c: &mut Criterion) {
                 },
             );
             group.bench_function(
-                BenchmarkId::new(format!("LINEAR / Layers {:?}", layers), size),
+                BenchmarkId::new(format!("LINEAR / Layers {layers:?}"), size),
                 move |b| {
                     b.iter_custom(|iters| {
                         iter_decompress_multifiles_linear(iters, *size as u64, *layers)
