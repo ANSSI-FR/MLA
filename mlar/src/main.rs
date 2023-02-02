@@ -369,9 +369,7 @@ fn get_extracted_path(output_dir: &Path, file_name: &str) -> Option<PathBuf> {
             // security issues.  See, e.g.: CVE-2001-1267,
             // CVE-2002-0399, CVE-2005-1918, CVE-2007-4131
             Component::ParentDir => {
-                eprintln!(
-                    "[!] Skipping file \"{file_name}\" because it contains \"..\""
-                );
+                eprintln!("[!] Skipping file \"{file_name}\" because it contains \"..\"");
                 return None;
             }
 
@@ -595,15 +593,11 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
         // Look for the file in the archive
         let mut sub_file = match mla.get_file(fname.clone()) {
             Err(err) => {
-                eprintln!(
-                    " [!] Error while looking up subfile \"{fname}\" ({err:?})"
-                );
+                eprintln!(" [!] Error while looking up subfile \"{fname}\" ({err:?})");
                 continue;
             }
             Ok(None) => {
-                eprintln!(
-                    " [!] Subfile \"{fname}\" indexed in metadata could not be found"
-                );
+                eprintln!(" [!] Subfile \"{fname}\" indexed in metadata could not be found");
                 continue;
             }
             Ok(Some(subfile)) => subfile,
@@ -703,23 +697,17 @@ fn to_tar(matches: &ArgMatches) -> Result<(), MlarError> {
     for fname in archive_files {
         let sub_file = match mla.get_file(fname.clone()) {
             Err(err) => {
-                eprintln!(
-                    " [!] Error while looking up subfile \"{fname}\" ({err:?})"
-                );
+                eprintln!(" [!] Error while looking up subfile \"{fname}\" ({err:?})");
                 continue;
             }
             Ok(None) => {
-                eprintln!(
-                    " [!] Subfile \"{fname}\" indexed in metadata could not be found"
-                );
+                eprintln!(" [!] Subfile \"{fname}\" indexed in metadata could not be found");
                 continue;
             }
             Ok(Some(subfile)) => subfile,
         };
         if let Err(err) = add_file_to_tar(&mut tar_file, sub_file) {
-            eprintln!(
-                " [!] Unable to add subfile \"{fname}\" to tarball ({err:?})"
-            );
+            eprintln!(" [!] Unable to add subfile \"{fname}\" to tarball ({err:?})");
         }
     }
     Ok(())

@@ -212,20 +212,14 @@ mod tests {
         let mut buf = Vec::new();
         raw_r.read_to_end(&mut buf).unwrap();
         assert_eq!(buf.as_slice(), b"bcdef");
-        assert_eq!(
-            raw_r.stream_position().unwrap(),
-            data2.len() as u64
-        );
+        assert_eq!(raw_r.stream_position().unwrap(), data2.len() as u64);
 
         assert_eq!(raw_r.rewind().unwrap(), 0);
         assert_eq!(raw_r.seek(SeekFrom::Start(3)).unwrap(), 3);
         let mut buf = Vec::new();
         raw_r.read_to_end(&mut buf).unwrap();
         assert_eq!(buf.as_slice(), b"def");
-        assert_eq!(
-            raw_r.stream_position().unwrap(),
-            data2.len() as u64
-        );
+        assert_eq!(raw_r.stream_position().unwrap(), data2.len() as u64);
 
         assert_eq!(raw_r.seek(SeekFrom::End(0)).unwrap(), data2.len() as u64);
         assert_eq!(raw_r.seek(SeekFrom::End(-6)).unwrap(), 0);
@@ -234,10 +228,7 @@ mod tests {
         let mut buf = Vec::new();
         raw_r.read_to_end(&mut buf).unwrap();
         assert_eq!(buf.as_slice(), b"cdef");
-        assert_eq!(
-            raw_r.stream_position().unwrap(),
-            data2.len() as u64
-        );
+        assert_eq!(raw_r.stream_position().unwrap(), data2.len() as u64);
     }
 
     #[test]
