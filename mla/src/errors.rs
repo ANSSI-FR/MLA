@@ -62,7 +62,7 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // For now, use the debug derived version
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -92,7 +92,7 @@ impl From<bincode::ErrorKind> for Error {
 
 impl From<Error> for io::Error {
     fn from(error: Error) -> Self {
-        io::Error::new(io::ErrorKind::Other, format!("{}", error))
+        io::Error::new(io::ErrorKind::Other, format!("{error}"))
     }
 }
 
@@ -165,7 +165,7 @@ pub enum FailSafeReadError {
 impl fmt::Display for FailSafeReadError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // For now, use the debug derived version
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -195,7 +195,7 @@ pub enum ConfigError {
 impl fmt::Display for ConfigError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // For now, use the debug derived version
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
