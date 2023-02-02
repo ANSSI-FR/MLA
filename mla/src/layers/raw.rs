@@ -65,7 +65,7 @@ impl<R: Read + Seek> RawLayerReader<R> {
 
     /// Mark the current position as the position 0
     pub fn reset_position(&mut self) -> io::Result<()> {
-        self.offset_pos = self.inner.seek(SeekFrom::Current(0))?;
+        self.offset_pos = self.inner.stream_position()?;
         Ok(())
     }
 }
@@ -206,24 +206,24 @@ mod tests {
 
         // Start playing with relative seek
         raw_r.reset_position().unwrap();
-        assert_eq!(raw_r.seek(SeekFrom::Current(0)).unwrap(), 0);
+        assert_eq!(raw_r.stream_position().unwrap(), 0);
         assert_eq!(raw_r.seek(SeekFrom::Current(-1)).unwrap(), 0);
         assert_eq!(raw_r.seek(SeekFrom::Current(1)).unwrap(), 1);
         let mut buf = Vec::new();
         raw_r.read_to_end(&mut buf).unwrap();
         assert_eq!(buf.as_slice(), b"bcdef");
         assert_eq!(
-            raw_r.seek(SeekFrom::Current(0)).unwrap(),
+            raw_r.stream_position().unwrap(),
             data2.len() as u64
         );
 
-        assert_eq!(raw_r.seek(SeekFrom::Start(0)).unwrap(), 0);
+        assert_eq!(raw_r.rewind().unwrap(), 0);
         assert_eq!(raw_r.seek(SeekFrom::Start(3)).unwrap(), 3);
         let mut buf = Vec::new();
         raw_r.read_to_end(&mut buf).unwrap();
         assert_eq!(buf.as_slice(), b"def");
         assert_eq!(
-            raw_r.seek(SeekFrom::Current(0)).unwrap(),
+            raw_r.stream_position().unwrap(),
             data2.len() as u64
         );
 
@@ -235,7 +235,7 @@ mod tests {
         raw_r.read_to_end(&mut buf).unwrap();
         assert_eq!(buf.as_slice(), b"cdef");
         assert_eq!(
-            raw_r.seek(SeekFrom::Current(0)).unwrap(),
+            raw_r.stream_position().unwrap(),
             data2.len() as u64
         );
     }
