@@ -214,7 +214,7 @@ mod tests {
         assert_eq!(buf.as_slice(), b"bcdef");
         assert_eq!(raw_r.stream_position().unwrap(), data2.len() as u64);
 
-        assert_eq!(raw_r.rewind().unwrap(), 0);
+        raw_r.rewind().unwrap();
         assert_eq!(raw_r.seek(SeekFrom::Start(3)).unwrap(), 3);
         let mut buf = Vec::new();
         raw_r.read_to_end(&mut buf).unwrap();
