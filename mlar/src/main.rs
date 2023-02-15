@@ -22,7 +22,7 @@ use std::error;
 use std::fmt;
 use std::fs::{self, read_dir, File};
 use std::io::{self, BufRead};
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{Read, Seek, Write};
 use std::path::{Component, Path, PathBuf};
 use tar::{Builder, Header};
 
@@ -43,7 +43,7 @@ pub enum MlarError {
 impl fmt::Display for MlarError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // For now, use the debug derived version
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -255,7 +255,7 @@ fn open_mla_file<'a>(matches: &ArgMatches) -> Result<ArchiveReader<'a, File>, Ml
 
     // If a decryption key is provided, assume the user expects the file to be encrypted
     // If not, avoid opening it
-    file.seek(SeekFrom::Start(0))?;
+    file.rewind()?;
     let header = ArchiveHeader::from(&mut file)?;
     if config.layers_enabled.contains(Layers::ENCRYPT)
         && !header.config.layers_enabled.contains(Layers::ENCRYPT)
@@ -263,7 +263,7 @@ fn open_mla_file<'a>(matches: &ArgMatches) -> Result<ArchiveReader<'a, File>, Ml
         eprintln!("[-] A private key has been provided, but the archive is not encrypted");
         return Err(MlarError::PrivateKeyProvidedButNotUsed);
     }
-    file.seek(SeekFrom::Start(0))?;
+    file.rewind()?;
 
     // Instantiate reader
     Ok(ArchiveReader::from_config(file, config)?)
@@ -328,7 +328,7 @@ impl ExtractFileNameMatcher {
                     .map(|pat| {
                         Pattern::new(pat)
                             .map_err(|err| {
-                                eprintln!("[!] Invalid glob pattern {:?} ({:?})", pat, err);
+                                eprintln!("[!] Invalid glob pattern {pat:?} ({err:?})");
                             })
                             .expect("Invalid glob pattern")
                     })
@@ -369,10 +369,7 @@ fn get_extracted_path(output_dir: &Path, file_name: &str) -> Option<PathBuf> {
             // security issues.  See, e.g.: CVE-2001-1267,
             // CVE-2002-0399, CVE-2005-1918, CVE-2007-4131
             Component::ParentDir => {
-                eprintln!(
-                    "[!] Skipping file \"{}\" because it contains \"..\"",
-                    file_name
-                );
+                eprintln!("[!] Skipping file \"{file_name}\" because it contains \"..\"");
                 return None;
             }
 
@@ -432,7 +429,7 @@ fn create_file<P1: AsRef<Path>>(
     }
     Ok(Some((
         File::create(&extracted_path).map_err(|err| {
-            eprintln!(" [!] Unable to create \"{}\" ({:?})", fname, err);
+            eprintln!(" [!] Unable to create \"{fname}\" ({err:?})");
             err
         })?,
         extracted_path,
@@ -474,7 +471,7 @@ fn add_file_or_dir(mla: &mut ArchiveWriter<OutputTypes>, path: &Path) -> Result<
         let filename = path.to_string_lossy();
         let file = File::open(path)?;
         let length = file.metadata()?.len();
-        eprintln!("{}", filename);
+        eprintln!("{filename}");
         mla.add_file(&filename, length, file)?;
     }
     Ok(())
@@ -524,13 +521,13 @@ fn list(matches: &ArgMatches) -> Result<(), MlarError> {
     iter.sort();
     for fname in iter {
         if matches.get_count("verbose") == 0 {
-            println!("{}", fname);
+            println!("{fname}");
         } else {
             let mla_file = mla.get_file(fname)?.expect("Unable to get the file");
             let filename = mla_file.filename;
             let size = mla_file.size.format_size(DECIMAL);
             if matches.get_count("verbose") == 1 {
-                println!("{} - {}", filename, size);
+                println!("{filename} - {size}");
             } else if matches.get_count("verbose") >= 2 {
                 let hash = mla.get_hash(&filename)?.expect("Unable to get the hash");
                 println!("{} - {} ({})", filename, size, hex::encode(hash),);
@@ -596,17 +593,11 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
         // Look for the file in the archive
         let mut sub_file = match mla.get_file(fname.clone()) {
             Err(err) => {
-                eprintln!(
-                    " [!] Error while looking up subfile \"{}\" ({:?})",
-                    fname, err
-                );
+                eprintln!(" [!] Error while looking up subfile \"{fname}\" ({err:?})");
                 continue;
             }
             Ok(None) => {
-                eprintln!(
-                    " [!] Subfile \"{}\" indexed in metadata could not be found",
-                    fname
-                );
+                eprintln!(" [!] Subfile \"{fname}\" indexed in metadata could not be found");
                 continue;
             }
             Ok(Some(subfile)) => subfile,
@@ -617,10 +608,10 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
         };
 
         if verbose {
-            println!("{}", fname);
+            println!("{fname}");
         }
         io::copy(&mut sub_file.data, &mut extracted_file).map_err(|err| {
-            eprintln!(" [!] Unable to extract \"{}\" ({:?})", fname, err);
+            eprintln!(" [!] Unable to extract \"{fname}\" ({err:?})");
             err
         })?;
     }
@@ -641,7 +632,7 @@ fn cat(matches: &ArgMatches) -> Result<(), MlarError> {
             let pat = match Pattern::new(arg_pattern) {
                 Ok(pat) => pat,
                 Err(err) => {
-                    eprintln!(" [!] Invalid glob pattern {:?} ({:?})", arg_pattern, err);
+                    eprintln!(" [!] Invalid glob pattern {arg_pattern:?} ({err:?})");
                     continue;
                 }
             };
@@ -651,19 +642,18 @@ fn cat(matches: &ArgMatches) -> Result<(), MlarError> {
                 }
                 match mla.get_file(fname.to_string()) {
                     Err(err) => {
-                        eprintln!(" [!] Error while looking up file \"{}\" ({:?})", fname, err);
+                        eprintln!(" [!] Error while looking up file \"{fname}\" ({err:?})");
                         continue;
                     }
                     Ok(None) => {
                         eprintln!(
-                            " [!] Subfile \"{}\" indexed in metadata could not be found",
-                            fname
+                            " [!] Subfile \"{fname}\" indexed in metadata could not be found"
                         );
                         continue;
                     }
                     Ok(Some(mut subfile)) => {
                         io::copy(&mut subfile.data, &mut destination).map_err(|err| {
-                            eprintln!(" [!] Unable to extract \"{}\" ({:?})", fname, err);
+                            eprintln!(" [!] Unable to extract \"{fname}\" ({err:?})");
                             err
                         })?;
                     }
@@ -675,16 +665,16 @@ fn cat(matches: &ArgMatches) -> Result<(), MlarError> {
         for fname in files_values {
             match mla.get_file(fname.to_string()) {
                 Err(err) => {
-                    eprintln!(" [!] Error while looking up file \"{}\" ({:?})", fname, err);
+                    eprintln!(" [!] Error while looking up file \"{fname}\" ({err:?})");
                     continue;
                 }
                 Ok(None) => {
-                    eprintln!(" [!] File not found: \"{}\"", fname);
+                    eprintln!(" [!] File not found: \"{fname}\"");
                     continue;
                 }
                 Ok(Some(mut subfile)) => {
                     io::copy(&mut subfile.data, &mut destination).map_err(|err| {
-                        eprintln!(" [!] Unable to extract \"{}\" ({:?})", fname, err);
+                        eprintln!(" [!] Unable to extract \"{fname}\" ({err:?})");
                         err
                     })?;
                 }
@@ -707,26 +697,17 @@ fn to_tar(matches: &ArgMatches) -> Result<(), MlarError> {
     for fname in archive_files {
         let sub_file = match mla.get_file(fname.clone()) {
             Err(err) => {
-                eprintln!(
-                    " [!] Error while looking up subfile \"{}\" ({:?})",
-                    fname, err
-                );
+                eprintln!(" [!] Error while looking up subfile \"{fname}\" ({err:?})");
                 continue;
             }
             Ok(None) => {
-                eprintln!(
-                    " [!] Subfile \"{}\" indexed in metadata could not be found",
-                    fname
-                );
+                eprintln!(" [!] Subfile \"{fname}\" indexed in metadata could not be found");
                 continue;
             }
             Ok(Some(subfile)) => subfile,
         };
         if let Err(err) = add_file_to_tar(&mut tar_file, sub_file) {
-            eprintln!(
-                " [!] Unable to add subfile \"{}\" to tarball ({:?})",
-                fname, err
-            );
+            eprintln!(" [!] Unable to add subfile \"{fname}\" to tarball ({err:?})");
         }
     }
     Ok(())
@@ -744,7 +725,7 @@ fn repair(matches: &ArgMatches) -> Result<(), MlarError> {
             eprintln!("[WARNING] The whole archive has been recovered");
         }
         _ => {
-            eprintln!("[WARNING] Conversion ends with {}", status);
+            eprintln!("[WARNING] Conversion ends with {status}");
         }
     };
     Ok(())
@@ -764,14 +745,14 @@ fn convert(matches: &ArgMatches) -> Result<(), MlarError> {
 
     // Convert
     for fname in fnames {
-        eprintln!("{}", fname);
+        eprintln!("{fname}");
         let sub_file = match mla.get_file(fname.clone()) {
             Err(err) => {
-                eprintln!("Error while adding {} ({:?})", fname, err);
+                eprintln!("Error while adding {fname} ({err:?})");
                 continue;
             }
             Ok(None) => {
-                eprintln!("Unable to found {}", fname);
+                eprintln!("Unable to found {fname}");
                 continue;
             }
             Ok(Some(mla)) => mla,
@@ -828,7 +809,7 @@ impl ArchiveInfoReader {
         R: 'a + Read + Seek,
     {
         // Make sure we read the archive header from the start
-        src.seek(SeekFrom::Start(0))?;
+        src.rewind()?;
         let header = ArchiveHeader::from(&mut src)?;
         config.load_persistent(header.config)?;
 
@@ -857,7 +838,7 @@ impl ArchiveInfoReader {
 
         let metadata = Some(ArchiveFooter::deserialize_from(&mut src)?);
 
-        src.seek(SeekFrom::Start(0))?;
+        src.rewind()?;
         Ok(ArchiveInfoReader {
             config,
             compressed_size,
@@ -898,7 +879,7 @@ fn info(matches: &ArgMatches) -> Result<(), MlarError> {
     println!("Format version: {}", header.format_version);
 
     // Encryption config
-    println!("Encryption: {}", encryption);
+    println!("Encryption: {encryption}");
     if encryption && matches.get_flag("verbose") {
         let encrypt_config = header.config.encrypt.expect("Encryption config not found");
         println!(
@@ -908,13 +889,13 @@ fn info(matches: &ArgMatches) -> Result<(), MlarError> {
     }
 
     // Compression config
-    println!("Compression: {}", compression);
+    println!("Compression: {compression}");
     if compression && matches.get_flag("verbose") {
         let mla_ = mla.expect("MLA is required for verbose compression info");
         let output_size = mla_.get_files_size()?;
         let compressed_size: u64 = mla_.compressed_size.expect("Missing compression size");
         let compression_rate = output_size as f64 / compressed_size as f64;
-        println!("  Compression rate: {:.2}", compression_rate);
+        println!("  Compression rate: {compression_rate:.2}");
     }
 
     Ok(())
@@ -1134,7 +1115,7 @@ fn main() {
     };
 
     if let Err(err) = res {
-        eprintln!("[!] Command ended with error: {:?}", err);
+        eprintln!("[!] Command ended with error: {err:?}");
         std::process::exit(1);
     }
 }

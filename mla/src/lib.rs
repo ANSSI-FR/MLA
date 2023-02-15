@@ -864,7 +864,7 @@ pub struct ArchiveReader<'a, R: 'a + Read + Seek> {
 impl<'b, R: 'b + Read + Seek> ArchiveReader<'b, R> {
     pub fn from_config(mut src: R, mut config: ArchiveReaderConfig) -> Result<Self, Error> {
         // Make sure we read the archive header from the start
-        src.seek(SeekFrom::Start(0))?;
+        src.rewind()?;
         let header = ArchiveHeader::from(&mut src)?;
         config.load_persistent(header.config)?;
 
@@ -886,7 +886,7 @@ impl<'b, R: 'b + Read + Seek> ArchiveReader<'b, R> {
         let metadata = Some(ArchiveFooter::deserialize_from(&mut src)?);
 
         // Reset the position for further uses
-        src.seek(SeekFrom::Start(0))?;
+        src.rewind()?;
 
         Ok(ArchiveReader {
             config,

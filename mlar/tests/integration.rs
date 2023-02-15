@@ -145,7 +145,7 @@ fn test_help() {
     cmd.arg("--help");
 
     // Ensure the basic help display is working
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     assert.success();
 }
@@ -181,7 +181,7 @@ fn test_create_from_dir() {
     // result of `read_dir` which is plateform and filesystem dependent.
     file_list_append_from_dir(tmp_dir.path(), &mut file_list);
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     assert.success().stderr(file_list.join("\n") + "\n");
 
@@ -193,7 +193,7 @@ fn test_create_from_dir() {
         .arg("-k")
         .arg(ecc_private);
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     file_list.sort();
     assert.success().stdout(file_list.join("\n") + "\n");
@@ -217,14 +217,14 @@ fn test_create_filelist_stdin() {
         .arg(ecc_public);
 
     cmd.arg("-");
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
 
     let mut file_list = String::new();
     for file in &testfs.files {
         file_list.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
     }
     cmd.write_stdin(String::from(&file_list));
-    println!("{:?}", file_list);
+    println!("{file_list:?}");
     let assert = cmd.assert();
     assert.success().stderr(String::from(&file_list));
 
@@ -236,7 +236,7 @@ fn test_create_filelist_stdin() {
         .arg("-k")
         .arg(ecc_private);
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     assert.success().stdout(file_list);
 }
@@ -265,7 +265,7 @@ fn test_create_list_tar() {
         file_list.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
     }
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     assert.success().stderr(String::from(&file_list));
 
@@ -277,7 +277,7 @@ fn test_create_list_tar() {
         .arg("-k")
         .arg(ecc_private);
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     assert.success().stdout(file_list);
 
@@ -291,7 +291,7 @@ fn test_create_list_tar() {
         .arg("-o")
         .arg(tar_file.path());
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     assert.success();
 
@@ -330,7 +330,7 @@ fn test_truncated_repair_list_tar() {
         file_list.push_str(format!("{}\n", path.to_string_lossy()).as_str());
     }
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     assert.success().stderr(String::from(&file_list));
 
@@ -357,7 +357,7 @@ fn test_truncated_repair_list_tar() {
         .arg("-o")
         .arg(mlar_repaired_file.path());
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     assert.success();
 
@@ -369,7 +369,7 @@ fn test_truncated_repair_list_tar() {
         .arg("-k")
         .arg(ecc_private);
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     // Do not consider the last file for test after trunc, as we truncate at
     // 6 / 7 (last file being really small)
@@ -385,7 +385,7 @@ fn test_truncated_repair_list_tar() {
         .arg("-o")
         .arg(tar_file.path());
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     assert.success();
 
@@ -459,7 +459,7 @@ fn test_multiple_keys() {
         file_list.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
     }
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     assert.success().stderr(String::from(&file_list));
 
@@ -478,7 +478,7 @@ fn test_multiple_keys() {
         .arg("-k")
         .arg(ecc_privates[1]);
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     assert.success().stdout(String::from(&file_list));
 
@@ -490,7 +490,7 @@ fn test_multiple_keys() {
         .arg("-k")
         .arg(Path::new("../samples/test_x25519_3.pem"));
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     assert.success().stdout(String::from(&file_list));
 
@@ -502,7 +502,7 @@ fn test_multiple_keys() {
         .arg("-k")
         .arg(ecc_privates[1]);
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     assert.failure();
 }
@@ -534,7 +534,7 @@ fn test_multiple_compression_level() {
             file_list.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
         }
 
-        println!("{:?}", cmd);
+        println!("{cmd:?}");
         let assert = cmd.assert();
         assert.success().stderr(String::from(&file_list));
     }
@@ -554,7 +554,7 @@ fn test_multiple_compression_level() {
             .arg("-o")
             .arg(tar_name.path());
 
-        println!("{:?}", cmd);
+        println!("{cmd:?}");
         let assert = cmd.assert();
         assert.success();
     }
@@ -591,7 +591,7 @@ fn test_convert() {
         file_list.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
     }
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     assert.success().stderr(String::from(&file_list));
 
@@ -609,7 +609,7 @@ fn test_convert() {
         .arg("-p")
         .arg(ecc_public2);
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     assert.success().stderr(String::from(&file_list));
 
@@ -628,7 +628,7 @@ fn test_convert() {
         .arg("-o")
         .arg(tar_file.path());
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     assert.success();
 
@@ -661,7 +661,7 @@ fn test_stdio() {
         file_list.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
     }
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     let archive_data = assert.get_output().stdout.clone();
     assert.success().stderr(String::from(&file_list));
@@ -680,7 +680,7 @@ fn test_stdio() {
         .arg("-o")
         .arg(tar_file.path());
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     assert.success();
 
@@ -727,7 +727,7 @@ fn test_multi_fileorders() {
             file_list.push_str(format!("{}\n", file.to_string_lossy()).as_str());
         }
 
-        println!("{:?}", cmd);
+        println!("{cmd:?}");
         let assert = cmd.assert();
         assert.success().stderr(String::from(&file_list));
 
@@ -741,7 +741,7 @@ fn test_multi_fileorders() {
             .arg("-o")
             .arg(tar_file.path());
 
-        println!("{:?}", cmd);
+        println!("{cmd:?}");
         let assert = cmd.assert();
         assert.success();
 
@@ -765,7 +765,7 @@ fn test_verbose_listing() {
         file_list.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
     }
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     assert.success().stderr(String::from(&file_list));
 
@@ -773,7 +773,7 @@ fn test_verbose_listing() {
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list").arg("-i").arg(mlar_file.path());
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     assert.success().stdout(file_list);
 
@@ -781,7 +781,7 @@ fn test_verbose_listing() {
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list").arg("-v").arg("-i").arg(mlar_file.path());
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     assert.success();
 
@@ -789,7 +789,7 @@ fn test_verbose_listing() {
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list").arg("-vv").arg("-i").arg(mlar_file.path());
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     assert.success();
 }
@@ -809,7 +809,7 @@ fn test_extract() {
         file_list.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
     }
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     assert.success().stderr(String::from(&file_list));
 
@@ -832,7 +832,7 @@ fn test_extract() {
         .arg("-g")
         .arg("*");
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     assert.success().stdout(file_list);
 
@@ -850,7 +850,7 @@ fn test_extract() {
         .arg("-o")
         .arg(output_dir.path());
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     assert
         .success()
@@ -884,7 +884,7 @@ fn test_extract() {
         .arg(output_dir.path())
         .arg(one_filename);
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     assert
         .success()
@@ -905,7 +905,7 @@ fn test_extract() {
         .arg("-g")
         .arg("*file1*");
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     assert
         .success()
@@ -929,7 +929,7 @@ fn test_cat() {
         file_list.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
     }
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     assert.success().stderr(String::from(&file_list));
 
@@ -940,7 +940,7 @@ fn test_cat() {
         .arg(mlar_file.path())
         .arg(&testfs.files_archive_order[2]);
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
 
     let mut expected_content = Vec::new();
@@ -978,7 +978,7 @@ fn test_keygen() {
         file_list.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
     }
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     assert.success().stderr(String::from(&file_list));
 
@@ -990,7 +990,7 @@ fn test_keygen() {
         .arg("-i")
         .arg(mlar_file.path());
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     assert.success().stdout(file_list);
 }
@@ -1018,7 +1018,7 @@ fn test_verbose_info() {
         file_list.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
     }
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     assert.success().stderr(String::from(&file_list));
 
@@ -1030,7 +1030,7 @@ fn test_verbose_info() {
         .arg("-i")
         .arg(mlar_file.path());
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     assert.success().stdout(
         "Format version: 1
@@ -1048,7 +1048,7 @@ Compression: true
         .arg("-i")
         .arg(mlar_file.path());
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     assert.success();
 }
@@ -1076,7 +1076,7 @@ fn test_no_open_on_encrypt() {
         file_list.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
     }
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     assert.success().stderr(String::from(&file_list));
 
@@ -1091,7 +1091,7 @@ fn test_no_open_on_encrypt() {
         .arg("-k")
         .arg(ecc_private);
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     assert.failure();
 }
