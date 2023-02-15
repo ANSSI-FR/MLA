@@ -56,7 +56,7 @@ impl From<nom::Err<der_parser::error::BerError>> for Curve25519ParserError {
 impl fmt::Display for Curve25519ParserError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // For now, use the debug derived version
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 

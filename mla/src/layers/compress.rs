@@ -149,7 +149,7 @@ impl<R: Read> CompressionLayerReaderState<R> {
 
 impl<'a, R: 'a + Read> CompressionLayerReader<'a, R> {
     pub fn new(mut inner: Box<dyn 'a + LayerReader<'a, R>>) -> Result<Self, Error> {
-        let underlayer_pos = inner.seek(SeekFrom::Current(0))?;
+        let underlayer_pos = inner.stream_position()?;
         Ok(Self {
             state: CompressionLayerReaderState::Ready(inner),
             sizes_info: None,
