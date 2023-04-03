@@ -36,7 +36,7 @@ brotli-decompressor = { version = "=2.3.3" }
 
 
 [dev-dependencies]
-hex-literal = { version = "0.3", default-features = false}
+hex-literal = { version = "0.4", default-features = false}
 aes-gcm = { version = "0.10", default-features = false, features = ["aes"]}
 aead = { version = "0.5", default-features = false, features = ["alloc"]}
 criterion = { version = "0.4", default-features = false}
