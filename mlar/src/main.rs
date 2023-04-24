@@ -17,6 +17,7 @@ use mla::{
 };
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
+use sha2::{Digest, Sha512};
 use std::collections::{HashMap, HashSet};
 use std::error;
 use std::fmt;
@@ -773,7 +774,22 @@ fn keygen(matches: &ArgMatches) -> Result<(), MlarError> {
         .expect("Unable to create the public file");
     let mut output_priv = File::create(output_base).expect("Unable to create the private file");
 
-    let mut csprng = ChaChaRng::from_entropy();
+    // handle seed
+    //
+    // if set, seed the PRNG with `SHA512(seed bytes as UTF8)[0..32]`
+    // if not, seed the PRNG with the dedicated API
+    let mut csprng = match matches.get_one::<String>("seed") {
+        Some(seed) => {
+            eprintln!(
+                "[WARNING] A seed-based keygen operation is deterministic. An attacker knowing the seed knows the private key and is able to decrypt associated messages"
+            );
+            let mut hseed = [0u8; 32];
+            hseed.copy_from_slice(&Sha512::digest(seed.as_bytes())[0..32]);
+            ChaChaRng::from_seed(hseed)
+        }
+        None => ChaChaRng::from_entropy(),
+    };
+
     let key_pair = generate_keypair(&mut csprng).expect("Error while generating the key-pair");
 
     // Output the public key in PEM format, to ease integration in text based
@@ -1068,6 +1084,14 @@ fn app() -> clap::Command {
                         .num_args(1)
                         .value_parser(value_parser!(PathBuf))
                         .required(true)
+                )
+                .arg(
+                    Arg::new("seed")
+                        .help("Initial seed for deterministic key generation. THE SEED IS AS SECRET AS THE RESULTING PRIVATE KEY. USE THIS OPTION ONLY IF NECESSARY")
+                        .long("seed")
+                        .short('s')
+                        .num_args(1)
+                        .value_parser(value_parser!(String))
                 )
         )
         .subcommand(
