@@ -487,3 +487,20 @@ By default, `MLAArchiveWriter` is not `Send`. If the inner writable type is also
 [dependencies]
 mla = { version = "...", default-features = false, features = ["send"]}
 ```
+
+**How to deterministically generate a key-pair?**
+
+The option `--seed` of `mlar keygen` can be used to deterministically generate a key-pair. For instance, it can be used for reproductive testing or archiving a key in a safe.
+
+:warning: It is not recommended to use a `seed` unless one knows why she is doing it.
+The security of the resulting private-key is dependent of the security of the seed. In particular:
+
+- if an attacker known the `seed`, he knowns the private-key
+- the entropy of the resulting private-key is at most the one of the `seed`
+
+The algorithm used for the generation is as follow:
+
+1. given a `seed`, encode it as an UTF8 sequence of bytes `bytes`
+1. `prng_seed = SHA512(bytes)[0..32]`
+1. `secret = ChaCha-20rounds(prng_seed)`
+1. `secret`, after being clamped as specified by the Curve-25519 reference, is used as the private key
