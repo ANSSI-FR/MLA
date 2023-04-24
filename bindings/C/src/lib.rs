@@ -310,6 +310,7 @@ pub extern "C" fn mla_reader_config_add_private_key(
 /// through the write_callback, and flushed at least at the end when the last byte is
 /// written. The context pointer can be used to hold any information, and is passed
 /// as an argument when any of the two callbacks are called.
+#[allow(clippy::fn_null_check)]
 #[no_mangle]
 pub extern "C" fn mla_archive_new(
     config: *mut MLAConfigHandle,
@@ -536,6 +537,7 @@ impl Seek for CallbackInputRead {
 /// read_callback and seek_callback are used to read the archive data
 /// file_callback is used to convert each archive file's name to pathes where extract the data
 /// The caller is responsible of all security checks related to callback provided paths
+#[allow(clippy::fn_null_check)]
 #[no_mangle]
 pub extern "C" fn mla_roarchive_extract(
     config: *mut MLAConfigHandle,
@@ -624,6 +626,7 @@ pub struct ArchiveInfo {
 }
 
 /// Get info on an existing MLA archive
+#[allow(clippy::fn_null_check)]
 #[no_mangle]
 pub extern "C" fn mla_roarchive_info(
     read_callback: MlaReadCallback,
