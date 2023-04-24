@@ -232,10 +232,10 @@ const PRIVATE_TAG: &[u8] = b"PRIVATE KEY";
 pub fn parse_openssl_25519_pubkey(data: &[u8]) -> Result<PublicKey, Curve25519ParserError> {
     if let Ok(pem_data) = pem::parse(data) {
         // First, try as a PEM
-        if pem_data.tag.as_bytes() != PUBLIC_TAG {
+        if pem_data.tag().as_bytes() != PUBLIC_TAG {
             return Err(Curve25519ParserError::InvalidPEMTag);
         }
-        parse_openssl_25519_pubkey_der(&pem_data.contents)
+        parse_openssl_25519_pubkey_der(pem_data.contents())
     } else {
         // Fallback to DER format
         parse_openssl_25519_pubkey_der(data)
@@ -246,10 +246,10 @@ pub fn parse_openssl_25519_pubkey(data: &[u8]) -> Result<PublicKey, Curve25519Pa
 pub fn parse_openssl_25519_privkey(data: &[u8]) -> Result<StaticSecret, Curve25519ParserError> {
     if let Ok(pem_data) = pem::parse(data) {
         // First, try as a PEM
-        if pem_data.tag.as_bytes() != PRIVATE_TAG {
+        if pem_data.tag().as_bytes() != PRIVATE_TAG {
             return Err(Curve25519ParserError::InvalidPEMTag);
         }
-        parse_openssl_25519_privkey_der(&pem_data.contents)
+        parse_openssl_25519_privkey_der(pem_data.contents())
     } else {
         // Fallback to DER format
         parse_openssl_25519_privkey_der(data)
@@ -262,10 +262,10 @@ pub fn parse_openssl_25519_pubkeys_pem_many(
 ) -> Result<Vec<PublicKey>, Curve25519ParserError> {
     let mut output = Vec::new();
     for pem_data in pem::parse_many(data)? {
-        if pem_data.tag.as_bytes() != PUBLIC_TAG {
+        if pem_data.tag().as_bytes() != PUBLIC_TAG {
             return Err(Curve25519ParserError::InvalidPEMTag);
         }
-        output.push(parse_openssl_25519_pubkey_der(&pem_data.contents)?);
+        output.push(parse_openssl_25519_pubkey_der(pem_data.contents())?);
     }
     Ok(output)
 }
@@ -287,18 +287,12 @@ pub struct KeyPair {
 
 impl KeyPair {
     pub fn public_as_pem(&self) -> String {
-        let out = pem::Pem {
-            tag: PUB_KEY_TAG.to_string(),
-            contents: self.public_der.to_vec(),
-        };
+        let out = pem::Pem::new(PUB_KEY_TAG, self.public_der.to_vec());
         pem::encode(&out)
     }
 
     pub fn private_as_pem(&self) -> String {
-        let out = pem::Pem {
-            tag: PRIV_KEY_TAG.to_string(),
-            contents: self.private_der.to_vec(),
-        };
+        let out = pem::Pem::new(PRIV_KEY_TAG, self.private_der.to_vec());
         pem::encode(&out)
     }
 }
