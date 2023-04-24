@@ -995,6 +995,51 @@ fn test_keygen() {
     assert.success().stdout(file_list);
 }
 
+const PRIVATE_KEY_TESTSEED: [u8; 48] = [
+    48, 46, 2, 1, 0, 48, 5, 6, 3, 43, 101, 110, 4, 34, 4, 32, 94, 121, 194, 104, 155, 90, 60, 64,
+    82, 240, 66, 106, 58, 170, 219, 60, 118, 22, 29, 161, 99, 243, 195, 174, 36, 134, 238, 189,
+    226, 45, 50, 34,
+];
+
+const PRIVATE_KEY_TESTSEED2: [u8; 48] = [
+    48, 46, 2, 1, 0, 48, 5, 6, 3, 43, 101, 110, 4, 34, 4, 32, 149, 139, 7, 71, 128, 28, 248, 2,
+    227, 242, 22, 225, 219, 80, 100, 43, 179, 186, 25, 174, 243, 30, 246, 96, 133, 12, 240, 86, 17,
+    254, 140, 0,
+];
+
+#[test]
+fn test_keygen_seed() {
+    // Gen deterministic keypairs
+    let output_dir = TempDir::new().unwrap();
+    let base_name = output_dir.path().join("key");
+
+    // `mlar keygen tempdir/key -s TESTSEED`
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("keygen").arg(&base_name).arg("-s").arg("TESTSEED");
+    cmd.assert().success();
+
+    let mut pkey_testseed = vec![];
+    File::open(&base_name)
+        .unwrap()
+        .read_to_end(&mut pkey_testseed)
+        .unwrap();
+    assert_eq!(pkey_testseed, PRIVATE_KEY_TESTSEED);
+
+    // `mlar keygen tempdir/key -s TESTSEED2`
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("keygen").arg(&base_name).arg("-s").arg("TESTSEED2");
+    cmd.assert().success();
+
+    let mut pkey_testseed = vec![];
+    File::open(&base_name)
+        .unwrap()
+        .read_to_end(&mut pkey_testseed)
+        .unwrap();
+    assert_eq!(pkey_testseed, PRIVATE_KEY_TESTSEED2);
+
+    assert_ne!(PRIVATE_KEY_TESTSEED, PRIVATE_KEY_TESTSEED2);
+}
+
 #[test]
 fn test_verbose_info() {
     let ecc_public = Path::new("../samples/test_x25519_pub.pem");
