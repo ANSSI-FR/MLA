@@ -5,7 +5,7 @@ use rand::distributions::{Alphanumeric, Distribution, Standard};
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use std::collections::{HashMap, HashSet};
-use std::fs::{metadata, read_dir, File};
+use std::fs::{self, metadata, read_dir, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use tar::Archive;
@@ -1038,6 +1038,114 @@ fn test_keygen_seed() {
     assert_eq!(pkey_testseed, PRIVATE_KEY_TESTSEED2);
 
     assert_ne!(PRIVATE_KEY_TESTSEED, PRIVATE_KEY_TESTSEED2);
+}
+
+#[test]
+fn test_keyderive() {
+    /*
+    key_parent
+    ├──["Child 1"]── key_child1
+    │   └──["Child 1"]── key_child1_child1
+    └──["Child 2"]── key_child2
+     */
+    let output_dir = TempDir::new().unwrap();
+    let key_parent = output_dir.path().join("key_parent");
+    let key_child1 = output_dir.path().join("key_child1");
+    let key_child2 = output_dir.path().join("key_child2");
+    let key_child1_child1 = output_dir.path().join("key_child1_child1");
+
+    //---------------- SETUP: Create and fill `keys` --------------
+    struct Keys {
+        parent: Vec<u8>,
+        child1: Vec<u8>,
+        child2: Vec<u8>,
+        child1child1: Vec<u8>,
+    }
+    let mut keys = Keys {
+        parent: vec![],
+        child1: vec![],
+        child2: vec![],
+        child1child1: vec![],
+    };
+
+    // `mlar keygen tempdir/key_parent`
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("keygen").arg(&key_parent);
+    cmd.assert().success();
+
+    keys.parent = fs::read(&key_parent).unwrap();
+
+    // `mlar keyderive tempdir/key_parent tempdir/key_child1 --path "Child 1"`
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("keyderive")
+        .arg(&key_parent)
+        .arg(&key_child1)
+        .arg("-p")
+        .arg("Child 1");
+    cmd.assert().success();
+
+    keys.child1 = fs::read(&key_child1).unwrap();
+
+    // `mlar keyderive tempdir/key_parent tempdir/key_child2 --path "Child 2"`
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("keyderive")
+        .arg(&key_parent)
+        .arg(&key_child2)
+        .arg("-p")
+        .arg("Child 2");
+    cmd.assert().success();
+
+    keys.child2 = fs::read(&key_child2).unwrap();
+
+    // `mlar keyderive tempdir/key_child1 tempdir/key_child1_child1 --path "Child 1"`
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("keyderive")
+        .arg(&key_child1)
+        .arg(&key_child1_child1)
+        .arg("-p")
+        .arg("Child 1");
+    cmd.assert().success();
+
+    keys.child1child1 = fs::read(&key_child1_child1).unwrap();
+
+    //---------------- END OF SETUP -----------------
+
+    // Assert all keys are different
+    let v: HashSet<_> = vec![&keys.parent, &keys.child1, &keys.child2, &keys.child1child1]
+        .iter()
+        .cloned()
+        .collect();
+    assert_eq!(v.len(), 4);
+
+    // Ensure path is deterministic
+
+    let key_tmp = output_dir.path().join("key_tmp");
+    // `mlar keyderive tempdir/key_parent tempdir/key_tmp --path "Child 2"`
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("keyderive")
+        .arg(&key_parent)
+        .arg(&key_tmp)
+        .arg("-p")
+        .arg("Child 2");
+    cmd.assert().success();
+
+    assert_eq!(keys.child2, fs::read(&key_tmp).unwrap());
+
+    // Ensure path is transitive
+
+    let key_tmp2 = output_dir.path().join("key_tmp2");
+    // `mlar keyderive tempdir/key_parent tempdir/key_tmp2 --path "Child 1" --path "Child 1"`
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("keyderive")
+        .arg(&key_parent)
+        .arg(&key_tmp2)
+        .arg("-p")
+        .arg("Child 1")
+        .arg("-p")
+        .arg("Child 1");
+    cmd.assert().success();
+
+    assert_eq!(keys.child1child1, fs::read(&key_tmp2).unwrap());
 }
 
 #[test]
