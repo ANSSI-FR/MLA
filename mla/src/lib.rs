@@ -54,12 +54,12 @@ bitflags! {
     /// [Encryption (ENCRYPT)]
     /// [Raw File I/O]
     /// ```
-    #[derive(Serialize, Deserialize)]
+    #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
     pub struct Layers: u8 {
         const ENCRYPT = 0b0000_0001;
         const COMPRESS = 0b0000_0010;
         /// Recommended layering
-        const DEFAULT = Self::ENCRYPT.bits | Self::COMPRESS.bits;
+        const DEFAULT = Self::ENCRYPT.bits() | Self::COMPRESS.bits();
         /// No additional layer (ie, for debugging purpose)
         const DEBUG = 0;
         const EMPTY = 0;
