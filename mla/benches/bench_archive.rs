@@ -267,7 +267,8 @@ fn iter_decompress_multifiles_linear(iters: u64, size: u64, layers: Layers) -> D
 /// The full extraction is a common pattern of use of the library. This
 /// benchmark helps measuring the gain of using `linear_extract`.
 pub fn reader_multiple_layers_multiple_block_size_multifiles_linear(c: &mut Criterion) {
-    let mut group = c.benchmark_group("reader_multiple_layers_multiple_block_size_multifiles_linear");
+    let mut group =
+        c.benchmark_group("reader_multiple_layers_multiple_block_size_multifiles_linear");
     // Reduce the number of sample to avoid taking too much time
     group.sample_size(SAMPLE_SIZE_SMALL);
     for size in SIZE_LIST.iter() {
