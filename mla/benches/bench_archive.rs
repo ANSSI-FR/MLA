@@ -20,7 +20,7 @@ use x25519_dalek::{PublicKey, StaticSecret};
 const KB: usize = 1024;
 const MB: usize = 1024 * KB;
 
-const SIZE_LIST: [usize; 5] = [KB, 16 * KB, 128 * KB, MB, 4 * MB];
+const SIZE_LIST: [usize; 4] = [KB, 64 * KB, MB, 16 * MB];
 const SAMPLE_SIZE_SMALL: usize = 10;
 
 /// Build an archive with `iters` files of `size` bytes each and `layers` enabled
