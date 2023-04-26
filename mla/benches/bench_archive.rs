@@ -162,7 +162,7 @@ pub fn multiple_compression_quality(c: &mut Criterion) {
 ///
 /// This function is used to measure only the read time without the cost of
 /// creation nor file getting
-fn iter_decompress(iters: u64, size: u64, layers: Layers) -> Duration {
+fn read_one_file_by_chunk(iters: u64, size: u64, layers: Layers) -> Duration {
     // Prepare data
     let mut mla_read = build_archive(1, size * iters, layers);
 
@@ -190,7 +190,9 @@ pub fn multiple_layers_multiple_block_size_decompress(c: &mut Criterion) {
         for layers in &LAYERS_POSSIBILITIES {
             group.bench_function(
                 BenchmarkId::new(format!("Layers {layers:?}"), size),
-                move |b| b.iter_custom(|iters| iter_decompress(iters, *size as u64, *layers)),
+                move |b| {
+                    b.iter_custom(|iters| read_one_file_by_chunk(iters, *size as u64, *layers))
+                },
             );
         }
     }
@@ -202,7 +204,7 @@ pub fn multiple_layers_multiple_block_size_decompress(c: &mut Criterion) {
 ///
 /// This function is used to measure only the get_file + read time without the
 /// cost of archive creation
-fn iter_decompress_multifiles_random(iters: u64, size: u64, layers: Layers) -> Duration {
+fn iter_read_multifiles_random(iters: u64, size: u64, layers: Layers) -> Duration {
     let mut mla_read = build_archive(iters, size, layers);
 
     let mut rng = ChaChaRng::seed_from_u64(0);
@@ -223,22 +225,17 @@ fn iter_decompress_multifiles_random(iters: u64, size: u64, layers: Layers) -> D
 ///
 /// This pattern should represent one of the common use of the library
 pub fn multiple_layers_multiple_block_size_decompress_multifiles_random(c: &mut Criterion) {
-    static KB: usize = 1024;
-    static MB: usize = 1024 * KB;
-
     let mut group = c.benchmark_group("chunk_size_decompress_mutilfiles_random");
     // Reduce the number of sample to avoid taking too much time
     group.sample_size(SAMPLE_SIZE_SMALL);
-    for size in [MB, 2 * MB, 4 * MB, 16 * MB].iter() {
+    for size in [MB, 4 * MB, 16 * MB].iter() {
         group.throughput(Throughput::Bytes(*size as u64));
 
         for layers in &LAYERS_POSSIBILITIES {
             group.bench_function(
                 BenchmarkId::new(format!("Layers {layers:?}"), size),
                 move |b| {
-                    b.iter_custom(|iters| {
-                        iter_decompress_multifiles_random(iters, *size as u64, *layers)
-                    })
+                    b.iter_custom(|iters| iter_read_multifiles_random(iters, *size as u64, *layers))
                 },
             );
         }
@@ -270,22 +267,17 @@ fn iter_decompress_multifiles_linear(iters: u64, size: u64, layers: Layers) -> D
 /// The full extraction is a common pattern of use of the library. This
 /// benchmark helps measuring the gain of using `linear_extract`.
 pub fn linear_vs_normal_extract(c: &mut Criterion) {
-    static KB: usize = 1024;
-    static MB: usize = 1024 * KB;
-
     let mut group = c.benchmark_group("linear_vs_normal_extract");
     // Reduce the number of sample to avoid taking too much time
     group.sample_size(SAMPLE_SIZE_SMALL);
-    for size in [MB, 2 * MB, 4 * MB, 16 * MB].iter() {
+    for size in [MB, 4 * MB, 16 * MB].iter() {
         group.throughput(Throughput::Bytes(*size as u64));
 
         for layers in &LAYERS_POSSIBILITIES {
             group.bench_function(
                 BenchmarkId::new(format!("NORMAL / Layers {layers:?}"), size),
                 move |b| {
-                    b.iter_custom(|iters| {
-                        iter_decompress_multifiles_random(iters, *size as u64, *layers)
-                    })
+                    b.iter_custom(|iters| iter_read_multifiles_random(iters, *size as u64, *layers))
                 },
             );
             group.bench_function(
