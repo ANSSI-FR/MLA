@@ -30,7 +30,7 @@ const LAYERS_POSSIBILITIES: [Layers; 4] = [
 ];
 
 /// Build an archive with `iters` files of `size` bytes each and `layers` enabled
-/// 
+///
 /// Files names are `file_{i}`
 fn build_archive<'a>(
     iters: u64,
@@ -78,7 +78,7 @@ fn build_archive<'a>(
 /// enough samples it ends as outliers
 ///
 /// Big blocks (> 4MB) are also use to force the use of several blocks inside boundaries
-pub fn multiple_layers_multiple_block_size(c: &mut Criterion) {
+pub fn writer_multiple_layers_multiple_block_size(c: &mut Criterion) {
     // Setup
     // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
     let mut rng = ChaChaRng::seed_from_u64(0);
@@ -86,7 +86,7 @@ pub fn multiple_layers_multiple_block_size(c: &mut Criterion) {
     rng.fill_bytes(&mut bytes);
     let key = StaticSecret::from(bytes);
 
-    let mut group = c.benchmark_group("multiple_layers_multiple_block_size");
+    let mut group = c.benchmark_group("writer_multiple_layers_multiple_block_size");
     group.measurement_time(Duration::from_secs(10));
     group.sample_size(SAMPLE_SIZE_SMALL);
     for size in SIZE_LIST.iter() {
@@ -179,8 +179,8 @@ fn read_one_file_by_chunk(iters: u64, size: u64, layers: Layers) -> Duration {
 }
 
 /// Benchmark the read speed depending on layers enabled and read size
-pub fn multiple_layers_multiple_block_size_decompress(c: &mut Criterion) {
-    let mut group = c.benchmark_group("multiple_layers_multiple_block_size_decompress");
+pub fn reader_multiple_layers_multiple_block_size(c: &mut Criterion) {
+    let mut group = c.benchmark_group("reader_multiple_layers_multiple_block_size");
     // Reduce the number of sample to avoid taking too much time
     group.sample_size(SAMPLE_SIZE_SMALL);
 
@@ -224,7 +224,7 @@ fn iter_read_multifiles_random(iters: u64, size: u64, layers: Layers) -> Duratio
 /// This benchmark measures the time needed to randomly pick a file and read it
 ///
 /// This pattern should represent one of the common use of the library
-pub fn multiple_layers_multiple_block_size_decompress_multifiles_random(c: &mut Criterion) {
+pub fn reader_multiple_layers_multiple_block_size_multifiles_random(c: &mut Criterion) {
     let mut group = c.benchmark_group("chunk_size_decompress_mutilfiles_random");
     // Reduce the number of sample to avoid taking too much time
     group.sample_size(SAMPLE_SIZE_SMALL);
@@ -266,8 +266,8 @@ fn iter_decompress_multifiles_linear(iters: u64, size: u64, layers: Layers) -> D
 ///
 /// The full extraction is a common pattern of use of the library. This
 /// benchmark helps measuring the gain of using `linear_extract`.
-pub fn linear_vs_normal_extract(c: &mut Criterion) {
-    let mut group = c.benchmark_group("linear_vs_normal_extract");
+pub fn reader_linear_vs_random_extract(c: &mut Criterion) {
+    let mut group = c.benchmark_group("reader_linear_vs_random_extract");
     // Reduce the number of sample to avoid taking too much time
     group.sample_size(SAMPLE_SIZE_SMALL);
     for size in [MB, 4 * MB, 16 * MB].iter() {
@@ -295,10 +295,15 @@ pub fn linear_vs_normal_extract(c: &mut Criterion) {
 
 criterion_group!(
     benches,
-    multiple_layers_multiple_block_size,
-    multiple_compression_quality,
-    multiple_layers_multiple_block_size_decompress,
-    multiple_layers_multiple_block_size_decompress_multifiles_random,
-    linear_vs_normal_extract,
+    writer_multiple_layers_multiple_block_size,
+    reader_multiple_layers_multiple_block_size,
+    reader_linear_vs_random_extract,
+    // Was used to determine the best default compression quality ratio
+    //
+    // multiple_compression_quality,
+    //
+    // Commented as these tests are already made in `reader_linear_vs_random_extract`
+    //
+    // reader_multiple_layers_multiple_block_size_multifiles_random,
 );
 criterion_main!(benches);
