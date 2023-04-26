@@ -20,8 +20,55 @@ use x25519_dalek::{PublicKey, StaticSecret};
 const KB: usize = 1024;
 const MB: usize = 1024 * KB;
 
-const SIZE_LIST: [usize; 5] = [KB, 16 * KB, 128 * KB, MB, 4 * MB];
+const SIZE_LIST: [usize; 4] = [KB, 64 * KB, MB, 16 * MB];
 const SAMPLE_SIZE_SMALL: usize = 10;
+const LAYERS_POSSIBILITIES: [Layers; 4] = [
+    Layers::EMPTY,
+    Layers::COMPRESS,
+    Layers::ENCRYPT,
+    Layers::COMPRESS.union(Layers::ENCRYPT),
+];
+
+/// Build an archive with `iters` files of `size` bytes each and `layers` enabled
+///
+/// Files names are `file_{i}`
+fn build_archive<'a>(
+    iters: u64,
+    size: u64,
+    layers: Layers,
+) -> ArchiveReader<'a, io::Cursor<Vec<u8>>> {
+    // Setup
+    let mut rng = ChaChaRng::seed_from_u64(0);
+    let mut bytes = [0u8; 32];
+    rng.fill_bytes(&mut bytes);
+    let key = StaticSecret::from(bytes);
+    let file = Vec::new();
+
+    // Create the initial archive with `iters` files of `size` bytes
+    let mut config = ArchiveWriterConfig::new();
+    config
+        .enable_layer(layers)
+        .add_public_keys(&[PublicKey::from(&key)]);
+    let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
+    for i in 0..iters {
+        let data: Vec<u8> = Alphanumeric
+            .sample_iter(&mut rng)
+            .take(size as usize)
+            .collect();
+        let id = mla.start_file(&format!("file_{i}")).unwrap();
+        mla.append_file_content(id, data.len() as u64, data.as_slice())
+            .unwrap();
+        mla.end_file(id).unwrap();
+    }
+    mla.finalize().unwrap();
+
+    // Instantiate the reader
+    let dest = mla.into_raw();
+    let buf = Cursor::new(dest);
+    let mut config = ArchiveReaderConfig::new();
+    config.add_private_keys(std::slice::from_ref(&key));
+    ArchiveReader::from_config(buf, config).unwrap()
+}
 
 /// Benchmark with all layers' permutations different block size
 ///
@@ -31,7 +78,7 @@ const SAMPLE_SIZE_SMALL: usize = 10;
 /// enough samples it ends as outliers
 ///
 /// Big blocks (> 4MB) are also use to force the use of several blocks inside boundaries
-pub fn multiple_layers_multiple_block_size(c: &mut Criterion) {
+pub fn writer_multiple_layers_multiple_block_size(c: &mut Criterion) {
     // Setup
     // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
     let mut rng = ChaChaRng::seed_from_u64(0);
@@ -39,7 +86,7 @@ pub fn multiple_layers_multiple_block_size(c: &mut Criterion) {
     rng.fill_bytes(&mut bytes);
     let key = StaticSecret::from(bytes);
 
-    let mut group = c.benchmark_group("multiple_layers_multiple_block_size");
+    let mut group = c.benchmark_group("writer_multiple_layers_multiple_block_size");
     group.measurement_time(Duration::from_secs(10));
     group.sample_size(SAMPLE_SIZE_SMALL);
     for size in SIZE_LIST.iter() {
@@ -47,12 +94,7 @@ pub fn multiple_layers_multiple_block_size(c: &mut Criterion) {
 
         let data: Vec<u8> = Alphanumeric.sample_iter(&mut rng).take(*size).collect();
 
-        for layers in &[
-            Layers::EMPTY,
-            Layers::COMPRESS,
-            Layers::ENCRYPT,
-            Layers::COMPRESS | Layers::ENCRYPT,
-        ] {
+        for layers in &LAYERS_POSSIBILITIES {
             // Create an archive
             let file = Vec::new();
             let mut config = ArchiveWriterConfig::new();
@@ -120,39 +162,12 @@ pub fn multiple_compression_quality(c: &mut Criterion) {
 ///
 /// This function is used to measure only the read time without the cost of
 /// creation nor file getting
-fn iter_decompress(iters: u64, size: u64, layers: Layers) -> Duration {
+fn read_one_file_by_chunk(iters: u64, size: u64, layers: Layers) -> Duration {
     // Prepare data
-    let mut rng = ChaChaRng::seed_from_u64(0);
-    let mut bytes = [0u8; 32];
-    rng.fill_bytes(&mut bytes);
-    let key = StaticSecret::from(bytes);
-    let data: Vec<u8> = Alphanumeric
-        .sample_iter(&mut rng)
-        .take((size * iters) as usize)
-        .collect();
-
-    // Create an archive with one file
-    let file = Vec::new();
-    let mut config = ArchiveWriterConfig::new();
-    config
-        .enable_layer(layers)
-        .add_public_keys(&[PublicKey::from(&key)]);
-    let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
-    let id = mla.start_file("file").unwrap();
-    mla.append_file_content(id, data.len() as u64, data.as_slice())
-        .unwrap();
-    mla.end_file(id).unwrap();
-    mla.finalize().unwrap();
-
-    // Prepare the reader
-    let dest = mla.into_raw();
-    let buf = Cursor::new(dest.as_slice());
-    let mut config = ArchiveReaderConfig::new();
-    config.add_private_keys(std::slice::from_ref(&key));
-    let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
+    let mut mla_read = build_archive(1, size * iters, layers);
 
     // Get the file (costly as `seek` are implied)
-    let subfile = mla_read.get_file("file".to_string()).unwrap().unwrap();
+    let subfile = mla_read.get_file("file_0".to_string()).unwrap().unwrap();
 
     // Read iters * size bytes
     let start = Instant::now();
@@ -164,65 +179,24 @@ fn iter_decompress(iters: u64, size: u64, layers: Layers) -> Duration {
 }
 
 /// Benchmark the read speed depending on layers enabled and read size
-pub fn multiple_layers_multiple_block_size_decompress(c: &mut Criterion) {
-    let mut group = c.benchmark_group("multiple_layers_multiple_block_size_decompress");
+pub fn reader_multiple_layers_multiple_block_size(c: &mut Criterion) {
+    let mut group = c.benchmark_group("reader_multiple_layers_multiple_block_size");
     // Reduce the number of sample to avoid taking too much time
     group.sample_size(SAMPLE_SIZE_SMALL);
 
     for size in SIZE_LIST.iter() {
         group.throughput(Throughput::Bytes(*size as u64));
 
-        for layers in &[
-            Layers::EMPTY,
-            Layers::COMPRESS,
-            Layers::ENCRYPT,
-            Layers::COMPRESS | Layers::ENCRYPT,
-        ] {
+        for layers in &LAYERS_POSSIBILITIES {
             group.bench_function(
                 BenchmarkId::new(format!("Layers {layers:?}"), size),
-                move |b| b.iter_custom(|iters| iter_decompress(iters, *size as u64, *layers)),
+                move |b| {
+                    b.iter_custom(|iters| read_one_file_by_chunk(iters, *size as u64, *layers))
+                },
             );
         }
     }
     group.finish();
-}
-
-fn build_archive<'a>(
-    iters: u64,
-    size: u64,
-    layers: Layers,
-) -> ArchiveReader<'a, io::Cursor<Vec<u8>>> {
-    // Setup
-    let mut rng = ChaChaRng::seed_from_u64(0);
-    let mut bytes = [0u8; 32];
-    rng.fill_bytes(&mut bytes);
-    let key = StaticSecret::from(bytes);
-    let file = Vec::new();
-
-    // Create the initial archive with `iters` files of `size` bytes
-    let mut config = ArchiveWriterConfig::new();
-    config
-        .enable_layer(layers)
-        .add_public_keys(&[PublicKey::from(&key)]);
-    let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
-    for i in 0..iters {
-        let data: Vec<u8> = Alphanumeric
-            .sample_iter(&mut rng)
-            .take(size as usize)
-            .collect();
-        let id = mla.start_file(&format!("file_{i}")).unwrap();
-        mla.append_file_content(id, data.len() as u64, data.as_slice())
-            .unwrap();
-        mla.end_file(id).unwrap();
-    }
-    mla.finalize().unwrap();
-
-    // Instantiate the reader
-    let dest = mla.into_raw();
-    let buf = Cursor::new(dest);
-    let mut config = ArchiveReaderConfig::new();
-    config.add_private_keys(std::slice::from_ref(&key));
-    ArchiveReader::from_config(buf, config).unwrap()
 }
 
 /// Create an archive with a `iters` files of `size` bytes using `layers` and
@@ -230,7 +204,7 @@ fn build_archive<'a>(
 ///
 /// This function is used to measure only the get_file + read time without the
 /// cost of archive creation
-fn iter_decompress_multifiles_random(iters: u64, size: u64, layers: Layers) -> Duration {
+fn iter_read_multifiles_random(iters: u64, size: u64, layers: Layers) -> Duration {
     let mut mla_read = build_archive(iters, size, layers);
 
     let mut rng = ChaChaRng::seed_from_u64(0);
@@ -250,28 +224,18 @@ fn iter_decompress_multifiles_random(iters: u64, size: u64, layers: Layers) -> D
 /// This benchmark measures the time needed to randomly pick a file and read it
 ///
 /// This pattern should represent one of the common use of the library
-pub fn multiple_layers_multiple_block_size_decompress_multifiles_random(c: &mut Criterion) {
-    static KB: usize = 1024;
-    static MB: usize = 1024 * KB;
-
+pub fn reader_multiple_layers_multiple_block_size_multifiles_random(c: &mut Criterion) {
     let mut group = c.benchmark_group("chunk_size_decompress_mutilfiles_random");
     // Reduce the number of sample to avoid taking too much time
     group.sample_size(SAMPLE_SIZE_SMALL);
-    for size in [MB, 2 * MB, 4 * MB, 16 * MB].iter() {
+    for size in SIZE_LIST.iter() {
         group.throughput(Throughput::Bytes(*size as u64));
 
-        for layers in &[
-            Layers::EMPTY,
-            Layers::COMPRESS,
-            Layers::ENCRYPT,
-            Layers::COMPRESS | Layers::ENCRYPT,
-        ] {
+        for layers in &LAYERS_POSSIBILITIES {
             group.bench_function(
                 BenchmarkId::new(format!("Layers {layers:?}"), size),
                 move |b| {
-                    b.iter_custom(|iters| {
-                        iter_decompress_multifiles_random(iters, *size as u64, *layers)
-                    })
+                    b.iter_custom(|iters| iter_read_multifiles_random(iters, *size as u64, *layers))
                 },
             );
         }
@@ -297,35 +261,19 @@ fn iter_decompress_multifiles_linear(iters: u64, size: u64, layers: Layers) -> D
     start.elapsed()
 }
 
-/// This benchmark measures the time needed to compare the extraction time
-/// between the "randomly pick" and "linear extraction"
+/// This benchmark measures the time needed in a "linear extraction"
+/// It can be compared to the "randomly pick" extraction
 ///
 /// The full extraction is a common pattern of use of the library. This
 /// benchmark helps measuring the gain of using `linear_extract`.
-pub fn linear_vs_normal_extract(c: &mut Criterion) {
-    static KB: usize = 1024;
-    static MB: usize = 1024 * KB;
-
-    let mut group = c.benchmark_group("linear_vs_normal_extract");
+pub fn reader_multiple_layers_multiple_block_size_multifiles_linear(c: &mut Criterion) {
+    let mut group = c.benchmark_group("reader_multiple_layers_multiple_block_size_multifiles_linear");
     // Reduce the number of sample to avoid taking too much time
     group.sample_size(SAMPLE_SIZE_SMALL);
-    for size in [MB, 2 * MB, 4 * MB, 16 * MB].iter() {
+    for size in SIZE_LIST.iter() {
         group.throughput(Throughput::Bytes(*size as u64));
 
-        for layers in &[
-            Layers::EMPTY,
-            Layers::COMPRESS,
-            Layers::ENCRYPT,
-            Layers::COMPRESS | Layers::ENCRYPT,
-        ] {
-            group.bench_function(
-                BenchmarkId::new(format!("NORMAL / Layers {layers:?}"), size),
-                move |b| {
-                    b.iter_custom(|iters| {
-                        iter_decompress_multifiles_random(iters, *size as u64, *layers)
-                    })
-                },
-            );
+        for layers in &LAYERS_POSSIBILITIES {
             group.bench_function(
                 BenchmarkId::new(format!("LINEAR / Layers {layers:?}"), size),
                 move |b| {
@@ -341,10 +289,12 @@ pub fn linear_vs_normal_extract(c: &mut Criterion) {
 
 criterion_group!(
     benches,
-    multiple_layers_multiple_block_size,
-    multiple_compression_quality,
-    multiple_layers_multiple_block_size_decompress,
-    multiple_layers_multiple_block_size_decompress_multifiles_random,
-    linear_vs_normal_extract,
+    writer_multiple_layers_multiple_block_size,
+    reader_multiple_layers_multiple_block_size,
+    reader_multiple_layers_multiple_block_size_multifiles_random,
+    reader_multiple_layers_multiple_block_size_multifiles_linear,
+    // Was used to determine the best default compression quality ratio
+    //
+    // multiple_compression_quality,
 );
 criterion_main!(benches);
