@@ -23,6 +23,48 @@ const MB: usize = 1024 * KB;
 const SIZE_LIST: [usize; 5] = [KB, 16 * KB, 128 * KB, MB, 4 * MB];
 const SAMPLE_SIZE_SMALL: usize = 10;
 
+/// Build an archive with `iters` files of `size` bytes each and `layers` enabled
+/// 
+/// Files names are `file_{i}`
+fn build_archive<'a>(
+    iters: u64,
+    size: u64,
+    layers: Layers,
+) -> ArchiveReader<'a, io::Cursor<Vec<u8>>> {
+    // Setup
+    let mut rng = ChaChaRng::seed_from_u64(0);
+    let mut bytes = [0u8; 32];
+    rng.fill_bytes(&mut bytes);
+    let key = StaticSecret::from(bytes);
+    let file = Vec::new();
+
+    // Create the initial archive with `iters` files of `size` bytes
+    let mut config = ArchiveWriterConfig::new();
+    config
+        .enable_layer(layers)
+        .add_public_keys(&[PublicKey::from(&key)]);
+    let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
+    for i in 0..iters {
+        let data: Vec<u8> = Alphanumeric
+            .sample_iter(&mut rng)
+            .take(size as usize)
+            .collect();
+        let id = mla.start_file(&format!("file_{i}")).unwrap();
+        mla.append_file_content(id, data.len() as u64, data.as_slice())
+            .unwrap();
+        mla.end_file(id).unwrap();
+    }
+    mla.finalize().unwrap();
+
+    // Instantiate the reader
+    let dest = mla.into_raw();
+    let buf = Cursor::new(dest);
+    let mut config = ArchiveReaderConfig::new();
+    config.add_private_keys(std::slice::from_ref(&key));
+    ArchiveReader::from_config(buf, config).unwrap()
+}
+
+
 /// Benchmark with all layers' permutations different block size
 ///
 /// The archive is not reset between iterations, only between benchs.
@@ -122,37 +164,11 @@ pub fn multiple_compression_quality(c: &mut Criterion) {
 /// creation nor file getting
 fn iter_decompress(iters: u64, size: u64, layers: Layers) -> Duration {
     // Prepare data
-    let mut rng = ChaChaRng::seed_from_u64(0);
-    let mut bytes = [0u8; 32];
-    rng.fill_bytes(&mut bytes);
-    let key = StaticSecret::from(bytes);
-    let data: Vec<u8> = Alphanumeric
-        .sample_iter(&mut rng)
-        .take((size * iters) as usize)
-        .collect();
-
-    // Create an archive with one file
-    let file = Vec::new();
-    let mut config = ArchiveWriterConfig::new();
-    config
-        .enable_layer(layers)
-        .add_public_keys(&[PublicKey::from(&key)]);
-    let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
-    let id = mla.start_file("file").unwrap();
-    mla.append_file_content(id, data.len() as u64, data.as_slice())
-        .unwrap();
-    mla.end_file(id).unwrap();
-    mla.finalize().unwrap();
-
-    // Prepare the reader
-    let dest = mla.into_raw();
-    let buf = Cursor::new(dest.as_slice());
-    let mut config = ArchiveReaderConfig::new();
-    config.add_private_keys(std::slice::from_ref(&key));
-    let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
+    let mut mla_read = build_archive(1, size * iters, layers);
 
     // Get the file (costly as `seek` are implied)
-    let subfile = mla_read.get_file("file".to_string()).unwrap().unwrap();
+    let subfile = mla_read.get_file("file_0".to_string()).unwrap()
+        .unwrap();
 
     // Read iters * size bytes
     let start = Instant::now();
@@ -185,44 +201,6 @@ pub fn multiple_layers_multiple_block_size_decompress(c: &mut Criterion) {
         }
     }
     group.finish();
-}
-
-fn build_archive<'a>(
-    iters: u64,
-    size: u64,
-    layers: Layers,
-) -> ArchiveReader<'a, io::Cursor<Vec<u8>>> {
-    // Setup
-    let mut rng = ChaChaRng::seed_from_u64(0);
-    let mut bytes = [0u8; 32];
-    rng.fill_bytes(&mut bytes);
-    let key = StaticSecret::from(bytes);
-    let file = Vec::new();
-
-    // Create the initial archive with `iters` files of `size` bytes
-    let mut config = ArchiveWriterConfig::new();
-    config
-        .enable_layer(layers)
-        .add_public_keys(&[PublicKey::from(&key)]);
-    let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
-    for i in 0..iters {
-        let data: Vec<u8> = Alphanumeric
-            .sample_iter(&mut rng)
-            .take(size as usize)
-            .collect();
-        let id = mla.start_file(&format!("file_{i}")).unwrap();
-        mla.append_file_content(id, data.len() as u64, data.as_slice())
-            .unwrap();
-        mla.end_file(id).unwrap();
-    }
-    mla.finalize().unwrap();
-
-    // Instantiate the reader
-    let dest = mla.into_raw();
-    let buf = Cursor::new(dest);
-    let mut config = ArchiveReaderConfig::new();
-    config.add_private_keys(std::slice::from_ref(&key));
-    ArchiveReader::from_config(buf, config).unwrap()
 }
 
 /// Create an archive with a `iters` files of `size` bytes using `layers` and
