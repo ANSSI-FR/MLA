@@ -261,25 +261,19 @@ fn iter_decompress_multifiles_linear(iters: u64, size: u64, layers: Layers) -> D
     start.elapsed()
 }
 
-/// This benchmark measures the time needed to compare the extraction time
-/// between the "randomly pick" and "linear extraction"
+/// This benchmark measures the time needed in a "linear extraction"
+/// It can be compared to the "randomly pick" extraction
 ///
 /// The full extraction is a common pattern of use of the library. This
 /// benchmark helps measuring the gain of using `linear_extract`.
-pub fn reader_linear_vs_random_extract(c: &mut Criterion) {
-    let mut group = c.benchmark_group("reader_linear_vs_random_extract");
+pub fn reader_multiple_layers_multiple_block_size_multifiles_linear(c: &mut Criterion) {
+    let mut group = c.benchmark_group("reader_multiple_layers_multiple_block_size_multifiles_linear");
     // Reduce the number of sample to avoid taking too much time
     group.sample_size(SAMPLE_SIZE_SMALL);
     for size in [MB, 4 * MB, 16 * MB].iter() {
         group.throughput(Throughput::Bytes(*size as u64));
 
         for layers in &LAYERS_POSSIBILITIES {
-            group.bench_function(
-                BenchmarkId::new(format!("NORMAL / Layers {layers:?}"), size),
-                move |b| {
-                    b.iter_custom(|iters| iter_read_multifiles_random(iters, *size as u64, *layers))
-                },
-            );
             group.bench_function(
                 BenchmarkId::new(format!("LINEAR / Layers {layers:?}"), size),
                 move |b| {
@@ -297,13 +291,10 @@ criterion_group!(
     benches,
     writer_multiple_layers_multiple_block_size,
     reader_multiple_layers_multiple_block_size,
-    reader_linear_vs_random_extract,
+    reader_multiple_layers_multiple_block_size_multifiles_random,
+    reader_multiple_layers_multiple_block_size_multifiles_linear,
     // Was used to determine the best default compression quality ratio
     //
     // multiple_compression_quality,
-    //
-    // Commented as these tests are already made in `reader_linear_vs_random_extract`
-    //
-    // reader_multiple_layers_multiple_block_size_multifiles_random,
 );
 criterion_main!(benches);
