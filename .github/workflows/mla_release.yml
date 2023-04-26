@@ -1,5 +1,8 @@
 name: mla release
 
+permissions:
+  contents: write
+
 on:
   push:
     tags:
