@@ -228,7 +228,7 @@ pub fn reader_multiple_layers_multiple_block_size_multifiles_random(c: &mut Crit
     let mut group = c.benchmark_group("chunk_size_decompress_mutilfiles_random");
     // Reduce the number of sample to avoid taking too much time
     group.sample_size(SAMPLE_SIZE_SMALL);
-    for size in [MB, 4 * MB, 16 * MB].iter() {
+    for size in SIZE_LIST.iter() {
         group.throughput(Throughput::Bytes(*size as u64));
 
         for layers in &LAYERS_POSSIBILITIES {
@@ -270,7 +270,7 @@ pub fn reader_multiple_layers_multiple_block_size_multifiles_linear(c: &mut Crit
     let mut group = c.benchmark_group("reader_multiple_layers_multiple_block_size_multifiles_linear");
     // Reduce the number of sample to avoid taking too much time
     group.sample_size(SAMPLE_SIZE_SMALL);
-    for size in [MB, 4 * MB, 16 * MB].iter() {
+    for size in SIZE_LIST.iter() {
         group.throughput(Throughput::Bytes(*size as u64));
 
         for layers in &LAYERS_POSSIBILITIES {
