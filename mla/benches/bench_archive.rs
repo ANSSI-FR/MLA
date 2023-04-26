@@ -22,6 +22,12 @@ const MB: usize = 1024 * KB;
 
 const SIZE_LIST: [usize; 4] = [KB, 64 * KB, MB, 16 * MB];
 const SAMPLE_SIZE_SMALL: usize = 10;
+const LAYERS_POSSIBILITIES: [Layers; 4] = [
+    Layers::EMPTY,
+    Layers::COMPRESS,
+    Layers::ENCRYPT,
+    Layers::COMPRESS.union(Layers::ENCRYPT),
+];
 
 /// Build an archive with `iters` files of `size` bytes each and `layers` enabled
 /// 
@@ -64,7 +70,6 @@ fn build_archive<'a>(
     ArchiveReader::from_config(buf, config).unwrap()
 }
 
-
 /// Benchmark with all layers' permutations different block size
 ///
 /// The archive is not reset between iterations, only between benchs.
@@ -89,12 +94,7 @@ pub fn multiple_layers_multiple_block_size(c: &mut Criterion) {
 
         let data: Vec<u8> = Alphanumeric.sample_iter(&mut rng).take(*size).collect();
 
-        for layers in &[
-            Layers::EMPTY,
-            Layers::COMPRESS,
-            Layers::ENCRYPT,
-            Layers::COMPRESS | Layers::ENCRYPT,
-        ] {
+        for layers in &LAYERS_POSSIBILITIES {
             // Create an archive
             let file = Vec::new();
             let mut config = ArchiveWriterConfig::new();
@@ -167,8 +167,7 @@ fn iter_decompress(iters: u64, size: u64, layers: Layers) -> Duration {
     let mut mla_read = build_archive(1, size * iters, layers);
 
     // Get the file (costly as `seek` are implied)
-    let subfile = mla_read.get_file("file_0".to_string()).unwrap()
-        .unwrap();
+    let subfile = mla_read.get_file("file_0".to_string()).unwrap().unwrap();
 
     // Read iters * size bytes
     let start = Instant::now();
@@ -188,12 +187,7 @@ pub fn multiple_layers_multiple_block_size_decompress(c: &mut Criterion) {
     for size in SIZE_LIST.iter() {
         group.throughput(Throughput::Bytes(*size as u64));
 
-        for layers in &[
-            Layers::EMPTY,
-            Layers::COMPRESS,
-            Layers::ENCRYPT,
-            Layers::COMPRESS | Layers::ENCRYPT,
-        ] {
+        for layers in &LAYERS_POSSIBILITIES {
             group.bench_function(
                 BenchmarkId::new(format!("Layers {layers:?}"), size),
                 move |b| b.iter_custom(|iters| iter_decompress(iters, *size as u64, *layers)),
@@ -238,12 +232,7 @@ pub fn multiple_layers_multiple_block_size_decompress_multifiles_random(c: &mut 
     for size in [MB, 2 * MB, 4 * MB, 16 * MB].iter() {
         group.throughput(Throughput::Bytes(*size as u64));
 
-        for layers in &[
-            Layers::EMPTY,
-            Layers::COMPRESS,
-            Layers::ENCRYPT,
-            Layers::COMPRESS | Layers::ENCRYPT,
-        ] {
+        for layers in &LAYERS_POSSIBILITIES {
             group.bench_function(
                 BenchmarkId::new(format!("Layers {layers:?}"), size),
                 move |b| {
@@ -290,12 +279,7 @@ pub fn linear_vs_normal_extract(c: &mut Criterion) {
     for size in [MB, 2 * MB, 4 * MB, 16 * MB].iter() {
         group.throughput(Throughput::Bytes(*size as u64));
 
-        for layers in &[
-            Layers::EMPTY,
-            Layers::COMPRESS,
-            Layers::ENCRYPT,
-            Layers::COMPRESS | Layers::ENCRYPT,
-        ] {
+        for layers in &LAYERS_POSSIBILITIES {
             group.bench_function(
                 BenchmarkId::new(format!("NORMAL / Layers {layers:?}"), size),
                 move |b| {
