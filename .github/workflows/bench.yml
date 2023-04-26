@@ -1,0 +1,17 @@
+name: Benchmark PR
+
+on:
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  runBenchmark:
+    name: Criterion benchmark
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: boa-dev/criterion-compare-action@v3
+        with:
+          branchName: ${{ github.base_ref }}
+          benchName: "bench_archive"
+          token: ${{ secrets.GITHUB_TOKEN }}
