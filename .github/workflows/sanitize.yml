@@ -1,5 +1,8 @@
 name: Ensure repository healthy state over time
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: [ master ]
