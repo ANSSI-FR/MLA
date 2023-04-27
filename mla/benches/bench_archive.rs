@@ -188,12 +188,9 @@ pub fn reader_multiple_layers_multiple_block_size(c: &mut Criterion) {
         group.throughput(Throughput::Bytes(*size as u64));
 
         for layers in &LAYERS_POSSIBILITIES {
-            group.bench_function(
-                BenchmarkId::new(format!("{layers:?}"), size),
-                move |b| {
-                    b.iter_custom(|iters| read_one_file_by_chunk(iters, *size as u64, *layers))
-                },
-            );
+            group.bench_function(BenchmarkId::new(format!("{layers:?}"), size), move |b| {
+                b.iter_custom(|iters| read_one_file_by_chunk(iters, *size as u64, *layers))
+            });
         }
     }
     group.finish();
@@ -232,12 +229,9 @@ pub fn reader_multiple_layers_multiple_block_size_multifiles_random(c: &mut Crit
         group.throughput(Throughput::Bytes(*size as u64));
 
         for layers in &LAYERS_POSSIBILITIES {
-            group.bench_function(
-                BenchmarkId::new(format!("{layers:?}"), size),
-                move |b| {
-                    b.iter_custom(|iters| iter_read_multifiles_random(iters, *size as u64, *layers))
-                },
-            );
+            group.bench_function(BenchmarkId::new(format!("{layers:?}"), size), move |b| {
+                b.iter_custom(|iters| iter_read_multifiles_random(iters, *size as u64, *layers))
+            });
         }
     }
     group.finish();
@@ -275,14 +269,11 @@ pub fn reader_multiple_layers_multiple_block_size_multifiles_linear(c: &mut Crit
         group.throughput(Throughput::Bytes(*size as u64));
 
         for layers in &LAYERS_POSSIBILITIES {
-            group.bench_function(
-                BenchmarkId::new(format!("{layers:?}"), size),
-                move |b| {
-                    b.iter_custom(|iters| {
-                        iter_decompress_multifiles_linear(iters, *size as u64, *layers)
-                    })
-                },
-            );
+            group.bench_function(BenchmarkId::new(format!("{layers:?}"), size), move |b| {
+                b.iter_custom(|iters| {
+                    iter_decompress_multifiles_linear(iters, *size as u64, *layers)
+                })
+            });
         }
     }
     group.finish();
