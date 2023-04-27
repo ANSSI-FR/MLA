@@ -1,5 +1,8 @@
 name: Build & test
 
+permissions:
+  contents: write
+
 on:
   push:
     branches: [ master ]

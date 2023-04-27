@@ -1,5 +1,8 @@
 name: mlar release
 
+permissions:
+  contents: write
+
 on:
   push:
     tags:
