@@ -21,7 +21,7 @@ const KB: usize = 1024;
 const MB: usize = 1024 * KB;
 
 const SIZE_LIST: [usize; 4] = [KB, 64 * KB, MB, 16 * MB];
-const SAMPLE_SIZE_SMALL: usize = 10;
+const SAMPLE_SIZE_SMALL: usize = 20;
 const LAYERS_POSSIBILITIES: [Layers; 4] = [
     Layers::EMPTY,
     Layers::COMPRESS,
