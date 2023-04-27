@@ -105,7 +105,7 @@ pub fn writer_multiple_layers_multiple_block_size(c: &mut Criterion) {
 
             let id = mla.start_file("file").unwrap();
             group.bench_with_input(
-                BenchmarkId::new(format!("Layers {layers:?}"), size),
+                BenchmarkId::new(format!("{layers:?}"), size),
                 size,
                 |b, &_size| {
                     b.iter(|| mla.append_file_content(id, data.len() as u64, data.as_slice()));
@@ -189,7 +189,7 @@ pub fn reader_multiple_layers_multiple_block_size(c: &mut Criterion) {
 
         for layers in &LAYERS_POSSIBILITIES {
             group.bench_function(
-                BenchmarkId::new(format!("Layers {layers:?}"), size),
+                BenchmarkId::new(format!("{layers:?}"), size),
                 move |b| {
                     b.iter_custom(|iters| read_one_file_by_chunk(iters, *size as u64, *layers))
                 },
@@ -233,7 +233,7 @@ pub fn reader_multiple_layers_multiple_block_size_multifiles_random(c: &mut Crit
 
         for layers in &LAYERS_POSSIBILITIES {
             group.bench_function(
-                BenchmarkId::new(format!("Layers {layers:?}"), size),
+                BenchmarkId::new(format!("{layers:?}"), size),
                 move |b| {
                     b.iter_custom(|iters| iter_read_multifiles_random(iters, *size as u64, *layers))
                 },
@@ -276,7 +276,7 @@ pub fn reader_multiple_layers_multiple_block_size_multifiles_linear(c: &mut Crit
 
         for layers in &LAYERS_POSSIBILITIES {
             group.bench_function(
-                BenchmarkId::new(format!("LINEAR / Layers {layers:?}"), size),
+                BenchmarkId::new(format!("{layers:?}"), size),
                 move |b| {
                     b.iter_custom(|iters| {
                         iter_decompress_multifiles_linear(iters, *size as u64, *layers)
