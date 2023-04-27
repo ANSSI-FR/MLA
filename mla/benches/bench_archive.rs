@@ -21,7 +21,7 @@ const KB: usize = 1024;
 const MB: usize = 1024 * KB;
 
 const SIZE_LIST: [usize; 4] = [KB, 64 * KB, MB, 16 * MB];
-const SAMPLE_SIZE_SMALL: usize = 10;
+const SAMPLE_SIZE_SMALL: usize = 20;
 const LAYERS_POSSIBILITIES: [Layers; 4] = [
     Layers::EMPTY,
     Layers::COMPRESS,
@@ -105,7 +105,7 @@ pub fn writer_multiple_layers_multiple_block_size(c: &mut Criterion) {
 
             let id = mla.start_file("file").unwrap();
             group.bench_with_input(
-                BenchmarkId::new(format!("Layers {layers:?}"), size),
+                BenchmarkId::new(format!("{layers:?}"), size),
                 size,
                 |b, &_size| {
                     b.iter(|| mla.append_file_content(id, data.len() as u64, data.as_slice()));
@@ -188,12 +188,9 @@ pub fn reader_multiple_layers_multiple_block_size(c: &mut Criterion) {
         group.throughput(Throughput::Bytes(*size as u64));
 
         for layers in &LAYERS_POSSIBILITIES {
-            group.bench_function(
-                BenchmarkId::new(format!("Layers {layers:?}"), size),
-                move |b| {
-                    b.iter_custom(|iters| read_one_file_by_chunk(iters, *size as u64, *layers))
-                },
-            );
+            group.bench_function(BenchmarkId::new(format!("{layers:?}"), size), move |b| {
+                b.iter_custom(|iters| read_one_file_by_chunk(iters, *size as u64, *layers))
+            });
         }
     }
     group.finish();
@@ -232,12 +229,9 @@ pub fn reader_multiple_layers_multiple_block_size_multifiles_random(c: &mut Crit
         group.throughput(Throughput::Bytes(*size as u64));
 
         for layers in &LAYERS_POSSIBILITIES {
-            group.bench_function(
-                BenchmarkId::new(format!("Layers {layers:?}"), size),
-                move |b| {
-                    b.iter_custom(|iters| iter_read_multifiles_random(iters, *size as u64, *layers))
-                },
-            );
+            group.bench_function(BenchmarkId::new(format!("{layers:?}"), size), move |b| {
+                b.iter_custom(|iters| iter_read_multifiles_random(iters, *size as u64, *layers))
+            });
         }
     }
     group.finish();
@@ -267,21 +261,19 @@ fn iter_decompress_multifiles_linear(iters: u64, size: u64, layers: Layers) -> D
 /// The full extraction is a common pattern of use of the library. This
 /// benchmark helps measuring the gain of using `linear_extract`.
 pub fn reader_multiple_layers_multiple_block_size_multifiles_linear(c: &mut Criterion) {
-    let mut group = c.benchmark_group("reader_multiple_layers_multiple_block_size_multifiles_linear");
+    let mut group =
+        c.benchmark_group("reader_multiple_layers_multiple_block_size_multifiles_linear");
     // Reduce the number of sample to avoid taking too much time
     group.sample_size(SAMPLE_SIZE_SMALL);
     for size in SIZE_LIST.iter() {
         group.throughput(Throughput::Bytes(*size as u64));
 
         for layers in &LAYERS_POSSIBILITIES {
-            group.bench_function(
-                BenchmarkId::new(format!("LINEAR / Layers {layers:?}"), size),
-                move |b| {
-                    b.iter_custom(|iters| {
-                        iter_decompress_multifiles_linear(iters, *size as u64, *layers)
-                    })
-                },
-            );
+            group.bench_function(BenchmarkId::new(format!("{layers:?}"), size), move |b| {
+                b.iter_custom(|iters| {
+                    iter_decompress_multifiles_linear(iters, *size as u64, *layers)
+                })
+            });
         }
     }
     group.finish();
