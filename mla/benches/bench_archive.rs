@@ -5,7 +5,7 @@ use criterion::Throughput;
 
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
 use mla::helpers::linear_extract;
-use mla::Layers;
+use mla::{ArchiveFailSafeReader, Layers};
 use mla::{ArchiveReader, ArchiveWriter};
 use rand::distributions::{Alphanumeric, Distribution};
 use rand::seq::index::sample;
@@ -32,11 +32,7 @@ const LAYERS_POSSIBILITIES: [Layers; 4] = [
 /// Build an archive with `iters` files of `size` bytes each and `layers` enabled
 ///
 /// Files names are `file_{i}`
-fn build_archive<'a>(
-    iters: u64,
-    size: u64,
-    layers: Layers,
-) -> ArchiveReader<'a, io::Cursor<Vec<u8>>> {
+fn build_archive(iters: u64, size: u64, layers: Layers) -> (Vec<u8>, ArchiveReaderConfig) {
     // Setup
     let mut rng = ChaChaRng::seed_from_u64(0);
     let mut bytes = [0u8; 32];
@@ -64,9 +60,19 @@ fn build_archive<'a>(
 
     // Instantiate the reader
     let dest = mla.into_raw();
-    let buf = Cursor::new(dest);
     let mut config = ArchiveReaderConfig::new();
     config.add_private_keys(std::slice::from_ref(&key));
+    (dest, config)
+}
+
+/// Wrapper on `build_archive` returning an already instancied `ArchiveReader`
+fn build_archive_reader<'a>(
+    iters: u64,
+    size: u64,
+    layers: Layers,
+) -> ArchiveReader<'a, io::Cursor<Vec<u8>>> {
+    let (dest, config) = build_archive(iters, size, layers);
+    let buf = Cursor::new(dest);
     ArchiveReader::from_config(buf, config).unwrap()
 }
 
@@ -164,7 +170,7 @@ pub fn multiple_compression_quality(c: &mut Criterion) {
 /// creation nor file getting
 fn read_one_file_by_chunk(iters: u64, size: u64, layers: Layers) -> Duration {
     // Prepare data
-    let mut mla_read = build_archive(1, size * iters, layers);
+    let mut mla_read = build_archive_reader(1, size * iters, layers);
 
     // Get the file (costly as `seek` are implied)
     let subfile = mla_read.get_file("file_0".to_string()).unwrap().unwrap();
@@ -202,7 +208,7 @@ pub fn reader_multiple_layers_multiple_block_size(c: &mut Criterion) {
 /// This function is used to measure only the get_file + read time without the
 /// cost of archive creation
 fn iter_read_multifiles_random(iters: u64, size: u64, layers: Layers) -> Duration {
-    let mut mla_read = build_archive(iters, size, layers);
+    let mut mla_read = build_archive_reader(iters, size, layers);
 
     let mut rng = ChaChaRng::seed_from_u64(0);
     // Measure the time needed to get and read a file
@@ -243,7 +249,7 @@ pub fn reader_multiple_layers_multiple_block_size_multifiles_random(c: &mut Crit
 /// This function is used to measure only `linear_extract` time without the cost
 /// of archive creation
 fn iter_decompress_multifiles_linear(iters: u64, size: u64, layers: Layers) -> Duration {
-    let mut mla_read = build_archive(iters, size, layers);
+    let mut mla_read = build_archive_reader(iters, size, layers);
 
     let fnames: Vec<String> = mla_read.list_files().unwrap().cloned().collect();
     // Measure the time needed to get and read a file
@@ -279,12 +285,52 @@ pub fn reader_multiple_layers_multiple_block_size_multifiles_linear(c: &mut Crit
     group.finish();
 }
 
+/// Create an archive then repair it.
+///
+/// Return the time taken by the repair operation
+fn repair_archive(iters: u64, size: u64, layers: Layers) -> Duration {
+    let (data, config) = build_archive(iters, size, layers);
+    let buf = Cursor::new(data);
+    let dest = Vec::new();
+
+    // No need to truncate the data, repair the whole file
+    let mut mla_repair = ArchiveFailSafeReader::from_config(buf, config).unwrap();
+    // Avoid any layers to speed up writing, as this is not the measurement target
+    let mut writer_config = ArchiveWriterConfig::new();
+    writer_config.set_layers(Layers::EMPTY);
+    let mut mla_output = ArchiveWriter::from_config(dest, writer_config).unwrap();
+
+    let start = Instant::now();
+    // Measure the convert_to_archive time
+    mla_repair.convert_to_archive(&mut mla_output).unwrap();
+    start.elapsed()
+}
+
+/// This benchmark measures the time needed to repair an archive depending on the
+/// enabled layers.
+///
+/// Only one-size is used, as the archive must be big enough to be representative
+pub fn failsafe_multiple_layers_repair(c: &mut Criterion) {
+    let size = 4 * MB as u64;
+    let mut group = c.benchmark_group("failsafe_multiple_layers_repair");
+    // Reduce the number of sample to avoid taking too much time
+    group.sample_size(10);
+    group.throughput(Throughput::Bytes(size));
+
+    for layers in &LAYERS_POSSIBILITIES {
+        group.bench_function(BenchmarkId::new(format!("{layers:?}"), size), move |b| {
+            b.iter_custom(|iters| repair_archive(iters, size, *layers))
+        });
+    }
+}
+
 criterion_group!(
     benches,
     writer_multiple_layers_multiple_block_size,
     reader_multiple_layers_multiple_block_size,
     reader_multiple_layers_multiple_block_size_multifiles_random,
     reader_multiple_layers_multiple_block_size_multifiles_linear,
+    failsafe_multiple_layers_repair,
     // Was used to determine the best default compression quality ratio
     //
     // multiple_compression_quality,
