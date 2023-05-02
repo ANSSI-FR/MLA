@@ -1,3 +1,5 @@
+use std::fmt;
+
 use bincode::Options;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use serde::{Deserialize, Serialize};
@@ -73,6 +75,17 @@ enum CompressionLayerReaderState<R: Read> {
     /// Empty is a placeholder to allow state replacement
     Empty,
 }
+
+impl<R: Read> fmt::Debug for CompressionLayerReaderState<R> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CompressionLayerReaderState::Ready(_inner) => write!(f, "Ready"),
+            CompressionLayerReaderState::InData { .. } => write!(f, "InData"),
+            CompressionLayerReaderState::Empty => write!(f, "Empty")
+        }
+    }
+}
+
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SizesInfo {
