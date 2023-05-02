@@ -103,10 +103,19 @@ impl<'a, 'b, W: InnerWriterTrait> Write for StreamWriter<'a, 'b, W> {
 
 #[cfg(test)]
 mod tests {
+    use rand::distributions::Standard;
+    use rand::prelude::Distribution;
+    use rand::{RngCore, SeedableRng};
+    use rand_chacha::ChaChaRng;
+    use x25519_dalek::{PublicKey, StaticSecret};
+
     use super::*;
     use crate::tests::build_archive;
     use crate::*;
     use std::io::Cursor;
+
+    // From mla.layers.compress
+    const UNCOMPRESSED_DATA_SIZE: u32 = 4 * 1024 * 1024;
 
     #[test]
     fn full_linear_extract() {
@@ -153,6 +162,56 @@ mod tests {
 
         // Check file
         assert_eq!(export.get(&files[0].0).unwrap(), &files[0].1);
+    }
+
+    #[test]
+    /// Linear extraction of a file big enough to use several block
+    ///
+    /// This test is different from the layers' compress ones:
+    /// - in the standard use, between each block, a `Seek` operation is made
+    /// - the use of `linear_extract` avoid that repetitive `Seek` usage, as layers are "raw"-read
+    ///
+    /// Regression test for `brotli-decompressor` 2.3.3 to 2.3.4 (issue #146)
+    fn linear_extract_big_file() {
+        let file_length = 4 * UNCOMPRESSED_DATA_SIZE as usize;
+
+        // --------- SETUP ----------
+        let file = Vec::new();
+        // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
+        let mut rng = ChaChaRng::seed_from_u64(0);
+        let mut bytes = [0u8; 32];
+        rng.fill_bytes(&mut bytes);
+        let key = StaticSecret::from(bytes);
+        let mut config = ArchiveWriterConfig::new();
+        let layers = Layers::ENCRYPT | Layers::COMPRESS;
+        config
+            .set_layers(layers)
+            .add_public_keys(&[PublicKey::from(&key)]);
+        let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
+
+        let fname = "my_file".to_string();
+        let data: Vec<u8> = Standard.sample_iter(&mut rng).take(file_length).collect();
+        assert_eq!(data.len(), file_length);
+        mla.add_file(&fname, data.len() as u64, data.as_slice())
+            .unwrap();
+
+        mla.finalize().unwrap();
+
+        // --------------------------
+
+        // Prepare the reader
+        let dest = Cursor::new(mla.into_raw());
+        let mut config = ArchiveReaderConfig::new();
+        config.add_private_keys(std::slice::from_ref(&key));
+        let mut mla_read = ArchiveReader::from_config(dest, config).unwrap();
+
+        // Prepare writers
+        let mut export: HashMap<&String, Vec<u8>> = HashMap::new();
+        export.insert(&fname, Vec::new());
+        linear_extract(&mut mla_read, &mut export).expect("Extract error");
+
+        // Check file
+        assert_eq!(export.get(&fname).unwrap(), &data);
     }
 
     #[test]
