@@ -1,4 +1,5 @@
 use std::fmt;
+use std::io::{self, Read, Seek, SeekFrom, Take, Write};
 
 use bincode::Options;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
@@ -8,8 +9,6 @@ use crate::layers::traits::{
     InnerWriterTrait, InnerWriterType, LayerFailSafeReader, LayerReader, LayerWriter,
 };
 use crate::{Error, BINCODE_MAX_DESERIALIZE};
-use std::io;
-use std::io::{Read, Seek, SeekFrom, Write};
 
 use crate::config::{ArchiveWriterConfig, ConfigResult};
 use crate::errors::ConfigError;
@@ -69,8 +68,9 @@ enum CompressionLayerReaderState<R: Read> {
     InData {
         read: u32,
         uncompressed_size: u32,
-        // Use a Box to avoid a too big enum
-        decompressor: Box<brotli::Decompressor<R>>,
+        /// Use a Box to avoid a too big enum
+        /// Use a `Take` to instanciate the `Decompressor` only on the current block's compressed bytes
+        decompressor: Box<brotli::Decompressor<Take<R>>>,
     },
     /// Empty is a placeholder to allow state replacement
     Empty,
@@ -81,11 +81,10 @@ impl<R: Read> fmt::Debug for CompressionLayerReaderState<R> {
         match self {
             CompressionLayerReaderState::Ready(_inner) => write!(f, "Ready"),
             CompressionLayerReaderState::InData { .. } => write!(f, "InData"),
-            CompressionLayerReaderState::Empty => write!(f, "Empty")
+            CompressionLayerReaderState::Empty => write!(f, "Empty"),
         }
     }
 }
-
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SizesInfo {
@@ -151,7 +150,9 @@ impl<R: Read> CompressionLayerReaderState<R> {
     fn into_inner(self) -> R {
         match self {
             CompressionLayerReaderState::Ready(inner) => inner,
-            CompressionLayerReaderState::InData { decompressor, .. } => decompressor.into_inner(),
+            CompressionLayerReaderState::InData { decompressor, .. } => {
+                decompressor.into_inner().into_inner()
+            }
             // `panic!` explicitly called to avoid propagating an error which
             // must never happens (ie, calling `into_inner` in an inconsistent
             // internal state)
@@ -188,7 +189,7 @@ impl<'a, R: 'a + Read> CompressionLayerReader<'a, R> {
         &self,
         inner: S,
         uncompressed_pos: u64,
-    ) -> Result<brotli::Decompressor<S>, Error> {
+    ) -> Result<brotli::Decompressor<Take<S>>, Error> {
         // Ensure it's a starting position
         if uncompressed_pos % (UNCOMPRESSED_DATA_SIZE as u64) != 0 {
             return Err(Error::BadAPIArgument(
@@ -205,9 +206,12 @@ impl<'a, R: 'a + Read> CompressionLayerReader<'a, R> {
         match &self.sizes_info {
             Some(sizes_info) => {
                 // Use index for faster decompression
+                let compressed_block_size =
+                    sizes_info.compressed_block_size_at(uncompressed_pos) as usize;
                 Ok(brotli::Decompressor::new(
-                    inner,
-                    sizes_info.compressed_block_size_at(uncompressed_pos) as usize,
+                    // Make the Decompressor work only on the compressed block's bytes, no more
+                    inner.take(compressed_block_size as u64),
+                    compressed_block_size,
                 ))
             }
             None => Err(Error::MissingMetadata),
@@ -364,7 +368,8 @@ impl<'a, R: 'a + Read + Seek> Read for CompressionLayerReader<'a, R> {
                     .into());
                 }
                 if read == uncompressed_size {
-                    self.state = CompressionLayerReaderState::Ready(decompressor.into_inner());
+                    self.state =
+                        CompressionLayerReaderState::Ready(decompressor.into_inner().into_inner());
                     // Start a new block, fill it with new values!
                     return self.read(buf);
                 }
@@ -710,7 +715,12 @@ impl<'a, R: 'a + Read> Read for CompressionLayerFailSafeReader<'a, R> {
                 // will stop on the first byte of the next CompressionBlock.
                 // This is slower, but we don't have index, and
                 // therefore we don't know the compressed block size
-                let decompressor = Box::new(brotli::Decompressor::new(inner, 1));
+                // Take more than the maximum number of compressed byte (as the real number is unknown)
+                // to comply with the CompressionLayerReaderState type
+                let decompressor = Box::new(brotli::Decompressor::new(
+                    inner.take(2 * UNCOMPRESSED_DATA_SIZE as u64),
+                    1,
+                ));
                 self.state = CompressionLayerReaderState::InData {
                     read: 0,
                     // Default values, for "repair" mode
@@ -738,7 +748,8 @@ impl<'a, R: 'a + Read> Read for CompressionLayerFailSafeReader<'a, R> {
                     // the end of the current block.
                     io::copy(&mut decompressor, &mut io::sink())?;
                     // Start a new block, fill it with new values
-                    self.state = CompressionLayerReaderState::Ready(decompressor.into_inner());
+                    self.state =
+                        CompressionLayerReaderState::Ready(decompressor.into_inner().into_inner());
                     return self.read(buf);
                 }
                 let size = std::cmp::min((uncompressed_size - read) as usize, buf.len());
