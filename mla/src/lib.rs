@@ -1105,26 +1105,42 @@ impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
                                 "`id_failsafe2hash` not more sync with `id_failsafe2id_output`",
                             );
 
+                            // Limit the reader to at most the file's content
                             let src = &mut (&mut self.src).take(length);
+
+                            // `Read` trait normally garantees that if an error is returned by `.read()`, no data
+                            // has been read
+                            //
+                            // It must then be equivalent to
+                            // - call `n` times the API for 1 byte looking for the first fail
+                            // - call the API for `n` bytes, possibly returning a first bunch of bytes then a failure
+                            //
+                            // The second method is used to reduced the calls' count while repairing large files.
+                            // Being equivalent to the first method, it should extracts as many bytes as possible
+                            // from the potentially broken stream.
+                            //
+                            // Note: some `Read` implementation does not respect this contract, as it might be
+                            // subject to different interpretation
+
+                            // This buffer is used to reduced the resulting file fragmentation by aggregating `read` results
+                            let mut buf = vec![0; CACHE_SIZE];
                             'content: loop {
-                                let mut buf = Vec::with_capacity(CACHE_SIZE);
+                                let mut next_write_pos = 0;
                                 'buf_fill: loop {
-                                    // Read bytes one per one to take the maximum of it
-                                    let mut mini_buf = [0u8; 1];
-                                    match src.read(&mut mini_buf) {
+                                    match src.read(&mut buf[next_write_pos..]) {
                                         Ok(read) => {
                                             if read == 0 {
                                                 // EOF
                                                 break 'buf_fill;
                                             }
-                                            buf.push(mini_buf[0]);
+                                            next_write_pos += read;
                                         }
                                         Err(err) => {
                                             // Stop reconstruction
                                             output.append_file_content(
                                                 id_output,
-                                                buf.len() as u64,
-                                                buf.as_slice(),
+                                                next_write_pos as u64,
+                                                &buf[..next_write_pos],
                                             )?;
                                             update_error!(
                                                 error = FailSafeReadError::ErrorInFile(
@@ -1136,17 +1152,17 @@ impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
                                         }
                                     }
                                     // Cache full
-                                    if buf.len() == CACHE_SIZE {
+                                    if next_write_pos >= CACHE_SIZE {
                                         break 'buf_fill;
                                     }
                                 }
                                 output.append_file_content(
                                     id_output,
-                                    buf.len() as u64,
-                                    buf.as_slice(),
+                                    next_write_pos as u64,
+                                    &buf[..next_write_pos],
                                 )?;
-                                hash.update(buf.as_slice());
-                                if buf.len() < CACHE_SIZE {
+                                hash.update(&buf[..next_write_pos]);
+                                if next_write_pos < CACHE_SIZE {
                                     // EOF
                                     break 'content;
                                 }
