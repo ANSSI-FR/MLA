@@ -935,6 +935,7 @@ mod tests {
     use crate::Layers;
 
     use crate::layers::raw::{RawLayerFailSafeReader, RawLayerReader, RawLayerWriter};
+    use brotli::writer::StandardAlloc;
     use rand::distributions::{Alphanumeric, Distribution, Standard};
     use rand::SeedableRng;
     use std::io::{Cursor, Read, Write};
@@ -1010,17 +1011,59 @@ mod tests {
         let file = comp.into_raw();
         println!("{}", file.len());
         let mut src = Cursor::new(file.as_slice());
-        // Use a block size of 1 to be sure that the decompression will stop on
-        // the first byte of the next CompressionBlock (-> slower, but in
-        // reality, we will have index with compressed size)
+        // Highlight the use of BrotliDecompressStream
         let now = Instant::now();
-
-        let mut reader = brotli::Decompressor::new(&mut src, 1);
         let mut buf = vec![0; UNCOMPRESSED_DATA_SIZE as usize];
-        reader.read_exact(&mut buf).expect("First buffer");
+
+        // A similar result can be obtained by using a buffer_size of 1, as demonstrated below
+        //
+        // Using a Decompressor with a bigger buffer size lead to an over read of the inner source:
+        // let mut reader = brotli::Decompressor::new(&mut src, 4096);
+        // reader.read_exact(&mut buf).expect("First buffer");
+        //
+        // reader.__0.__0.input_offset -> current offset in the underlying buffer
+        // reader.__0.__0: DecompressorCustomIo
+        // src.position() - buffer_size + input_offset -> actual last byte read
+        //
+        // But this information is not exposed by the API
+
+        let mut brotli_state = BrotliState::new(
+            StandardAlloc::default(),
+            StandardAlloc::default(),
+            StandardAlloc::default(),
+        );
+
+        // at this point the decompressor simply needs an input and output buffer and the ability to track
+        // the available data left in each buffer
+        let mut available_in = file.len();
+        let mut input_offset = 0;
+        let mut available_out = buf.len();
+        let mut output_offset = 0;
+        let mut written = 0;
+
+        match brotli::BrotliDecompressStream(
+            &mut available_in,
+            &mut input_offset,
+            &src.get_ref(),
+            &mut available_out,
+            &mut output_offset,
+            &mut buf,
+            &mut written,
+            &mut brotli_state,
+        ) {
+            brotli::BrotliResult::ResultSuccess => {}
+            _ => panic!(),
+        };
+
+        // Ensure the decompression is correct
+        assert_eq!(written, buf.len());
         assert_eq!(buf.len(), UNCOMPRESSED_DATA_SIZE as usize);
         assert_eq!(buf.as_slice(), &bytes[..(UNCOMPRESSED_DATA_SIZE as usize)]);
 
+        // Use the `input_offset` information to seek to the beginning of the next compressed block
+        src.set_position(input_offset as u64);
+
+        // Use a Decompressor with a buffer size of 1, as a replacement of the above optimization (must be compatible)
         let mut reader = brotli::Decompressor::new(&mut src, 1);
         let mut buf2 = vec![0; UNCOMPRESSED_DATA_SIZE as usize];
         reader.read_exact(&mut buf2).expect("Second buffer");
