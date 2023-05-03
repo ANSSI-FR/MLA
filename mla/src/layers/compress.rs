@@ -843,7 +843,7 @@ impl<'a, R: 'a + Read> Read for CompressionLayerFailSafeReader<'a, R> {
                         }
                         // There is still data in the cache to read
                         // Will fail and return the error on the next .read()
-                }
+                    }
                 }
 
                 // Number of byte available in the source
@@ -1146,8 +1146,8 @@ mod tests {
                 .unwrap(),
             );
             let mut buf = Vec::new();
-            // This may ends with an error, when we start reading the footer (invalid for decompression)
-            decomp.read_to_end(&mut buf).unwrap();
+            // This must ends with an error, when we start reading the footer (invalid for decompression)
+            decomp.read_to_end(&mut buf).unwrap_err();
             println!(
                 "Compression / Decompression (fail-safe): {} us for {} bytes ({} compressed)",
                 now.elapsed().as_micros(),
