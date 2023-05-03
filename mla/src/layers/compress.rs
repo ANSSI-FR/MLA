@@ -1044,7 +1044,7 @@ mod tests {
         match brotli::BrotliDecompressStream(
             &mut available_in,
             &mut input_offset,
-            &src.get_ref(),
+            src.get_ref(),
             &mut available_out,
             &mut output_offset,
             &mut buf,
