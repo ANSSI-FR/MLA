@@ -38,7 +38,7 @@ zeroize = { version = "1", default-features = false}
 hex-literal = { version = "0.4", default-features = false}
 aes-gcm = { version = "0.10", default-features = false, features = ["aes"]}
 aead = { version = "0.5", default-features = false, features = ["alloc"]}
-criterion = { version = "0.4", default-features = false}
+criterion = { version = "0.5", default-features = false}
 curve25519-parser = { path = "../curve25519-parser" }
 hex = { version = "0.4", default-features = false, features = ["alloc"]}
 static_assertions = { version = "1", default-features = false }
