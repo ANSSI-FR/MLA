@@ -487,3 +487,65 @@ By default, `MLAArchiveWriter` is not `Send`. If the inner writable type is also
 [dependencies]
 mla = { version = "...", default-features = false, features = ["send"]}
 ```
+
+**How to deterministically generate a key-pair?**
+
+The option `--seed` of `mlar keygen` can be used to deterministically generate a key-pair. For instance, it can be used for reproductive testing or archiving a key in a safe.
+
+:warning: It is not recommended to use a `seed` unless one knows why she is doing it.
+The security of the resulting private-key is dependent of the security of the seed. In particular:
+
+- if an attacker known the `seed`, he knowns the private-key
+- the entropy of the resulting private-key is at most the one of the `seed`
+
+The algorithm used for the generation is as follow:
+
+1. given a `seed`, encode it as an UTF8 sequence of bytes `bytes`
+1. `prng_seed = SHA512(bytes)[0..32]`
+1. `secret = ChaCha-20rounds(prng_seed)`
+1. `secret`, after being clamped as specified by the Curve-25519 reference, is used as the private key
+
+**How to setup a "hierarchical key infrastructure"?**
+
+`mlar` provides a subcommand `keyderive` to deterministically derive sub-key from a given key along a derivation path (a bit like [BIP-32](https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki), except children public keys can't be derived from the parent one).
+
+For instance, if one wants to derive the following scheme:
+```ascii
+root_key
+    ├──["App X"]── key_app_x
+    │   └──["v1.2.3"]── key_app_x_v1.2.3
+    └──["App Y"]── key_app_y
+```
+
+One can use the following commands:
+```bash
+# Create the root key (--seed can be used if this key must be created deterministically, see above)
+mlar keygen root_key
+# Create App keys
+mlar keyderive root_key key_app_x --path "App X"
+mlar keyderive root_key key_app_y --path "App Y"
+# Create the v1.2.3 key of App X
+mlar keyderive key_app_x key_app_x_v1.2.3 --path "v1.2.3"
+```
+
+At this point, let's consider an outage happened and keys have been lost.
+
+One can recover all the keys from the `root_key` private key.
+For instance, to recover the `key_app_v1.2.3`:
+```bash
+mlar keyderive root_key recovered_key --path "App X" --path "v1.2.3"
+```
+
+As such, if the `App X` owner only knows `key_app_x`, he can recover all of its subkeys, including `key_app_v1.2.3` but excluding `key_app_y`.
+
+:warning: This scheme does not provide any revocation mechanism. If a parent key is compromised, all of the key in its sub-tree must be considered compromised (ie. all past and futures key that can be obtained from it). The opposite is not true: a parent key remains safe if any of its children key is compromised.
+
+The algorithm used for the generation is as follow:
+
+1. Given a `private key`, extract it's `secret` as a 32-bytes value (the clamped private key of Curve 25519)
+1. For each `path` encoded as UTF8:
+   
+    1. Derive a seed from a HKDF-SHA512 function (RFC5869) with: `HKDF-SHA512(salt="PATH DERIVATION" ASCII-encoded, ikm=secret extracted from the parent key, info=Derivation path)`
+    1. Use the first 32-bytes as a seed for a ChaCha-20 rounds PRNG
+    1. The first 32-bytes output of ChaCha, after being clamped as specified by the Curve-25519 reference, is used as the new private key
+1. Use the last computed private key as the resulting key

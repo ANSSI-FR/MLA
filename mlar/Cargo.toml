@@ -21,6 +21,9 @@ rand = "0.8"
 x25519-dalek = "1"
 humansize = {version = "2", features = ["impl_style"]}
 hex = "0.4"
+sha2 = { version = "0", default-features = false}
+hkdf = { version = "0", default-features = false}
+zeroize = { version = "1", default-features = false}
 # Could be made optional / feature to enable (for binary size)
 tar = "0.4"
 rand_chacha = "0.3"
