@@ -1,8 +1,9 @@
 use clap::{value_parser, Arg, ArgAction, ArgMatches, Command};
 use curve25519_parser::{
-    generate_keypair, parse_openssl_25519_privkey, parse_openssl_25519_pubkey,
+    generate_keypair, parse_openssl_25519_privkey, parse_openssl_25519_pubkey, StaticSecret,
 };
 use glob::Pattern;
+use hkdf::Hkdf;
 use humansize::{FormatSize, DECIMAL};
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
 use mla::errors::{Error, FailSafeReadError};
@@ -17,6 +18,7 @@ use mla::{
 };
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
+use sha2::{Digest, Sha512};
 use std::collections::{HashMap, HashSet};
 use std::error;
 use std::fmt;
@@ -25,6 +27,7 @@ use std::io::{self, BufRead};
 use std::io::{Read, Seek, Write};
 use std::path::{Component, Path, PathBuf};
 use tar::{Builder, Header};
+use zeroize::Zeroize;
 
 // ----- Error ------
 
@@ -773,8 +776,86 @@ fn keygen(matches: &ArgMatches) -> Result<(), MlarError> {
         .expect("Unable to create the public file");
     let mut output_priv = File::create(output_base).expect("Unable to create the private file");
 
-    let mut csprng = ChaChaRng::from_entropy();
+    // handle seed
+    //
+    // if set, seed the PRNG with `SHA512(seed bytes as UTF8)[0..32]`
+    // if not, seed the PRNG with the dedicated API
+    let mut csprng = match matches.get_one::<String>("seed") {
+        Some(seed) => {
+            eprintln!(
+                "[WARNING] A seed-based keygen operation is deterministic. An attacker knowing the seed knows the private key and is able to decrypt associated messages"
+            );
+            let mut hseed = [0u8; 32];
+            hseed.copy_from_slice(&Sha512::digest(seed.as_bytes())[0..32]);
+            ChaChaRng::from_seed(hseed)
+        }
+        None => ChaChaRng::from_entropy(),
+    };
+
     let key_pair = generate_keypair(&mut csprng).expect("Error while generating the key-pair");
+
+    // Output the public key in PEM format, to ease integration in text based
+    // configs
+    output_pub
+        .write_all(key_pair.public_as_pem().as_bytes())
+        .expect("Error writing the public key");
+
+    // Output the private key in DER format, to avoid common mistakes
+    output_priv
+        .write_all(&key_pair.private_der)
+        .expect("Error writing the private key");
+    Ok(())
+}
+
+const DERIVE_PATH_SALT: &[u8; 15] = b"PATH DERIVATION";
+
+/// Derive a Curve25519 secret along a path and return a seed
+///
+/// HKDF(salt="PATH DERIVATION", ikm=Parent Key, info=Derivation path) -> seed
+fn apply_derive(path: &str, mut src: StaticSecret) -> [u8; 32] {
+    let hkdf: Hkdf<Sha512> = Hkdf::new(Some(DERIVE_PATH_SALT), &src.to_bytes());
+    let mut seed = [0u8; 32];
+    hkdf.expand(path.as_bytes(), &mut seed)
+        .expect("[ERROR] Error while expanding the key");
+    src.zeroize();
+    seed
+}
+
+#[allow(clippy::unnecessary_wraps)]
+fn keyderive(matches: &ArgMatches) -> Result<(), MlarError> {
+    // Safe to use unwrap() because of the requirement
+    let output_base = matches.get_one::<PathBuf>("output").unwrap();
+
+    let mut output_pub = File::create(Path::new(output_base).with_extension("pub"))
+        .expect("Unable to create the public file");
+    let mut output_priv = File::create(output_base).expect("Unable to create the private file");
+
+    // Safe to use unwrap() because of the requirement
+    let private_key_arg = matches.get_one::<PathBuf>("input").unwrap();
+    let mut file = File::open(private_key_arg)?;
+
+    // Load the the ECC key in-memory and parse it
+    let mut buf = Vec::new();
+    file.read_to_end(&mut buf)?;
+    let mut secret =
+        parse_openssl_25519_privkey(&buf).expect("[ERROR] Unable to read the private key");
+
+    // Derive the key along the path
+    let mut key_pair = None;
+    for path in matches
+        .get_many::<String>("path")
+        .expect("[ERROR] At least one path must be provided")
+    {
+        let mut csprng = ChaChaRng::from_seed(apply_derive(path, secret));
+
+        // Use the high-level API to avoid duplicating code from curve25519-parser in case of futur changes
+        key_pair =
+            Some(generate_keypair(&mut csprng).expect("Error while generating the key-pair"));
+        secret = parse_openssl_25519_privkey(&key_pair.as_ref().unwrap().private_der).unwrap();
+    }
+
+    // Safe to unwrap, there is at least one derivation path
+    let key_pair = key_pair.unwrap();
 
     // Output the public key in PEM format, to ease integration in text based
     // configs
@@ -1069,6 +1150,43 @@ fn app() -> clap::Command {
                         .value_parser(value_parser!(PathBuf))
                         .required(true)
                 )
+                .arg(
+                    Arg::new("seed")
+                        .help("Initial seed for deterministic key generation. THE SEED IS AS SECRET AS THE RESULTING PRIVATE KEY. USE THIS OPTION ONLY IF NECESSARY")
+                        .long("seed")
+                        .short('s')
+                        .num_args(1)
+                        .value_parser(value_parser!(String))
+                )
+        )
+        .subcommand(
+            Command::new("keyderive")
+                .about(
+                    "Derive a new public/private keypair from an existing one and a public path, in OpenSSL Ed25519 format, to be used by mlar",
+                )
+                .arg(
+                    Arg::new("input")
+                        .help("Input private key file")
+                        .num_args(1)
+                        .value_parser(value_parser!(PathBuf))
+                        .required(true)
+                )
+                .arg(
+                    Arg::new("output")
+                        .help("Output file for the private key. The public key is in {output}.pub")
+                        .num_args(1)
+                        .value_parser(value_parser!(PathBuf))
+                        .required(true)
+                )
+                .arg(
+                    Arg::new("path")
+                    .help("Public derivation path")
+                    .long("path")
+                    .short('p')
+                    .num_args(1)
+                    .action(ArgAction::Append)
+                    .value_parser(value_parser!(String))
+                )
         )
         .subcommand(
             Command::new("info")
@@ -1106,6 +1224,8 @@ fn main() {
         convert(matches)
     } else if let Some(matches) = matches.subcommand_matches("keygen") {
         keygen(matches)
+    } else if let Some(matches) = matches.subcommand_matches("keyderive") {
+        keyderive(matches)
     } else if let Some(matches) = matches.subcommand_matches("info") {
         info(matches)
     } else {
