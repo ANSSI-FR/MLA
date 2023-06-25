@@ -46,7 +46,10 @@ using MLAConfigHandle = void*;
 /// file, and does whatever it wants with it (e.g. write it to a file, to a HTTP stream, etc.)
 /// If successful, returns 0 and sets the number of bytes actually written to its last
 /// parameter. Otherwise, returns an error code on failure.
-using MLAWriteCallback = int32_t(*)(const uint8_t *buffer, uint32_t buffer_len, void *context, uint32_t *bytes_written);
+using MLAWriteCallback = int32_t(*)(const uint8_t *buffer,
+                                    uint32_t buffer_len,
+                                    void *context,
+                                    uint32_t *bytes_written);
 
 /// Implemented by the developper. Should ask the underlying medium (file buffering, HTTP
 /// buffering, etc.) to flush any internal buffer.
@@ -59,7 +62,10 @@ using MLAArchiveFileHandle = void*;
 /// Implemented by the developper. Read between 0 and buffer_len into buffer.
 /// If successful, returns 0 and sets the number of bytes actually read to its last
 /// parameter. Otherwise, returns an error code on failure.
-using MlaReadCallback = int32_t(*)(uint8_t *buffer, uint32_t buffer_len, void *context, uint32_t *bytes_read);
+using MlaReadCallback = int32_t(*)(uint8_t *buffer,
+                                   uint32_t buffer_len,
+                                   void *context,
+                                   uint32_t *bytes_read);
 
 /// Implemented by the developper. Seek in the source data.
 /// If successful, returns 0 and sets the new position to its last
@@ -75,7 +81,10 @@ struct FileWriter {
 /// Implemented by the developper
 /// Return the desired output path which is expected to be writable.
 /// The callback developper is responsible all security checks and parent path creation.
-using MlaFileCalback = int32_t(*)(void *context, const uint8_t *filename, uintptr_t filename_len, FileWriter *file_writer);
+using MlaFileCalback = int32_t(*)(void *context,
+                                  const uint8_t *filename,
+                                  uintptr_t filename_len,
+                                  FileWriter *file_writer);
 
 /// Structure for MLA archive info
 struct ArchiveInfo {
