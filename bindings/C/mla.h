@@ -48,7 +48,10 @@ typedef void *MLAConfigHandle;
  * If successful, returns 0 and sets the number of bytes actually written to its last
  * parameter. Otherwise, returns an error code on failure.
  */
-typedef int32_t (*MLAWriteCallback)(const uint8_t *buffer, uint32_t buffer_len, void *context, uint32_t *bytes_written);
+typedef int32_t (*MLAWriteCallback)(const uint8_t *buffer,
+                                    uint32_t buffer_len,
+                                    void *context,
+                                    uint32_t *bytes_written);
 
 /**
  * Implemented by the developper. Should ask the underlying medium (file buffering, HTTP
@@ -65,7 +68,10 @@ typedef void *MLAArchiveFileHandle;
  * If successful, returns 0 and sets the number of bytes actually read to its last
  * parameter. Otherwise, returns an error code on failure.
  */
-typedef int32_t (*MlaReadCallback)(uint8_t *buffer, uint32_t buffer_len, void *context, uint32_t *bytes_read);
+typedef int32_t (*MlaReadCallback)(uint8_t *buffer,
+                                   uint32_t buffer_len,
+                                   void *context,
+                                   uint32_t *bytes_read);
 
 /**
  * Implemented by the developper. Seek in the source data.
@@ -85,7 +91,10 @@ typedef struct FileWriter {
  * Return the desired output path which is expected to be writable.
  * The callback developper is responsible all security checks and parent path creation.
  */
-typedef int32_t (*MlaFileCalback)(void *context, const uint8_t *filename, uintptr_t filename_len, struct FileWriter *file_writer);
+typedef int32_t (*MlaFileCalback)(void *context,
+                                  const uint8_t *filename,
+                                  uintptr_t filename_len,
+                                  struct FileWriter *file_writer);
 
 /**
  * Structure for MLA archive info
