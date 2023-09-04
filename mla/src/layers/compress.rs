@@ -1094,7 +1094,7 @@ mod tests {
     fn compress_layer() {
         // Compress then decompress with dedicated Layer structs
 
-        for data in vec![get_data(), get_uncompressable_data()] {
+        for data in [get_data(), get_uncompressable_data()] {
             let bytes = data.as_slice();
 
             let file = Vec::new();
@@ -1127,7 +1127,7 @@ mod tests {
     fn compress_failsafe_layer() {
         // Compress then decompress with Fail-Safe Layer structs
 
-        for data in vec![get_data(), get_uncompressable_data()] {
+        for data in [get_data(), get_uncompressable_data()] {
             let bytes = data.as_slice();
 
             let file = Vec::new();
@@ -1163,7 +1163,7 @@ mod tests {
     fn compress_failsafe_truncated() {
         // Compress then decompress with Fail-Safe Layer structs, while truncating the intermediate buffer
 
-        for data in vec![get_data(), get_uncompressable_data()] {
+        for data in [get_data(), get_uncompressable_data()] {
             let bytes = data.as_slice();
 
             let file = Vec::new();
@@ -1236,7 +1236,7 @@ mod tests {
 
     #[test]
     fn seek_with_footer() {
-        for data in vec![get_data(), get_uncompressable_data()] {
+        for data in [get_data(), get_uncompressable_data()] {
             let bytes = data.as_slice();
 
             let file = Vec::new();
