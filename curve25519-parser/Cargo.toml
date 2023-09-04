@@ -13,8 +13,8 @@ readme = "../README.md"
 
 [dependencies]
 der-parser = { version = "8", default-features = false}
-x25519-dalek = { version = "1", default-features = false}
 curve25519-dalek = { version = "4", default-features = false, features = ["u64_backend"]}
+x25519-dalek = { version = "2", default-features = false}
 sha2 = { version = "0", default-features = false}
 pem = { version = "3", default-features = false}
 
