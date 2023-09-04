@@ -431,11 +431,11 @@ fn test_truncated_repair_list_tar() {
 fn test_multiple_keys() {
     // Key parsing is common for each subcommands, so test only one: `list`
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
-    let ecc_publics = vec![
+    let ecc_publics = [
         Path::new("../samples/test_x25519_pub.pem"),
         Path::new("../samples/test_x25519_3_pub.pem"),
     ];
-    let ecc_privates = vec![
+    let ecc_privates = [
         Path::new("../samples/test_x25519.pem"),
         Path::new("../samples/test_x25519_2.pem"),
     ];
@@ -545,7 +545,7 @@ fn test_multiple_compression_level() {
     assert!(q5_size < q0_size);
 
     // Ensure files are correct
-    for (src, tar_name) in vec![(mlar_file_q0, &tar_file_q0), (mlar_file_q5, &tar_file_q5)] {
+    for (src, tar_name) in [(mlar_file_q0, &tar_file_q0), (mlar_file_q5, &tar_file_q5)] {
         // `mlar to-tar -i {src} -o {tar_name}`
         let mut cmd = Command::cargo_bin(UTIL).unwrap();
         cmd.arg("to-tar")
@@ -1111,7 +1111,7 @@ fn test_keyderive() {
     //---------------- END OF SETUP -----------------
 
     // Assert all keys are different
-    let v: HashSet<_> = vec![&keys.parent, &keys.child1, &keys.child2, &keys.child1child1]
+    let v: HashSet<_> = [&keys.parent, &keys.child1, &keys.child2, &keys.child1child1]
         .iter()
         .cloned()
         .collect();
