@@ -132,7 +132,7 @@ jobs:
       - name: Install cargo-afl binary crate
         uses: actions-rs/install@v0.1
         with:
-          crate: afl
+          crate: cargo-afl
           version: latest
           use-tool-cache: true
       - name: Test AFL build
@@ -173,7 +173,7 @@ jobs:
       - name: Install cargo-afl binary crate
         uses: actions-rs/install@v0.1
         with:
-          crate: afl
+          crate: cargo-afl
           version: latest
           use-tool-cache: true
       - uses: actions-rs/cargo@v1
