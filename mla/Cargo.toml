@@ -44,9 +44,7 @@ hex = { version = "0.4", default-features = false, features = ["alloc"]}
 static_assertions = { version = "1", default-features = false }
 
 [features]
-# x25519-dalek depends on curve25519-dalek, which requires at least one feature to be enabled
-# -> use default u64_backend (x25519-dalek's default) to have a working default compilation
-default = ["x25519-dalek/u64_backend"]
+default = []
 send = []
 
 [[bench]]
