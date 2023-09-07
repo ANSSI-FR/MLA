@@ -221,7 +221,7 @@ pub extern "C" fn mla_config_add_public_keys(
     let mut config = unsafe { Box::from_raw(config as *mut ArchiveWriterConfig) };
 
     // Create a slice from the NULL-terminated string
-    let public_keys = unsafe { CStr::from_ptr(public_keys as *const i8) }.to_bytes();
+    let public_keys = unsafe { CStr::from_ptr(public_keys) }.to_bytes();
     // Parse as OpenSSL Ed25519 public key(s)
     let res = match parse_openssl_25519_pubkeys_pem_many(public_keys) {
         Ok(v) if !v.is_empty() => {
@@ -290,7 +290,7 @@ pub extern "C" fn mla_reader_config_add_private_key(
     let mut private_keys = Vec::new();
 
     // Create a slice from the NULL-terminated string
-    let private_key = unsafe { CStr::from_ptr(private_key as *const i8) }.to_bytes();
+    let private_key = unsafe { CStr::from_ptr(private_key) }.to_bytes();
     // Parse as OpenSSL Ed25519 private key(s)
     let res = match parse_openssl_25519_privkey(private_key) {
         Ok(v) => {
