@@ -10,4 +10,4 @@ crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
 mla = { path = "../../mla", version = "1" }
-curve25519-parser = { path = "../../curve25519-parser", version = "0.3" }
+curve25519-parser = { path = "../../curve25519-parser", version = "0.4" }
