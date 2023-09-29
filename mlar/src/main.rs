@@ -5,6 +5,7 @@ use curve25519_parser::{
 use glob::Pattern;
 use hkdf::Hkdf;
 use humansize::{FormatSize, DECIMAL};
+use lru::LruCache;
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
 use mla::errors::{Error, FailSafeReadError};
 use mla::helpers::linear_extract;
@@ -25,7 +26,9 @@ use std::fmt;
 use std::fs::{self, read_dir, File};
 use std::io::{self, BufRead};
 use std::io::{Read, Seek, Write};
+use std::num::NonZeroUsize;
 use std::path::{Component, Path, PathBuf};
+use std::sync::Mutex;
 use tar::{Builder, Header};
 use zeroize::Zeroize;
 
@@ -443,19 +446,32 @@ fn create_file<P1: AsRef<Path>>(
 ///
 /// This wrapper is used to avoid opening all files simultaneously, potentially
 /// reaching the filesystem limit, but rather appending to file on-demand
-/// This could be enhanced with a limited pool of active file, but this
-/// optimisation doesn't seems necessary for now
-struct FileWriter {
+///
+/// A limited pool of active file, in a LRU cache, is used to avoid too many open-close
+struct FileWriter<'a> {
     /// Target file for data appending
     path: PathBuf,
+    /// Reference on the cache
+    // A `Mutex` is used instead of a `RefCell` as `FileWriter` can be `Send`
+    cache: &'a Mutex<LruCache<PathBuf, File>>,
 }
 
-impl Write for FileWriter {
+/// Max number of fd simultaneously opened
+pub const FILE_WRITER_POOL_SIZE: usize = 1000;
+
+impl<'a> Write for FileWriter<'a> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        fs::OpenOptions::new()
-            .append(true)
-            .open(&self.path)?
-            .write(buf)
+        // Only one thread is using the FileWriter, safe to `.unwrap()`
+        let mut cache = self.cache.lock().unwrap();
+        if !cache.contains(&self.path) {
+            let file = fs::OpenOptions::new().append(true).open(&self.path)?;
+            cache.put(self.path.clone(), file);
+        }
+        // Safe to `unwrap` here cause we ensure the element is in the cache (mono-threaded)
+        let file = cache.get_mut(&self.path).unwrap();
+        file.write(buf)
+
+        // `file` will be closed on deletion from the cache
     }
 
     fn flush(&mut self) -> io::Result<()> {
@@ -575,11 +591,20 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
         if verbose {
             println!("Extracting the whole archive using a linear extraction");
         }
+        let cache = Mutex::new(LruCache::new(
+            NonZeroUsize::new(FILE_WRITER_POOL_SIZE).unwrap(),
+        ));
         let mut export: HashMap<&String, FileWriter> = HashMap::new();
         for fname in &iter {
             match create_file(&output_dir, fname)? {
                 Some((_file, path)) => {
-                    export.insert(fname, FileWriter { path });
+                    export.insert(
+                        fname,
+                        FileWriter {
+                            path,
+                            cache: &cache,
+                        },
+                    );
                 }
                 None => continue,
             }
