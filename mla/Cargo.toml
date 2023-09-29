@@ -28,7 +28,7 @@ ctr = { version = "0.9", default-features = false}
 subtle = { version = "2", default-features = false}
 digest = { version = "0", default-features = false}
 # ECC
-x25519-dalek = { version = "1", default-features = false}
+x25519-dalek = { version = "2", default-features = false, features = ["zeroize"]}
 hkdf = { version = "0", default-features = false}
 sha2 = { version = "0", default-features = false}
 zeroize = { version = "1", default-features = false}
@@ -44,9 +44,7 @@ hex = { version = "0.4", default-features = false, features = ["alloc"]}
 static_assertions = { version = "1", default-features = false }
 
 [features]
-# x25519-dalek depends on curve25519-dalek, which requires at least one feature to be enabled
-# -> use default u64_backend (x25519-dalek's default) to have a working default compilation
-default = ["x25519-dalek/u64_backend"]
+default = []
 send = []
 
 [[bench]]

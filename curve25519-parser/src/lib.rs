@@ -211,11 +211,11 @@ pub fn parse_openssl_25519_pubkey_der(data: &[u8]) -> Result<PublicKey, Curve255
         .map_err(|_| Curve25519ParserError::InvalidData)?;
     let read_oid = ed25519_public.header.tag.as_oid()?;
     if read_oid == &ED_25519_OID {
-        if let Some(edwards_val) = CompressedEdwardsY::from_slice(&data).decompress() {
-            Ok(PublicKey::from(edwards_val.to_montgomery().to_bytes()))
-        } else {
-            Err(Curve25519ParserError::InvalidData)
-        }
+        CompressedEdwardsY::from_slice(&data)
+            .ok()
+            .and_then(|c| c.decompress())
+            .map(|v| PublicKey::from(v.to_montgomery().to_bytes()))
+            .ok_or(Curve25519ParserError::InvalidData)
     } else if read_oid == &X_25519_OID {
         Ok(PublicKey::from(MontgomeryPoint(data).to_bytes()))
     } else {
