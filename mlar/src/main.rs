@@ -20,7 +20,6 @@ use mla::{
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use sha2::{Digest, Sha512};
-use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::error;
 use std::fmt;
@@ -29,6 +28,7 @@ use std::io::{self, BufRead};
 use std::io::{Read, Seek, Write};
 use std::num::NonZeroUsize;
 use std::path::{Component, Path, PathBuf};
+use std::sync::Mutex;
 use tar::{Builder, Header};
 use zeroize::Zeroize;
 
@@ -452,7 +452,8 @@ struct FileWriter<'a> {
     /// Target file for data appending
     path: PathBuf,
     /// Reference on the cache
-    cache: &'a RefCell<LruCache<PathBuf, File>>,
+    // A `Mutex` is used instead of a `RefCell` as `FileWriter` can be `Send`
+    cache: &'a Mutex<LruCache<PathBuf, File>>,
 }
 
 /// Max number of fd simultaneously opened
@@ -460,7 +461,8 @@ pub const FILE_WRITER_POOL_SIZE: usize = 1000;
 
 impl<'a> Write for FileWriter<'a> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let mut cache = self.cache.borrow_mut();
+        // Only one thread is using the FileWriter, safe to `.unwrap()`
+        let mut cache = self.cache.lock().unwrap();
         if !cache.contains(&self.path) {
             let file = fs::OpenOptions::new().append(true).open(&self.path)?;
             cache.put(self.path.clone(), file);
@@ -589,7 +591,7 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
         if verbose {
             println!("Extracting the whole archive using a linear extraction");
         }
-        let cache = RefCell::new(LruCache::new(
+        let cache = Mutex::new(LruCache::new(
             NonZeroUsize::new(FILE_WRITER_POOL_SIZE).unwrap(),
         ));
         let mut export: HashMap<&String, FileWriter> = HashMap::new();
