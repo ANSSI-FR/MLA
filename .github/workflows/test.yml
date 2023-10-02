@@ -180,3 +180,19 @@ jobs:
         with:
           command: clippy
           args: --all-targets -- -D warnings
+
+  publish-dry-run:
+      runs-on: ubuntu-latest
+
+      steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - name: Dry-run publish curve25519-parser
+        run: cd curve25519-parser && cargo publish --dry-run
+      - name: Dry-run publish mla
+        run: cd mla && cargo publish --dry-run
+      - name: Dry-run publish mlar
+        run: cd mlar && cargo publish --dry-run
+      
