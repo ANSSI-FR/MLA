@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2023-10-02
+
+### Added/Changed
+
+- Code cleaning
+- Bump dependencies
+- Benchmarking: reduce the number of test case per test, add new scenarios
+- Explicitely ask for `zeroize` feature in `x25519-dalek`
+
+### Fixed
+
+- FailSafe Reader: drastically improve performance
+- Fix a Brotli-decompressor regression ([following a minor update](https://github.com/ANSSI-FR/MLA/pull/163)) and add corresponding tests
+
 ## [1.3.0] - 2022-08-22
 
 ### Thanks
