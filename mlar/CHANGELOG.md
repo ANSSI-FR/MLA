@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2023-10-06
+
+### Thanks
+
+- [Jean-Baptiste Galet](https://github.com/jbgalet)
+
+### Added/Changed
+
+- Bump dependencies
+- Code cleaning
+- Add more integration & CLI tests
+- Behavior change: to avoid mistake, do not open unencrypted archive if a key is provided
+- Add [key derivation capabilities](https://github.com/ANSSI-FR/MLA/pull/155)
+
+### Fixed
+
+- Reduce the number of call to `open`/`close` on linear extraction
+
 ## [1.2.0] - 2021-10-01
 
 ### Thanks
