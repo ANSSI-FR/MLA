@@ -58,7 +58,16 @@ pub enum MLAStatus {
 /// file, and does whatever it wants with it (e.g. write it to a file, to a HTTP stream, etc.)
 /// If successful, returns 0 and sets the number of bytes actually written to its last
 /// parameter. Otherwise, returns an error code on failure.
-pub type MLAWriteCallback = extern "C" fn(
+type MLAWriteCallback = Option<
+    extern "C" fn(
+        buffer: *const u8,
+        buffer_len: u32,
+        context: *mut c_void,
+        bytes_written: *mut u32,
+    ) -> i32,
+>;
+// bindgen workaround, as Option<typedef> is gen as an opaque type
+type MLAWriteCallbackRaw = extern "C" fn(
     buffer: *const u8,
     buffer_len: u32,
     context: *mut c_void,
@@ -66,7 +75,9 @@ pub type MLAWriteCallback = extern "C" fn(
 ) -> i32;
 /// Implemented by the developper. Should ask the underlying medium (file buffering, HTTP
 /// buffering, etc.) to flush any internal buffer.
-pub type MLAFlushCallback = extern "C" fn(context: *mut c_void) -> i32;
+pub type MLAFlushCallback = Option<extern "C" fn(context: *mut c_void) -> i32>;
+// bindgen workaround, as Option<typedef> is gen as an opaque type
+type MLAFlushCallbackRaw = extern "C" fn(context: *mut c_void) -> i32;
 
 #[repr(C)]
 pub struct FileWriter {
@@ -77,7 +88,16 @@ pub struct FileWriter {
 /// Implemented by the developper
 /// Return the desired output path which is expected to be writable.
 /// The callback developper is responsible all security checks and parent path creation.
-pub type MlaFileCalback = extern "C" fn(
+pub type MlaFileCalback = Option<
+    extern "C" fn(
+        context: *mut c_void,
+        filename: *const u8,
+        filename_len: usize,
+        file_writer: *mut FileWriter,
+    ) -> i32,
+>;
+// bindgen workaround, as Option<typedef> is gen as an opaque type
+type MlaFileCalbackRaw = extern "C" fn(
     context: *mut c_void,
     filename: *const u8,
     filename_len: usize,
@@ -86,7 +106,16 @@ pub type MlaFileCalback = extern "C" fn(
 /// Implemented by the developper. Read between 0 and buffer_len into buffer.
 /// If successful, returns 0 and sets the number of bytes actually read to its last
 /// parameter. Otherwise, returns an error code on failure.
-pub type MlaReadCallback = extern "C" fn(
+pub type MlaReadCallback = Option<
+    extern "C" fn(
+        buffer: *mut u8,
+        buffer_len: u32,
+        context: *mut c_void,
+        bytes_read: *mut u32,
+    ) -> i32,
+>;
+// bindgen workaround, as Option<typedef> is gen as an opaque type
+type MlaReadCallbackRaw = extern "C" fn(
     buffer: *mut u8,
     buffer_len: u32,
     context: *mut c_void,
@@ -96,6 +125,9 @@ pub type MlaReadCallback = extern "C" fn(
 /// If successful, returns 0 and sets the new position to its last
 /// parameter. Otherwise, returns an error code on failure.
 pub type MlaSeekCallback =
+    Option<extern "C" fn(offset: i64, whence: i32, context: *mut c_void, new_pos: *mut u64) -> i32>;
+// bindgen workaround, as Option<typedef> is gen as an opaque type
+pub type MlaSeekCallbackRaw =
     extern "C" fn(offset: i64, whence: i32, context: *mut c_void, new_pos: *mut u64) -> i32;
 
 impl From<MLAError> for MLAStatus {
@@ -157,8 +189,8 @@ pub type MLAArchiveFileHandle = *mut c_void;
 // Internal struct definition to create a Write-able from function pointers
 
 struct CallbackOutput {
-    write_callback: MLAWriteCallback,
-    flush_callback: MLAFlushCallback,
+    write_callback: MLAWriteCallbackRaw,
+    flush_callback: MLAFlushCallbackRaw,
     context: *mut c_void,
 }
 
@@ -313,8 +345,8 @@ pub extern "C" fn mla_reader_config_add_private_key(
 #[no_mangle]
 pub extern "C" fn mla_archive_new(
     config: *mut MLAConfigHandle,
-    write_callback: Option<MLAWriteCallback>,
-    flush_callback: Option<MLAFlushCallback>,
+    write_callback: MLAWriteCallback,
+    flush_callback: MLAFlushCallback,
     context: *mut c_void,
     handle_out: *mut MLAArchiveHandle,
 ) -> MLAStatus {
@@ -497,8 +529,8 @@ pub extern "C" fn mla_archive_close(archive: *mut MLAArchiveHandle) -> MLAStatus
 }
 
 struct CallbackInputRead {
-    read_callback: MlaReadCallback,
-    seek_callback: Option<MlaSeekCallback>,
+    read_callback: MlaReadCallbackRaw,
+    seek_callback: Option<MlaSeekCallbackRaw>,
     context: *mut c_void,
 }
 
@@ -544,9 +576,9 @@ impl Seek for CallbackInputRead {
 #[no_mangle]
 pub extern "C" fn mla_roarchive_extract(
     config: *mut MLAConfigHandle,
-    read_callback: Option<MlaReadCallback>,
-    seek_callback: Option<MlaSeekCallback>,
-    file_callback: Option<MlaFileCalback>,
+    read_callback: MlaReadCallback,
+    seek_callback: MlaSeekCallback,
+    file_callback: MlaFileCalback,
     context: *mut c_void,
 ) -> MLAStatus {
     if config.is_null() {
@@ -578,7 +610,7 @@ pub extern "C" fn mla_roarchive_extract(
 fn _mla_roarchive_extract<'a, R: Read + Seek + 'a>(
     config: *mut MLAConfigHandle,
     src: R,
-    file_callback: MlaFileCalback,
+    file_callback: MlaFileCalbackRaw,
     context: *mut c_void,
 ) -> MLAStatus {
     let config_ptr = unsafe { *(config as *mut *mut ArchiveReaderConfig) };
@@ -615,8 +647,16 @@ fn _mla_roarchive_extract<'a, R: Read + Seek + 'a>(
                 export.insert(
                     fname,
                     CallbackOutput {
-                        write_callback: file_writer.write_callback,
-                        flush_callback: file_writer.flush_callback,
+                        write_callback: match file_writer.write_callback {
+                            // Rust FFI garantees Option<x> as equal to x
+                            Some(x) => x,
+                            None => return MLAStatus::BadAPIArgument,
+                        },
+                        flush_callback: match file_writer.flush_callback {
+                            // Rust FFI garantees Option<x> as equal to x
+                            Some(x) => x,
+                            None => return MLAStatus::BadAPIArgument,
+                        },
                         context: file_writer.context,
                     },
                 );
@@ -640,7 +680,7 @@ pub struct ArchiveInfo {
 /// Get info on an existing MLA archive
 #[no_mangle]
 pub extern "C" fn mla_roarchive_info(
-    read_callback: Option<MlaReadCallback>,
+    read_callback: MlaReadCallback,
     context: *mut c_void,
     info_out: *mut ArchiveInfo,
 ) -> MLAStatus {
