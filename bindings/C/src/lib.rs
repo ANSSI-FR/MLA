@@ -310,22 +310,26 @@ pub extern "C" fn mla_reader_config_add_private_key(
 /// through the write_callback, and flushed at least at the end when the last byte is
 /// written. The context pointer can be used to hold any information, and is passed
 /// as an argument when any of the two callbacks are called.
-#[allow(clippy::fn_null_check)]
 #[no_mangle]
 pub extern "C" fn mla_archive_new(
     config: *mut MLAConfigHandle,
-    write_callback: MLAWriteCallback,
-    flush_callback: MLAFlushCallback,
+    write_callback: Option<MLAWriteCallback>,
+    flush_callback: Option<MLAFlushCallback>,
     context: *mut c_void,
     handle_out: *mut MLAArchiveHandle,
 ) -> MLAStatus {
-    if config.is_null()
-        || handle_out.is_null()
-        || (write_callback as *mut c_void).is_null()
-        || (flush_callback as *mut c_void).is_null()
-    {
+    if config.is_null() || handle_out.is_null() {
         return MLAStatus::BadAPIArgument;
     }
+
+    let write_callback = match write_callback {
+        None => return MLAStatus::BadAPIArgument,
+        Some(x) => x,
+    };
+    let flush_callback = match flush_callback {
+        None => return MLAStatus::BadAPIArgument,
+        Some(x) => x,
+    };
 
     let config_ptr = unsafe { *(config as *mut *mut ArchiveWriterConfig) };
     // Avoid any use-after-free of this handle by the caller
@@ -537,22 +541,30 @@ impl Seek for CallbackInputRead {
 /// read_callback and seek_callback are used to read the archive data
 /// file_callback is used to convert each archive file's name to pathes where extract the data
 /// The caller is responsible of all security checks related to callback provided paths
-#[allow(clippy::fn_null_check)]
 #[no_mangle]
 pub extern "C" fn mla_roarchive_extract(
     config: *mut MLAConfigHandle,
-    read_callback: MlaReadCallback,
-    seek_callback: MlaSeekCallback,
-    file_callback: MlaFileCalback,
+    read_callback: Option<MlaReadCallback>,
+    seek_callback: Option<MlaSeekCallback>,
+    file_callback: Option<MlaFileCalback>,
     context: *mut c_void,
 ) -> MLAStatus {
-    if (read_callback as *mut c_void).is_null()
-        || (seek_callback as *mut c_void).is_null()
-        || config.is_null()
-        || (file_callback as *mut c_void).is_null()
-    {
+    if config.is_null() {
         return MLAStatus::BadAPIArgument;
     }
+
+    let read_callback = match read_callback {
+        None => return MLAStatus::BadAPIArgument,
+        Some(x) => x,
+    };
+    let seek_callback = match seek_callback {
+        None => return MLAStatus::BadAPIArgument,
+        Some(x) => x,
+    };
+    let file_callback = match file_callback {
+        None => return MLAStatus::BadAPIArgument,
+        Some(x) => x,
+    };
 
     let reader = CallbackInputRead {
         read_callback,
@@ -626,16 +638,20 @@ pub struct ArchiveInfo {
 }
 
 /// Get info on an existing MLA archive
-#[allow(clippy::fn_null_check)]
 #[no_mangle]
 pub extern "C" fn mla_roarchive_info(
-    read_callback: MlaReadCallback,
+    read_callback: Option<MlaReadCallback>,
     context: *mut c_void,
     info_out: *mut ArchiveInfo,
 ) -> MLAStatus {
-    if (read_callback as *mut c_void).is_null() || info_out.is_null() {
+    if info_out.is_null() {
         return MLAStatus::BadAPIArgument;
     }
+    let read_callback = match read_callback {
+        None => return MLAStatus::BadAPIArgument,
+        Some(x) => x,
+    };
+
     let mut reader = CallbackInputRead {
         read_callback,
         seek_callback: None,
