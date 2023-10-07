@@ -58,7 +58,16 @@ pub enum MLAStatus {
 /// file, and does whatever it wants with it (e.g. write it to a file, to a HTTP stream, etc.)
 /// If successful, returns 0 and sets the number of bytes actually written to its last
 /// parameter. Otherwise, returns an error code on failure.
-pub type MLAWriteCallback = extern "C" fn(
+type MLAWriteCallback = Option<
+    extern "C" fn(
+        buffer: *const u8,
+        buffer_len: u32,
+        context: *mut c_void,
+        bytes_written: *mut u32,
+    ) -> i32,
+>;
+// bindgen workaround, as Option<typedef> is gen as an opaque type
+type MLAWriteCallbackRaw = extern "C" fn(
     buffer: *const u8,
     buffer_len: u32,
     context: *mut c_void,
@@ -66,7 +75,9 @@ pub type MLAWriteCallback = extern "C" fn(
 ) -> i32;
 /// Implemented by the developper. Should ask the underlying medium (file buffering, HTTP
 /// buffering, etc.) to flush any internal buffer.
-pub type MLAFlushCallback = extern "C" fn(context: *mut c_void) -> i32;
+pub type MLAFlushCallback = Option<extern "C" fn(context: *mut c_void) -> i32>;
+// bindgen workaround, as Option<typedef> is gen as an opaque type
+type MLAFlushCallbackRaw = extern "C" fn(context: *mut c_void) -> i32;
 
 #[repr(C)]
 pub struct FileWriter {
@@ -77,7 +88,16 @@ pub struct FileWriter {
 /// Implemented by the developper
 /// Return the desired output path which is expected to be writable.
 /// The callback developper is responsible all security checks and parent path creation.
-pub type MlaFileCalback = extern "C" fn(
+pub type MlaFileCalback = Option<
+    extern "C" fn(
+        context: *mut c_void,
+        filename: *const u8,
+        filename_len: usize,
+        file_writer: *mut FileWriter,
+    ) -> i32,
+>;
+// bindgen workaround, as Option<typedef> is gen as an opaque type
+type MlaFileCalbackRaw = extern "C" fn(
     context: *mut c_void,
     filename: *const u8,
     filename_len: usize,
@@ -86,7 +106,16 @@ pub type MlaFileCalback = extern "C" fn(
 /// Implemented by the developper. Read between 0 and buffer_len into buffer.
 /// If successful, returns 0 and sets the number of bytes actually read to its last
 /// parameter. Otherwise, returns an error code on failure.
-pub type MlaReadCallback = extern "C" fn(
+pub type MlaReadCallback = Option<
+    extern "C" fn(
+        buffer: *mut u8,
+        buffer_len: u32,
+        context: *mut c_void,
+        bytes_read: *mut u32,
+    ) -> i32,
+>;
+// bindgen workaround, as Option<typedef> is gen as an opaque type
+type MlaReadCallbackRaw = extern "C" fn(
     buffer: *mut u8,
     buffer_len: u32,
     context: *mut c_void,
@@ -96,6 +125,9 @@ pub type MlaReadCallback = extern "C" fn(
 /// If successful, returns 0 and sets the new position to its last
 /// parameter. Otherwise, returns an error code on failure.
 pub type MlaSeekCallback =
+    Option<extern "C" fn(offset: i64, whence: i32, context: *mut c_void, new_pos: *mut u64) -> i32>;
+// bindgen workaround, as Option<typedef> is gen as an opaque type
+pub type MlaSeekCallbackRaw =
     extern "C" fn(offset: i64, whence: i32, context: *mut c_void, new_pos: *mut u64) -> i32;
 
 impl From<MLAError> for MLAStatus {
@@ -157,8 +189,8 @@ pub type MLAArchiveFileHandle = *mut c_void;
 // Internal struct definition to create a Write-able from function pointers
 
 struct CallbackOutput {
-    write_callback: MLAWriteCallback,
-    flush_callback: MLAFlushCallback,
+    write_callback: MLAWriteCallbackRaw,
+    flush_callback: MLAFlushCallbackRaw,
     context: *mut c_void,
 }
 
@@ -310,7 +342,6 @@ pub extern "C" fn mla_reader_config_add_private_key(
 /// through the write_callback, and flushed at least at the end when the last byte is
 /// written. The context pointer can be used to hold any information, and is passed
 /// as an argument when any of the two callbacks are called.
-#[allow(clippy::fn_null_check)]
 #[no_mangle]
 pub extern "C" fn mla_archive_new(
     config: *mut MLAConfigHandle,
@@ -319,13 +350,18 @@ pub extern "C" fn mla_archive_new(
     context: *mut c_void,
     handle_out: *mut MLAArchiveHandle,
 ) -> MLAStatus {
-    if config.is_null()
-        || handle_out.is_null()
-        || (write_callback as *mut c_void).is_null()
-        || (flush_callback as *mut c_void).is_null()
-    {
+    if config.is_null() || handle_out.is_null() {
         return MLAStatus::BadAPIArgument;
     }
+
+    let write_callback = match write_callback {
+        None => return MLAStatus::BadAPIArgument,
+        Some(x) => x,
+    };
+    let flush_callback = match flush_callback {
+        None => return MLAStatus::BadAPIArgument,
+        Some(x) => x,
+    };
 
     let config_ptr = unsafe { *(config as *mut *mut ArchiveWriterConfig) };
     // Avoid any use-after-free of this handle by the caller
@@ -493,8 +529,8 @@ pub extern "C" fn mla_archive_close(archive: *mut MLAArchiveHandle) -> MLAStatus
 }
 
 struct CallbackInputRead {
-    read_callback: MlaReadCallback,
-    seek_callback: Option<MlaSeekCallback>,
+    read_callback: MlaReadCallbackRaw,
+    seek_callback: Option<MlaSeekCallbackRaw>,
     context: *mut c_void,
 }
 
@@ -537,7 +573,6 @@ impl Seek for CallbackInputRead {
 /// read_callback and seek_callback are used to read the archive data
 /// file_callback is used to convert each archive file's name to pathes where extract the data
 /// The caller is responsible of all security checks related to callback provided paths
-#[allow(clippy::fn_null_check)]
 #[no_mangle]
 pub extern "C" fn mla_roarchive_extract(
     config: *mut MLAConfigHandle,
@@ -546,13 +581,22 @@ pub extern "C" fn mla_roarchive_extract(
     file_callback: MlaFileCalback,
     context: *mut c_void,
 ) -> MLAStatus {
-    if (read_callback as *mut c_void).is_null()
-        || (seek_callback as *mut c_void).is_null()
-        || config.is_null()
-        || (file_callback as *mut c_void).is_null()
-    {
+    if config.is_null() {
         return MLAStatus::BadAPIArgument;
     }
+
+    let read_callback = match read_callback {
+        None => return MLAStatus::BadAPIArgument,
+        Some(x) => x,
+    };
+    let seek_callback = match seek_callback {
+        None => return MLAStatus::BadAPIArgument,
+        Some(x) => x,
+    };
+    let file_callback = match file_callback {
+        None => return MLAStatus::BadAPIArgument,
+        Some(x) => x,
+    };
 
     let reader = CallbackInputRead {
         read_callback,
@@ -566,7 +610,7 @@ pub extern "C" fn mla_roarchive_extract(
 fn _mla_roarchive_extract<'a, R: Read + Seek + 'a>(
     config: *mut MLAConfigHandle,
     src: R,
-    file_callback: MlaFileCalback,
+    file_callback: MlaFileCalbackRaw,
     context: *mut c_void,
 ) -> MLAStatus {
     let config_ptr = unsafe { *(config as *mut *mut ArchiveReaderConfig) };
@@ -603,8 +647,16 @@ fn _mla_roarchive_extract<'a, R: Read + Seek + 'a>(
                 export.insert(
                     fname,
                     CallbackOutput {
-                        write_callback: file_writer.write_callback,
-                        flush_callback: file_writer.flush_callback,
+                        write_callback: match file_writer.write_callback {
+                            // Rust FFI garantees Option<x> as equal to x
+                            Some(x) => x,
+                            None => return MLAStatus::BadAPIArgument,
+                        },
+                        flush_callback: match file_writer.flush_callback {
+                            // Rust FFI garantees Option<x> as equal to x
+                            Some(x) => x,
+                            None => return MLAStatus::BadAPIArgument,
+                        },
                         context: file_writer.context,
                     },
                 );
@@ -626,16 +678,20 @@ pub struct ArchiveInfo {
 }
 
 /// Get info on an existing MLA archive
-#[allow(clippy::fn_null_check)]
 #[no_mangle]
 pub extern "C" fn mla_roarchive_info(
     read_callback: MlaReadCallback,
     context: *mut c_void,
     info_out: *mut ArchiveInfo,
 ) -> MLAStatus {
-    if (read_callback as *mut c_void).is_null() || info_out.is_null() {
+    if info_out.is_null() {
         return MLAStatus::BadAPIArgument;
     }
+    let read_callback = match read_callback {
+        None => return MLAStatus::BadAPIArgument,
+        Some(x) => x,
+    };
+
     let mut reader = CallbackInputRead {
         read_callback,
         seek_callback: None,
