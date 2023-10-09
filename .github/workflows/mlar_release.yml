@@ -114,7 +114,7 @@ jobs:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./mlar-windows/mlar.exe
           asset_content_type: application/octet-stream
-          asset_name: mlar-windows-${{ steps.get_version.outputs.VERSION }}
+          asset_name: mlar-windows-${{ steps.get_version.outputs.VERSION }}.exe
 
       - name: Release MacOS artifact
         uses: actions/upload-release-asset@v1
