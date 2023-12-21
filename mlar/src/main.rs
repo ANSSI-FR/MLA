@@ -454,6 +454,10 @@ struct FileWriter<'a> {
     /// Reference on the cache
     // A `Mutex` is used instead of a `RefCell` as `FileWriter` can be `Send`
     cache: &'a Mutex<LruCache<PathBuf, File>>,
+    /// Is verbose mode enabled
+    verbose: bool,
+    /// Filename in the archive
+    fname: &'a str
 }
 
 /// Max number of fd simultaneously opened
@@ -466,6 +470,9 @@ impl<'a> Write for FileWriter<'a> {
         if !cache.contains(&self.path) {
             let file = fs::OpenOptions::new().append(true).open(&self.path)?;
             cache.put(self.path.clone(), file);
+            if self.verbose {
+                println!("{}", self.fname);
+            }
         }
         // Safe to `unwrap` here cause we ensure the element is in the cache (mono-threaded)
         let file = cache.get_mut(&self.path).unwrap();
@@ -603,6 +610,8 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
                         FileWriter {
                             path,
                             cache: &cache,
+                            verbose,
+                            fname
                         },
                     );
                 }
