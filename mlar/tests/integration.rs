@@ -856,9 +856,7 @@ fn test_extract() {
         "Extracting the whole archive using a linear extraction\n{}",
         file_list
     );
-    assert
-        .success()
-        .stdout(expected_output);
+    assert.success().stdout(expected_output);
 
     ensure_directory_content(output_dir.path(), &testfs.files);
 
@@ -1343,9 +1341,7 @@ fn test_extract_lot_files() {
         "Extracting the whole archive using a linear extraction\n{}",
         file_list
     );
-    assert
-        .success()
-        .stdout(expected_output);
+    assert.success().stdout(expected_output);
 
     ensure_directory_content(output_dir.path(), &testfs.files);
 
