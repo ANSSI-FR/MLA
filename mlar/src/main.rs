@@ -457,7 +457,7 @@ struct FileWriter<'a> {
     /// Is verbose mode enabled
     verbose: bool,
     /// Filename in the archive
-    fname: &'a str
+    fname: &'a str,
 }
 
 /// Max number of fd simultaneously opened
@@ -611,7 +611,7 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
                             path,
                             cache: &cache,
                             verbose,
-                            fname
+                            fname,
                         },
                     );
                 }
