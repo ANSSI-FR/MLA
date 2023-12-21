@@ -834,7 +834,7 @@ fn test_extract() {
 
     println!("{cmd:?}");
     let assert = cmd.assert();
-    assert.success().stdout(file_list);
+    assert.success().stdout(file_list.clone());
 
     ensure_directory_content(output_dir.path(), &testfs.files);
 
@@ -852,9 +852,13 @@ fn test_extract() {
 
     println!("{cmd:?}");
     let assert = cmd.assert();
+    let expected_output = format!(
+        "Extracting the whole archive using a linear extraction\n{}",
+        file_list
+    );
     assert
         .success()
-        .stdout("Extracting the whole archive using a linear extraction\n");
+        .stdout(expected_output);
 
     ensure_directory_content(output_dir.path(), &testfs.files);
 
@@ -1317,7 +1321,7 @@ fn test_extract_lot_files() {
 
     println!("{:?}", cmd);
     let assert = cmd.assert();
-    assert.success().stdout(file_list);
+    assert.success().stdout(file_list.clone());
 
     ensure_directory_content(output_dir.path(), &testfs.files);
 
@@ -1335,9 +1339,13 @@ fn test_extract_lot_files() {
 
     println!("{:?}", cmd);
     let assert = cmd.assert();
+    let expected_output = format!(
+        "Extracting the whole archive using a linear extraction\n{}",
+        file_list
+    );
     assert
         .success()
-        .stdout("Extracting the whole archive using a linear extraction\n");
+        .stdout(expected_output);
 
     ensure_directory_content(output_dir.path(), &testfs.files);
 
