@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryFrom;
 use std::io;
 use std::io::{Read, Seek, SeekFrom, Write};
 #[macro_use]
@@ -669,10 +669,7 @@ impl<'a, W: InnerWriterTrait> ArchiveWriter<'a, W> {
                     Error::WrongWriterState("[EndFile] Unable to retrieve the hash".to_string())
                 })?;
                 vec_remove_item(ids, &id);
-                hash.finalize().try_into().map_err(
-                    // Never happens, as hash is a Sha256, to a Sha256Hash
-                    |_| Error::WrongWriterState("[EndFile] Hash with wrong size".to_string()),
-                )?
+                hash.finalize().into()
             }
             _ => {
                 // Never happens, due to `check_state_file_opened!`
