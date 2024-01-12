@@ -240,6 +240,12 @@ def test_writer_config_compression():
     with pytest.raises(mla.ConfigError):
         config.with_compression_level(0xFF)
     
+    # Value
+    config.with_compression_level(mla.DEFAULT_COMPRESSION_LEVEL)
+    assert config.compression_level == mla.DEFAULT_COMPRESSION_LEVEL
+    config.with_compression_level(1)
+    assert config.compression_level == 1
+
     # Chaining
     out = config.with_compression_level(mla.DEFAULT_COMPRESSION_LEVEL)
     assert out is config
@@ -293,3 +299,26 @@ def test_public_keys():
         open(os.path.join(SAMPLE_PATH, "test_x25519_2_pub.pem"), "rb").read()
     )
     assert len(pkeys.keys) == 2
+
+def test_writer_config_public_keys():
+    "Test public keys API in WriterConfig creation"
+
+    # Test API call
+    config = mla.WriterConfig()
+    with pytest.raises(mla.InvalidECCKeyFormat):
+        config.set_public_keys(mla.PublicKeys(b"NOT A KEY"))
+    
+    # Test shortcut on object build
+    config = mla.WriterConfig(
+        public_keys=mla.PublicKeys(os.path.join(SAMPLE_PATH, "test_ed25519_pub.pem"))
+    )
+    # Test the getter
+    assert len(config.public_keys.keys) == 1
+
+    # Chaining
+    out = config.set_public_keys(mla.PublicKeys(
+        os.path.join(SAMPLE_PATH, "test_ed25519_pub.pem"),
+        open(os.path.join(SAMPLE_PATH, "test_x25519_2_pub.pem"), "rb").read()
+    ))
+    assert out is config
+    assert len(config.public_keys.keys) == 2
