@@ -308,7 +308,7 @@ impl WriterConfig {
             Some(layers_enabled) => Layers::from_bits(layers_enabled).ok_or(
                 mla::errors::Error::BadAPIArgument(format!("Unknown layers")),
             )?,
-            None => Layers::EMPTY,
+            None => Layers::DEFAULT,
         };
 
         // Check compression level is correct using a fake object

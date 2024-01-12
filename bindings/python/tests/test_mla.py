@@ -193,7 +193,7 @@ def test_writer_config_layers():
     "Test writer config creation for layers"
     # Enable and disable layers
     config = mla.WriterConfig()
-    assert config.layers == mla.LAYER_EMPTY
+    assert config.layers == mla.LAYER_DEFAULT
 
     config = mla.WriterConfig(layers=mla.LAYER_COMPRESS)
     assert config.layers == mla.LAYER_COMPRESS
