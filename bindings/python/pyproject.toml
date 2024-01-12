@@ -1,0 +1,24 @@
+[build-system]
+requires = ["maturin>=1.4,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "mla"
+description = "Bindings for MLA Archive manipulation"
+requires-python = ">=3.8"
+keywords = ["archive", "mla"]
+license = {file = "../../LICENSE.md"}
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+]
+dynamic = ["version"]
+
+[project.urls]
+documentation = "https://github.com/ANSSI-FR/MLA"
+repository = "https://github.com/ANSSI-FR/MLA"
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
+module-name = "mla"
