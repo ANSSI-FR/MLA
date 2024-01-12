@@ -1,13 +1,14 @@
-use std::{borrow::Cow, collections::HashMap, io::Read};
+use std::{borrow::Cow, collections::HashMap, io::Read, fs::File};
 
+use curve25519_parser::parse_openssl_25519_pubkey;
 use mla::{
     config::{ArchiveReaderConfig, ArchiveWriterConfig},
     ArchiveReader, ArchiveWriter, Layers,
 };
 use pyo3::{
     create_exception,
-    exceptions::{PyKeyError, PyRuntimeError},
-    prelude::*,
+    exceptions::{PyKeyError, PyRuntimeError, PyTypeError},
+    prelude::*, types::{PyTuple, PyString, PyBytes},
 };
 
 // -------- Error handling --------
@@ -205,6 +206,68 @@ impl FileMetadata {
 
     fn __repr__(&self) -> String {
         format!("<FileMetadata size={:?} hash={:?}>", self.size, self.hash)
+    }
+}
+
+// -------- mla.PublicKeys --------
+
+/// Represents multiple ECC Public Keys
+/// 
+/// Instanciate with path (as string) or data (as bytes)
+/// PEM and DER format are supported
+/// 
+/// Example:
+/// ```python
+/// pkeys = PublicKeys("/path/to/key.pem", b"""
+/// -----BEGIN PUBLIC KEY-----
+/// ...
+/// -----END PUBLIC KEY-----
+/// """)
+/// ```
+#[pyclass]
+struct PublicKeys {
+    keys: Vec<x25519_dalek::PublicKey>,
+}
+
+#[pymethods]
+impl PublicKeys {
+    #[new]
+    #[pyo3(signature = (*args))]
+    fn new(args: &PyTuple) -> Result<Self, WrappedError> {
+        let mut keys = Vec::new();
+
+        for element in args {
+            // String argument: this is a path
+            // "/path/to/public.pem"
+            if let Ok(path) = element.downcast::<PyString>() {
+                let mut file = File::open(path.to_string())?;
+                // Load the the ECC key in-memory and parse it
+                let mut buf = Vec::new();
+                file.read_to_end(&mut buf)?;
+                keys.push(
+                    parse_openssl_25519_pubkey(&buf).map_err(|_| mla::errors::Error::InvalidECCKeyFormat)?
+                );
+            } else if let Ok(data) = element.downcast::<PyBytes>() {
+                keys.push(
+                    parse_openssl_25519_pubkey(data.as_bytes()).map_err(|_| mla::errors::Error::InvalidECCKeyFormat)?
+                );
+            } else {
+                return Err(WrappedError::WrappedPy(
+                    PyTypeError::new_err("Expect a path (as a string) or data (as bytes)")
+                ));
+            }
+        }
+        Ok(Self {
+            keys
+        })
+    }
+
+    /// DER representation of keys
+    #[getter]
+    fn keys(&self) -> Vec<Cow<[u8]>> {
+        self.keys.iter().map(
+            |pubkey| Cow::Owned(Vec::from(pubkey.to_bytes()))
+        ).collect()
     }
 }
 
@@ -549,6 +612,7 @@ fn pymla(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<MLAFile>()?;
     m.add_class::<FileMetadata>()?;
     m.add_class::<WriterConfig>()?;
+    m.add_class::<PublicKeys>()?;
 
     // Exceptions
     m.add("MLAError", py.get_type::<MLAError>())?;

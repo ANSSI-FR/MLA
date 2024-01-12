@@ -1,6 +1,7 @@
 import hashlib
 import pytest
 import tempfile
+import os
 
 import mla
 from mla import MLAFile, MLAError
@@ -243,3 +244,52 @@ def test_writer_config_compression():
     out = config.with_compression_level(mla.DEFAULT_COMPRESSION_LEVEL)
     assert out is config
 
+# Expected: mla/bindings/python/tests/
+MLA_BASE_PATH = os.path.dirname(
+    os.path.dirname(
+        os.path.dirname(
+            os.path.dirname(
+                __file__
+            )
+        )
+    )
+)
+SAMPLE_PATH = os.path.join(MLA_BASE_PATH, "samples")
+
+def test_public_keys():
+    "Test the PublicKeys object"
+    # Bad parsing
+    with pytest.raises(mla.InvalidECCKeyFormat):
+        mla.PublicKeys(b"NOT A KEY")
+    
+    with pytest.raises(FileNotFoundError):
+        mla.PublicKeys("/tmp/does_not_exists")
+    
+    # Open a PEM key, through path
+    pkeys_pem = mla.PublicKeys(os.path.join(SAMPLE_PATH, "test_ed25519_pub.pem"))
+    assert len(pkeys_pem.keys) == 1
+    
+    # Open a DER key, through path
+    pkeys_der = mla.PublicKeys(os.path.join(SAMPLE_PATH, "test_ed25519_pub.der"))
+    assert len(pkeys_pem.keys) == 1
+
+    # Keys must be the same
+    assert pkeys_pem.keys == pkeys_der.keys
+
+    # Open a PEM key, through data
+    pkeys_pem = mla.PublicKeys(open(os.path.join(SAMPLE_PATH, "test_ed25519_pub.pem"), "rb").read())
+    assert len(pkeys_pem.keys) == 1
+    
+    # Open a DER key, through data
+    pkeys_pem = mla.PublicKeys(open(os.path.join(SAMPLE_PATH, "test_ed25519_pub.der"), "rb").read())
+    assert len(pkeys_pem.keys) == 1
+    
+    # Keys must be the same
+    assert pkeys_pem.keys == pkeys_der.keys
+
+    # Open several keys, using both path and data
+    pkeys =  mla.PublicKeys(
+        os.path.join(SAMPLE_PATH, "test_ed25519_pub.pem"),
+        open(os.path.join(SAMPLE_PATH, "test_x25519_2_pub.pem"), "rb").read()
+    )
+    assert len(pkeys.keys) == 2
