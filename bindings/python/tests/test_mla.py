@@ -322,3 +322,8 @@ def test_writer_config_public_keys():
     ))
     assert out is config
     assert len(config.public_keys.keys) == 2
+
+def test_mlafile_bad_config():
+    "Try to create a MLAFile with the wrong config parameter"
+    with pytest.raises(TypeError):
+        MLAFile(tempfile.mkstemp(suffix=".mla")[1], "w", config="NOT A CONFIG")

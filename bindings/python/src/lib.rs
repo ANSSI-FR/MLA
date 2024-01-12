@@ -1,14 +1,15 @@
-use std::{borrow::Cow, collections::HashMap, io::Read, fs::File};
+use std::{borrow::Cow, collections::HashMap, fs::File, io::Read};
 
 use curve25519_parser::parse_openssl_25519_pubkey;
 use mla::{
-    config::{ArchiveReaderConfig, ArchiveWriterConfig, self},
+    config::{self, ArchiveReaderConfig, ArchiveWriterConfig},
     ArchiveReader, ArchiveWriter, Layers,
 };
 use pyo3::{
     create_exception,
     exceptions::{PyKeyError, PyRuntimeError, PyTypeError},
-    prelude::*, types::{PyTuple, PyString, PyBytes},
+    prelude::*,
+    types::{PyBytes, PyString, PyTuple},
 };
 
 // -------- Error handling --------
@@ -146,6 +147,12 @@ impl From<std::io::Error> for WrappedError {
     }
 }
 
+impl From<PyErr> for WrappedError {
+    fn from(err: PyErr) -> Self {
+        WrappedError::WrappedPy(err)
+    }
+}
+
 /// Convert back the wrapped type to Python errors
 impl From<WrappedError> for PyErr {
     fn from(err: WrappedError) -> PyErr {
@@ -180,7 +187,6 @@ impl From<WrappedError> for PyErr {
         }
     }
 }
-
 // -------- mla.FileMetadata --------
 
 #[pyclass]
@@ -212,10 +218,10 @@ impl FileMetadata {
 // -------- mla.PublicKeys --------
 
 /// Represents multiple ECC Public Keys
-/// 
+///
 /// Instanciate with path (as string) or data (as bytes)
 /// PEM and DER format are supported
-/// 
+///
 /// Example:
 /// ```python
 /// pkeys = PublicKeys("/path/to/key.pem", b"""
@@ -246,29 +252,30 @@ impl PublicKeys {
                 let mut buf = Vec::new();
                 file.read_to_end(&mut buf)?;
                 keys.push(
-                    parse_openssl_25519_pubkey(&buf).map_err(|_| mla::errors::Error::InvalidECCKeyFormat)?
+                    parse_openssl_25519_pubkey(&buf)
+                        .map_err(|_| mla::errors::Error::InvalidECCKeyFormat)?,
                 );
             } else if let Ok(data) = element.downcast::<PyBytes>() {
                 keys.push(
-                    parse_openssl_25519_pubkey(data.as_bytes()).map_err(|_| mla::errors::Error::InvalidECCKeyFormat)?
+                    parse_openssl_25519_pubkey(data.as_bytes())
+                        .map_err(|_| mla::errors::Error::InvalidECCKeyFormat)?,
                 );
             } else {
-                return Err(WrappedError::WrappedPy(
-                    PyTypeError::new_err("Expect a path (as a string) or data (as bytes)")
-                ));
+                return Err(
+                    PyTypeError::new_err("Expect a path (as a string) or data (as bytes)").into(),
+                );
             }
         }
-        Ok(Self {
-            keys
-        })
+        Ok(Self { keys })
     }
 
     /// DER representation of keys
     #[getter]
     fn keys(&self) -> Vec<Cow<[u8]>> {
-        self.keys.iter().map(
-            |pubkey| Cow::Owned(Vec::from(pubkey.to_bytes()))
-        ).collect()
+        self.keys
+            .iter()
+            .map(|pubkey| Cow::Owned(Vec::from(pubkey.to_bytes())))
+            .collect()
     }
 }
 
@@ -291,7 +298,11 @@ struct WriterConfig {
 impl WriterConfig {
     #[new]
     #[pyo3(signature = (layers=None, compression_level=DEFAULT_COMPRESSION_LEVEL, public_keys=None))]
-    fn new(layers: Option<u8>, compression_level: u32, public_keys: Option<PublicKeys>) -> Result<Self, WrappedError> {
+    fn new(
+        layers: Option<u8>,
+        compression_level: u32,
+        public_keys: Option<PublicKeys>,
+    ) -> Result<Self, WrappedError> {
         // Check parameters
         let layers = match layers {
             Some(layers_enabled) => Layers::from_bits(layers_enabled).ok_or(
@@ -303,13 +314,11 @@ impl WriterConfig {
         // Check compression level is correct using a fake object
         ArchiveWriterConfig::new().with_compression_level(compression_level)?;
 
-        Ok(
-            WriterConfig {
-                layers,
-                compression_level,
-                public_keys
-            }
-        )
+        Ok(WriterConfig {
+            layers,
+            compression_level,
+            public_keys,
+        })
     }
 
     #[getter]
@@ -319,21 +328,24 @@ impl WriterConfig {
 
     /// Enable a layer
     fn enable_layer(mut slf: PyRefMut<Self>, layer: u8) -> Result<PyRefMut<Self>, WrappedError> {
-        let layer = Layers::from_bits(layer).ok_or(mla::errors::Error::BadAPIArgument(format!("Unknown layer")))?;
+        let layer = Layers::from_bits(layer)
+            .ok_or(mla::errors::Error::BadAPIArgument(format!("Unknown layer")))?;
         slf.layers |= layer;
         Ok(slf)
     }
 
     /// Disable a layer
     fn disable_layer(mut slf: PyRefMut<Self>, layer: u8) -> Result<PyRefMut<Self>, WrappedError> {
-        let layer = Layers::from_bits(layer).ok_or(mla::errors::Error::BadAPIArgument(format!("Unknown layer")))?;
+        let layer = Layers::from_bits(layer)
+            .ok_or(mla::errors::Error::BadAPIArgument(format!("Unknown layer")))?;
         slf.layers &= !layer;
         Ok(slf)
     }
 
     /// Set several layers at once
     fn set_layers(mut slf: PyRefMut<Self>, layers: u8) -> Result<PyRefMut<Self>, WrappedError> {
-        slf.layers = Layers::from_bits(layers).ok_or(mla::errors::Error::BadAPIArgument(format!("Unknown layer")))?;
+        slf.layers = Layers::from_bits(layers)
+            .ok_or(mla::errors::Error::BadAPIArgument(format!("Unknown layer")))?;
         Ok(slf)
     }
 
@@ -368,7 +380,6 @@ impl WriterConfig {
     fn public_keys(&self) -> Option<PublicKeys> {
         self.public_keys.clone()
     }
-
 }
 
 impl WriterConfig {
@@ -474,7 +485,7 @@ macro_rules! check_mode {
 impl MLAFile {
     #[new]
     #[pyo3(signature = (path, mode="r", config=None))]
-    fn new(path: &str, mode: &str, config: Option<&WriterConfig>) -> Result<Self, WrappedError> {
+    fn new(path: &str, mode: &str, config: Option<&PyAny>) -> Result<Self, WrappedError> {
         match mode {
             "r" => {
                 let config = ArchiveReaderConfig::new();
@@ -486,12 +497,17 @@ impl MLAFile {
                 })
             }
             "w" => {
-                let config = match config {
-                    Some(config) => config.to_archive_writer_config()?,
-                    None => ArchiveWriterConfig::new()
+                let wconfig = match config {
+                    Some(config) => {
+                        // Must be a WriterConfig
+                        config
+                            .extract::<PyRef<WriterConfig>>()?
+                            .to_archive_writer_config()?
+                    }
+                    None => ArchiveWriterConfig::new(),
                 };
                 let output_file = std::fs::File::create(path)?;
-                let arch_writer = ArchiveWriter::from_config(output_file, config)?;
+                let arch_writer = ArchiveWriter::from_config(output_file, wconfig)?;
                 Ok(MLAFile {
                     inner: OpeningModeInner::Write(ExplicitWriters::FileWriter(arch_writer)),
                     path: path.to_string(),
@@ -543,18 +559,21 @@ impl MLAFile {
                     if include_size {
                         metadata.size = Some(
                             mla.get_file(fname.clone())?
-                                .ok_or(WrappedError::WrappedPy(PyRuntimeError::new_err(format!(
+                                .ok_or(PyRuntimeError::new_err(format!(
                                     "File {} not found",
                                     fname
-                                ))))?
+                                )))?
                                 .size,
                         );
                     }
                     if include_hash {
-                        metadata.hash =
-                            Some(mla.get_hash(&fname)?.ok_or(WrappedError::WrappedPy(
-                                PyRuntimeError::new_err(format!("File {} not found", fname)),
-                            ))?);
+                        metadata.hash = Some(
+                            mla.get_hash(&fname)?
+                                .ok_or(PyRuntimeError::new_err(format!(
+                                    "File {} not found",
+                                    fname
+                                )))?,
+                        );
                     }
                 }
             }
@@ -580,11 +599,7 @@ impl MLAFile {
                     archive_file.data.read_to_end(&mut buf)?;
                     Ok(Cow::Owned(buf))
                 } else {
-                    Err(WrappedError::WrappedPy(PyKeyError::new_err(format!(
-                        "File {} not found",
-                        key
-                    )))
-                    .into())
+                    Err(PyKeyError::new_err(format!("File {} not found", key)).into())
                 }
             }
         }
