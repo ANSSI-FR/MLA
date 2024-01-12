@@ -397,3 +397,45 @@ def test_reader_config_api():
         mla.PrivateKeys(os.path.join(SAMPLE_PATH, "test_ed25519.pem")),
     )
     assert out is config
+
+def test_write_then_read_encrypted():
+    "Create an encrypted archive, then read it"
+    # Create the archive
+    path = tempfile.mkstemp(suffix=".mla")[1]
+    with MLAFile(path, "w", config=mla.WriterConfig(
+        public_keys=mla.PublicKeys(os.path.join(SAMPLE_PATH, "test_ed25519_pub.pem")),
+        layers=mla.LAYER_ENCRYPT
+    )) as archive:
+        for name, data in FILES.items():
+            archive[name] = data
+    
+    # Read the archive
+    with MLAFile(path, config=mla.ReaderConfig(
+        private_keys=mla.PrivateKeys(os.path.join(SAMPLE_PATH, "test_ed25519.pem"))
+    )) as archive:
+        assert sorted(archive.keys()) == sorted(list(FILES.keys()))
+        for name, data in FILES.items():
+            assert archive[name] == data
+
+def test_read_encrypted_archive_bad_key():
+    "Try to read an encrypted archive with a bad key"
+    # Create the archive
+    path = tempfile.mkstemp(suffix=".mla")[1]
+    with MLAFile(path, "w", config=mla.WriterConfig(
+        public_keys=mla.PublicKeys(os.path.join(SAMPLE_PATH, "test_ed25519_pub.pem")),
+        layers=mla.LAYER_ENCRYPT
+    )) as archive:
+        for name, data in FILES.items():
+            archive[name] = data
+
+    # Try to read without a key
+    with pytest.raises(mla.PrivateKeyNeeded):
+        with MLAFile(path) as archive:
+            pass
+    
+    # Try to read with an incorrect key (mla.ConfigError: PrivateKeyNotFound)
+    with pytest.raises(mla.ConfigError):
+        with MLAFile(path, config=mla.ReaderConfig(
+            private_keys=mla.PrivateKeys(os.path.join(SAMPLE_PATH, "test_x25519_2.pem"))
+        )) as archive:
+            pass
