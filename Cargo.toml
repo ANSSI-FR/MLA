@@ -6,6 +6,7 @@ members = [
     "mlar",
     "mla-fuzz-afl",
     "bindings/C",
+    "bindings/python",
 ]
 
 [profile.release]
