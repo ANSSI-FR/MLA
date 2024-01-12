@@ -369,3 +369,31 @@ def test_mlafile_bad_config():
     "Try to create a MLAFile with the wrong config parameter"
     with pytest.raises(TypeError):
         MLAFile(tempfile.mkstemp(suffix=".mla")[1], "w", config="NOT A CONFIG")
+    
+    with pytest.raises(TypeError):
+        MLAFile(tempfile.mkstemp(suffix=".mla")[1], "w", config=mla.ReaderConfig())
+    
+    with pytest.raises(TypeError):
+        MLAFile(tempfile.mkstemp(suffix=".mla")[1], "r", config=mla.WriterConfig())
+    
+
+def test_reader_config_api():
+    "Test the ReaderConfig API"
+    # Add a remove private keys
+    config = mla.ReaderConfig()
+    assert config.private_keys is None
+
+    config.set_private_keys(
+        mla.PrivateKeys(os.path.join(SAMPLE_PATH, "test_ed25519.pem"))
+    )
+    assert len(config.private_keys.keys) == 1
+
+    config = mla.ReaderConfig(private_keys=mla.PrivateKeys(os.path.join(SAMPLE_PATH, "test_ed25519.pem")))
+    assert len(config.private_keys.keys) == 1
+
+    # Chaining
+    config = mla.ReaderConfig()
+    out = config.set_private_keys(
+        mla.PrivateKeys(os.path.join(SAMPLE_PATH, "test_ed25519.pem")),
+    )
+    assert out is config

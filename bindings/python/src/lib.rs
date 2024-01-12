@@ -460,6 +460,55 @@ impl WriterConfig {
     }
 }
 
+// -------- mla.ConfigReader --------
+
+// This class keep the values of configured object, and can be used to produce an actual
+// `ArchiveReaderConfig`. That way, it can be used to produced many of them, as they are
+// consumed during the `ArchiveReader` init
+#[pyclass]
+struct ReaderConfig {
+    private_keys: Option<PrivateKeys>,
+}
+
+#[pymethods]
+impl ReaderConfig {
+    #[new]
+    #[pyo3(signature = (private_keys=None))]
+    fn new(
+        private_keys: Option<PrivateKeys>,
+    ) -> Self {
+        ReaderConfig {
+            private_keys,
+        }
+    }
+
+    /// Set private keys
+    fn set_private_keys<'a>(
+        mut slf: PyRefMut<'a, Self>,
+        private_keys: PrivateKeys,
+    ) -> Result<PyRefMut<'a, Self>, WrappedError> {
+        slf.private_keys = Some(private_keys);
+        Ok(slf)
+    }
+
+    #[getter]
+    fn private_keys(&self) -> Option<PrivateKeys> {
+        self.private_keys.clone()
+    }
+}
+
+impl ReaderConfig {
+    /// Create an `ArchiveReaderConfig` out of the python object
+    fn to_archive_reader_config(&self) -> Result<ArchiveReaderConfig, WrappedError> {
+        let mut config = ArchiveReaderConfig::new();
+        if let Some(ref private_keys) = self.private_keys {
+            config.add_private_keys(&private_keys.keys);
+            config.layers_enabled |= Layers::ENCRYPT;
+        }
+        Ok(config)
+    }
+}
+
 
 // -------- mla.MLAFile --------
 
@@ -554,9 +603,17 @@ impl MLAFile {
     fn new(path: &str, mode: &str, config: Option<&PyAny>) -> Result<Self, WrappedError> {
         match mode {
             "r" => {
-                let config = ArchiveReaderConfig::new();
+                let rconfig = match config {
+                    Some(config) => {
+                        // Must be a ReaderConfig
+                        config
+                            .extract::<PyRef<ReaderConfig>>()?
+                            .to_archive_reader_config()?
+                    }
+                    None => ArchiveReaderConfig::new(),
+                };
                 let input_file = std::fs::File::open(path)?;
-                let arch_reader = ArchiveReader::from_config(input_file, config)?;
+                let arch_reader = ArchiveReader::from_config(input_file, rconfig)?;
                 Ok(MLAFile {
                     inner: OpeningModeInner::Read(ExplicitReaders::FileReader(arch_reader)),
                     path: path.to_string(),
@@ -738,6 +795,7 @@ fn pymla(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<WriterConfig>()?;
     m.add_class::<PublicKeys>()?;
     m.add_class::<PrivateKeys>()?;
+    m.add_class::<ReaderConfig>()?;
 
     // Exceptions
     m.add("MLAError", py.get_type::<MLAError>())?;
