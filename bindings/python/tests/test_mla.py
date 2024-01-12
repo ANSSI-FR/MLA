@@ -300,6 +300,48 @@ def test_public_keys():
     )
     assert len(pkeys.keys) == 2
 
+def test_private_keys():
+    "Test the PrivateKeys object"
+    # Bad parsing
+    with pytest.raises(mla.InvalidECCKeyFormat):
+        mla.PrivateKeys(b"NOT A KEY")
+    
+    with pytest.raises(mla.InvalidECCKeyFormat):
+        # This is a public key, not a private one
+        mla.PrivateKeys(os.path.join(SAMPLE_PATH, "test_ed25519_pub.pem"))
+
+    with pytest.raises(FileNotFoundError):
+        mla.PrivateKeys("/tmp/does_not_exists")
+    
+    # Open a PEM key, through path
+    pkeys_pem = mla.PrivateKeys(os.path.join(SAMPLE_PATH, "test_ed25519.pem"))
+    assert len(pkeys_pem.keys) == 1
+    
+    # Open a DER key, through path
+    pkeys_der = mla.PrivateKeys(os.path.join(SAMPLE_PATH, "test_ed25519.der"))
+    assert len(pkeys_pem.keys) == 1
+
+    # Keys must be the same
+    assert pkeys_pem.keys == pkeys_der.keys
+
+    # Open a PEM key, through data
+    pkeys_pem = mla.PrivateKeys(open(os.path.join(SAMPLE_PATH, "test_ed25519.pem"), "rb").read())
+    assert len(pkeys_pem.keys) == 1
+    
+    # Open a DER key, through data
+    pkeys_pem = mla.PrivateKeys(open(os.path.join(SAMPLE_PATH, "test_ed25519.der"), "rb").read())
+    assert len(pkeys_pem.keys) == 1
+    
+    # Keys must be the same
+    assert pkeys_pem.keys == pkeys_der.keys
+
+    # Open several keys, using both path and data
+    pkeys =  mla.PrivateKeys(
+        os.path.join(SAMPLE_PATH, "test_ed25519.pem"),
+        open(os.path.join(SAMPLE_PATH, "test_x25519_2.pem"), "rb").read()
+    )
+    assert len(pkeys.keys) == 2
+
 def test_writer_config_public_keys():
     "Test public keys API in WriterConfig creation"
 

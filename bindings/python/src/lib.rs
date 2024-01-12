@@ -1,6 +1,6 @@
 use std::{borrow::Cow, collections::HashMap, fs::File, io::Read};
 
-use curve25519_parser::parse_openssl_25519_pubkey;
+use curve25519_parser::{parse_openssl_25519_pubkey, parse_openssl_25519_privkey};
 use mla::{
     config::{self, ArchiveReaderConfig, ArchiveWriterConfig},
     ArchiveReader, ArchiveWriter, Layers,
@@ -279,6 +279,71 @@ impl PublicKeys {
     }
 }
 
+// -------- mla.PrivateKeys --------
+
+/// Represents multiple ECC Private Keys
+///
+/// Instanciate with path (as string) or data (as bytes)
+/// PEM and DER format are supported
+///
+/// Example:
+/// ```python
+/// pkeys = PrivateKeys("/path/to/key.pem", b"""
+/// -----BEGIN PRIVATE KEY-----
+/// ...
+/// -----END PRIVATE KEY-----
+/// """)
+/// ```
+#[derive(Clone)]
+#[pyclass]
+struct PrivateKeys {
+    keys: Vec<x25519_dalek::StaticSecret>,
+}
+
+#[pymethods]
+impl PrivateKeys {
+    #[new]
+    #[pyo3(signature = (*args))]
+    fn new(args: &PyTuple) -> Result<Self, WrappedError> {
+        let mut keys = Vec::new();
+
+        for element in args {
+            // String argument: this is a path
+            // "/path/to/public.pem"
+            if let Ok(path) = element.downcast::<PyString>() {
+                let mut file = File::open(path.to_string())?;
+                // Load the the ECC key in-memory and parse it
+                let mut buf = Vec::new();
+                file.read_to_end(&mut buf)?;
+                keys.push(
+                    parse_openssl_25519_privkey(&buf)
+                        .map_err(|_| mla::errors::Error::InvalidECCKeyFormat)?,
+                );
+            } else if let Ok(data) = element.downcast::<PyBytes>() {
+                keys.push(
+                    parse_openssl_25519_privkey(data.as_bytes())
+                        .map_err(|_| mla::errors::Error::InvalidECCKeyFormat)?,
+                );
+            } else {
+                return Err(
+                    PyTypeError::new_err("Expect a path (as a string) or data (as bytes)").into(),
+                );
+            }
+        }
+        Ok(Self { keys })
+    }
+
+    /// DER representation of keys
+    /// :warning: This keys must be kept secrets!
+    #[getter]
+    fn keys(&self) -> Vec<Cow<[u8]>> {
+        self.keys
+            .iter()
+            .map(|privkey| Cow::Owned(Vec::from(privkey.to_bytes())))
+            .collect()
+    }
+}
+
 // -------- mla.ConfigWriter --------
 
 // from mla::layers::DEFAULT_COMPRESSION_LEVEL
@@ -394,6 +459,7 @@ impl WriterConfig {
         Ok(config)
     }
 }
+
 
 // -------- mla.MLAFile --------
 
@@ -671,6 +737,7 @@ fn pymla(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<FileMetadata>()?;
     m.add_class::<WriterConfig>()?;
     m.add_class::<PublicKeys>()?;
+    m.add_class::<PrivateKeys>()?;
 
     // Exceptions
     m.add("MLAError", py.get_type::<MLAError>())?;
