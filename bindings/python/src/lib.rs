@@ -2,7 +2,7 @@ use std::{borrow::Cow, collections::HashMap, io::Read, fs::File};
 
 use curve25519_parser::parse_openssl_25519_pubkey;
 use mla::{
-    config::{ArchiveReaderConfig, ArchiveWriterConfig},
+    config::{ArchiveReaderConfig, ArchiveWriterConfig, self},
     ArchiveReader, ArchiveWriter, Layers,
 };
 use pyo3::{
@@ -224,6 +224,7 @@ impl FileMetadata {
 /// -----END PUBLIC KEY-----
 /// """)
 /// ```
+#[derive(Clone)]
 #[pyclass]
 struct PublicKeys {
     keys: Vec<x25519_dalek::PublicKey>,
@@ -276,59 +277,63 @@ impl PublicKeys {
 // from mla::layers::DEFAULT_COMPRESSION_LEVEL
 const DEFAULT_COMPRESSION_LEVEL: u32 = 5;
 
+// This class keep the values of configured object, and can be used to produce an actual
+// `ArchiveWriterConfig`. That way, it can be used to produced many of them, as they are
+// consumed during the `ArchiveWriter` init (to avoid reusing cryptographic materials)
 #[pyclass]
 struct WriterConfig {
-    inner: ArchiveWriterConfig,
+    layers: Layers,
+    compression_level: u32,
+    public_keys: Option<PublicKeys>,
 }
 
 #[pymethods]
 impl WriterConfig {
     #[new]
-    #[pyo3(signature = (layers=None, compression_level=DEFAULT_COMPRESSION_LEVEL))]
-    fn new(layers: Option<u8>, compression_level: u32) -> Result<Self, WrappedError> {
-        let mut output = WriterConfig {
-            inner: ArchiveWriterConfig::new(),
+    #[pyo3(signature = (layers=None, compression_level=DEFAULT_COMPRESSION_LEVEL, public_keys=None))]
+    fn new(layers: Option<u8>, compression_level: u32, public_keys: Option<PublicKeys>) -> Result<Self, WrappedError> {
+        // Check parameters
+        let layers = match layers {
+            Some(layers_enabled) => Layers::from_bits(layers_enabled).ok_or(
+                mla::errors::Error::BadAPIArgument(format!("Unknown layers")),
+            )?,
+            None => Layers::EMPTY,
         };
-        if let Some(layers_enabled) = layers {
-            output
-                .inner
-                .set_layers(Layers::from_bits(layers_enabled).ok_or(
-                    mla::errors::Error::BadAPIArgument(format!("Unknown layers")),
-                )?);
-        }
-        output.inner.with_compression_level(compression_level)?;
 
-        Ok(output)
+        // Check compression level is correct using a fake object
+        ArchiveWriterConfig::new().with_compression_level(compression_level)?;
+
+        Ok(
+            WriterConfig {
+                layers,
+                compression_level,
+                public_keys
+            }
+        )
     }
 
     #[getter]
-    fn layers(&self) -> Result<u8, WrappedError> {
-        Ok(self.inner.to_persistent()?.layers_enabled.bits())
+    fn layers(&self) -> u8 {
+        self.layers.bits()
     }
 
     /// Enable a layer
     fn enable_layer(mut slf: PyRefMut<Self>, layer: u8) -> Result<PyRefMut<Self>, WrappedError> {
-        slf.inner.enable_layer(
-            Layers::from_bits(layer)
-                .ok_or(mla::errors::Error::BadAPIArgument(format!("Unknown layer")))?,
-        );
+        let layer = Layers::from_bits(layer).ok_or(mla::errors::Error::BadAPIArgument(format!("Unknown layer")))?;
+        slf.layers |= layer;
         Ok(slf)
     }
 
     /// Disable a layer
     fn disable_layer(mut slf: PyRefMut<Self>, layer: u8) -> Result<PyRefMut<Self>, WrappedError> {
-        slf.inner.disable_layer(
-            Layers::from_bits(layer)
-                .ok_or(mla::errors::Error::BadAPIArgument(format!("Unknown layer")))?,
-        );
+        let layer = Layers::from_bits(layer).ok_or(mla::errors::Error::BadAPIArgument(format!("Unknown layer")))?;
+        slf.layers &= !layer;
         Ok(slf)
     }
 
     /// Set several layers at once
     fn set_layers(mut slf: PyRefMut<Self>, layers: u8) -> Result<PyRefMut<Self>, WrappedError> {
-        slf.inner.set_layers(Layers::from_bits(layers).ok_or(
-            mla::errors::Error::BadAPIArgument(format!("Unknown layers")),
-        )?);
+        slf.layers = Layers::from_bits(layers).ok_or(mla::errors::Error::BadAPIArgument(format!("Unknown layer")))?;
         Ok(slf)
     }
 
@@ -338,8 +343,44 @@ impl WriterConfig {
         mut slf: PyRefMut<Self>,
         compression_level: u32,
     ) -> Result<PyRefMut<Self>, WrappedError> {
-        slf.inner.with_compression_level(compression_level)?;
+        // Check compression level is correct using a fake object
+        ArchiveWriterConfig::new().with_compression_level(compression_level)?;
+
+        slf.compression_level = compression_level;
         Ok(slf)
+    }
+
+    #[getter]
+    fn compression_level(&self) -> u32 {
+        self.compression_level
+    }
+
+    /// Set public keys
+    fn set_public_keys<'a>(
+        mut slf: PyRefMut<'a, Self>,
+        public_keys: PublicKeys,
+    ) -> Result<PyRefMut<'a, Self>, WrappedError> {
+        slf.public_keys = Some(public_keys);
+        Ok(slf)
+    }
+
+    #[getter]
+    fn public_keys(&self) -> Option<PublicKeys> {
+        self.public_keys.clone()
+    }
+
+}
+
+impl WriterConfig {
+    /// Create an `ArchiveWriterConfig` out of the python object
+    fn to_archive_writer_config(&self) -> Result<ArchiveWriterConfig, WrappedError> {
+        let mut config = ArchiveWriterConfig::new();
+        config.set_layers(self.layers);
+        config.with_compression_level(self.compression_level)?;
+        if let Some(ref public_keys) = self.public_keys {
+            config.add_public_keys(&public_keys.keys);
+        }
+        Ok(config)
     }
 }
 
@@ -432,8 +473,8 @@ macro_rules! check_mode {
 #[pymethods]
 impl MLAFile {
     #[new]
-    #[pyo3(signature = (path, mode="r"))]
-    fn new(path: &str, mode: &str) -> Result<Self, WrappedError> {
+    #[pyo3(signature = (path, mode="r", config=None))]
+    fn new(path: &str, mode: &str, config: Option<&WriterConfig>) -> Result<Self, WrappedError> {
         match mode {
             "r" => {
                 let config = ArchiveReaderConfig::new();
@@ -445,8 +486,10 @@ impl MLAFile {
                 })
             }
             "w" => {
-                let mut config = ArchiveWriterConfig::new();
-                config.enable_layer(Layers::COMPRESS);
+                let config = match config {
+                    Some(config) => config.to_archive_writer_config()?,
+                    None => ArchiveWriterConfig::new()
+                };
                 let output_file = std::fs::File::create(path)?;
                 let arch_writer = ArchiveWriter::from_config(output_file, config)?;
                 Ok(MLAFile {
