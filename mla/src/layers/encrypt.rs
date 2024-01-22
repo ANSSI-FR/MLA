@@ -16,6 +16,8 @@ use x25519_dalek::{PublicKey, StaticSecret};
 
 use serde::{Deserialize, Serialize};
 
+use super::traits::InnerReaderTrait;
+
 const CIPHER_BUF_SIZE: u64 = 4096;
 // This is the size of the nonce taken as input
 const NONCE_SIZE: usize = 8;
@@ -342,7 +344,7 @@ impl<'a, R: 'a + Read + Seek> EncryptionLayerReader<'a, R> {
     }
 }
 
-impl<'a, R: 'a + Read + Seek> LayerReader<'a, R> for EncryptionLayerReader<'a, R> {
+impl<'a, R: 'a + InnerReaderTrait> LayerReader<'a, R> for EncryptionLayerReader<'a, R> {
     fn into_inner(self) -> Option<Box<dyn 'a + LayerReader<'a, R>>> {
         Some(self.inner)
     }
