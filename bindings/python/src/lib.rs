@@ -209,10 +209,7 @@ impl FileMetadata {
 
     #[getter]
     fn hash(&self) -> Option<Cow<[u8]>> {
-        match self.hash {
-            Some(ref hash) => Some(Cow::Borrowed(hash)),
-            None => None,
-        }
+        self.hash.as_ref().map(|h| Cow::Borrowed::<[u8]>(h))
     }
 
     fn __repr__(&self) -> String {
@@ -376,7 +373,7 @@ impl WriterConfig {
         // Check parameters
         let layers = match layers {
             Some(layers_enabled) => Layers::from_bits(layers_enabled).ok_or(
-                mla::errors::Error::BadAPIArgument(format!("Unknown layers")),
+                mla::errors::Error::BadAPIArgument("Unknown layers".to_string()),
             )?,
             None => Layers::DEFAULT,
         };
@@ -398,24 +395,27 @@ impl WriterConfig {
 
     /// Enable a layer
     fn enable_layer(mut slf: PyRefMut<Self>, layer: u8) -> Result<PyRefMut<Self>, WrappedError> {
-        let layer = Layers::from_bits(layer)
-            .ok_or(mla::errors::Error::BadAPIArgument(format!("Unknown layer")))?;
+        let layer = Layers::from_bits(layer).ok_or(mla::errors::Error::BadAPIArgument(
+            "Unknown layer".to_string(),
+        ))?;
         slf.layers |= layer;
         Ok(slf)
     }
 
     /// Disable a layer
     fn disable_layer(mut slf: PyRefMut<Self>, layer: u8) -> Result<PyRefMut<Self>, WrappedError> {
-        let layer = Layers::from_bits(layer)
-            .ok_or(mla::errors::Error::BadAPIArgument(format!("Unknown layer")))?;
+        let layer = Layers::from_bits(layer).ok_or(mla::errors::Error::BadAPIArgument(
+            "Unknown layer".to_string(),
+        ))?;
         slf.layers &= !layer;
         Ok(slf)
     }
 
     /// Set several layers at once
     fn set_layers(mut slf: PyRefMut<Self>, layers: u8) -> Result<PyRefMut<Self>, WrappedError> {
-        slf.layers = Layers::from_bits(layers)
-            .ok_or(mla::errors::Error::BadAPIArgument(format!("Unknown layer")))?;
+        slf.layers = Layers::from_bits(layers).ok_or(mla::errors::Error::BadAPIArgument(
+            "Unknown layer".to_string(),
+        ))?;
         Ok(slf)
     }
 
@@ -438,10 +438,10 @@ impl WriterConfig {
     }
 
     /// Set public keys
-    fn set_public_keys<'a>(
-        mut slf: PyRefMut<'a, Self>,
+    fn set_public_keys(
+        mut slf: PyRefMut<Self>,
         public_keys: PublicKeys,
-    ) -> Result<PyRefMut<'a, Self>, WrappedError> {
+    ) -> Result<PyRefMut<Self>, WrappedError> {
         slf.public_keys = Some(public_keys);
         Ok(slf)
     }
@@ -484,10 +484,10 @@ impl ReaderConfig {
     }
 
     /// Set private keys
-    fn set_private_keys<'a>(
-        mut slf: PyRefMut<'a, Self>,
+    fn set_private_keys(
+        mut slf: PyRefMut<Self>,
         private_keys: PrivateKeys,
-    ) -> Result<PyRefMut<'a, Self>, WrappedError> {
+    ) -> Result<PyRefMut<Self>, WrappedError> {
         slf.private_keys = Some(private_keys);
         Ok(slf)
     }
@@ -932,7 +932,7 @@ impl MLAFile {
                     .call_method1("read", (chunk_size,))?
                     .extract::<&PyBytes>()?
                     .as_bytes();
-                if data.len() == 0 {
+                if data.is_empty() {
                     break;
                 }
                 writer.append_file_content(id, data.len(), data)?;
