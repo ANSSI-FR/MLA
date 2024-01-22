@@ -508,3 +508,63 @@ def test_write_file_to_file_chunk_size(basic_archive):
         assert output.write_count == len(FILES["file1"]) // 2 + 1
         output.seek(0)
         assert output.read() == FILES["file1"]
+
+def test_add_file_from_str():
+    "Test archive.add_file_from(), using the String input version"
+    # Create the archive
+    path = tempfile.mkstemp(suffix=".mla")[1]
+    with MLAFile(path, "w") as archive:
+        for name, data in FILES.items():
+            # Create a file on disk to import
+            fname = tempfile.mkstemp()[1]
+            with open(fname, "wb") as f:
+                f.write(data)
+            # Import the file
+            archive.add_file_from(name, fname)
+
+    # Read the archive
+    with MLAFile(path) as archive:
+        assert sorted(archive.keys()) == sorted(list(FILES.keys()))
+        for name, data in FILES.items():
+            assert archive[name] == data
+
+def test_add_file_from_io():
+    "Test archive.add_file_from(), using the IO input version"
+    # Create the archive
+    path = tempfile.mkstemp(suffix=".mla")[1]
+    with MLAFile(path, "w") as archive:
+        for name, data in FILES.items():
+            # Use a buffered IO
+            f = io.BytesIO(data)
+            # Import the data
+            archive.add_file_from(name, f)
+
+    # Read the archive
+    with MLAFile(path) as archive:
+        assert sorted(archive.keys()) == sorted(list(FILES.keys()))
+        for name, data in FILES.items():
+            assert archive[name] == data
+
+def test_add_file_from_io_chunk_size():
+    "Test archive.add_file_from(), using the IO input version"
+    for chunk_size in [1, 2]:    
+        # Create the archive
+        path = tempfile.mkstemp(suffix=".mla")[1]
+        data = FILES["file1"]
+        with MLAFile(path, "w") as archive:
+            src = BytesIOCounter(data)
+            archive.add_file_from("file1", src, chunk_size=chunk_size)
+
+            # Check the number of calls
+            if chunk_size == 1:
+                # Chunk size set to 1 -> expect 6 calls (5 with data, 1 empty)
+                assert src.read_count == len(data) + 1
+            elif chunk_size == 2:
+                # Chunk size set to 2 -> expect 4 calls (3 with data, 1 empty)
+                assert src.read_count == 4
+
+        # Read the archive
+        with MLAFile(path) as archive:
+            assert archive["file1"] == data
+
+    
