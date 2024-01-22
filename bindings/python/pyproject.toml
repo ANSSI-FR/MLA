@@ -3,11 +3,14 @@ requires = ["maturin>=1.4,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "mla"
+name = "mla-archive"
 description = "Bindings for MLA Archive manipulation"
+authors = [
+    { name="Mougey Camille", email="camille.mougey@ssi.gouv.fr" },
+]
 requires-python = ">=3.8"
 keywords = ["archive", "mla"]
-license = {file = "../../LICENSE.md"}
+license = {file = "LICENSE.md"}
 classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
