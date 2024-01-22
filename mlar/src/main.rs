@@ -12,7 +12,7 @@ use mla::helpers::linear_extract;
 use mla::layers::compress::CompressionLayerReader;
 use mla::layers::encrypt::EncryptionLayerReader;
 use mla::layers::raw::RawLayerReader;
-use mla::layers::traits::LayerReader;
+use mla::layers::traits::{InnerReaderTrait, LayerReader};
 use mla::{
     ArchiveFailSafeReader, ArchiveFile, ArchiveFooter, ArchiveHeader, ArchiveReader, ArchiveWriter,
     Layers,
@@ -921,7 +921,7 @@ impl ArchiveInfoReader {
         mut config: ArchiveReaderConfig,
     ) -> Result<Self, MlarError>
     where
-        R: 'a + Read + Seek,
+        R: 'a + InnerReaderTrait,
     {
         // Make sure we read the archive header from the start
         src.rewind()?;

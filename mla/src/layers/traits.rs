@@ -3,7 +3,7 @@ use std::io::{Read, Seek, Write};
 
 // Here, feature `send` is used to force `Send` on Box<dyn> type
 // Indeed, the auto-derivation of Send is not able to automatically propagates it
-// As a result, forcing `Send` on the Layers forces it on the initial `W` (writable) type
+// As a result, forcing `Send` on the Layers forces it on the initial `W` (writable) and `R` (readable) types
 // To avoid this restriction when `Send` is not required, a feature is used
 
 /// Type alias for Layer Writer inner type
@@ -43,8 +43,22 @@ pub trait LayerWriter<'a, W: InnerWriterTrait>: Write {
     fn finalize(&mut self) -> Result<(), Error>;
 }
 
+/// Trait alias for Layer Reader readable source
+// Type aliases are not yet stable
+// See https://github.com/rust-lang/rust/issues/41517
+// -> use a dummy trait instead
+#[cfg(not(feature = "send"))]
+pub trait InnerReaderTrait: Read + Seek {}
+#[cfg(not(feature = "send"))]
+impl<T: Read + Seek> InnerReaderTrait for T {}
+
+#[cfg(feature = "send")]
+pub trait InnerReaderTrait: Read + Seek + Send {}
+#[cfg(feature = "send")]
+impl<T: Read + Seek + Send> InnerReaderTrait for T {}
+
 /// Trait to be implemented by layer readers
-pub trait LayerReader<'a, R: Read + Seek>: Read + Seek {
+pub trait LayerReader<'a, R: InnerReaderTrait>: InnerReaderTrait {
     /// Unwraps the inner reader
     fn into_inner(self) -> Option<Box<dyn 'a + LayerReader<'a, R>>>;
 

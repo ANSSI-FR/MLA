@@ -15,6 +15,8 @@ use crate::{Error, BINCODE_MAX_DESERIALIZE};
 use crate::config::{ArchiveWriterConfig, ConfigResult};
 use crate::errors::ConfigError;
 
+use super::traits::InnerReaderTrait;
+
 // ---------- Config ----------
 
 /// A bigger value means a better compression ratio, less indexes to save (in
@@ -292,7 +294,7 @@ impl<'a, R: 'a + Read> CompressionLayerReader<'a, R> {
     }
 }
 
-impl<'a, R: 'a + Read + Seek> LayerReader<'a, R> for CompressionLayerReader<'a, R> {
+impl<'a, R: 'a + InnerReaderTrait> LayerReader<'a, R> for CompressionLayerReader<'a, R> {
     fn into_inner(self) -> Option<Box<dyn 'a + LayerReader<'a, R>>> {
         Some(self.state.into_inner())
     }

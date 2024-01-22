@@ -6,6 +6,8 @@ use crate::layers::traits::{
 };
 use crate::Error;
 
+use super::traits::InnerReaderTrait;
+
 // ---------- Writer ----------
 
 /// Dummy layer, standing for the last layer (wrapping I/O)
@@ -49,13 +51,13 @@ impl<W: InnerWriterTrait> Write for RawLayerWriter<W> {
 // ---------- Reader ----------
 
 /// Dummy layer, standing for the last layer (wrapping I/O)
-pub struct RawLayerReader<R: Read + Seek> {
+pub struct RawLayerReader<R: InnerReaderTrait> {
     inner: R,
     // Offset to use in position
     offset_pos: u64,
 }
 
-impl<R: Read + Seek> RawLayerReader<R> {
+impl<R: InnerReaderTrait> RawLayerReader<R> {
     pub fn new(inner: R) -> Self {
         Self {
             inner,
@@ -70,7 +72,7 @@ impl<R: Read + Seek> RawLayerReader<R> {
     }
 }
 
-impl<'a, R: Read + Seek> LayerReader<'a, R> for RawLayerReader<R> {
+impl<'a, R: InnerReaderTrait> LayerReader<'a, R> for RawLayerReader<R> {
     fn into_inner(self) -> Option<Box<dyn 'a + LayerReader<'a, R>>> {
         None
     }
@@ -85,7 +87,7 @@ impl<'a, R: Read + Seek> LayerReader<'a, R> for RawLayerReader<R> {
     }
 }
 
-impl<R: Read + Seek> Seek for RawLayerReader<R> {
+impl<R: InnerReaderTrait> Seek for RawLayerReader<R> {
     /// Offer a position relatively to `self.offset_pos`
     fn seek(&mut self, ask_pos: SeekFrom) -> io::Result<u64> {
         match ask_pos {
@@ -115,7 +117,7 @@ impl<R: Read + Seek> Seek for RawLayerReader<R> {
     }
 }
 
-impl<R: Read + Seek> Read for RawLayerReader<R> {
+impl<R: InnerReaderTrait> Read for RawLayerReader<R> {
     /// Wrapper on inner
     fn read(&mut self, into: &mut [u8]) -> io::Result<usize> {
         self.inner.read(into)

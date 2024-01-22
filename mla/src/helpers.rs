@@ -1,3 +1,5 @@
+use crate::layers::traits::InnerReaderTrait;
+
 use super::layers::traits::InnerWriterTrait;
 /// Helpers for common operation with MLA Archives
 use super::{ArchiveFileBlock, ArchiveFileID, ArchiveReader, ArchiveWriter, Error};
@@ -19,7 +21,7 @@ use std::io::{self, Read, Seek, Write};
 /// encryption tag).
 /// Linear extraction avoids these costs by reading once and only once each byte,
 /// and by reducing the amount of seeks.
-pub fn linear_extract<W1: InnerWriterTrait, R: Read + Seek, S: BuildHasher>(
+pub fn linear_extract<W1: InnerWriterTrait, R: InnerReaderTrait, S: BuildHasher>(
     archive: &mut ArchiveReader<R>,
     export: &mut HashMap<&String, W1, S>,
 ) -> Result<(), Error> {

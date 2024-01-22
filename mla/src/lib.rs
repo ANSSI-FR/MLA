@@ -6,6 +6,7 @@ use std::io::{Read, Seek, SeekFrom, Write};
 extern crate bitflags;
 use bincode::Options;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
+use layers::traits::InnerReaderTrait;
 use serde::{Deserialize, Serialize};
 
 pub mod layers;
@@ -847,7 +848,7 @@ pub struct FileInfo {
     eof_offset: u64,
 }
 
-pub struct ArchiveReader<'a, R: 'a + Read + Seek> {
+pub struct ArchiveReader<'a, R: 'a + InnerReaderTrait> {
     /// MLA Archive format Reader
 
     /// User's reading configuration
@@ -858,7 +859,7 @@ pub struct ArchiveReader<'a, R: 'a + Read + Seek> {
     metadata: Option<ArchiveFooter>,
 }
 
-impl<'b, R: 'b + Read + Seek> ArchiveReader<'b, R> {
+impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
     pub fn from_config(mut src: R, mut config: ArchiveReaderConfig) -> Result<Self, Error> {
         // Make sure we read the archive header from the start
         src.rewind()?;
@@ -2187,5 +2188,6 @@ pub(crate) mod tests {
         static_assertions::assert_cfg!(feature = "send");
         static_assertions::assert_impl_all!(File: Send);
         static_assertions::assert_impl_all!(ArchiveWriter<File>: Send);
+        static_assertions::assert_impl_all!(ArchiveReader<File>: Send);
     }
 }
