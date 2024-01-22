@@ -534,6 +534,45 @@ impl ExplicitWriters {
             }
         }
     }
+
+    fn add_file<R: Read>(
+        &mut self,
+        key: &str,
+        size: u64,
+        reader: &mut R,
+    ) -> Result<(), mla::errors::Error> {
+        match self {
+            ExplicitWriters::FileWriter(writer) => {
+                writer.add_file(key, size, reader)?;
+                Ok(())
+            }
+        }
+    }
+
+    fn start_file(&mut self, key: &str) -> Result<u64, mla::errors::Error> {
+        match self {
+            ExplicitWriters::FileWriter(writer) => writer.start_file(key),
+        }
+    }
+
+    fn append_file_content(
+        &mut self,
+        id: u64,
+        size: usize,
+        data: &[u8],
+    ) -> Result<(), mla::errors::Error> {
+        match self {
+            ExplicitWriters::FileWriter(writer) => writer.append_file_content(id, size as u64, data),
+        }
+    }
+
+    fn end_file(&mut self, id: u64) -> Result<(), mla::errors::Error> {
+        match self {
+            ExplicitWriters::FileWriter(writer) => writer.end_file(id),
+        }
+    }
+
+
 }
 
 /// See `ExplicitWriters` for details
@@ -848,6 +887,50 @@ impl MLAFile {
         Ok(())
     }
 
+    /// Add a file to an archive from @src, which can be:
+    /// - a string, corresponding to the input path
+    /// - a readable BufferedIOBase object (file-object like)
+    /// If a BufferedIOBase object is provided, the size of the chunck passed to `.read` can be adjusted
+    /// through @chunk_size (default to 4MB)
+    /// 
+    /// Example:
+    /// ```python
+    /// archive.add_file_from("file1", "/path/to/file1")
+    /// ```
+    /// Or
+    /// ```python
+    /// with open("/path/to/file1", "rb") as f:
+    ///    archive.add_file_from("file1", f)
+    /// ```
+    #[pyo3(signature = (key, src, chunk_size=4194304))]
+    fn add_file_from(&mut self, py: Python, key: &str, src: &PyAny, chunk_size: usize) -> Result<(), WrappedError> {
+        let writer = check_mode!(mut self, Write);
+
+        if let Ok(src) = src.downcast::<PyString>() {
+            // src is a String, this is a path
+            // `/path/to/src`
+            let mut input = std::fs::File::open(src.to_string())?;
+            writer.add_file(key, input.metadata()?.len(), &mut input)?;
+
+        } else if src.is_instance(py.get_type::<MLAFile>().getattr("_buffered_type")?)? {
+            // isinstance(src, io.BufferedIOBase)
+            // offer `.read` (`.close` must be called from the caller)
+
+            let id = writer.start_file(key)?;
+            loop {
+                let data = src.call_method1("read", (chunk_size,))?.extract::<&PyBytes>()?.as_bytes();
+                if data.len() == 0 {
+                    break;
+                }
+                writer.append_file_content(id, data.len(), data)?;
+            }
+            writer.end_file(id)?;
+
+        } else {
+            return Err(PyTypeError::new_err("Expected a string or a file-object like (subclass of io.RawIOBase)").into());
+        }
+        Ok(())
+    }
 }
 
 // -------- Python module instanciation --------
