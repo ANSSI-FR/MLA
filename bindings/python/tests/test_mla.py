@@ -2,6 +2,7 @@ import hashlib
 import pytest
 import tempfile
 import os
+import io
 
 import mla
 from mla import MLAFile, MLAError
@@ -439,3 +440,71 @@ def test_read_encrypted_archive_bad_key():
             private_keys=mla.PrivateKeys(os.path.join(SAMPLE_PATH, "test_x25519_2.pem"))
         )) as archive:
             pass
+
+def test_write_file_to_str(basic_archive):
+    """Test archive.write_file_to(), using the String output version"""
+    # Temporary directory for extraction
+    tmpdir = tempfile.mkdtemp()
+    with MLAFile(basic_archive) as archive:
+        # Extract all files using the String output version
+        for name in archive.keys():
+            archive.write_file_to(name, os.path.join(tmpdir, name))
+
+    # Check the files
+    for name, data in FILES.items():
+        assert open(os.path.join(tmpdir, name), "rb").read() == data
+
+def test_write_file_to_file(basic_archive):
+    """Test archive.write_file_to(), using the File output version"""
+    # Temporary directory for extraction
+    tmpdir = tempfile.mkdtemp()
+    with MLAFile(basic_archive) as archive:
+        # Extract all files using the File output version
+        for name in archive.keys():
+            with open(os.path.join(tmpdir, name), "wb") as f:
+                archive.write_file_to(name, f)
+
+    # Check the files
+    for name, data in FILES.items():
+        assert open(os.path.join(tmpdir, name), "rb").read() == data
+
+
+class BytesIOCounter(io.BytesIO):
+    """
+    Extend BytesIO to count the number of calls to `write` and `read`
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.write_count = 0
+        self.read_count = 0
+    
+    def write(self, *args, **kwargs):
+        self.write_count += 1
+        return super().write(*args, **kwargs)
+    
+    def read(self, *args, **kwargs):
+        self.read_count += 1
+        return super().read(*args, **kwargs)
+
+
+def test_write_file_to_file_chunk_size(basic_archive):
+    """Test archive.write_file_to(), using the File output version"""
+    with MLAFile(basic_archive) as archive:
+        # Chunk size set to 1 -> expect 5 calls
+        output = BytesIOCounter()
+        archive.write_file_to("file1", output, chunk_size=1)
+
+        # Check the number of calls
+        assert output.write_count == len(FILES["file1"])
+        output.seek(0)
+        assert output.read() == FILES["file1"]
+
+        # Chunk size set to 2 -> expect 3 calls
+        output = BytesIOCounter()
+        archive.write_file_to("file1", output, chunk_size=2)
+
+        # Check the number of calls
+        assert output.write_count == len(FILES["file1"]) // 2 + 1
+        output.seek(0)
+        assert output.read() == FILES["file1"]
