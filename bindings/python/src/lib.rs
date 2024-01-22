@@ -1,15 +1,15 @@
-use std::{borrow::Cow, collections::HashMap, fs::File, io::Read};
+use std::{borrow::Cow, collections::HashMap, fs::File, io::{Read, self}};
 
 use curve25519_parser::{parse_openssl_25519_pubkey, parse_openssl_25519_privkey};
 use mla::{
-    config::{self, ArchiveReaderConfig, ArchiveWriterConfig},
+    config::{ArchiveReaderConfig, ArchiveWriterConfig},
     ArchiveReader, ArchiveWriter, Layers,
 };
 use pyo3::{
     create_exception,
     exceptions::{PyKeyError, PyRuntimeError, PyTypeError},
     prelude::*,
-    types::{PyBytes, PyString, PyTuple},
+    types::{PyBytes, PyString, PyTuple, PyType},
 };
 
 // -------- Error handling --------
@@ -661,7 +661,16 @@ impl MLAFile {
         Ok(inner.list_files()?.map(|x| x.to_string()).collect())
     }
 
-    /// Return the size of a file in the archive
+    /// Return the list of the files in the archive, along with metadata
+    /// If `include_size` is set, the size will be included in the metadata
+    /// If `include_hash` is set, the hash (SHA256) will be included in the metadata
+    /// 
+    /// Example:
+    /// ```python
+    /// metadatas = archive.list_files(include_size=True, include_hash=True)
+    /// for fname, metadata in metadatas.items():
+    ///    print(f"File {fname} has size {metadata.size} and hash {metadata.hash}")
+    /// ```
     #[pyo3(signature = (include_size=false, include_hash=false))]
     fn list_files(
         &mut self,
@@ -781,6 +790,64 @@ impl MLAFile {
         }
         Ok(false)
     }
+
+    /// alias for io.BufferedIOBase
+    // Purpose: only one import
+    #[classattr]
+    fn _buffered_type(py: Python) -> Result<&PyType, WrappedError> {
+        Ok(py.import("io")?.getattr("BufferedIOBase")?.extract()?)
+    }
+
+    /// Write an archive file to @dest, which can be:
+    /// - a string, corresponding to the output path
+    /// - a writable BufferedIOBase object (file-object like)
+    /// If a BufferedIOBase object is provided, the size of the chunck passed to `.write` can be adjusted
+    /// through @chunk_size (default to 4MB)
+    /// 
+    /// Example:
+    /// ```python
+    /// with open("/path/to/extract/file1", "wb") as f:
+    ///     archive.write_file_to("file1", f)
+    /// ```
+    /// Or
+    /// ```python
+    /// archive.write_file_to("file1", "/path/to/extract/file1")
+    /// ```
+    #[pyo3(signature = (key, dest, chunk_size=4194304))]
+    fn write_file_to(&mut self, py: Python, key: &str, dest: &PyAny, chunk_size: usize) -> Result<(), WrappedError> {
+        let reader = check_mode!(mut self, Read);
+
+        let archive_file = match reader {
+            ExplicitReaders::FileReader(reader) => {
+                reader.get_file(key.to_string())?
+            }
+        };
+
+        if let Ok(dest) = dest.downcast::<PyString>() {
+            // dest is a String, this is a path
+            // `/path/to/dest`
+            let mut output = std::fs::File::create(dest.to_string())?;
+            io::copy(&mut archive_file.unwrap().data, &mut output)?;
+
+        } else if dest.is_instance(py.get_type::<MLAFile>().getattr("_buffered_type")?)? {
+            // isinstance(dest, io.BufferedIOBase)
+            // offer `.write` (`.close` must be called from the caller)
+
+            let src = &mut archive_file.unwrap().data;
+            let mut buf = Vec::from_iter(std::iter::repeat(0).take(chunk_size));
+            while let Ok(n) = src.read(&mut buf) {
+                if n == 0 {
+                    break;
+                }
+                dest.call_method1("write", (&buf[..n],))?;
+            }
+
+        } else {
+            return Err(PyTypeError::new_err("Expected a string or a file-object like (subclass of io.RawIOBase)").into());
+        }
+        Ok(())
+    }
+
 }
 
 // -------- Python module instanciation --------
