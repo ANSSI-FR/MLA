@@ -1,6 +1,11 @@
-use std::{borrow::Cow, collections::HashMap, fs::File, io::{Read, self}};
+use std::{
+    borrow::Cow,
+    collections::HashMap,
+    fs::File,
+    io::{self, Read},
+};
 
-use curve25519_parser::{parse_openssl_25519_pubkey, parse_openssl_25519_privkey};
+use curve25519_parser::{parse_openssl_25519_privkey, parse_openssl_25519_pubkey};
 use mla::{
     config::{ArchiveReaderConfig, ArchiveWriterConfig},
     ArchiveReader, ArchiveWriter, Layers,
@@ -474,12 +479,8 @@ struct ReaderConfig {
 impl ReaderConfig {
     #[new]
     #[pyo3(signature = (private_keys=None))]
-    fn new(
-        private_keys: Option<PrivateKeys>,
-    ) -> Self {
-        ReaderConfig {
-            private_keys,
-        }
+    fn new(private_keys: Option<PrivateKeys>) -> Self {
+        ReaderConfig { private_keys }
     }
 
     /// Set private keys
@@ -508,7 +509,6 @@ impl ReaderConfig {
         Ok(config)
     }
 }
-
 
 // -------- mla.MLAFile --------
 
@@ -562,7 +562,9 @@ impl ExplicitWriters {
         data: &[u8],
     ) -> Result<(), mla::errors::Error> {
         match self {
-            ExplicitWriters::FileWriter(writer) => writer.append_file_content(id, size as u64, data),
+            ExplicitWriters::FileWriter(writer) => {
+                writer.append_file_content(id, size as u64, data)
+            }
         }
     }
 
@@ -571,8 +573,6 @@ impl ExplicitWriters {
             ExplicitWriters::FileWriter(writer) => writer.end_file(id),
         }
     }
-
-
 }
 
 /// See `ExplicitWriters` for details
@@ -703,7 +703,7 @@ impl MLAFile {
     /// Return the list of the files in the archive, along with metadata
     /// If `include_size` is set, the size will be included in the metadata
     /// If `include_hash` is set, the hash (SHA256) will be included in the metadata
-    /// 
+    ///
     /// Example:
     /// ```python
     /// metadatas = archive.list_files(include_size=True, include_hash=True)
@@ -842,7 +842,7 @@ impl MLAFile {
     /// - a writable BufferedIOBase object (file-object like)
     /// If a BufferedIOBase object is provided, the size of the chunck passed to `.write` can be adjusted
     /// through @chunk_size (default to 4MB)
-    /// 
+    ///
     /// Example:
     /// ```python
     /// with open("/path/to/extract/file1", "wb") as f:
@@ -853,13 +853,17 @@ impl MLAFile {
     /// archive.write_file_to("file1", "/path/to/extract/file1")
     /// ```
     #[pyo3(signature = (key, dest, chunk_size=4194304))]
-    fn write_file_to(&mut self, py: Python, key: &str, dest: &PyAny, chunk_size: usize) -> Result<(), WrappedError> {
+    fn write_file_to(
+        &mut self,
+        py: Python,
+        key: &str,
+        dest: &PyAny,
+        chunk_size: usize,
+    ) -> Result<(), WrappedError> {
         let reader = check_mode!(mut self, Read);
 
         let archive_file = match reader {
-            ExplicitReaders::FileReader(reader) => {
-                reader.get_file(key.to_string())?
-            }
+            ExplicitReaders::FileReader(reader) => reader.get_file(key.to_string())?,
         };
 
         if let Ok(dest) = dest.downcast::<PyString>() {
@@ -867,7 +871,6 @@ impl MLAFile {
             // `/path/to/dest`
             let mut output = std::fs::File::create(dest.to_string())?;
             io::copy(&mut archive_file.unwrap().data, &mut output)?;
-
         } else if dest.is_instance(py.get_type::<MLAFile>().getattr("_buffered_type")?)? {
             // isinstance(dest, io.BufferedIOBase)
             // offer `.write` (`.close` must be called from the caller)
@@ -880,9 +883,11 @@ impl MLAFile {
                 }
                 dest.call_method1("write", (&buf[..n],))?;
             }
-
         } else {
-            return Err(PyTypeError::new_err("Expected a string or a file-object like (subclass of io.RawIOBase)").into());
+            return Err(PyTypeError::new_err(
+                "Expected a string or a file-object like (subclass of io.RawIOBase)",
+            )
+            .into());
         }
         Ok(())
     }
@@ -892,7 +897,7 @@ impl MLAFile {
     /// - a readable BufferedIOBase object (file-object like)
     /// If a BufferedIOBase object is provided, the size of the chunck passed to `.read` can be adjusted
     /// through @chunk_size (default to 4MB)
-    /// 
+    ///
     /// Example:
     /// ```python
     /// archive.add_file_from("file1", "/path/to/file1")
@@ -903,7 +908,13 @@ impl MLAFile {
     ///    archive.add_file_from("file1", f)
     /// ```
     #[pyo3(signature = (key, src, chunk_size=4194304))]
-    fn add_file_from(&mut self, py: Python, key: &str, src: &PyAny, chunk_size: usize) -> Result<(), WrappedError> {
+    fn add_file_from(
+        &mut self,
+        py: Python,
+        key: &str,
+        src: &PyAny,
+        chunk_size: usize,
+    ) -> Result<(), WrappedError> {
         let writer = check_mode!(mut self, Write);
 
         if let Ok(src) = src.downcast::<PyString>() {
@@ -911,23 +922,27 @@ impl MLAFile {
             // `/path/to/src`
             let mut input = std::fs::File::open(src.to_string())?;
             writer.add_file(key, input.metadata()?.len(), &mut input)?;
-
         } else if src.is_instance(py.get_type::<MLAFile>().getattr("_buffered_type")?)? {
             // isinstance(src, io.BufferedIOBase)
             // offer `.read` (`.close` must be called from the caller)
 
             let id = writer.start_file(key)?;
             loop {
-                let data = src.call_method1("read", (chunk_size,))?.extract::<&PyBytes>()?.as_bytes();
+                let data = src
+                    .call_method1("read", (chunk_size,))?
+                    .extract::<&PyBytes>()?
+                    .as_bytes();
                 if data.len() == 0 {
                     break;
                 }
                 writer.append_file_content(id, data.len(), data)?;
             }
             writer.end_file(id)?;
-
         } else {
-            return Err(PyTypeError::new_err("Expected a string or a file-object like (subclass of io.RawIOBase)").into());
+            return Err(PyTypeError::new_err(
+                "Expected a string or a file-object like (subclass of io.RawIOBase)",
+            )
+            .into());
         }
         Ok(())
     }
