@@ -1,0 +1,25 @@
+[package]
+name = "pymla"
+version = "0.1.0"
+edition = "2021"
+authors = ["Camille Mougey <camille.mougey@ssi.gouv.fr>"]
+license = "LGPL-3.0-only"
+description = "Multi Layer Archive - A pure rust encrypted and compressed archive file format"
+homepage = "https://github.com/ANSSI-FR/MLA"
+repository = "https://github.com/ANSSI-FR/MLA"
+readme = "../../README.md"
+
+# Avoid cargo feature unification, which might broke other build in the workspace
+[workspace]
+members = ["."]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+name = "pymla"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = "0"
+mla = { version = "1", features = ["send"], path = "../../mla"}
+x25519-dalek = "2"
+curve25519-parser = { path = "../../curve25519-parser", version = "0.4" }
