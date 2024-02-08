@@ -478,7 +478,6 @@ impl<'a, W: InnerWriterTrait> ArchiveWriter<'a, W> {
         ArchiveHeader {
             format_version: MLA_FORMAT_VERSION,
             config: config.to_persistent()?,
-            // TODO public_key hashes for easier decryption
         }
         .dump(&mut dest)?;
 
