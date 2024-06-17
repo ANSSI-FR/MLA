@@ -175,7 +175,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
-      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);Ws2_32.lib;Userenv.lib;Bcrypt.lib</AdditionalDependencies>
+      <AdditionalDependencies>ntdll.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);Ws2_32.lib;Userenv.lib;Bcrypt.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(SolutionDir)\..\..\..\..\target\i686-pc-windows-msvc\debug</AdditionalLibraryDirectories>
     </Link>
     <PreBuildEvent>
@@ -195,7 +195,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
-      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);Ws2_32.lib;Userenv.lib;Bcrypt.lib</AdditionalDependencies>
+      <AdditionalDependencies>ntdll.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);Ws2_32.lib;Userenv.lib;Bcrypt.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(SolutionDir)\..\..\..\..\target\i686-pc-windows-msvc\debug</AdditionalLibraryDirectories>
     </Link>
     <PreBuildEvent>
@@ -219,7 +219,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(SolutionDir)\..\..\..\..\target\i686-pc-windows-msvc\release</AdditionalLibraryDirectories>
-      <AdditionalDependencies>%(AdditionalDependencies);Bcrypt.lib</AdditionalDependencies>
+      <AdditionalDependencies>%(AdditionalDependencies);Bcrypt.lib;ntdll.lib</AdditionalDependencies>
     </Link>
     <PreBuildEvent>
       <Command>if not exist "$(SolutionDir)\..\..\..\..\target\i686-pc-windows-msvc\release\mla.lib" cargo build --target=i686-pc-windows-msvc --release</Command>
@@ -242,7 +242,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(SolutionDir)\..\..\..\..\target\i686-pc-windows-msvc\release</AdditionalLibraryDirectories>
-      <AdditionalDependencies>%(AdditionalDependencies);Bcrypt.lib</AdditionalDependencies>
+      <AdditionalDependencies>%(AdditionalDependencies);Bcrypt.lib;ntdll.lib</AdditionalDependencies>
     </Link>
     <PreBuildEvent>
       <Command>if not exist "$(SolutionDir)\..\..\..\..\target\i686-pc-windows-msvc\release\mla.lib" cargo build --target=i686-pc-windows-msvc --release</Command>
@@ -261,7 +261,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
-      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);Ws2_32.lib;Userenv.lib;;Bcrypt.lib</AdditionalDependencies>
+      <AdditionalDependencies>ntdll.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);Ws2_32.lib;Userenv.lib;;Bcrypt.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(SolutionDir)\..\..\..\..\target\x86_64-pc-windows-msvc\debug</AdditionalLibraryDirectories>
     </Link>
     <PreBuildEvent>
@@ -281,7 +281,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
-      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);Ws2_32.lib;Userenv.lib;Bcrypt.lib</AdditionalDependencies>
+      <AdditionalDependencies>ntdll.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);Ws2_32.lib;Userenv.lib;Bcrypt.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(SolutionDir)\..\..\..\..\target\x86_64-pc-windows-msvc\debug</AdditionalLibraryDirectories>
     </Link>
     <PreBuildEvent>
@@ -305,7 +305,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(SolutionDir)\..\..\..\..\target\x86_64-pc-windows-msvc\release</AdditionalLibraryDirectories>
-      <AdditionalDependencies>%(AdditionalDependencies);Bcrypt.lib</AdditionalDependencies>
+      <AdditionalDependencies>%(AdditionalDependencies);Bcrypt.lib;ntdll.lib</AdditionalDependencies>
     </Link>
     <PreBuildEvent>
       <Command>if not exist "$(SolutionDir)\..\..\..\..\target\x86_64-pc-windows-msvc\release\mla.lib" cargo build --target=x86_64-pc-windows-msvc --release</Command>
@@ -328,7 +328,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(SolutionDir)\..\..\..\..\target\x86_64-pc-windows-msvc\release</AdditionalLibraryDirectories>
-      <AdditionalDependencies>%(AdditionalDependencies);Bcrypt.lib</AdditionalDependencies>
+      <AdditionalDependencies>%(AdditionalDependencies);Bcrypt.lib;ntdll.lib</AdditionalDependencies>
     </Link>
     <PreBuildEvent>
       <Command>if not exist "$(SolutionDir)\..\..\..\..\target\x86_64-pc-windows-msvc\release\mla.lib" cargo build --target=x86_64-pc-windows-msvc --release</Command>
