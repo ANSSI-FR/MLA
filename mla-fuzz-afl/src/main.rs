@@ -1,4 +1,5 @@
-#[macro_use]
+#[cfg(fuzzing)]
+use afl::fuzz;
 extern crate afl;
 use bincode::Options;
 use curve25519_parser::{parse_openssl_25519_privkey, parse_openssl_25519_pubkey};
