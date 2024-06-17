@@ -1,7 +1,7 @@
 [package]
 name = "mla-bindings-c"
 version = "1.0.0"
-authors = ["Matthieu Buffet <matthieu.buffet@ssi.gouv.fr>"]
+authors = ["Matthieu Buffet <matthieu.buffet@ssi.gouv.fr>","Camille Mougey <camille.mougey@ssi.gouv.fr>"]
 edition = "2018"
 
 [lib]
