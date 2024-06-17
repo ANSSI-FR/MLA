@@ -29,6 +29,8 @@ cargo build --target ...
 cargo build --release --target ...
 ```
 
+Notes: when linking with `mla.lib`, `ntdll.lib` is also needed.
+
 ## Example
 
 * Creating a new MLA archive (from [this file](tests/linux-gcc-g++/create.c) - Windows example [here](tests/windows-msvc/src/main.c))
