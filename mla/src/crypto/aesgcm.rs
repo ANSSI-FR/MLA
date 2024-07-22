@@ -16,6 +16,7 @@ pub const BLOCK_SIZE: usize = 128 / 8;
 pub const TAG_LENGTH: usize = BLOCK_SIZE;
 pub const KEY_SIZE: usize = 32;
 pub const NONCE_AES_SIZE: usize = 96 / 8;
+pub const KEY_COMMITMENT_SIZE: usize = KEY_SIZE;
 
 pub type Nonce = [u8; NONCE_AES_SIZE];
 pub type Key = [u8; KEY_SIZE];

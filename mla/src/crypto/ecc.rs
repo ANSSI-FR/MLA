@@ -32,6 +32,7 @@ struct KeyAndTag {
 pub struct MultiRecipientPersistent {
     /// Ephemeral public key
     public: [u8; 32],
+    /// Key wrapping for each recipient
     encrypted_keys: Vec<KeyAndTag>,
 }
 

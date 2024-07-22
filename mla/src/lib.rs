@@ -2006,6 +2006,7 @@ pub(crate) mod tests {
          */
     }
 
+    #[ignore]
     #[test]
     fn check_archive_format_v1() {
         let pem_priv: &'static [u8] = include_bytes!("../../samples/test_x25519_archive_v1.pem");

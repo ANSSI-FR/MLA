@@ -49,6 +49,8 @@ pub enum MLAStatus {
     ConfigErrorPrivateKeyNotSet = 0x140004,
     ConfigErrorPrivateKeyNotFound = 0x140005,
     ConfigErrorECIESComputationError = 0x140006,
+    ConfigErrorKeyCommitmentComputationError = 0x140007,
+    ConfigErrorKeyCommitmentCheckingError = 0x140008,
     DuplicateFilename = 0x150000,
     AuthenticatedDecryptionWrongTag = 0x160000,
     HKDFInvalidKeyLength = 0x170000,
@@ -171,6 +173,12 @@ impl From<MLAError> for MLAStatus {
             }
             MLAError::ConfigError(ConfigError::ECIESComputationError) => {
                 MLAStatus::ConfigErrorECIESComputationError
+            }
+            MLAError::ConfigError(ConfigError::KeyCommitmentComputationError) => {
+                MLAStatus::ConfigErrorKeyCommitmentComputationError
+            }
+            MLAError::ConfigError(ConfigError::KeyCommitmentCheckingError) => {
+                MLAStatus::ConfigErrorKeyCommitmentCheckingError
             }
             MLAError::DuplicateFilename => MLAStatus::DuplicateFilename,
             MLAError::AuthenticatedDecryptionWrongTag => MLAStatus::AuthenticatedDecryptionWrongTag,
