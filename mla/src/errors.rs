@@ -190,6 +190,9 @@ pub enum ConfigError {
     PrivateKeyNotSet,
     PrivateKeyNotFound,
     ECIESComputationError,
+    KeyCommitmentComputationError,
+    /// The encrypted key commitment does not correspond to the key commitment chain
+    KeyCommitmentCheckingError,
 }
 
 impl fmt::Display for ConfigError {

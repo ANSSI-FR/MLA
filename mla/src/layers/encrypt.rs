@@ -1,4 +1,6 @@
-use crate::crypto::aesgcm::{AesGcm256, ConstantTimeEq, Key, Nonce, Tag, TAG_LENGTH};
+use crate::crypto::aesgcm::{
+    AesGcm256, ConstantTimeEq, Key, Nonce, Tag, KEY_COMMITMENT_SIZE, TAG_LENGTH,
+};
 use crate::crypto::ecc::{retrieve_key, store_key_for_multi_recipients, MultiRecipientPersistent};
 
 use crate::layers::traits::{
@@ -42,13 +44,67 @@ fn build_nonce(nonce_prefix: [u8; NONCE_SIZE], current_ctr: u32) -> Nonce {
     nonce
 }
 
+// ---------- Key commitment ----------
+
+/// Key commitment chain, to be used to ensure the key is actually the expected one
+const KEY_COMMITMENT_CHAIN: &[u8; KEY_COMMITMENT_SIZE] = b"THIS IS THE KEY COMMITMENT CHAIN";
+
+/// Encrypt the hardcoded `KEY_COMMITMENT_CHAIN` with the given key and nonce
+fn build_key_commitment_chain(
+    key: &Key,
+    nonce: &[u8; NONCE_SIZE],
+) -> Result<KeyCommitmentAndTag, Error> {
+    let mut key_commitment = [0u8; KEY_COMMITMENT_SIZE];
+    key_commitment.copy_from_slice(KEY_COMMITMENT_CHAIN);
+    let mut cipher = AesGcm256::new(key, &build_nonce(*nonce, 0), b"")?;
+    cipher.encrypt(&mut key_commitment);
+    let mut tag = [0u8; TAG_LENGTH];
+    tag.copy_from_slice(&cipher.into_tag());
+    Ok(KeyCommitmentAndTag {
+        key_commitment,
+        tag,
+    })
+}
+
+fn check_key_commitment(
+    key: &Key,
+    nonce: &[u8; NONCE_SIZE],
+    commitment: &KeyCommitmentAndTag,
+) -> Result<(), ConfigError> {
+    let mut key_commitment = commitment.key_commitment;
+    let mut cipher = AesGcm256::new(key, &build_nonce(*nonce, 0), b"")
+        .or(Err(ConfigError::KeyCommitmentCheckingError))?;
+    let tag = cipher.decrypt(&mut key_commitment);
+    if tag.ct_eq(&commitment.tag).unwrap_u8() == 1 {
+        Ok(())
+    } else {
+        Err(ConfigError::KeyCommitmentCheckingError)
+    }
+}
+
+/// Number of the first chunk used for actual data
+///
+/// 0: used to encrypt the key commitment chain
+/// 1-n: used for the actual data
+const FIRST_DATA_CHUNK_NUMBER: u32 = 1;
+
 // ---------- Config ----------
 
+/// Encrypted Key commitment and associated tag
+#[derive(Serialize, Deserialize)]
+struct KeyCommitmentAndTag {
+    key_commitment: [u8; KEY_COMMITMENT_SIZE],
+    tag: [u8; TAG_LENGTH],
+}
 /// Configuration stored in the header, to be reloaded
 #[derive(Serialize, Deserialize)]
 pub struct EncryptionPersistentConfig {
+    /// Key-wrapping for each recipients
     pub multi_recipient: MultiRecipientPersistent,
+    /// Nonce for the archive AES-GCM
     nonce: [u8; NONCE_SIZE],
+    /// Encrypted version of the hardcoded `KEY_COMMITMENT_CHAIN`
+    key_commitment: KeyCommitmentAndTag,
 }
 
 pub struct EncryptionConfig {
@@ -100,13 +156,19 @@ impl EncryptionConfig {
 
     pub fn to_persistent(&self) -> Result<EncryptionPersistentConfig, ConfigError> {
         let mut rng = ChaChaRng::from_entropy();
+
         if let Ok(multi_recipient) =
             store_key_for_multi_recipients(&self.ecc_keys, &self.key, &mut rng)
         {
-            Ok(EncryptionPersistentConfig {
-                multi_recipient,
-                nonce: self.nonce,
-            })
+            if let Ok(key_commitment) = build_key_commitment_chain(&self.key, &self.nonce) {
+                Ok(EncryptionPersistentConfig {
+                    multi_recipient,
+                    nonce: self.nonce,
+                    key_commitment,
+                })
+            } else {
+                Err(ConfigError::KeyCommitmentComputationError)
+            }
         } else {
             Err(ConfigError::ECIESComputationError)
         }
@@ -144,6 +206,7 @@ impl EncryptionReaderConfig {
         &mut self,
         config: EncryptionPersistentConfig,
     ) -> Result<(), ConfigError> {
+        // Unwrap the private key
         if self.private_keys.is_empty() {
             return Err(ConfigError::PrivateKeyNotSet);
         }
@@ -159,9 +222,14 @@ impl EncryptionReaderConfig {
             };
         }
 
-        if self.encrypt_parameters.is_none() {
+        if let Some((key, nonce)) = &self.encrypt_parameters {
+            // A key has been found, check if it is the one expected
+            check_key_commitment(key, nonce, &config.key_commitment)
+                .or(Err(ConfigError::KeyCommitmentCheckingError))?;
+        } else {
             return Err(ConfigError::PrivateKeyNotFound);
         }
+
         Ok(())
     }
 }
@@ -198,9 +266,13 @@ impl<'a, W: 'a + InnerWriterTrait> EncryptionLayerWriter<'a, W> {
             inner,
             key: config.key,
             nonce_prefix: config.nonce,
-            cipher: AesGcm256::new(&config.key, &build_nonce(config.nonce, 0), b"")?,
+            cipher: AesGcm256::new(
+                &config.key,
+                &build_nonce(config.nonce, FIRST_DATA_CHUNK_NUMBER),
+                b"",
+            )?,
             current_chunk_offset: 0,
-            current_ctr: 0,
+            current_ctr: FIRST_DATA_CHUNK_NUMBER,
         })
     }
 
@@ -281,6 +353,8 @@ pub struct EncryptionLayerReader<'a, R: Read + Seek> {
     key: Key,
     nonce: [u8; NONCE_SIZE],
     chunk_cache: Cursor<Vec<u8>>,
+    /// Current chunk number in the data.
+    /// Note: the actual chunk number used in the cipher is offseted by FIRST_DATA_CHUNK_NUMBER
     current_chunk_number: u32,
 }
 
@@ -292,7 +366,7 @@ impl<'a, R: 'a + Read + Seek> EncryptionLayerReader<'a, R> {
         match config.encrypt_parameters {
             Some((key, nonce)) => Ok(Self {
                 inner,
-                cipher: AesGcm256::new(&key, &build_nonce(nonce, 0), b"")?,
+                cipher: AesGcm256::new(&key, &build_nonce(nonce, FIRST_DATA_CHUNK_NUMBER), b"")?,
                 key,
                 nonce,
                 chunk_cache: Cursor::new(Vec::with_capacity(CHUNK_SIZE as usize)),
@@ -307,7 +381,10 @@ impl<'a, R: 'a + Read + Seek> EncryptionLayerReader<'a, R> {
     fn load_in_cache(&mut self) -> Result<Option<()>, Error> {
         self.cipher = AesGcm256::new(
             &self.key,
-            &build_nonce(self.nonce, self.current_chunk_number),
+            &build_nonce(
+                self.nonce,
+                self.current_chunk_number + FIRST_DATA_CHUNK_NUMBER,
+            ),
             b"",
         )?;
 
@@ -476,7 +553,7 @@ impl<'a, R: 'a + Read> EncryptionLayerFailSafeReader<'a, R> {
         match config.encrypt_parameters {
             Some((key, nonce)) => Ok(Self {
                 inner,
-                cipher: AesGcm256::new(&key, &build_nonce(nonce, 0), b"")?,
+                cipher: AesGcm256::new(&key, &build_nonce(nonce, FIRST_DATA_CHUNK_NUMBER), b"")?,
                 key,
                 nonce,
                 current_chunk_number: 0,
@@ -509,7 +586,10 @@ impl<'a, R: Read> Read for EncryptionLayerFailSafeReader<'a, R> {
             self.current_chunk_offset = 0;
             self.cipher = AesGcm256::new(
                 &self.key,
-                &build_nonce(self.nonce, self.current_chunk_number),
+                &build_nonce(
+                    self.nonce,
+                    self.current_chunk_number + FIRST_DATA_CHUNK_NUMBER,
+                ),
                 b"",
             )?;
             return self.read(buf);
@@ -705,5 +785,45 @@ mod tests {
         let mut output = Vec::new();
         encrypt_r.read_to_end(&mut output).unwrap();
         assert_eq!(output.as_slice(), &data[CHUNK_SIZE as usize..]);
+    }
+
+    #[test]
+    fn build_key_commitment_chain_test() {
+        // Build the encrypted key commitment chain
+        let key: Key = [1u8; KEY_SIZE];
+        let nonce: [u8; NONCE_SIZE] = [2u8; NONCE_SIZE];
+        let result = build_key_commitment_chain(&key, &nonce);
+        assert!(result.is_ok());
+        let key_commitment_and_tag = result.unwrap();
+
+        // Decrypt it
+        let mut cipher = AesGcm256::new(&key, &build_nonce(nonce, 0), b"").unwrap();
+        let mut decrypted_key_commitment = [0u8; KEY_COMMITMENT_SIZE];
+        decrypted_key_commitment.copy_from_slice(&key_commitment_and_tag.key_commitment);
+        let tag = cipher.decrypt(&mut decrypted_key_commitment);
+        assert_eq!(tag.ct_eq(&key_commitment_and_tag.tag).unwrap_u8(), 1);
+        assert_eq!(decrypted_key_commitment, *KEY_COMMITMENT_CHAIN);
+    }
+
+    #[test]
+    fn check_key_commitment_test() {
+        // Build the encrypted key commitment chain
+        let key: Key = [1u8; KEY_SIZE];
+        let nonce: [u8; NONCE_SIZE] = [2u8; NONCE_SIZE];
+        let result = build_key_commitment_chain(&key, &nonce);
+        assert!(result.is_ok());
+        let key_commitment_and_tag = result.unwrap();
+
+        // Check it
+        let result = check_key_commitment(&key, &nonce, &key_commitment_and_tag);
+        assert!(result.is_ok());
+
+        // Test with invalid key commitment
+        let invalid_key_commitment_and_tag = KeyCommitmentAndTag {
+            key_commitment: [0u8; KEY_COMMITMENT_SIZE],
+            tag: [0u8; TAG_LENGTH],
+        };
+        let result = check_key_commitment(&key, &nonce, &invalid_key_commitment_and_tag);
+        assert!(result.is_err());
     }
 }
