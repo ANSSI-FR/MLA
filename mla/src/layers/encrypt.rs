@@ -16,7 +16,7 @@ use rand::{Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use x25519_dalek::{PublicKey, StaticSecret};
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use super::traits::InnerReaderTrait;
 
@@ -49,7 +49,9 @@ fn build_nonce(nonce_prefix: [u8; NONCE_SIZE], current_ctr: u32) -> Nonce {
 // ---------- Key commitment ----------
 
 /// Key commitment chain, to be used to ensure the key is actually the expected one
-const KEY_COMMITMENT_CHAIN: &[u8; KEY_COMMITMENT_SIZE] = b"THIS IS THE KEY COMMITMENT CHAIN";
+/// Enforce that all recipients are actually using the same key, so getting the same plaintext
+const KEY_COMMITMENT_CHAIN: &[u8; KEY_COMMITMENT_SIZE] =
+    b"-KEY COMMITMENT--KEY COMMITMENT--KEY COMMITMENT--KEY COMMITMENT-";
 
 /// Encrypt the hardcoded `KEY_COMMITMENT_CHAIN` with the given key and nonce
 fn build_key_commitment_chain(
@@ -91,13 +93,48 @@ fn check_key_commitment(
 const FIRST_DATA_CHUNK_NUMBER: u32 = 1;
 
 // ---------- Config ----------
-
 /// Encrypted Key commitment and associated tag
-#[derive(Serialize, Deserialize)]
 struct KeyCommitmentAndTag {
     key_commitment: [u8; KEY_COMMITMENT_SIZE],
     tag: [u8; TAG_LENGTH],
 }
+
+// For now, `serde` does not support generic const array, so [u8; 64] is not supported
+// -> Serialize as [u8; 32][u8; 32]
+// A Vec<u8> could also be used, but using array avoid having creating arbitrary sized vectors
+// that early in the process
+impl Serialize for KeyCommitmentAndTag {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::ser::Serializer,
+    {
+        let mut part1: [u8; KEY_COMMITMENT_SIZE / 2] = [0; KEY_COMMITMENT_SIZE / 2];
+        let mut part2: [u8; KEY_COMMITMENT_SIZE / 2] = [0; KEY_COMMITMENT_SIZE / 2];
+        part1.copy_from_slice(&self.key_commitment[..KEY_COMMITMENT_SIZE / 2]);
+        part2.copy_from_slice(&self.key_commitment[KEY_COMMITMENT_SIZE / 2..]);
+        (part1, part2, self.tag).serialize(serializer)
+    }
+}
+impl<'de> Deserialize<'de> for KeyCommitmentAndTag {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let (part1, part2, tag) = <(
+            [u8; KEY_COMMITMENT_SIZE / 2],
+            [u8; KEY_COMMITMENT_SIZE / 2],
+            [u8; TAG_LENGTH],
+        )>::deserialize(deserializer)?;
+        let mut key_commitment = [0u8; KEY_COMMITMENT_SIZE];
+        key_commitment[..KEY_COMMITMENT_SIZE / 2].copy_from_slice(&part1);
+        key_commitment[KEY_COMMITMENT_SIZE / 2..].copy_from_slice(&part2);
+        Ok(KeyCommitmentAndTag {
+            key_commitment,
+            tag,
+        })
+    }
+}
+
 /// Configuration stored in the header, to be reloaded
 #[derive(Serialize, Deserialize)]
 pub struct EncryptionPersistentConfig {

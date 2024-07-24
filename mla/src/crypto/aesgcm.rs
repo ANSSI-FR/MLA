@@ -16,7 +16,9 @@ pub const BLOCK_SIZE: usize = 128 / 8;
 pub const TAG_LENGTH: usize = BLOCK_SIZE;
 pub const KEY_SIZE: usize = 32;
 pub const NONCE_AES_SIZE: usize = 96 / 8;
-pub const KEY_COMMITMENT_SIZE: usize = KEY_SIZE;
+// Based on "How to abuse and fix authenticated encryption without key commitment", 2020
+// Key commitment chain must be as long as twice the expected security strength
+pub const KEY_COMMITMENT_SIZE: usize = KEY_SIZE * 2;
 
 pub type Nonce = [u8; NONCE_AES_SIZE];
 pub type Key = [u8; KEY_SIZE];
