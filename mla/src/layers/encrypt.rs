@@ -13,7 +13,7 @@ use std::io::{BufReader, Cursor, Read, Seek, SeekFrom, Write};
 use crate::config::{ArchiveReaderConfig, ArchiveWriterConfig};
 use crate::errors::ConfigError;
 use rand::{Rng, SeedableRng};
-use rand_chacha::ChaChaRng;
+use rand_chacha::{rand_core::CryptoRngCore, ChaChaRng};
 use x25519_dalek::{PublicKey, StaticSecret};
 
 use serde::{Deserialize, Deserializer, Serialize};
@@ -155,8 +155,8 @@ pub struct EncryptionConfig {
     nonce: [u8; NONCE_SIZE],
 }
 
-impl std::default::Default for EncryptionConfig {
-    fn default() -> Self {
+/// Return a Cryptographic random number generator
+fn get_crypto_rng() -> impl CryptoRngCore {
         // Use OsRng from crate rand, that uses getrandom() from crate getrandom.
         // getrandom provides implementations for many systems, listed on
         // https://docs.rs/getrandom/0.1.14/getrandom/
@@ -172,7 +172,14 @@ impl std::default::Default for EncryptionConfig {
         // https://github.com/rust-random/rand/blob/rand_core-0.5.1/rand_core/src/lib.rs#L378
         // and this function is documented as "secure" in
         // https://docs.rs/rand/0.7.3/rand/trait.SeedableRng.html#method.from_entropy
-        let mut csprng = ChaChaRng::from_entropy();
+    //
+    // For the same reasons, force at compile time that the Rng implements CryptoRngCore
+    ChaChaRng::from_entropy()
+}
+
+impl std::default::Default for EncryptionConfig {
+    fn default() -> Self {
+        let mut csprng = get_crypto_rng();
         let key = csprng.gen::<Key>();
         let nonce = csprng.gen::<[u8; NONCE_SIZE]>();
         EncryptionConfig {
