@@ -6,6 +6,8 @@ use std::io::{Read, Seek, SeekFrom, Write};
 extern crate bitflags;
 use bincode::Options;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
+use config::InternalConfig;
+use errors::ConfigError;
 use layers::traits::InnerReaderTrait;
 use serde::{Deserialize, Serialize};
 
@@ -431,7 +433,7 @@ pub struct ArchiveWriter<'a, W: 'a + InnerWriterTrait> {
     // config is not used for now after archive creation,
     // but it could in the future
     #[allow(dead_code)]
-    config: ArchiveWriterConfig,
+    internal_config: InternalConfig,
     ///
     /// Internals part:
     ///
@@ -473,17 +475,26 @@ impl<'a, W: InnerWriterTrait> ArchiveWriter<'a, W> {
         // Ensure config is correct
         config.check()?;
 
+        // Seperate config into the internal state and the persistent config
+        let (persistent, internal) = config.to_persistent()?;
+
         // Write archive header
         let mut dest: InnerWriterType<W> = Box::new(RawLayerWriter::new(dest));
         ArchiveHeader {
             format_version: MLA_FORMAT_VERSION,
-            config: config.to_persistent()?,
+            config: persistent,
         }
         .dump(&mut dest)?;
 
         // Enable layers depending on user option
         if config.is_layers_enabled(Layers::ENCRYPT) {
-            dest = Box::new(EncryptionLayerWriter::new(dest, &config.encrypt)?);
+            dest = Box::new(EncryptionLayerWriter::new(
+                dest,
+                internal
+                    .encrypt
+                    .as_ref()
+                    .ok_or(ConfigError::EncryptionKeyIsMissing)?,
+            )?);
         }
         if config.is_layers_enabled(Layers::COMPRESS) {
             dest = Box::new(CompressionLayerWriter::new(dest, &config.compress));
@@ -495,7 +506,7 @@ impl<'a, W: InnerWriterTrait> ArchiveWriter<'a, W> {
 
         // Build initial archive
         Ok(ArchiveWriter {
-            config,
+            internal_config: internal,
             dest: final_dest,
             state: ArchiveWriterState::OpenedFiles {
                 ids: Vec::new(),
@@ -1375,8 +1386,8 @@ pub(crate) mod tests {
         mla.end_file(id).unwrap();
         mla.finalize().unwrap();
 
-        let mla_key = *mla.config.encryption_key();
-        let mla_nonce = *mla.config.encryption_nonce();
+        let mla_key = mla.internal_config.encrypt.as_ref().unwrap().key;
+        let mla_nonce = mla.internal_config.encrypt.as_ref().unwrap().nonce;
         let dest = mla.into_raw();
         let buf = Cursor::new(dest.as_slice());
         let mut config = ArchiveReaderConfig::new();
