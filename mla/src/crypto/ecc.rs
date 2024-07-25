@@ -10,6 +10,7 @@ use zeroize::Zeroize;
 
 const DERIVE_KEY_INFO: &[u8; 14] = b"KEY DERIVATION";
 const ECIES_NONCE: &[u8; 12] = b"ECIES NONCE0";
+const ECIES_ASSOCIATED_DATA: &[u8; 0] = b"";
 
 // Implementation inspired from XSTREAM/x25519hkdf.rs
 // /!\ in XSTREAM/x25519hkdf.rs, the arguments of Hkdf::new seem inverted
@@ -32,6 +33,7 @@ struct KeyAndTag {
 pub struct MultiRecipientPersistent {
     /// Ephemeral public key
     public: [u8; 32],
+    /// Key wrapping for each recipient
     encrypted_keys: Vec<KeyAndTag>,
 }
 
@@ -66,7 +68,7 @@ where
         // Encrypt the final shared key with it
         // As the key is completely random and use only once, no need for a
         // random NONCE
-        let mut cipher = aesgcm::AesGcm256::new(&dh_key, ECIES_NONCE, b"")?;
+        let mut cipher = aesgcm::AesGcm256::new(&dh_key, ECIES_NONCE, ECIES_ASSOCIATED_DATA)?;
         let mut encrypted_key = [0u8; KEY_SIZE];
         encrypted_key.copy_from_slice(key);
         cipher.encrypt(&mut encrypted_key);
@@ -95,7 +97,7 @@ pub(crate) fn retrieve_key(
 
     // Try to find the correct key using the tag validation
     for keytag in persist.encrypted_keys.iter() {
-        let mut cipher = aesgcm::AesGcm256::new(&key, ECIES_NONCE, b"")?;
+        let mut cipher = aesgcm::AesGcm256::new(&key, ECIES_NONCE, ECIES_ASSOCIATED_DATA)?;
         let mut data = [0u8; KEY_SIZE];
         data.copy_from_slice(&keytag.key);
         let tag = cipher.decrypt(&mut data);
