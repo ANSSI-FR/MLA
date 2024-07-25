@@ -51,6 +51,7 @@ pub enum MLAStatus {
     ConfigErrorECIESComputationError = 0x140006,
     ConfigErrorKeyCommitmentComputationError = 0x140007,
     ConfigErrorKeyCommitmentCheckingError = 0x140008,
+    ConfigErrorNoRecipients = 0x140009,
     DuplicateFilename = 0x150000,
     AuthenticatedDecryptionWrongTag = 0x160000,
     HKDFInvalidKeyLength = 0x170000,
@@ -161,6 +162,9 @@ impl From<MLAError> for MLAStatus {
             }
             MLAError::ConfigError(ConfigError::CompressionLevelOutOfRange) => {
                 MLAStatus::ConfigErrorCompressionLevelOutOfRange
+            }
+            MLAError::ConfigError(ConfigError::NoRecipients) => {
+                MLAStatus::ConfigErrorNoRecipients
             }
             MLAError::ConfigError(ConfigError::EncryptionKeyIsMissing) => {
                 MLAStatus::ConfigErrorEncryptionKeyIsMissing
