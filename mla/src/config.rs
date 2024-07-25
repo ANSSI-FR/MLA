@@ -1,12 +1,25 @@
 use crate::errors::ConfigError;
 use crate::layers::compress::CompressionConfig;
 use crate::layers::encrypt::{
-    EncryptionConfig, EncryptionPersistentConfig, EncryptionReaderConfig,
+    EncryptionConfig, EncryptionPersistentConfig, EncryptionReaderConfig, InternalEncryptionConfig,
 };
 use crate::Layers;
 use serde::{Deserialize, Serialize};
 
 /// This module implements the configuration capabilities of MLA Archive
+///
+/// Workflow:
+/// ```asciiart
+///                      `ArchiveWriterConfig`  <--> User, add recipients, set the compression level, etc.
+///                              |
+///                              v
+///                      -------------- MLA ---
+///                              |
+///                       .to_persistent()
+///                           /       \
+/// MLA specifics <= InternalConfig  PersistentConfig => to be stored in the header,
+///                                                      for futur reloaded by the Reader
+/// ```
 
 /// User's configuration used to prepare an archive
 pub struct ArchiveWriterConfig {
@@ -17,13 +30,20 @@ pub struct ArchiveWriterConfig {
     pub(crate) encrypt: EncryptionConfig,
 }
 
-/// Internal configuration stored in the header, to be reloaded
+/// Configuration stored in the header, to be reloaded
 #[derive(Serialize, Deserialize)]
 pub struct ArchivePersistentConfig {
     pub layers_enabled: Layers,
 
     // Layers specifics
     pub encrypt: Option<EncryptionPersistentConfig>,
+}
+
+/// Internal config, to be used only during MLA processing, by MLA
+#[derive(Default)]
+pub(crate) struct InternalConfig {
+    // Layers specifics
+    pub(crate) encrypt: Option<InternalEncryptionConfig>,
 }
 
 pub type ConfigResult<'a> = Result<&'a mut ArchiveWriterConfig, ConfigError>;
@@ -57,17 +77,24 @@ impl ArchiveWriterConfig {
     }
 
     /// Get the persistent version, to be stored in the header
-    pub fn to_persistent(&self) -> Result<ArchivePersistentConfig, ConfigError> {
-        Ok(ArchivePersistentConfig {
-            layers_enabled: self.layers_enabled,
-            encrypt: {
-                if self.is_layers_enabled(Layers::ENCRYPT) {
-                    Some(self.encrypt.to_persistent()?)
-                } else {
-                    None
-                }
+    pub(crate) fn to_persistent(
+        &self,
+    ) -> Result<(ArchivePersistentConfig, InternalConfig), ConfigError> {
+        let (encrypt_persistent, encrypt_internal) = if self.is_layers_enabled(Layers::ENCRYPT) {
+            let (persistent, internal) = self.encrypt.to_persistent()?;
+            (Some(persistent), Some(internal))
+        } else {
+            (None, None)
+        };
+        Ok((
+            ArchivePersistentConfig {
+                layers_enabled: self.layers_enabled,
+                encrypt: encrypt_persistent,
             },
-        })
+            InternalConfig {
+                encrypt: encrypt_internal,
+            },
+        ))
     }
 
     /// Check if layers are enabled
