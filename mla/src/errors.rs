@@ -186,6 +186,9 @@ pub enum ConfigError {
     // Compression specifics
     CompressionLevelOutOfRange,
     // Encryption specifics
+    /// No recipients provided, encryption can't continue
+    NoRecipients,
+    /// Internal state has not yet been created. A call to `to_persistent` might be missing
     EncryptionKeyIsMissing,
     PrivateKeyNotSet,
     PrivateKeyNotFound,
