@@ -192,10 +192,13 @@ pub enum ConfigError {
     EncryptionKeyIsMissing,
     PrivateKeyNotSet,
     PrivateKeyNotFound,
+    MLKEMComputationError,
     ECIESComputationError,
     KeyCommitmentComputationError,
     /// The encrypted key commitment does not correspond to the key commitment chain
     KeyCommitmentCheckingError,
+    /// Error while wrapping or unwrapping the encryption key
+    KeyWrappingComputationError,
 }
 
 impl fmt::Display for ConfigError {
