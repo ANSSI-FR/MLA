@@ -1,5 +1,5 @@
 use crate::crypto::aesgcm;
-use crate::crypto::aesgcm::{ConstantTimeEq, KEY_SIZE, TAG_LENGTH};
+use crate::crypto::aesgcm::{ConstantTimeEq, Key, KEY_SIZE, TAG_LENGTH};
 use crate::errors::Error;
 use hkdf::Hkdf;
 use rand::{CryptoRng, RngCore};
@@ -8,16 +8,17 @@ use sha2::Sha256;
 use x25519_dalek::{PublicKey, StaticSecret};
 use zeroize::Zeroize;
 
+pub const PUBLIC_KEY_SIZE: usize = 32;
 const DERIVE_KEY_INFO: &[u8; 14] = b"KEY DERIVATION";
 const ECIES_NONCE: &[u8; 12] = b"ECIES NONCE0";
 const ECIES_ASSOCIATED_DATA: &[u8; 0] = b"";
 
 // Implementation inspired from XSTREAM/x25519hkdf.rs
 // /!\ in XSTREAM/x25519hkdf.rs, the arguments of Hkdf::new seem inverted
-fn derive_key(private_key: &StaticSecret, public_key: &PublicKey) -> Result<[u8; KEY_SIZE], Error> {
+pub(crate) fn derive_key(private_key: &StaticSecret, public_key: &PublicKey) -> Result<Key, Error> {
     let mut shared_secret = private_key.diffie_hellman(public_key);
     let hkdf: Hkdf<Sha256> = Hkdf::new(None, shared_secret.as_bytes());
-    let mut output = [0u8; KEY_SIZE];
+    let mut output = Key::default();
     hkdf.expand(DERIVE_KEY_INFO, &mut output)?;
     shared_secret.zeroize();
     Ok(output)
@@ -25,14 +26,14 @@ fn derive_key(private_key: &StaticSecret, public_key: &PublicKey) -> Result<[u8;
 
 #[derive(Serialize, Deserialize)]
 struct KeyAndTag {
-    key: [u8; KEY_SIZE],
+    key: Key,
     tag: [u8; TAG_LENGTH],
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct MultiRecipientPersistent {
     /// Ephemeral public key
-    public: [u8; 32],
+    public: [u8; PUBLIC_KEY_SIZE],
     /// Key wrapping for each recipient
     encrypted_keys: Vec<KeyAndTag>,
 }
@@ -47,7 +48,7 @@ impl MultiRecipientPersistent {
 /// serializable structure (Key-wrapping made thanks to AesGcm256)
 pub(crate) fn store_key_for_multi_recipients<T>(
     recipients: &[PublicKey],
-    key: &[u8; KEY_SIZE],
+    key: &Key,
     csprng: &mut T,
 ) -> Result<MultiRecipientPersistent, Error>
 where
@@ -69,7 +70,7 @@ where
         // As the key is completely random and use only once, no need for a
         // random NONCE
         let mut cipher = aesgcm::AesGcm256::new(&dh_key, ECIES_NONCE, ECIES_ASSOCIATED_DATA)?;
-        let mut encrypted_key = [0u8; KEY_SIZE];
+        let mut encrypted_key = Key::default();
         encrypted_key.copy_from_slice(key);
         cipher.encrypt(&mut encrypted_key);
         let mut tag = [0u8; TAG_LENGTH];
@@ -91,14 +92,14 @@ where
 pub(crate) fn retrieve_key(
     persist: &MultiRecipientPersistent,
     private_key: &StaticSecret,
-) -> Result<Option<[u8; KEY_SIZE]>, Error> {
+) -> Result<Option<Key>, Error> {
     // Perform an ECIES to obtain the common key
     let key = derive_key(private_key, &PublicKey::from(persist.public))?;
 
     // Try to find the correct key using the tag validation
     for keytag in persist.encrypted_keys.iter() {
         let mut cipher = aesgcm::AesGcm256::new(&key, ECIES_NONCE, ECIES_ASSOCIATED_DATA)?;
-        let mut data = [0u8; KEY_SIZE];
+        let mut data = Key::default();
         data.copy_from_slice(&keytag.key);
         let tag = cipher.decrypt(&mut data);
         if tag.ct_eq(&keytag.tag).unwrap_u8() == 1 {
@@ -149,7 +150,7 @@ mod tests {
         }
 
         // Perform multi-recipients ECIES
-        let key = csprng.gen::<[u8; KEY_SIZE]>();
+        let key = csprng.gen::<Key>();
         let persist = store_key_for_multi_recipients(&recipients_pub, &key, &mut csprng).unwrap();
 
         // Count keys
