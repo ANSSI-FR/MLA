@@ -105,11 +105,11 @@ impl<'a, 'b, W: InnerWriterTrait> Write for StreamWriter<'a, 'b, W> {
 
 #[cfg(test)]
 mod tests {
+    use crypto::hybrid::generate_keypair_from_rng;
     use rand::distributions::Standard;
     use rand::prelude::Distribution;
-    use rand::{RngCore, SeedableRng};
+    use rand::SeedableRng;
     use rand_chacha::ChaChaRng;
-    use x25519_dalek::{PublicKey, StaticSecret};
 
     use super::*;
     use crate::tests::build_archive;
@@ -122,7 +122,7 @@ mod tests {
     #[test]
     fn full_linear_extract() {
         // Build an archive with 3 files
-        let (mla, key, files) = build_archive(None, false);
+        let (mla, key, _pubkey, files) = build_archive(None, false);
 
         // Prepare the reader
         let dest = Cursor::new(mla.into_raw());
@@ -149,7 +149,7 @@ mod tests {
     #[test]
     fn one_linear_extract() {
         // Build an archive with 3 files
-        let (mla, key, files) = build_archive(None, false);
+        let (mla, key, _pubkey, files) = build_archive(None, false);
 
         // Prepare the reader
         let dest = Cursor::new(mla.into_raw());
@@ -181,14 +181,10 @@ mod tests {
         let file = Vec::new();
         // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
         let mut rng = ChaChaRng::seed_from_u64(0);
-        let mut bytes = [0u8; 32];
-        rng.fill_bytes(&mut bytes);
-        let key = StaticSecret::from(bytes);
+        let (private_key, public_key) = generate_keypair_from_rng(&mut rng);
         let mut config = ArchiveWriterConfig::new();
         let layers = Layers::ENCRYPT | Layers::COMPRESS;
-        config
-            .set_layers(layers)
-            .add_public_keys(&[PublicKey::from(&key)]);
+        config.set_layers(layers).add_public_keys(&[public_key]);
         let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
 
         let fname = "my_file".to_string();
@@ -204,7 +200,7 @@ mod tests {
         // Prepare the reader
         let dest = Cursor::new(mla.into_raw());
         let mut config = ArchiveReaderConfig::new();
-        config.add_private_keys(std::slice::from_ref(&key));
+        config.add_private_keys(std::slice::from_ref(&private_key));
         let mut mla_read = ArchiveReader::from_config(dest, config).unwrap();
 
         // Prepare writers
