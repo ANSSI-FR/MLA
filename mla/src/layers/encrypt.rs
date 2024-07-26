@@ -1,8 +1,11 @@
 use crate::crypto::aesgcm::{
     AesGcm256, ConstantTimeEq, Key, Nonce, Tag, KEY_COMMITMENT_SIZE, TAG_LENGTH,
 };
-use crate::crypto::ecc::{retrieve_key, store_key_for_multi_recipients, MultiRecipientPersistent};
 
+use crate::crypto::hybrid::{
+    HybridMultiRecipientEncapsulatedKey, HybridMultiRecipientsPublicKeys, HybridPrivateKey,
+    HybridPublicKey,
+};
 use crate::layers::traits::{
     InnerWriterTrait, InnerWriterType, LayerFailSafeReader, LayerReader, LayerWriter,
 };
@@ -12,9 +15,9 @@ use std::io::{BufReader, Cursor, Read, Seek, SeekFrom, Write};
 
 use crate::config::{ArchiveReaderConfig, ArchiveWriterConfig};
 use crate::errors::ConfigError;
+use kem::{Decapsulate, Encapsulate};
 use rand::{Rng, SeedableRng};
 use rand_chacha::{rand_core::CryptoRngCore, ChaChaRng};
-use x25519_dalek::{PublicKey, StaticSecret};
 
 use serde::{Deserialize, Deserializer, Serialize};
 use zeroize::Zeroize;
@@ -24,6 +27,8 @@ use super::traits::InnerReaderTrait;
 const CIPHER_BUF_SIZE: u64 = 4096;
 // This is the size of the nonce taken as input
 const NONCE_SIZE: usize = 8;
+/// Type standing for the unique nonce per-archive
+type ArchiveNonce = [u8; NONCE_SIZE];
 const CHUNK_SIZE: u64 = 128 * 1024;
 
 const ASSOCIATED_DATA: &[u8; 0] = b"";
@@ -37,7 +42,7 @@ const ASSOCIATED_DATA: &[u8; 0] = b"";
 ///
 /// Inspired from the construction in TLS or STREAM from "Online
 /// Authenticated-Encryption and its Nonce-Reuse Misuse-Resistance"
-fn build_nonce(nonce_prefix: [u8; NONCE_SIZE], current_ctr: u32) -> Nonce {
+fn build_nonce(nonce_prefix: ArchiveNonce, current_ctr: u32) -> Nonce {
     // This is the Nonce as expected by AesGcm
     let mut nonce = Nonce::default();
     nonce[..NONCE_SIZE].copy_from_slice(&nonce_prefix);
@@ -55,7 +60,7 @@ const KEY_COMMITMENT_CHAIN: &[u8; KEY_COMMITMENT_SIZE] =
 /// Encrypt the hardcoded `KEY_COMMITMENT_CHAIN` with the given key and nonce
 fn build_key_commitment_chain(
     key: &Key,
-    nonce: &[u8; NONCE_SIZE],
+    nonce: &ArchiveNonce,
 ) -> Result<KeyCommitmentAndTag, Error> {
     let mut key_commitment = [0u8; KEY_COMMITMENT_SIZE];
     key_commitment.copy_from_slice(KEY_COMMITMENT_CHAIN);
@@ -71,7 +76,7 @@ fn build_key_commitment_chain(
 
 fn check_key_commitment(
     key: &Key,
-    nonce: &[u8; NONCE_SIZE],
+    nonce: &ArchiveNonce,
     commitment: &KeyCommitmentAndTag,
 ) -> Result<(), ConfigError> {
     let mut key_commitment = commitment.key_commitment;
@@ -102,6 +107,7 @@ struct KeyCommitmentAndTag {
 // -> Serialize as [u8; 32][u8; 32]
 // A Vec<u8> could also be used, but using array avoid having creating arbitrary sized vectors
 // that early in the process
+// TODO: use serde-big-array
 impl Serialize for KeyCommitmentAndTag {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -135,7 +141,7 @@ impl<'de> Deserialize<'de> for KeyCommitmentAndTag {
 }
 
 /// Return a Cryptographic random number generator
-fn get_crypto_rng() -> impl CryptoRngCore {
+pub(crate) fn get_crypto_rng() -> impl CryptoRngCore {
     // Use OsRng from crate rand, that uses getrandom() from crate getrandom.
     // getrandom provides implementations for many systems, listed on
     // https://docs.rs/getrandom/0.1.14/getrandom/
@@ -161,14 +167,13 @@ fn get_crypto_rng() -> impl CryptoRngCore {
 /// Part of this data must be kept secret and drop as soon as possible
 pub(crate) struct InternalEncryptionConfig {
     pub(crate) key: Key,
-    pub(crate) nonce: [u8; NONCE_SIZE],
+    pub(crate) nonce: ArchiveNonce,
 }
 
-impl Default for InternalEncryptionConfig {
-    fn default() -> Self {
+impl InternalEncryptionConfig {
+    fn from(key: Key) -> Self {
         let mut csprng = get_crypto_rng();
-        let key = csprng.gen::<Key>();
-        let nonce = csprng.gen::<[u8; NONCE_SIZE]>();
+        let nonce = csprng.gen::<ArchiveNonce>();
 
         Self { key, nonce }
     }
@@ -178,9 +183,9 @@ impl Default for InternalEncryptionConfig {
 #[derive(Serialize, Deserialize)]
 pub struct EncryptionPersistentConfig {
     /// Key-wrapping for each recipients
-    pub multi_recipient: MultiRecipientPersistent,
+    pub multi_recipient: HybridMultiRecipientEncapsulatedKey,
     /// Nonce for the archive AES-GCM
-    nonce: [u8; NONCE_SIZE],
+    nonce: ArchiveNonce,
     /// Encrypted version of the hardcoded `KEY_COMMITMENT_CHAIN`
     key_commitment: KeyCommitmentAndTag,
 }
@@ -189,35 +194,32 @@ pub struct EncryptionPersistentConfig {
 /// ArchiveWriterConfig specific configuration for the Encryption, to let API users specify encryption options
 pub struct EncryptionConfig {
     /// Public keys of recipients
-    ecc_keys: Vec<PublicKey>,
+    public_keys: HybridMultiRecipientsPublicKeys,
 }
 
 impl EncryptionConfig {
     /// Consistency check
     pub fn check(&self) -> Result<(), ConfigError> {
-        if self.ecc_keys.is_empty() {
+        if self.public_keys.keys.is_empty() {
             Err(ConfigError::NoRecipients)
         } else {
             Ok(())
         }
     }
 
-    /// Create a persistent version, to be reloaded, of the configuration
-    /// This method also create the cryptographic material, so it can only be called once
+    /// Create a persistent version of the configuration to be reloaded
+    ///    and the internal configuration, containing the cryptographic material
+    ///
+    /// This material is created for the current recipients, and several call to this function
+    /// will results in several materials
     pub(crate) fn to_persistent(
         &self,
     ) -> Result<(EncryptionPersistentConfig, InternalEncryptionConfig), ConfigError> {
-        // This will generate the main encrypt layer key & nonce
-        let cryptographic_material = InternalEncryptionConfig::default();
+        // Generate then encapsulate the main key for each recipients
+        let (multi_recipient, key) = self.public_keys.encapsulate(&mut get_crypto_rng())?;
 
-        // Store a wrapped version of the key for each recipient
-        // As this function call be call only once, recipient list can't be changed after
-        let multi_recipient = store_key_for_multi_recipients(
-            &self.ecc_keys,
-            &cryptographic_material.key,
-            &mut get_crypto_rng(),
-        )
-        .or(Err(ConfigError::ECIESComputationError))?;
+        // Generate the main encrypt layer nonce and keep the main key for internal use
+        let cryptographic_material = InternalEncryptionConfig::from(key);
 
         // Add a key commitment
         let key_commitment =
@@ -239,8 +241,8 @@ impl EncryptionConfig {
 
 impl ArchiveWriterConfig {
     /// Set public keys to use
-    pub fn add_public_keys(&mut self, keys: &[PublicKey]) -> &mut ArchiveWriterConfig {
-        self.encrypt.ecc_keys.extend_from_slice(keys);
+    pub fn add_public_keys(&mut self, keys: &[HybridPublicKey]) -> &mut ArchiveWriterConfig {
+        self.encrypt.public_keys.keys.extend_from_slice(keys);
         self
     }
 }
@@ -248,9 +250,10 @@ impl ArchiveWriterConfig {
 #[derive(Default)]
 pub struct EncryptionReaderConfig {
     /// Private key(s) to use
-    private_keys: Vec<StaticSecret>,
+    private_keys: Vec<HybridPrivateKey>,
     /// Symmetric encryption key and nonce, if decrypted successfully from header
-    encrypt_parameters: Option<(Key, [u8; NONCE_SIZE])>,
+    // TODO: split in two, like InternalEncryptionConfig
+    encrypt_parameters: Option<(Key, ArchiveNonce)>,
 }
 
 impl EncryptionReaderConfig {
@@ -263,38 +266,30 @@ impl EncryptionReaderConfig {
             return Err(ConfigError::PrivateKeyNotSet);
         }
         for private_key in &self.private_keys {
-            match retrieve_key(&config.multi_recipient, private_key) {
-                Ok(Some(key)) => {
-                    self.encrypt_parameters = Some((key, config.nonce));
-                    break;
-                }
-                _ => {
-                    continue;
-                }
+            if let Ok(key) = private_key.decapsulate(&config.multi_recipient) {
+                self.encrypt_parameters = Some((key, config.nonce));
+                break;
             };
         }
 
-        if let Some((key, nonce)) = &self.encrypt_parameters {
-            // A key has been found, check if it is the one expected
-            check_key_commitment(key, nonce, &config.key_commitment)
-                .or(Err(ConfigError::KeyCommitmentCheckingError))?;
-        } else {
-            return Err(ConfigError::PrivateKeyNotFound);
-        }
+        let (key, nonce) = &self
+            .encrypt_parameters
+            .ok_or(ConfigError::PrivateKeyNotFound)?;
 
-        Ok(())
+        // A key has been found, check if it is the one expected
+        check_key_commitment(key, nonce, &config.key_commitment)
     }
 }
 
 impl ArchiveReaderConfig {
     /// Set private key to use
-    pub fn add_private_keys(&mut self, keys: &[StaticSecret]) -> &mut ArchiveReaderConfig {
+    pub fn add_private_keys(&mut self, keys: &[HybridPrivateKey]) -> &mut ArchiveReaderConfig {
         self.encrypt.private_keys.extend_from_slice(keys);
         self
     }
 
     /// Retrieve key and nonce used for encryption
-    pub fn get_encrypt_parameters(&self) -> Option<(Key, [u8; NONCE_SIZE])> {
+    pub fn get_encrypt_parameters(&self) -> Option<(Key, ArchiveNonce)> {
         self.encrypt.encrypt_parameters
     }
 }
@@ -307,7 +302,7 @@ pub(crate) struct EncryptionLayerWriter<'a, W: 'a + InnerWriterTrait> {
     /// Symmetric encryption Key
     key: Key,
     /// Symmetric encryption nonce prefix, see `build_nonce`
-    nonce_prefix: [u8; NONCE_SIZE],
+    nonce_prefix: ArchiveNonce,
     current_chunk_offset: u64,
     current_ctr: u32,
 }
@@ -406,7 +401,7 @@ pub struct EncryptionLayerReader<'a, R: Read + Seek> {
     inner: Box<dyn 'a + LayerReader<'a, R>>,
     cipher: AesGcm256,
     key: Key,
-    nonce: [u8; NONCE_SIZE],
+    nonce: ArchiveNonce,
     chunk_cache: Cursor<Vec<u8>>,
     /// Current chunk number in the data.
     /// Note: the actual chunk number used in the cipher is offseted by FIRST_DATA_CHUNK_NUMBER
@@ -599,7 +594,7 @@ pub struct EncryptionLayerFailSafeReader<'a, R: Read> {
     inner: Box<dyn 'a + LayerFailSafeReader<'a, R>>,
     cipher: AesGcm256,
     key: Key,
-    nonce: [u8; NONCE_SIZE],
+    nonce: ArchiveNonce,
     current_chunk_number: u32,
     current_chunk_offset: u64,
 }
@@ -684,7 +679,7 @@ mod tests {
 
     static FAKE_FILE: [u8; 26] = *b"abcdefghijklmnopqrstuvwxyz";
     static KEY: Key = [2u8; KEY_SIZE];
-    static NONCE: [u8; NONCE_SIZE] = [3u8; NONCE_SIZE];
+    static NONCE: ArchiveNonce = [3u8; NONCE_SIZE];
 
     fn encrypt_write(file: Vec<u8>) -> Vec<u8> {
         // Instantiate a EncryptionLayerWriter and fill it with FAKE_FILE
@@ -852,7 +847,7 @@ mod tests {
     fn build_key_commitment_chain_test() {
         // Build the encrypted key commitment chain
         let key: Key = [1u8; KEY_SIZE];
-        let nonce: [u8; NONCE_SIZE] = [2u8; NONCE_SIZE];
+        let nonce: ArchiveNonce = [2u8; NONCE_SIZE];
         let result = build_key_commitment_chain(&key, &nonce);
         assert!(result.is_ok());
         let key_commitment_and_tag = result.unwrap();
@@ -870,7 +865,7 @@ mod tests {
     fn check_key_commitment_test() {
         // Build the encrypted key commitment chain
         let key: Key = [1u8; KEY_SIZE];
-        let nonce: [u8; NONCE_SIZE] = [2u8; NONCE_SIZE];
+        let nonce: ArchiveNonce = [2u8; NONCE_SIZE];
         let result = build_key_commitment_chain(&key, &nonce);
         assert!(result.is_ok());
         let key_commitment_and_tag = result.unwrap();
