@@ -87,7 +87,7 @@ impl HybridMultiRecipientEncapsulatedKey {
 /// Private key for hybrid cryptography, made of
 /// - a X25519 key, for ECC (pre-quantum) cryptography
 /// - a ML-KEM 1024 key, for post-quantum cryptography
-/// 
+///
 /// Support KEM decapsulation
 #[derive(Clone)]
 pub struct HybridPrivateKey {
@@ -147,7 +147,7 @@ pub struct HybridPublicKey {
 }
 
 /// Public keys for multiple recipients, used for hybrid cryptography
-/// 
+///
 /// Support KEM encapsulation
 #[derive(Default)]
 pub(crate) struct HybridMultiRecipientsPublicKeys {

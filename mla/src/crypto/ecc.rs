@@ -1,18 +1,16 @@
-use crate::crypto::aesgcm;
-use crate::crypto::aesgcm::{ConstantTimeEq, Key, KEY_SIZE, TAG_LENGTH};
+use crate::crypto::aesgcm::Key;
 use crate::errors::Error;
 use hkdf::Hkdf;
-use rand::{CryptoRng, RngCore};
-use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use x25519_dalek::{PublicKey, StaticSecret};
 use zeroize::Zeroize;
 
 pub const PUBLIC_KEY_SIZE: usize = 32;
+/// The ciphertext in DH-KEM / ECIES is a public key
+pub(crate) type DHKEMCipherText = [u8; PUBLIC_KEY_SIZE];
 const DERIVE_KEY_INFO: &[u8; 14] = b"KEY DERIVATION";
-const ECIES_NONCE: &[u8; 12] = b"ECIES NONCE0";
-const ECIES_ASSOCIATED_DATA: &[u8; 0] = b"";
 
+// TODO: consider DH-KEM
 // Implementation inspired from XSTREAM/x25519hkdf.rs
 // /!\ in XSTREAM/x25519hkdf.rs, the arguments of Hkdf::new seem inverted
 pub(crate) fn derive_key(private_key: &StaticSecret, public_key: &PublicKey) -> Result<Key, Error> {
@@ -24,95 +22,10 @@ pub(crate) fn derive_key(private_key: &StaticSecret, public_key: &PublicKey) -> 
     Ok(output)
 }
 
-#[derive(Serialize, Deserialize)]
-struct KeyAndTag {
-    key: Key,
-    tag: [u8; TAG_LENGTH],
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct MultiRecipientPersistent {
-    /// Ephemeral public key
-    public: [u8; PUBLIC_KEY_SIZE],
-    /// Key wrapping for each recipient
-    encrypted_keys: Vec<KeyAndTag>,
-}
-
-impl MultiRecipientPersistent {
-    pub fn count_keys(&self) -> usize {
-        self.encrypted_keys.len()
-    }
-}
-
-/// Perform ECIES with several recipients, to share a common `key`, and return a
-/// serializable structure (Key-wrapping made thanks to AesGcm256)
-pub(crate) fn store_key_for_multi_recipients<T>(
-    recipients: &[PublicKey],
-    key: &Key,
-    csprng: &mut T,
-) -> Result<MultiRecipientPersistent, Error>
-where
-    T: RngCore + CryptoRng,
-{
-    // A `StaticSecret` is used instead of an `EphemeralSecret` to allow for
-    // multiple diffie-hellman computation
-    let mut bytes = [0u8; 32];
-    csprng.fill_bytes(&mut bytes);
-    let ephemeral = StaticSecret::from(bytes);
-
-    let public = PublicKey::from(&ephemeral);
-    let mut encrypted_keys = Vec::new();
-    for recipient in recipients.iter() {
-        // Perform an ECIES to obtain the common key
-        let dh_key = derive_key(&ephemeral, recipient)?;
-
-        // Encrypt the final shared key with it
-        // As the key is completely random and use only once, no need for a
-        // random NONCE
-        let mut cipher = aesgcm::AesGcm256::new(&dh_key, ECIES_NONCE, ECIES_ASSOCIATED_DATA)?;
-        let mut encrypted_key = Key::default();
-        encrypted_key.copy_from_slice(key);
-        cipher.encrypt(&mut encrypted_key);
-        let mut tag = [0u8; TAG_LENGTH];
-        tag.copy_from_slice(&cipher.into_tag());
-        // Save it for later serialization
-        encrypted_keys.push(KeyAndTag {
-            key: encrypted_key,
-            tag,
-        });
-    }
-
-    Ok(MultiRecipientPersistent {
-        public: *public.as_bytes(),
-        encrypted_keys,
-    })
-}
-
-/// Try to recover the shared key from the `MultiRecipientPersistent`, using the private key `private_key`
-pub(crate) fn retrieve_key(
-    persist: &MultiRecipientPersistent,
-    private_key: &StaticSecret,
-) -> Result<Option<Key>, Error> {
-    // Perform an ECIES to obtain the common key
-    let key = derive_key(private_key, &PublicKey::from(persist.public))?;
-
-    // Try to find the correct key using the tag validation
-    for keytag in persist.encrypted_keys.iter() {
-        let mut cipher = aesgcm::AesGcm256::new(&key, ECIES_NONCE, ECIES_ASSOCIATED_DATA)?;
-        let mut data = Key::default();
-        data.copy_from_slice(&keytag.key);
-        let tag = cipher.decrypt(&mut data);
-        if tag.ct_eq(&keytag.tag).unwrap_u8() == 1 {
-            return Ok(Some(data));
-        }
-    }
-    Ok(None)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::{Rng, SeedableRng};
+    use rand::{RngCore, SeedableRng};
     use rand_chacha::ChaChaRng;
     use x25519_dalek::{PublicKey, StaticSecret};
 
@@ -133,38 +46,5 @@ mod tests {
         let receiver_key = derive_key(&receiver_private, &ephemeral_public).unwrap();
 
         assert_eq!(symmetric_key, receiver_key);
-    }
-
-    #[test]
-    fn multi_recipients() {
-        // Create fake recipients
-        let mut csprng = ChaChaRng::from_entropy();
-        let mut bytes = [0u8; 32];
-        let mut recipients_priv = Vec::new();
-        let mut recipients_pub = Vec::new();
-        for _ in 0..5 {
-            csprng.fill_bytes(&mut bytes);
-            let skey = StaticSecret::from(bytes);
-            recipients_pub.push(PublicKey::from(&skey));
-            recipients_priv.push(skey);
-        }
-
-        // Perform multi-recipients ECIES
-        let key = csprng.gen::<Key>();
-        let persist = store_key_for_multi_recipients(&recipients_pub, &key, &mut csprng).unwrap();
-
-        // Count keys
-        assert_eq!(persist.count_keys(), 5);
-
-        // Ensure each recipient can retrieve the shared key
-        for private_key in recipients_priv.iter() {
-            let ret_key = retrieve_key(&persist, private_key).unwrap().unwrap();
-            assert_eq!(ret_key, key);
-        }
-
-        // Ensure another recipient does not obtain the shared key
-        csprng.fill_bytes(&mut bytes);
-        let fake_recipient = StaticSecret::from(bytes);
-        assert!(retrieve_key(&persist, &fake_recipient).unwrap().is_none());
     }
 }
