@@ -16,7 +16,7 @@ readme = "../README.md"
 clap = { version = "4", features = ["wrap_help"] }
 glob = "0.3"
 mla = { path = "../mla", version = "1" }
-curve25519-parser = { path = "../curve25519-parser", version = "0.4" }
+curve25519-parser = { version = "0.4", default-features = false }
 rand = "0.8"
 x25519-dalek = "2"
 humansize = {version = "2", features = ["impl_style"]}

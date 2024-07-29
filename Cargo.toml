@@ -2,7 +2,7 @@
 
 members = [
     "mla",
-    "curve25519-parser",
+    "mlakey-parser",
     "mlar",
     "mla-fuzz-afl",
     "bindings/C",
