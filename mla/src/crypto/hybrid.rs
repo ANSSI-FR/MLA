@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 use sha2::{Digest, Sha256};
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
+use zeroize::Zeroize;
 
 /// Common structures for ML-KEM 1024
 type MLKEMCiphertext = [u8; 1568];
@@ -97,6 +98,16 @@ impl HybridMultiRecipientEncapsulatedKey {
 pub struct HybridPrivateKey {
     pub private_key_ecc: X25519StaticSecret,
     pub private_key_ml: MLKEMDecapsulationKey,
+}
+
+impl Zeroize for HybridPrivateKey {
+    fn zeroize(&mut self) {
+        self.private_key_ecc.zeroize();
+        //TODO: once ml_kem introduce zeroize for DecapsulationKey, use it instead
+        // The current solution has no guarantee
+        let (private, _pub) = MlKem1024::generate(&mut get_crypto_rng());
+        self.private_key_ml = private;
+    }
 }
 
 impl Decapsulate<HybridMultiRecipientEncapsulatedKey, Key> for HybridPrivateKey {
