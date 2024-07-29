@@ -11,8 +11,12 @@ use serde_big_array::BigArray;
 use sha2::{Digest, Sha256};
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
 
-/// Represent a ML-KEM ciphertext
+/// Common structures for ML-KEM 1024
 type MLKEMCiphertext = [u8; 1568];
+/// ML-KEM 1024 "private key"
+pub type MLKEMDecapsulationKey = <MlKem1024 as KemCore>::DecapsulationKey;
+/// ML-KEM 1024 "public key"
+pub type MLKEMEncapsulationKey = <MlKem1024 as KemCore>::EncapsulationKey;
 
 const HYBRIDKEM_ASSOCIATED_DATA: &[u8; 0] = b"";
 
@@ -91,8 +95,8 @@ impl HybridMultiRecipientEncapsulatedKey {
 /// Support KEM decapsulation
 #[derive(Clone)]
 pub struct HybridPrivateKey {
-    private_key_ecc: X25519StaticSecret,
-    private_key_ml: <MlKem1024 as KemCore>::DecapsulationKey,
+    pub private_key_ecc: X25519StaticSecret,
+    pub private_key_ml: MLKEMDecapsulationKey,
 }
 
 impl Decapsulate<HybridMultiRecipientEncapsulatedKey, Key> for HybridPrivateKey {
@@ -142,8 +146,8 @@ impl Decapsulate<HybridMultiRecipientEncapsulatedKey, Key> for HybridPrivateKey 
 /// - a ML-KEM 1024 key, for post-quantum cryptography
 #[derive(Clone)]
 pub struct HybridPublicKey {
-    public_key_ecc: X25519PublicKey,
-    public_key_ml: <MlKem1024 as KemCore>::EncapsulationKey,
+    pub public_key_ecc: X25519PublicKey,
+    pub public_key_ml: MLKEMEncapsulationKey,
 }
 
 /// Public keys for multiple recipients, used for hybrid cryptography
