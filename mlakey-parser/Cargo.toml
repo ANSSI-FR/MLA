@@ -24,5 +24,6 @@ default-features = false
 
 [dev-dependencies]
 rand = "0.8"
+rand_chacha = { version = "0.3", default-features = false}
 kem = {version = "0.3.0-pre.0", default-features = false }
 

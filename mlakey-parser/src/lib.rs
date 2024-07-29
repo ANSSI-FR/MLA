@@ -575,14 +575,27 @@ pub fn parse_mlakey_pubkeys_pem_many(
 // This is done with constant data instead of real DER building, as the format
 // is strict and key size are constant
 
-const PRIV_KEY_PREFIX: &[u8] = b"\x30\x2e\x02\x01\x00\x30\x05\x06\x03\x2b\x65\x6e\x04\x22\x04\x20";
-const PUB_KEY_PREFIX: &[u8] = b"\x30\x2a\x30\x05\x06\x03\x2b\x65\x6e\x03\x21\x00";
+// Private key: PRIV_KEY_PREFIX1 + ECC private key, X25519 form + PRIV_KEY_PREFIX2 + MLKEM private key
+const PRIV_KEY_PREFIX1: &[u8] =
+    b"\x30\x82\x0c\xa7\x30\x2e\x02\x01\x00\x30\x05\x06\x03\x2b\x65\x6e\x04\x22\x04\x20";
+const PRIV_KEY_PREFIX2: &[u8] =
+    b"\x30\x82\x0c\x73\x02\x01\x01\x30\x0a\x06\x08\x2a\x81\x7a\x01\x81\x5f\x81\x49\x04\x82\x0c\x60";
+const PRIV_DER_LEN: usize =
+    PRIV_KEY_PREFIX1.len() + ECC_PUBKEY_SIZE + PRIV_KEY_PREFIX2.len() + MLKEM_1024_PRIVKEY_SIZE;
+
+// Public key: PUB_KEY_PREFIX1 + ECC public key, X25519 form + PUB_KEY_PREFIX2 + MLKEM public key
+const PUB_KEY_PREFIX1: &[u8] = b"\x30\x82\x06\x60\x30\x2a\x30\x05\x06\x03\x2b\x65\x6e\x03\x21\x00";
+const PUB_KEY_PREFIX2: &[u8] =
+    b"\x30\x82\x06\x30\x30\x0a\x06\x08\x2a\x81\x7a\x01\x81\x5f\x81\x49\x04\x82\x06\x20";
+const PUB_DER_LEN: usize =
+    PUB_KEY_PREFIX1.len() + ECC_PUBKEY_SIZE + PUB_KEY_PREFIX2.len() + MLKEM_1024_PUBKEY_SIZE;
+
 const PRIV_KEY_TAG: &str = "PRIVATE KEY";
 const PUB_KEY_TAG: &str = "PUBLIC KEY";
 
 pub struct KeyPair {
-    pub public_der: [u8; PUB_KEY_PREFIX.len() + ECC_PUBKEY_SIZE],
-    pub private_der: [u8; PRIV_KEY_PREFIX.len() + ECC_PRIVKEY_SIZE],
+    pub public_der: [u8; PUB_DER_LEN],
+    pub private_der: [u8; PRIV_DER_LEN],
 }
 
 impl KeyPair {
@@ -597,32 +610,36 @@ impl KeyPair {
     }
 }
 
-/// Generate a keypair, in DER format
+/// Generate a keypair, in DER format, using the provided CSPRNG
 ///
 /// Keypairs can later be converted to PEM using `public_as_pem`, `private_as_pem`
 pub fn generate_keypair<T>(csprng: &mut T) -> Option<KeyPair>
 where
     T: RngCore + CryptoRng,
 {
-    // Get the seed
-    let mut private = [0u8; ECC_PRIVKEY_SIZE];
-    csprng.fill_bytes(&mut private);
+    let (priv_key, public_key) = mla::crypto::hybrid::generate_keypair_from_rng(csprng);
 
-    // Get the corresponding public key
-    let priv_key = StaticSecret::from(private);
-    let pubkey = PublicKey::from(&priv_key);
+    // Build the private data bytes
+    let mut private_der = [0u8; PRIV_DER_LEN];
+    private_der[..PRIV_KEY_PREFIX1.len()].copy_from_slice(PRIV_KEY_PREFIX1);
+    private_der[PRIV_KEY_PREFIX1.len()..PRIV_KEY_PREFIX1.len() + ECC_PRIVKEY_SIZE]
+        .copy_from_slice(&priv_key.private_key_ecc.to_bytes());
+    private_der[PRIV_KEY_PREFIX1.len() + ECC_PRIVKEY_SIZE
+        ..PRIV_KEY_PREFIX1.len() + ECC_PRIVKEY_SIZE + PRIV_KEY_PREFIX2.len()]
+        .copy_from_slice(PRIV_KEY_PREFIX2);
+    private_der[PRIV_KEY_PREFIX1.len() + ECC_PRIVKEY_SIZE + PRIV_KEY_PREFIX2.len()..]
+        .copy_from_slice(&priv_key.private_key_ml.as_bytes());
 
-    // Get the public data bytes
-
-    let public = pubkey.as_bytes();
-
-    let mut private_der = [0u8; PRIV_KEY_PREFIX.len() + ECC_PRIVKEY_SIZE];
-    private_der[..PRIV_KEY_PREFIX.len()].copy_from_slice(PRIV_KEY_PREFIX);
-    private_der[PRIV_KEY_PREFIX.len()..].copy_from_slice(&private);
-
-    let mut public_der = [0u8; PUB_KEY_PREFIX.len() + ECC_PUBKEY_SIZE];
-    public_der[..PUB_KEY_PREFIX.len()].copy_from_slice(PUB_KEY_PREFIX);
-    public_der[PUB_KEY_PREFIX.len()..].copy_from_slice(&public[..]);
+    // Build the public data bytes
+    let mut public_der = [0u8; PUB_DER_LEN];
+    public_der[..PUB_KEY_PREFIX1.len()].copy_from_slice(PUB_KEY_PREFIX1);
+    public_der[PUB_KEY_PREFIX1.len()..PUB_KEY_PREFIX1.len() + ECC_PUBKEY_SIZE]
+        .copy_from_slice(&public_key.public_key_ecc.to_bytes());
+    public_der[PUB_KEY_PREFIX1.len() + ECC_PUBKEY_SIZE
+        ..PUB_KEY_PREFIX1.len() + ECC_PUBKEY_SIZE + PUB_KEY_PREFIX2.len()]
+        .copy_from_slice(PUB_KEY_PREFIX2);
+    public_der[PUB_KEY_PREFIX1.len() + ECC_PUBKEY_SIZE + PUB_KEY_PREFIX2.len()..]
+        .copy_from_slice(&public_key.public_key_ml.as_bytes());
 
     Some(KeyPair {
         public_der,
@@ -634,7 +651,8 @@ where
 mod tests {
     use super::*;
     use kem::{Decapsulate, Encapsulate};
-    use rand::rngs::OsRng;
+    use rand::{rngs::OsRng, SeedableRng};
+    use rand_chacha::ChaChaRng;
     use x25519_dalek::PublicKey;
 
     static MLA_DER_PRIV: &[u8] = include_bytes!("../../samples/test_mlakey.der");
@@ -710,40 +728,8 @@ mod tests {
         assert_eq!(pub_x_key_der.as_bytes(), pub_keys_pem[2].as_bytes());
     }
 
-    #[test]
-    fn exports() {
-        let mut csprng = OsRng {};
-        let keypair = generate_keypair(&mut csprng).unwrap();
-
-        let priv_key = parse_openssl_25519_privkey_der(&keypair.private_der).unwrap();
-        let pub_key = parse_openssl_25519_pubkey_der(&keypair.public_der).unwrap();
-        let computed_pub_key = PublicKey::from(&priv_key);
-        assert_eq!(pub_key.as_bytes().len(), ECC_PUBKEY_SIZE);
-        assert_eq!(priv_key.to_bytes().len(), ECC_PRIVKEY_SIZE);
-        assert_eq!(computed_pub_key.as_bytes(), pub_key.as_bytes());
-
-        let pub_pem_key = keypair.public_as_pem();
-        assert_eq!(
-            parse_openssl_25519_pubkey(pub_pem_key.as_bytes())
-                .unwrap()
-                .as_bytes(),
-            pub_key.as_bytes()
-        );
-        let priv_pem_key = keypair.private_as_pem();
-        assert_eq!(
-            &parse_openssl_25519_privkey(priv_pem_key.as_bytes())
-                .unwrap()
-                .to_bytes(),
-            &priv_key.to_bytes()
-        );
-    }
-
-    /// Parse a DER public & private key, then check the keys correspond
-    #[test]
-    fn parse_and_check_mlakey_der() {
-        let priv_key = parse_mlakey_privkey_der(MLA_DER_PRIV).unwrap();
-        let pub_key = parse_mlakey_pubkey_der(MLA_DER_PUB).unwrap();
-
+    /// Check key coherence
+    fn check_key_pair(pub_key: HybridPublicKey, priv_key: HybridPrivateKey) {
         // Check the public ECC key rebuilt from the private ECC key is the expected one
         let computed_ecc_pubkey = PublicKey::from(&priv_key.private_key_ecc);
         assert_eq!(pub_key.public_key_ecc.as_bytes().len(), ECC_PUBKEY_SIZE);
@@ -764,10 +750,88 @@ mod tests {
         assert_eq!(key, key_decap);
     }
 
+    /// Ensure the generated keypair is coherent and re-readable
+    #[test]
+    fn keypair_and_export() {
+        let mut csprng = OsRng {};
+        let keypair = generate_keypair(&mut csprng).unwrap();
+
+        let priv_key = parse_mlakey_privkey_der(&keypair.private_der).unwrap();
+        let pub_key = parse_mlakey_pubkey_der(&keypair.public_der).unwrap();
+
+        check_key_pair(pub_key, priv_key);
+    }
+
+    /// Ensure the keypair generation is deterministic
+    #[test]
+    fn keypair_deterministic() {
+        // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
+
+        // Check the created key is deterministic
+        let mut csprng = ChaChaRng::seed_from_u64(0);
+        let keypair1 = generate_keypair(&mut csprng).unwrap();
+        let mut csprng = ChaChaRng::seed_from_u64(0);
+        let keypair2 = generate_keypair(&mut csprng).unwrap();
+        assert_eq!(keypair1.private_der, keypair2.private_der);
+        assert_eq!(keypair1.public_der, keypair2.public_der);
+
+        // Ensure it is not always the same
+        let mut csprng = ChaChaRng::seed_from_u64(1);
+        let keypair3 = generate_keypair(&mut csprng).unwrap();
+        assert_ne!(keypair1.private_der, keypair3.private_der);
+    }
+
+    /// Check PEM export from KeyPair
+    #[test]
+    fn keypair_export_pem() {
+        // Generate a KeyPair
+        let mut csprng = OsRng {};
+        let keypair = generate_keypair(&mut csprng).unwrap();
+
+        // Parse it as DER, then in PEM form
+        let priv_key = parse_mlakey_privkey_der(&keypair.private_der).unwrap();
+        let pub_key = parse_mlakey_pubkey_der(&keypair.public_der).unwrap();
+
+        let priv_pem = keypair.private_as_pem();
+        let pub_pem = keypair.public_as_pem();
+        assert_ne!(&keypair.private_der, priv_pem.as_bytes());
+        assert_ne!(&keypair.public_der, pub_pem.as_bytes());
+
+        let priv_key_pem = parse_mlakey_privkey(priv_pem.as_bytes()).unwrap();
+        let pub_key_pem = parse_mlakey_pubkey(pub_pem.as_bytes()).unwrap();
+
+        // Resulting key must be the same
+        assert_eq!(
+            priv_key.private_key_ecc.as_bytes(),
+            priv_key_pem.private_key_ecc.as_bytes()
+        );
+        assert_eq!(
+            priv_key.private_key_ml.as_bytes(),
+            priv_key_pem.private_key_ml.as_bytes()
+        );
+        assert_eq!(
+            pub_key.public_key_ecc.as_bytes(),
+            pub_key_pem.public_key_ecc.as_bytes()
+        );
+        assert_eq!(
+            pub_key.public_key_ml.as_bytes(),
+            pub_key_pem.public_key_ml.as_bytes()
+        );
+    }
+
+    /// Parse a DER public & private key, then check the keys correspond
+    #[test]
+    fn parse_and_check_mlakey_der() {
+        let priv_key = parse_mlakey_privkey_der(MLA_DER_PRIV).unwrap();
+        let pub_key = parse_mlakey_pubkey_der(MLA_DER_PUB).unwrap();
+
+        check_key_pair(pub_key, priv_key);
+    }
+
     /// Parse the same public key in DER and PEM format
     #[test]
     fn parse_pub_der_pem() {
-        let pub_key_der = parse_mlakey_pubkey_der(MLA_DER_PUB).unwrap();
+        let pub_key_der = parse_mlakey_pubkey(MLA_DER_PUB).unwrap();
         let pub_key_pem = parse_mlakey_pubkey(MLA_PEM_PUB).unwrap();
         assert_eq!(pub_key_der.public_key_ecc.as_bytes().len(), ECC_PUBKEY_SIZE);
         assert_eq!(
@@ -787,7 +851,7 @@ mod tests {
     /// Parse the same private key in DER and PEM format
     #[test]
     fn parse_priv_der_pem() {
-        let priv_key_der = parse_mlakey_privkey_der(MLA_DER_PRIV).unwrap();
+        let priv_key_der = parse_mlakey_privkey(MLA_DER_PRIV).unwrap();
         let priv_key_pem = parse_mlakey_privkey(MLA_PEM_PRIV).unwrap();
         assert_eq!(
             priv_key_der.private_key_ecc.as_bytes().len(),
