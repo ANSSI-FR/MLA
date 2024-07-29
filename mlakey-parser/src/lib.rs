@@ -6,7 +6,7 @@ use der_parser::*;
 use nom::combinator::{complete, eof};
 use nom::IResult;
 
-use std::convert::{From, TryInto};
+use core::convert::{From, TryInto};
 
 use curve25519_dalek::edwards::CompressedEdwardsY;
 use curve25519_dalek::montgomery::MontgomeryPoint;
@@ -16,7 +16,7 @@ use sha2::{Digest, Sha512};
 // Re-export x25519_dalek structures for convenience
 pub use x25519_dalek::{PublicKey, StaticSecret};
 
-use std::fmt;
+use core::fmt;
 
 use mla::crypto::hybrid::{
     HybridPrivateKey, HybridPublicKey, MLKEMDecapsulationKey, MLKEMEncapsulationKey,
