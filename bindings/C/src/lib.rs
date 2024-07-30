@@ -1,6 +1,4 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
-use curve25519_parser::parse_openssl_25519_privkey;
-use curve25519_parser::parse_openssl_25519_pubkeys_pem_many;
 use mla::config::ArchiveReaderConfig;
 use mla::config::ArchiveWriterConfig;
 use mla::errors::ConfigError;
@@ -10,6 +8,8 @@ use mla::ArchiveHeader;
 use mla::ArchiveReader;
 use mla::ArchiveWriter;
 use mla::{ArchiveFileID, Layers};
+use mlakey_parser::parse_mlakey_privkey;
+use mlakey_parser::parse_mlakey_pubkeys_pem_many;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::ffi::{c_void, CStr};
@@ -52,6 +52,8 @@ pub enum MLAStatus {
     ConfigErrorKeyCommitmentComputationError = 0x140007,
     ConfigErrorKeyCommitmentCheckingError = 0x140008,
     ConfigErrorNoRecipients = 0x140009,
+    ConfigErrorMLKEMComputationError = 0x14000A,
+    ConfigErrorKeyWrappingComputationError = 0x14000B,
     DuplicateFilename = 0x150000,
     AuthenticatedDecryptionWrongTag = 0x160000,
     HKDFInvalidKeyLength = 0x170000,
@@ -163,9 +165,7 @@ impl From<MLAError> for MLAStatus {
             MLAError::ConfigError(ConfigError::CompressionLevelOutOfRange) => {
                 MLAStatus::ConfigErrorCompressionLevelOutOfRange
             }
-            MLAError::ConfigError(ConfigError::NoRecipients) => {
-                MLAStatus::ConfigErrorNoRecipients
-            }
+            MLAError::ConfigError(ConfigError::NoRecipients) => MLAStatus::ConfigErrorNoRecipients,
             MLAError::ConfigError(ConfigError::EncryptionKeyIsMissing) => {
                 MLAStatus::ConfigErrorEncryptionKeyIsMissing
             }
@@ -183,6 +183,12 @@ impl From<MLAError> for MLAStatus {
             }
             MLAError::ConfigError(ConfigError::KeyCommitmentCheckingError) => {
                 MLAStatus::ConfigErrorKeyCommitmentCheckingError
+            }
+            MLAError::ConfigError(ConfigError::MLKEMComputationError) => {
+                MLAStatus::ConfigErrorMLKEMComputationError
+            }
+            MLAError::ConfigError(ConfigError::KeyWrappingComputationError) => {
+                MLAStatus::ConfigErrorKeyWrappingComputationError
             }
             MLAError::DuplicateFilename => MLAStatus::DuplicateFilename,
             MLAError::AuthenticatedDecryptionWrongTag => MLAStatus::AuthenticatedDecryptionWrongTag,
@@ -267,7 +273,7 @@ pub extern "C" fn mla_config_add_public_keys(
     // Create a slice from the NULL-terminated string
     let public_keys = unsafe { CStr::from_ptr(public_keys) }.to_bytes();
     // Parse as OpenSSL Ed25519 public key(s)
-    let res = match parse_openssl_25519_pubkeys_pem_many(public_keys) {
+    let res = match parse_mlakey_pubkeys_pem_many(public_keys) {
         Ok(v) if !v.is_empty() => {
             config.add_public_keys(&v);
             MLAStatus::Success
@@ -335,8 +341,8 @@ pub extern "C" fn mla_reader_config_add_private_key(
 
     // Create a slice from the NULL-terminated string
     let private_key = unsafe { CStr::from_ptr(private_key) }.to_bytes();
-    // Parse as OpenSSL Ed25519 private key(s)
-    let res = match parse_openssl_25519_privkey(private_key) {
+    // Parse as MLA private key(s)
+    let res = match parse_mlakey_privkey(private_key) {
         Ok(v) => {
             private_keys.push(v);
             config.add_private_keys(&private_keys);
