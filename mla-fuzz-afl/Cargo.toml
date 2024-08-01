@@ -12,3 +12,6 @@ bincode = "~1.3"
 serde = { version = "1", features = ["derive"] }
 curve25519-parser = { path = "../curve25519-parser" }
 mla = { path = "../mla" }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
