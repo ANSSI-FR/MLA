@@ -27,10 +27,8 @@ const CHUNK_SIZE: u64 = 128 * 1024;
 ///
 /// AesGcm expect a 96 bits nonce.
 /// The nonce build as:
-/// {
-///   - 8 byte nonce, unique per archive
-///   - 4 byte counter, unique per chunk and incremental
-/// }
+/// 1. 8 byte nonce, unique per archive
+/// 2. 4 byte counter, unique per chunk and incremental
 ///
 /// Inspired from the construction in TLS or STREAM from "Online
 /// Authenticated-Encryption and its Nonce-Reuse Misuse-Resistance"

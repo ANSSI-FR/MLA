@@ -505,23 +505,25 @@ enum CompressionLayerWriterState<W: Write> {
 ///
 /// Compression is made of nested independent compressed block of a fixed
 /// uncompressed size
+///
 /// Pro:
 /// * no need to store the compressed size
 /// * compression can be streamed (storing the compressed size before the
-/// compressed block leads to either seekable stream, which is not an option
-/// here, or full-memory compression before actual write, which add limits to
-/// the memory footprint)
+///   compressed block leads to either seekable stream, which is not an option
+///   here, or full-memory compression before actual write, which add limits to
+///   the memory footprint)
+///
 /// Cons:
 /// * if the index is lost, a slow decompression with a block size of 1 is
-/// needed to found the CompressedBlock boundaries
+///   needed to found the CompressedBlock boundaries
 pub struct CompressionLayerWriter<'a, W: 'a + InnerWriterTrait> {
     state: CompressionLayerWriterState<InnerWriterType<'a, W>>,
-    // Ordered list of compressed size of block of `UNCOMPRESSED_DATA_SIZE`
-    // bytes
+    /// Ordered list of compressed size of block of `UNCOMPRESSED_DATA_SIZE`
+    /// bytes
     //
-    // Thus, accessing the `n`th byte in the sublayer, is accessing the `n %
-    // C`th uncompressed byte in the chunk beginning at `sum(compressed_sizes[:n
-    // / C])`, with `C = UNCOMPRESSED_DATA_SIZE`
+    /// Thus, accessing the `n`th byte in the sublayer, is accessing the `n %
+    /// C`th uncompressed byte in the chunk beginning at `sum(compressed_sizes[:n
+    /// / C])`, with `C = UNCOMPRESSED_DATA_SIZE`
     compressed_sizes: Vec<u32>,
     // From config
     compression_level: u32,
