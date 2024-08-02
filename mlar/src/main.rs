@@ -1296,9 +1296,50 @@ fn main() {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    use mla::crypto::hybrid::{generate_keypair_from_rng, MLKEMDecapsulationKey};
+    use std::iter::FromIterator;
+    use x25519_dalek::StaticSecret;
 
     #[test]
     fn verify_app() {
         app().debug_assert();
+    }
+
+    #[test]
+    /// Naive checks for "apply_derive", to avoid naive erros
+    fn check_apply_derive() {
+        // Ensure determinism
+        let rng = ChaChaRng::from_seed([0u8; 32]);
+        let (privkey, _pubkey) = generate_keypair_from_rng(rng);
+
+        // Derive along "test"
+        let path = "test";
+        let seed = apply_derive(path, privkey);
+        assert_ne!(seed, [0u8; 32]);
+
+        // Derive along "test2"
+        let rng = ChaChaRng::from_seed([0u8; 32]);
+        let (privkey, _pubkey) = generate_keypair_from_rng(rng);
+        let path = "test2";
+        let seed2 = apply_derive(path, privkey);
+        assert_ne!(seed, seed2);
+
+        // Ensure the secret depends on both keys
+        let mut priv_keys = vec![];
+        for i in 0..1 {
+            for j in 0..1 {
+                priv_keys.push(HybridPrivateKey {
+                    private_key_ecc: StaticSecret::from([i as u8; 32]),
+                    private_key_ml: MLKEMDecapsulationKey::from_bytes(&[j as u8; 3168].into()),
+                });
+            }
+        }
+
+        // Generated seeds for (0, 0), (0, 1), (1, 0) and (1, 1) must be different
+        let seeds: Vec<_> = priv_keys
+            .into_iter()
+            .map(|pkey| apply_derive("test", pkey))
+            .collect();
+        assert_eq!(HashSet::<_>::from_iter(seeds.iter()).len(), seeds.len());
     }
 }
