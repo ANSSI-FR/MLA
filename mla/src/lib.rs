@@ -1259,7 +1259,7 @@ impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
 pub(crate) mod tests {
     use super::*;
     use crypto::hybrid::{generate_keypair_from_rng, HybridPrivateKey};
-    use curve25519_parser::{parse_openssl_25519_privkey, parse_openssl_25519_pubkey};
+    // use curve25519_parser::{parse_openssl_25519_privkey, parse_openssl_25519_pubkey};
     use rand::distributions::{Distribution, Standard};
     use rand::{RngCore, SeedableRng};
     use rand_chacha::ChaChaRng;
@@ -1869,51 +1869,51 @@ pub(crate) mod tests {
         }
     }
 
-    fn make_format_regression_files() -> HashMap<String, Vec<u8>> {
-        // Build files easily scriptables and checkable
-        let mut files: HashMap<String, Vec<u8>> = HashMap::new();
+    // fn make_format_regression_files() -> HashMap<String, Vec<u8>> {
+    //     // Build files easily scriptables and checkable
+    //     let mut files: HashMap<String, Vec<u8>> = HashMap::new();
 
-        // One simple file
-        let mut simple: Vec<u8> = Vec::new();
-        for i in 0..=255 {
-            simple.push(i);
-        }
-        let pattern = simple.clone();
-        files.insert("simple".to_string(), simple);
+    //     // One simple file
+    //     let mut simple: Vec<u8> = Vec::new();
+    //     for i in 0..=255 {
+    //         simple.push(i);
+    //     }
+    //     let pattern = simple.clone();
+    //     files.insert("simple".to_string(), simple);
 
-        // One big file (10 MB)
-        let big: Vec<u8> = pattern
-            .iter()
-            .cycle()
-            .take(10 * 1024 * 1024)
-            .cloned()
-            .collect();
-        files.insert("big".to_string(), big);
+    //     // One big file (10 MB)
+    //     let big: Vec<u8> = pattern
+    //         .iter()
+    //         .cycle()
+    //         .take(10 * 1024 * 1024)
+    //         .cloned()
+    //         .collect();
+    //     files.insert("big".to_string(), big);
 
-        // Some constant files
-        for i in 0..=255 {
-            files.insert(
-                format!("file_{}", i).to_string(),
-                std::iter::repeat(i).take(0x1000).collect::<Vec<u8>>(),
-            );
-        }
+    //     // Some constant files
+    //     for i in 0..=255 {
+    //         files.insert(
+    //             format!("file_{}", i).to_string(),
+    //             std::iter::repeat(i).take(0x1000).collect::<Vec<u8>>(),
+    //         );
+    //     }
 
-        // sha256 sum of them
-        let mut sha256sum: Vec<u8> = Vec::new();
-        let mut info: Vec<(&String, &Vec<_>)> = files.iter().collect();
-        info.sort_by(|i1, i2| Ord::cmp(&i1.0, &i2.0));
-        for (fname, content) in info.iter() {
-            let mut hasher = Sha256::new();
-            hasher.update(content);
-            sha256sum.extend_from_slice(hex::encode(hasher.finalize()).as_bytes());
-            sha256sum.push(0x20);
-            sha256sum.push(0x20);
-            sha256sum.extend(fname.as_bytes());
-            sha256sum.push(0x0a);
-        }
-        files.insert("sha256sum".to_string(), sha256sum);
-        files
-    }
+    //     // sha256 sum of them
+    //     let mut sha256sum: Vec<u8> = Vec::new();
+    //     let mut info: Vec<(&String, &Vec<_>)> = files.iter().collect();
+    //     info.sort_by(|i1, i2| Ord::cmp(&i1.0, &i2.0));
+    //     for (fname, content) in info.iter() {
+    //         let mut hasher = Sha256::new();
+    //         hasher.update(content);
+    //         sha256sum.extend_from_slice(hex::encode(hasher.finalize()).as_bytes());
+    //         sha256sum.push(0x20);
+    //         sha256sum.push(0x20);
+    //         sha256sum.extend(fname.as_bytes());
+    //         sha256sum.push(0x0a);
+    //     }
+    //     files.insert("sha256sum".to_string(), sha256sum);
+    //     files
+    // }
 
     // #[test]
     // fn create_archive_format_version() {
