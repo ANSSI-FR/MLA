@@ -4,18 +4,17 @@ use criterion::BenchmarkId;
 use criterion::Throughput;
 
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
+use mla::crypto::hybrid::generate_keypair_from_rng;
 use mla::helpers::linear_extract;
 use mla::{ArchiveFailSafeReader, Layers};
 use mla::{ArchiveReader, ArchiveWriter};
 use rand::distributions::{Alphanumeric, Distribution};
 use rand::seq::index::sample;
-use rand::RngCore;
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use std::collections::HashMap;
 use std::io::{self, Cursor, Read};
 use std::time::{Duration, Instant};
-use x25519_dalek::{PublicKey, StaticSecret};
 
 const KB: usize = 1024;
 const MB: usize = 1024 * KB;
@@ -35,16 +34,11 @@ const LAYERS_POSSIBILITIES: [Layers; 4] = [
 fn build_archive(iters: u64, size: u64, layers: Layers) -> (Vec<u8>, ArchiveReaderConfig) {
     // Setup
     let mut rng = ChaChaRng::seed_from_u64(0);
-    let mut bytes = [0u8; 32];
-    rng.fill_bytes(&mut bytes);
-    let key = StaticSecret::from(bytes);
+    let (private_key, public_key) = generate_keypair_from_rng(&mut rng);
     let file = Vec::new();
-
     // Create the initial archive with `iters` files of `size` bytes
     let mut config = ArchiveWriterConfig::new();
-    config
-        .enable_layer(layers)
-        .add_public_keys(&[PublicKey::from(&key)]);
+    config.enable_layer(layers).add_public_keys(&[public_key]);
     let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
     for i in 0..iters {
         let data: Vec<u8> = Alphanumeric
@@ -61,7 +55,7 @@ fn build_archive(iters: u64, size: u64, layers: Layers) -> (Vec<u8>, ArchiveRead
     // Instantiate the reader
     let dest = mla.into_raw();
     let mut config = ArchiveReaderConfig::new();
-    config.add_private_keys(std::slice::from_ref(&key));
+    config.add_private_keys(&[private_key]);
     (dest, config)
 }
 
@@ -88,9 +82,7 @@ pub fn writer_multiple_layers_multiple_block_size(c: &mut Criterion) {
     // Setup
     // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
     let mut rng = ChaChaRng::seed_from_u64(0);
-    let mut bytes = [0u8; 32];
-    rng.fill_bytes(&mut bytes);
-    let key = StaticSecret::from(bytes);
+    let (_private_key, public_key) = generate_keypair_from_rng(&mut rng);
 
     let mut group = c.benchmark_group("writer_multiple_layers_multiple_block_size");
     group.measurement_time(Duration::from_secs(10));
@@ -106,7 +98,7 @@ pub fn writer_multiple_layers_multiple_block_size(c: &mut Criterion) {
             let mut config = ArchiveWriterConfig::new();
             config
                 .enable_layer(*layers)
-                .add_public_keys(&[PublicKey::from(&key)]);
+                .add_public_keys(&[public_key.clone()]);
             let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
 
             let id = mla.start_file("file").unwrap();

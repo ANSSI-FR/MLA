@@ -1366,7 +1366,7 @@ pub(crate) mod tests {
     fn new_mla() {
         let file = Vec::new();
         // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
-        let mut rng = ChaChaRng::seed_from_u64(0);
+        let rng = ChaChaRng::seed_from_u64(0);
         let (private_key, public_key) = generate_keypair_from_rng(rng);
         let mut mla = ArchiveWriter::new(file, std::slice::from_ref(&public_key))
             .expect("Writer init failed");
@@ -1422,7 +1422,7 @@ pub(crate) mod tests {
         // Build an archive with 3 files
         let file = Vec::new();
         // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
-        let mut rng = ChaChaRng::seed_from_u64(0);
+        let rng = ChaChaRng::seed_from_u64(0);
         let (private_key, public_key) = generate_keypair_from_rng(rng);
         let mut config = ArchiveWriterConfig::new();
         config
