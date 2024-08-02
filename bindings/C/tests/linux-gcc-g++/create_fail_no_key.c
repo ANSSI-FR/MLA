@@ -50,7 +50,7 @@ int main()
 
    MLAArchiveHandle hArchive = NULL;
    status = mla_archive_new(&hConfig, &callback_write, &callback_flush, f, &hArchive);
-   if (status != MLA_STATUS(MLA_STATUS_CONFIG_ERROR_ENCRYPTION_KEY_IS_MISSING))
+   if (status != MLA_STATUS(MLA_STATUS_CONFIG_ERROR_NO_RECIPIENTS))
    {
       fprintf(stderr, " [!] Archive creation did not fail, status %" PRIX64 "\n", (uint64_t)status);
       return (int)status;

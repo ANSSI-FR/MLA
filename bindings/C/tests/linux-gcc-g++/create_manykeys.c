@@ -4,13 +4,8 @@
 #include <string.h>
 #include "mla.h"
 
-// From samples/test_ed25519.pem and samples/test_x25519.pem
-const char *szPubkey = "-----BEGIN PUBLIC KEY-----\n"
-   "MCowBQYDK2VwAyEA9md4yIIFx+ftwe0c1p2YsJFrobXWKxan54Bs+/jFagE=\n"
-   "-----END PUBLIC KEY-----\n"
-   "-----BEGIN PUBLIC KEY-----\n"
-   "MCowBQYDK2VuAyEA/6CISoJRU5cqURCDRXpPUUF4nHGNo8jzQm+KUKhmc1c=\n"
-   "-----END PUBLIC KEY-----\n";
+// From samples/test_mlakey_many_pub.pem
+const char *szPubkey = "REPLACE WITH MANY PUBLIC KEY FROM SAMPLE";
 
 static int32_t callback_write(const uint8_t* pBuffer, uint32_t length, void *context, uint32_t *pBytesWritten)
 {
