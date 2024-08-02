@@ -1,12 +1,11 @@
 use clap::{value_parser, Arg, ArgAction, ArgMatches, Command};
-use curve25519_parser::{
-    generate_keypair, parse_openssl_25519_privkey, parse_openssl_25519_pubkey, StaticSecret,
-};
 use glob::Pattern;
 use hkdf::Hkdf;
 use humansize::{FormatSize, DECIMAL};
 use lru::LruCache;
+use ml_kem::EncodedSizeUser;
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
+use mla::crypto::hybrid::{HybridPrivateKey, HybridPublicKey};
 use mla::errors::{Error, FailSafeReadError};
 use mla::helpers::linear_extract;
 use mla::layers::compress::CompressionLayerReader;
@@ -17,7 +16,8 @@ use mla::{
     ArchiveFailSafeReader, ArchiveFile, ArchiveFooter, ArchiveHeader, ArchiveReader, ArchiveWriter,
     Layers,
 };
-use rand::SeedableRng;
+use mlakey_parser::{generate_keypair, parse_mlakey_privkey, parse_mlakey_pubkey};
+use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
 use sha2::{Digest, Sha512};
 use std::collections::{HashMap, HashSet};
@@ -108,16 +108,17 @@ impl Write for OutputTypes {
     }
 }
 
-fn open_ecc_private_keys(matches: &ArgMatches) -> Result<Vec<x25519_dalek::StaticSecret>, Error> {
+/// Return the parsed version of private keys from arguments `private_keys`
+fn open_private_keys(matches: &ArgMatches) -> Result<Vec<HybridPrivateKey>, Error> {
     let mut private_keys = Vec::new();
     if let Some(private_key_args) = matches.get_many::<PathBuf>("private_keys") {
         for private_key_arg in private_key_args {
             let mut file = File::open(private_key_arg)?;
-            // Load the the ECC key in-memory and parse it
+            // Load the the key in-memory and parse it
             let mut buf = Vec::new();
             file.read_to_end(&mut buf)?;
-            match parse_openssl_25519_privkey(&buf) {
-                Err(_) => return Err(Error::InvalidECCKeyFormat),
+            match parse_mlakey_privkey(&buf) {
+                Err(_) => return Err(Error::InvalidKeyFormat),
                 Ok(private_key) => private_keys.push(private_key),
             };
         }
@@ -125,17 +126,18 @@ fn open_ecc_private_keys(matches: &ArgMatches) -> Result<Vec<x25519_dalek::Stati
     Ok(private_keys)
 }
 
-fn open_ecc_public_keys(matches: &ArgMatches) -> Result<Vec<x25519_dalek::PublicKey>, Error> {
+/// Return the parsed version of public keys from arguments `public_keys`
+fn open_public_keys(matches: &ArgMatches) -> Result<Vec<HybridPublicKey>, Error> {
     let mut public_keys = Vec::new();
 
     if let Some(public_key_args) = matches.get_many::<PathBuf>("public_keys") {
         for public_key_arg in public_key_args {
             let mut file = File::open(public_key_arg)?;
-            // Load the the ECC key in-memory and parse it
+            // Load the the key in-memory and parse it
             let mut buf = Vec::new();
             file.read_to_end(&mut buf)?;
-            match parse_openssl_25519_pubkey(&buf) {
-                Err(_) => return Err(Error::InvalidECCKeyFormat),
+            match parse_mlakey_pubkey(&buf) {
+                Err(_) => return Err(Error::InvalidKeyFormat),
                 Ok(public_key) => public_keys.push(public_key),
             };
         }
@@ -177,7 +179,7 @@ fn config_from_matches(matches: &ArgMatches) -> ArchiveWriterConfig {
                 "[WARNING] 'public_keys' argument ignored, because 'encrypt' layer is not enabled"
             );
         } else {
-            let public_keys = match open_ecc_public_keys(matches) {
+            let public_keys = match open_public_keys(matches) {
                 Ok(public_keys) => public_keys,
                 Err(error) => {
                     panic!("[ERROR] Unable to open public keys: {}", error);
@@ -238,7 +240,7 @@ fn readerconfig_from_matches(matches: &ArgMatches) -> ArchiveReaderConfig {
     let mut config = ArchiveReaderConfig::new();
 
     if matches.contains_id("private_keys") {
-        let private_keys = match open_ecc_private_keys(matches) {
+        let private_keys = match open_private_keys(matches) {
             Ok(private_keys) => private_keys,
             Err(error) => {
                 panic!("[ERROR] Unable to open private keys: {}", error);
@@ -842,15 +844,28 @@ fn keygen(matches: &ArgMatches) -> Result<(), MlarError> {
 }
 
 const DERIVE_PATH_SALT: &[u8; 15] = b"PATH DERIVATION";
+const MLKEM_1024_PRIVKEY_SIZE: usize = 3168;
+const ECC_PRIVKEY_SIZE: usize = 32;
 
-/// Derive a Curve25519 secret along a path and return a seed
+/// Derive an Hybrid private secret along a path and return a seed
 ///
-/// HKDF(salt="PATH DERIVATION", ikm=Parent Key, info=Derivation path) -> seed
-fn apply_derive(path: &str, mut src: StaticSecret) -> [u8; 32] {
-    let hkdf: Hkdf<Sha512> = Hkdf::new(Some(DERIVE_PATH_SALT), &src.to_bytes());
+///   seed = HKDF(salt="PATH DERIVATION", ikm=serialize(Parent Key), info=Derivation path)
+///
+/// with:
+///   serialize(hybrid key) = ECC key . MLKEM key
+fn apply_derive(path: &str, mut src: HybridPrivateKey) -> [u8; 32] {
+    let mut ikm = [0u8; ECC_PRIVKEY_SIZE + MLKEM_1024_PRIVKEY_SIZE];
+    // Fill with random to avoid poor keys, just in case the following code is wrong
+    ChaChaRng::from_entropy().fill_bytes(&mut ikm);
+
+    ikm[..ECC_PRIVKEY_SIZE].copy_from_slice(src.private_key_ecc.as_bytes());
+    ikm[ECC_PRIVKEY_SIZE..].copy_from_slice(&src.private_key_ml.as_bytes());
+
+    let hkdf: Hkdf<Sha512> = Hkdf::new(Some(DERIVE_PATH_SALT), &ikm);
     let mut seed = [0u8; 32];
     hkdf.expand(path.as_bytes(), &mut seed)
         .expect("[ERROR] Error while expanding the key");
+    ikm.zeroize();
     src.zeroize();
     seed
 }
@@ -868,11 +883,10 @@ fn keyderive(matches: &ArgMatches) -> Result<(), MlarError> {
     let private_key_arg = matches.get_one::<PathBuf>("input").unwrap();
     let mut file = File::open(private_key_arg)?;
 
-    // Load the the ECC key in-memory and parse it
+    // Load the the key in-memory and parse it
     let mut buf = Vec::new();
     file.read_to_end(&mut buf)?;
-    let mut secret =
-        parse_openssl_25519_privkey(&buf).expect("[ERROR] Unable to read the private key");
+    let mut secret = parse_mlakey_privkey(&buf).expect("[ERROR] Unable to read the private key");
 
     // Derive the key along the path
     let mut key_pair = None;
@@ -885,7 +899,7 @@ fn keyderive(matches: &ArgMatches) -> Result<(), MlarError> {
         // Use the high-level API to avoid duplicating code from curve25519-parser in case of futur changes
         key_pair =
             Some(generate_keypair(&mut csprng).expect("Error while generating the key-pair"));
-        secret = parse_openssl_25519_privkey(&key_pair.as_ref().unwrap().private_der).unwrap();
+        secret = parse_mlakey_privkey(&key_pair.as_ref().unwrap().private_der).unwrap();
     }
 
     // Safe to unwrap, there is at least one derivation path

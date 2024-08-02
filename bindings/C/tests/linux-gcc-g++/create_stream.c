@@ -12,10 +12,8 @@
 #define MLA_STATUS(x) (x)
 #endif
 
-// From samples/test_ed25519.pem
-const char *szPubkey = "-----BEGIN PUBLIC KEY-----\n"
-   "MCowBQYDK2VwAyEA9md4yIIFx+ftwe0c1p2YsJFrobXWKxan54Bs+/jFagE=\n"
-   "-----END PUBLIC KEY-----\n";
+// from samples/test_mlakey_pub.pem
+const char *szPubkey = "REPLACE WITH PUBLIC KEY FROM SAMPLE";
 
 static int32_t callback_write(const uint8_t* pBuffer, uint32_t length, void *context, uint32_t *pBytesWritten)
 {

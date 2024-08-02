@@ -12,8 +12,8 @@ pub enum Error {
     WrongMagic,
     /// Unsupported version, must be 1
     UnsupportedVersion,
-    /// Supplied ECC key is not in the expected format
-    InvalidECCKeyFormat,
+    /// Supplied key is not in the expected format
+    InvalidKeyFormat,
     /// Wrong BlockSubFile magic has been encountered. Is the deserializion
     /// starting at the beginning of a block?
     WrongBlockSubFileType,
