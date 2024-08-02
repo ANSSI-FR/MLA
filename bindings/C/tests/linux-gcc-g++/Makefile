@@ -67,3 +67,5 @@ $(BUILDDIR)/$(TARGET)/debug/libmla.a: FORCE
 
 FORCE:
 
+clean:
+	rm *.elf; rm *.expanded.c; rm -rf ./extracted; rm ./test.mla
