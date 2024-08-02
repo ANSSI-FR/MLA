@@ -83,7 +83,7 @@ static int32_t file_cb(void *context, const uint8_t *filename, uintptr_t filenam
 
 int main()
 {
-    FILE *kf = fopen("../../../../samples/test_ed25519.pem", "r");
+    FILE *kf = fopen("../../../../samples/test_mlakey.pem", "r");
     if (kf == NULL)
     {
         fprintf(stderr, " [!] Could not open private key file\n");

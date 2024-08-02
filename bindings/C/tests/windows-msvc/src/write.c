@@ -9,11 +9,6 @@
 #define MLA_STATUS(x) (x)
 #endif
 
-// From samples/test_ed25519_pub.pem
-PCSTR szPubkey = "-----BEGIN PUBLIC KEY-----\n"
-"MCowBQYDK2VwAyEA9md4yIIFx+ftwe0c1p2YsJFrobXWKxan54Bs+/jFagE=\n"
-"-----END PUBLIC KEY-----\n";
-
 static int32_t callback_write(const uint8_t* pBuffer, uint32_t length, void* context, uint32_t* pBytesWritten)
 {
     HANDLE hOutFile = (HANDLE)context;
@@ -41,6 +36,28 @@ static int32_t callback_flush(void* context)
 
 int test_writer()
 {
+    FILE *kf;
+
+    if (fopen_s(&kf, "../../../../samples/test_mlakey_pub.pem", "r") != 0)
+    {
+        fprintf(stderr, " [!] Could not open public key file\n");
+        return errno;
+    }
+    if (fseek(kf, 0, SEEK_END))
+    {
+        fprintf(stderr, " [!] Could not open public key file\n");
+        return errno;
+    }
+
+    long keySize = ftell(kf);
+    char *szPubkey = (char *)malloc((size_t)keySize);
+    rewind(kf);
+    if (keySize != (long)fread(szPubkey, sizeof *szPubkey, keySize, kf))
+    {
+        fprintf(stderr, " [!] Could not read public key file\n");
+        return ferror(kf);
+    }
+
     HANDLE hOutFile = INVALID_HANDLE_VALUE;
 
     hOutFile = CreateFileA("test.mla", GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
@@ -104,5 +121,9 @@ int test_writer()
     }
 
     CloseHandle(hOutFile);
+
+    free(szPubkey);
+    fclose(kf);
+    
     return 0;
 }
