@@ -17,7 +17,7 @@ use mla::{
     Layers,
 };
 use mlakey_parser::{generate_keypair, parse_mlakey_privkey, parse_mlakey_pubkey};
-use rand::{RngCore, SeedableRng};
+use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use sha2::{Digest, Sha512};
 use std::collections::{HashMap, HashSet};
@@ -844,29 +844,34 @@ fn keygen(matches: &ArgMatches) -> Result<(), MlarError> {
 }
 
 const DERIVE_PATH_SALT: &[u8; 15] = b"PATH DERIVATION";
-const MLKEM_1024_PRIVKEY_SIZE: usize = 3168;
-const ECC_PRIVKEY_SIZE: usize = 32;
 
-/// Derive an Hybrid private secret along a path and return a seed
+/// Return a seed based on a path and an hybrid private key
 ///
-///   seed = HKDF(salt="PATH DERIVATION", ikm=serialize(Parent Key), info=Derivation path)
+/// The derivation scheme is based on the same ideas than `mla::crypto::hybrid::combine`, ie.
+/// 1. a dual-PRF (HKDF-Extract with a uniform random salt [1]) to extract entropy from the private key
+/// 2. HKDF-Expand to derive along the given path
 ///
-/// with:
-///   serialize(hybrid key) = ECC key . MLKEM key
+/// seed = HKDF-SHA512(
+///     salt=HKDF-SHA512-Extract(salt=0, ikm=ECC-key),
+///     ikm=MLKEM-key,
+///     info="PATH DERIVATION" . Derivation path
+/// )
+///
+/// Note: the secret is consumed on call
+/// [1] https://eprint.iacr.org/2023/861
 fn apply_derive(path: &str, mut src: HybridPrivateKey) -> [u8; 32] {
-    let mut ikm = [0u8; ECC_PRIVKEY_SIZE + MLKEM_1024_PRIVKEY_SIZE];
-    // Fill with random to avoid poor keys, just in case the following code is wrong
-    ChaChaRng::from_entropy().fill_bytes(&mut ikm);
+    // Force uniform-randomness on ECC-key, used as the future HKDF "salt" argument
+    let (dprf_salt, _hkdf) = Hkdf::<Sha512>::extract(None, src.private_key_ecc.as_bytes());
 
-    ikm[..ECC_PRIVKEY_SIZE].copy_from_slice(src.private_key_ecc.as_bytes());
-    ikm[ECC_PRIVKEY_SIZE..].copy_from_slice(&src.private_key_ml.as_bytes());
-
-    let hkdf: Hkdf<Sha512> = Hkdf::new(Some(DERIVE_PATH_SALT), &ikm);
+    // `salt` being uniformly random, HKDF can be viewed as a dual-PRF
+    let hkdf: Hkdf<Sha512> = Hkdf::new(Some(&dprf_salt), &src.private_key_ml.as_bytes());
     let mut seed = [0u8; 32];
-    hkdf.expand(path.as_bytes(), &mut seed)
-        .expect("[ERROR] Error while expanding the key");
-    ikm.zeroize();
+    hkdf.expand_multi_info(&[DERIVE_PATH_SALT, path.as_bytes()], &mut seed)
+        .expect("Unexpected error while derivating along the path");
+
+    // Consume the secret
     src.zeroize();
+
     seed
 }
 
