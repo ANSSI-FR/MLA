@@ -2,13 +2,14 @@ use crate::crypto::aesgcm::{ConstantTimeEq, Key, KEY_SIZE, NONCE_AES_SIZE, TAG_L
 use crate::crypto::ecc::{derive_key as ecc_derive_key, DHKEMCipherText};
 use crate::errors::ConfigError;
 use crate::layers::encrypt::get_crypto_rng;
+use hkdf::Hkdf;
 use kem::{Decapsulate, Encapsulate};
 use ml_kem::{KemCore, MlKem1024};
 use rand::Rng;
 use rand_chacha::rand_core::CryptoRngCore;
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
-use sha2::{Digest, Sha256};
+use sha2::Sha256;
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
 use zeroize::Zeroize;
 
@@ -21,30 +22,60 @@ pub type MLKEMEncapsulationKey = <MlKem1024 as KemCore>::EncapsulationKey;
 
 const HYBRIDKEM_ASSOCIATED_DATA: &[u8; 0] = b"";
 
-/// Concatenation scheme to keep IND-CCA, proved in [1] and explained in [4]
-/// It is very similar to the one used by TLS [2] and IKE [3], and this kind of scheme
-/// follows ANSSI recommandations [5]
+/// Produce a secret key by combining two KEM-Encaps outputs, using a "Nested Dual-PRF Combiner", proved in [6] (3.3)
 ///
-/// key = KDF(ss1 . ss2 . ct1 . ct2), with ss1 and ss2 the shared secrets and ct1 and ct2 the ciphertexts
+/// Arguments:
+/// - The use of concatenation scheme **including the ciphertext** keeps IND-CCA2 if one of the two
+///   underlying scheme is IND-CCA2, as proved in [1] and explained in [4]
+/// - TLS [2] uses a similar scheme, and IKE [3] also uses a concatenation scheme
+/// - This kind of scheme follows ANSSI recommandations [5]
+/// - HKDF can be considered as a Dual-PRF if both inputs are uniformly random [7]. In MLA, the `combine` method
+///   is called with a shared secret from ML-KEM, and the resulting ECC key derivation -- both are uniformly random
+/// - To avoid potential mistake in the future, or a mis-reuse of this method, the "Nested Dual-PRF Combiner" is
+///   used instead of the "Dual-PRF Combiner" (also from [6]). Indeed, this combiner force the "salt" part of HKDF
+///   to be uniformly random using an additionnal PRF use, ensuring the following HKDF is indeed a Dual-PRF
+///
+/// uniformly_random_ss1 = HKDF-SHA256-Extract(
+///     salt=0,
+///     ikm=ss1
+/// )
+/// key = HKDF(
+///     salt=uniformly_random_ss1,
+///     ikm=ss2,
+///     info=ct1 . ct2
+/// )
+///
+/// with ss1 and ss2 the shared secrets and ct1 and ct2 the ciphertexts
 ///
 /// [1] "F. Giacon, F. Heuer, and B. Poettering. Kem combiners, Cham, 2018"
 /// [2] https://datatracker.ietf.org/doc/draft-ietf-tls-hybrid-design/
 /// [3] https://datatracker.ietf.org/doc/html/rfc9370
 /// [4] https://eprint.iacr.org/2024/039
 /// [5] https://cyber.gouv.fr/en/publications/follow-position-paper-post-quantum-cryptography
+/// [6] https://eprint.iacr.org/2018/903.pdf
+/// [7] https://eprint.iacr.org/2023/861
 fn combine(
     shared_secret1: &[u8],
     shared_secret2: &[u8],
     ciphertext1: &[u8],
     ciphertext2: &[u8],
 ) -> Key {
-    let mut hasher = Sha256::new();
-    hasher.update(shared_secret1);
-    hasher.update(shared_secret2);
-    hasher.update(ciphertext1);
-    hasher.update(ciphertext2);
-    hasher.finalize().into()
-    // TODO: Consider adding a HKDF, like some of the referenced sources
+    // Make the first shared-secret uniformly random
+    let (uniformly_random_ss1, _hkdf) = Hkdf::<Sha256>::extract(None, shared_secret1);
+
+    // As uniformly_random_ss1 is uniformly random, HKDF-Extract act as a Dual-PRF
+    let hkdf = Hkdf::<Sha256>::new(
+        Some(&uniformly_random_ss1),
+        // Combine with the second shared secret
+        shared_secret2,
+    );
+
+    // Include ciphertexts to keep IND-CCA2 even if one of the KEM is not
+    let mut key = [0u8; KEY_SIZE];
+    hkdf.expand_multi_info(&[ciphertext1, ciphertext2], &mut key)
+        .expect("Safe to unwrap, 32 is a valid length for SHA256");
+
+    key
 }
 
 // ------- KEM implementation for a multi-recipient, hybrid, scheme -------
@@ -308,6 +339,48 @@ mod tests {
         // Ensure they are all unique
         let unique_results: HashSet<_> = vec![res1, res2, res3, res4, res5].into_iter().collect();
         assert_eq!(unique_results.len(), 5);
+    }
+
+    /// Vector test for combine
+    ///
+    /// Generated using the following script:
+    /// ```python
+    /// from cryptography.hazmat.primitives.kdf.hkdf import HKDF, HKDFExpand
+    /// from cryptography.hazmat.primitives import hashes
+    ///
+    /// shared_secret1 = b"shared_secret1"
+    /// shared_secret2 = b"shared_secret2"
+    /// ciphertext1 = b"ciphertext1"
+    /// ciphertext2 = b"ciphertext2"
+    ///
+    /// c = ciphertext1 + ciphertext2
+    /// ke = HKDF(
+    ///     hashes.SHA256(),
+    ///     length=32,
+    ///     salt=None,
+    ///     info=None
+    /// )._extract(shared_secret1)
+    /// k = HKDF(
+    ///     hashes.SHA256(),
+    ///     length=32,
+    ///     salt=ke,
+    ///     info=c
+    /// ).derive(shared_secret2)
+    /// print(list(k))
+    /// ```
+    #[test]
+    fn test_combine_vector() {
+        let computed_result = combine(
+            b"shared_secret1",
+            b"shared_secret2",
+            b"ciphertext1",
+            b"ciphertext2",
+        );
+        let expected_result = [
+            48, 101, 217, 203, 204, 40, 30, 190, 224, 0, 235, 53, 164, 222, 55, 98, 101, 174, 142,
+            98, 125, 204, 252, 210, 251, 111, 59, 45, 110, 150, 250, 11,
+        ];
+        assert_eq!(&computed_result, &expected_result);
     }
 
     /// Test the encapsulation and decapsulation of an hybrid key
