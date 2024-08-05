@@ -57,6 +57,7 @@ pub enum MLAStatus {
     DuplicateFilename = 0x150000,
     AuthenticatedDecryptionWrongTag = 0x160000,
     HKDFInvalidKeyLength = 0x170000,
+    HPKEError = 0x18000,
     Curve25519ParserError = 0xF10000,
 }
 /// Implemented by the developper. Takes a buffer of a certain number of bytes of MLA
@@ -193,6 +194,7 @@ impl From<MLAError> for MLAStatus {
             MLAError::DuplicateFilename => MLAStatus::DuplicateFilename,
             MLAError::AuthenticatedDecryptionWrongTag => MLAStatus::AuthenticatedDecryptionWrongTag,
             MLAError::HKDFInvalidKeyLength => MLAStatus::HKDFInvalidKeyLength,
+            MLAError::HPKEError(_) => MLAStatus::HPKEError,
         }
     }
 }

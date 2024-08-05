@@ -1,5 +1,6 @@
 use crate::ArchiveFileID;
 use hkdf::InvalidLength;
+use hpke::HpkeError;
 use std::error;
 use std::fmt;
 use std::io;
@@ -57,6 +58,8 @@ pub enum Error {
     AuthenticatedDecryptionWrongTag,
     /// Unable to expand while using the HKDF
     HKDFInvalidKeyLength,
+    /// Error during HPKE computation
+    HPKEError(HpkeError),
 }
 
 impl fmt::Display for Error {
@@ -108,6 +111,12 @@ impl From<ConfigError> for Error {
 impl From<InvalidLength> for Error {
     fn from(_error: InvalidLength) -> Self {
         Error::HKDFInvalidKeyLength
+    }
+}
+
+impl From<HpkeError> for Error {
+    fn from(error: HpkeError) -> Self {
+        Error::HPKEError(error)
     }
 }
 
