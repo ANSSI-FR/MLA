@@ -1,5 +1,5 @@
 use crate::crypto::aesgcm::{ConstantTimeEq, Key, KEY_SIZE, NONCE_AES_SIZE, TAG_LENGTH};
-use crate::crypto::ecc::derive_key as ecc_derive_key;
+use crate::crypto::hpke::{dhkem_decap, dhkem_encap, DHKEMCiphertext};
 use crate::errors::ConfigError;
 use crate::layers::encrypt::get_crypto_rng;
 use hkdf::Hkdf;
@@ -12,8 +12,6 @@ use serde_big_array::BigArray;
 use sha2::Sha256;
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
 use zeroize::Zeroize;
-
-use super::hpke::{dhkem_decap, dhkem_encap, DHKEMCiphertext};
 
 /// Common structures for ML-KEM 1024
 type MLKEMCiphertext = [u8; 1568];
