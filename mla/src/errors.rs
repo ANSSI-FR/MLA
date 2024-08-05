@@ -202,7 +202,7 @@ pub enum ConfigError {
     PrivateKeyNotSet,
     PrivateKeyNotFound,
     MLKEMComputationError,
-    ECIESComputationError,
+    DHKEMComputationError,
     KeyCommitmentComputationError,
     /// The encrypted key commitment does not correspond to the key commitment chain
     KeyCommitmentCheckingError,
