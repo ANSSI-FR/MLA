@@ -1,10 +1,8 @@
-use hpke::Deserializable;
 /// Implements RFC 9180 for MLA needs
-use hpke::{
-    kem::X25519HkdfSha256,
-    Kem as KemTrait,
-};
+use hpke::{kem::X25519HkdfSha256, Kem as KemTrait};
+use hpke::{Deserializable, Serializable};
 use rand::{CryptoRng, RngCore};
+use serde::{Deserialize, Serialize};
 use x25519_dalek::PublicKey as X25519PublicKey;
 
 use crate::errors::Error;
@@ -14,10 +12,40 @@ type Kem = X25519HkdfSha256;
 type WrappedPublicKey = <Kem as KemTrait>::PublicKey;
 type WrappedPrivateKey = <Kem as KemTrait>::PrivateKey;
 type DHKEMSharedSecret = hpke::kem::SharedSecret<Kem>;
-type DHKEMCiphertext = <Kem as KemTrait>::EncappedKey;
 
 // ----- DHKEM(X25519) -----
 // This implementation wraps https://github.com/rozbb/rust-hpke, which has been partially reviewed
+
+/// Wrap an `rust-hpke` `EncappedKey` to provide custom traits and prevent futur changes
+pub(crate) struct DHKEMCiphertext(<Kem as KemTrait>::EncappedKey);
+
+impl DHKEMCiphertext {
+    fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
+        Ok(DHKEMCiphertext(<Kem as KemTrait>::EncappedKey::from_bytes(
+            bytes,
+        )?))
+    }
+    pub(crate) fn to_bytes(&self) -> [u8; 32] {
+        self.0.to_bytes().into()
+    }
+}
+
+impl Serialize for DHKEMCiphertext {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.to_bytes().serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for DHKEMCiphertext {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let bytes = <[u8; 32]>::deserialize(deserializer)?;
+        DHKEMCiphertext::from_bytes(&bytes)
+            .or(Err(serde::de::Error::custom("Invalid DHKEMCiphertext")))
+    }
+}
 
 /// Provides DHKEM encapsulation over X25519 curve (RFC 9180 §4.1) from a given CryptoRng
 ///
@@ -27,7 +55,8 @@ pub(crate) fn dhkem_encap_from_rng(
     csprng: &mut (impl CryptoRng + RngCore),
 ) -> Result<(DHKEMSharedSecret, DHKEMCiphertext), Error> {
     let wrapped = WrappedPublicKey::from_bytes(&pubkey.to_bytes())?;
-    Ok(X25519HkdfSha256::encap(&wrapped, None, csprng)?)
+    let (shared_secret, ciphertext) = X25519HkdfSha256::encap(&wrapped, None, csprng)?;
+    Ok((shared_secret, DHKEMCiphertext(ciphertext)))
 }
 
 /// Provides DHKEM encapsulation over X25519 curve (RFC 9180 §4.1)
@@ -47,7 +76,7 @@ pub(crate) fn dhkem_decap(
     private_key: &x25519_dalek::StaticSecret,
 ) -> Result<DHKEMSharedSecret, Error> {
     let wrapped = WrappedPrivateKey::from_bytes(&private_key.to_bytes())?;
-    Ok(X25519HkdfSha256::decap(&wrapped, None, encapped_key)?)
+    Ok(X25519HkdfSha256::decap(&wrapped, None, &encapped_key.0)?)
 }
 
 #[cfg(test)]
@@ -121,11 +150,25 @@ mod tests {
         hex!("37fda3567bdbd628e88668c3c8d7e97d1d1253b6d4ea6d44c150f741f1bf4431");
     const RFC_SHARED_SECRET: [u8; 32] =
         hex!("fe0e18c9f024ce43799ae393c7e8fe8fce9d218875e8227b0187c04e7d2ea1fc");
+
+    /// Test Serialization and Deserialization of DHKEMCiphertext
     #[test]
+    fn dhkem_ciphertext_serde() {
+        // from_bytes / to_bytes
+        let ciphertext = DHKEMCiphertext::from_bytes(&RFC_PKRM).unwrap();
+        assert_eq!(ciphertext.to_bytes(), RFC_PKRM);
+
+        // serialize / deserialize
+        let serialized = bincode::serialize(&ciphertext).unwrap();
+        let deserialized: DHKEMCiphertext = bincode::deserialize(&serialized).unwrap();
+        assert_eq!(ciphertext.to_bytes(), deserialized.to_bytes());
+    }
+
     /// RFC 9180 §A.1.1
     ///
     /// These test vectors are already tested by `hpke` crates, but we ensure
     /// there is no regression change, even if we later change our base crate
+    #[test]
     fn rfc9180_dhkem_vector_tests() {
         // Key derivation
         let (privkey_em, pubkey_em) = X25519HkdfSha256::derive_keypair(&RFC_IKME);
