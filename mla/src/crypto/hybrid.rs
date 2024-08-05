@@ -1,5 +1,5 @@
 use crate::crypto::aesgcm::{ConstantTimeEq, Key, KEY_SIZE, NONCE_AES_SIZE, TAG_LENGTH};
-use crate::crypto::ecc::{derive_key as ecc_derive_key, DHKEMCipherText};
+use crate::crypto::ecc::derive_key as ecc_derive_key;
 use crate::errors::ConfigError;
 use crate::layers::encrypt::get_crypto_rng;
 use hkdf::Hkdf;
@@ -12,6 +12,8 @@ use serde_big_array::BigArray;
 use sha2::Sha256;
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
 use zeroize::Zeroize;
+
+use super::hpke::{dhkem_decap, dhkem_encap, DHKEMCiphertext};
 
 /// Common structures for ML-KEM 1024
 type MLKEMCiphertext = [u8; 1568];
@@ -92,6 +94,8 @@ struct HybridRecipientEncapsulatedKey {
     /// Ciphertext for ML-KEM
     #[serde(with = "BigArray")]
     ct_ml: MLKEMCiphertext,
+    /// Ciphertext for DH-KEM (actually an ECC ephemeral public key)
+    ct_ecc: DHKEMCiphertext,
     /// Wrapped (encrypted) version of the main key
     /// - Algorithm: AES-GCM 256
     /// - Key: hybrid shared secret
@@ -107,8 +111,6 @@ struct HybridRecipientEncapsulatedKey {
 /// Will be store in and load from the header
 #[derive(Serialize, Deserialize)]
 pub struct HybridMultiRecipientEncapsulatedKey {
-    /// Common ciphertext for DH-KEM (actually an ECC ephemeral public key)
-    ct_ecc: DHKEMCipherText,
     /// Key wrapping for each recipient
     recipients: Vec<HybridRecipientEncapsulatedKey>,
 }
@@ -149,19 +151,20 @@ impl Decapsulate<HybridMultiRecipientEncapsulatedKey, Key> for HybridPrivateKey 
         encapsulated_key: &HybridMultiRecipientEncapsulatedKey,
     ) -> Result<Key, Self::Error> {
         // For each possible recipient, compute the candidate hybrid shared secret
-        let ss_ecc = ecc_derive_key(
-            &self.private_key_ecc,
-            &X25519PublicKey::from(encapsulated_key.ct_ecc),
-        )
-        .or(Err(ConfigError::ECIESComputationError))?;
         for recipient in &encapsulated_key.recipients {
+            let ss_ecc = dhkem_decap(&recipient.ct_ecc, &self.private_key_ecc)
+                .or(Err(ConfigError::DHKEMComputationError))?;
             let ss_ml = self
                 .private_key_ml
                 .decapsulate(&recipient.ct_ml.into())
                 .or(Err(ConfigError::MLKEMComputationError))?;
 
-            let shared_secret =
-                combine(&ss_ecc, &ss_ml, &encapsulated_key.ct_ecc, &recipient.ct_ml);
+            let shared_secret = combine(
+                &ss_ecc.0,
+                &ss_ml,
+                &recipient.ct_ecc.to_bytes(),
+                &recipient.ct_ml,
+            );
 
             // Unwrap the candidate key and check it using AES-GCM tag validation
             let mut cipher = crate::crypto::aesgcm::AesGcm256::new(
@@ -210,16 +213,11 @@ impl Encapsulate<HybridMultiRecipientEncapsulatedKey, Key> for HybridMultiRecipi
         // Generate the final Key -- the one each recipient will finally retrieve
         let key = csprng.gen::<Key>();
 
-        // A `StaticSecret` is used instead of an `EphemeralSecret` to allow for
-        // multiple diffie-hellman computation
-        let ephemeral = X25519StaticSecret::from(csprng.gen::<[u8; 32]>());
-        let ct_ecc = X25519PublicKey::from(&ephemeral);
-
         let mut recipients = Vec::new();
         for recipient in &self.keys {
             // Compute the ECC shared secret
-            let ss_ecc = ecc_derive_key(&ephemeral, &recipient.public_key_ecc)
-                .or(Err(ConfigError::ECIESComputationError))?;
+            let (ss_ecc, ct_ecc) = dhkem_encap(&recipient.public_key_ecc)
+                .or(Err(ConfigError::DHKEMComputationError))?;
 
             // Compute the ML-KEM shared secret
             let (ct_ml, ss_ml) = &recipient
@@ -228,7 +226,7 @@ impl Encapsulate<HybridMultiRecipientEncapsulatedKey, Key> for HybridMultiRecipi
                 .or(Err(ConfigError::MLKEMComputationError))?;
 
             // Combine them to obtain the hybrid shared secret
-            let ss_hybrid = combine(&ss_ecc, ss_ml, ct_ecc.as_bytes(), ct_ml);
+            let ss_hybrid = combine(&ss_ecc.0, ss_ml, &ct_ecc.to_bytes(), ct_ml);
 
             // Wrap the final key
             let nonce = csprng.gen::<[u8; NONCE_AES_SIZE]>();
@@ -246,19 +244,14 @@ impl Encapsulate<HybridMultiRecipientEncapsulatedKey, Key> for HybridMultiRecipi
 
             recipients.push(HybridRecipientEncapsulatedKey {
                 ct_ml: (*ct_ml).into(),
+                ct_ecc,
                 wrapped_key,
                 tag,
                 nonce,
             });
         }
 
-        Ok((
-            HybridMultiRecipientEncapsulatedKey {
-                ct_ecc: ct_ecc.to_bytes(),
-                recipients,
-            },
-            key,
-        ))
+        Ok((HybridMultiRecipientEncapsulatedKey { recipients }, key))
     }
 }
 
