@@ -183,12 +183,12 @@ pub(crate) fn key_schedule_s(shared_secret: &[u8]) -> Result<(Key, Nonce), Error
 }
 
 /// Compute the nonce for a given sequence number (RFC 9180 §5.2)
-pub(crate) fn compute_nonce(base_nonce: Nonce, seq: u64) -> Nonce {
+pub(crate) fn compute_nonce(base_nonce: &Nonce, seq: u64) -> Nonce {
     // RFC 9180 §5.2: seq must not be superior to 1 << (8*Nn)
     // As we use AES-256-GCM, Nn = 12 (RFC 9180 §7.3), so u64 is always enough
 
     // Nonce = nonce ^ 0...seq
-    let mut nonce = base_nonce;
+    let mut nonce = *base_nonce;
     let seq_be = seq.to_be_bytes();
     for i in 0..seq_be.len() {
         let nonce_idx = i + nonce.len() - seq_be.len();
@@ -364,9 +364,8 @@ mod tests {
     /// RFC 9180 §A.6.1.1
     #[test]
     fn test_compute_nonce() {
-        let base_nonce = RFC_A6_BASE_NONCE;
         for i in 0..RFC_A6_SEQS.len() {
-            let computed_nonce = compute_nonce(base_nonce, RFC_A6_SEQS[i]);
+            let computed_nonce = compute_nonce(&RFC_A6_BASE_NONCE, RFC_A6_SEQS[i]);
             assert_eq!(computed_nonce, RFC_A6_NONCE[i]);
         }
     }
@@ -380,7 +379,7 @@ mod tests {
         for i in 0..RFC_A6_SEQS.len() {
             let mut aes = AesGcm256::new(
                 &RFC_A6_KEY,
-                &compute_nonce(RFC_A6_BASE_NONCE, RFC_A6_SEQS[i]),
+                &compute_nonce(&RFC_A6_BASE_NONCE, RFC_A6_SEQS[i]),
                 RFC_A6_AAD[i],
             )
             .unwrap();
