@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 use sha2::Sha256;
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
-use zeroize::Zeroize;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// Common structures for ML-KEM 1024
 type MLKEMCiphertext = [u8; 1568];
@@ -19,6 +19,28 @@ type MLKEMCiphertext = [u8; 1568];
 pub type MLKEMDecapsulationKey = <MlKem1024 as KemCore>::DecapsulationKey;
 /// ML-KEM 1024 "public key"
 pub type MLKEMEncapsulationKey = <MlKem1024 as KemCore>::EncapsulationKey;
+
+type HybridKemSharedSecretArray = [u8; 32];
+type EncryptedSharedSecret = HybridKemSharedSecretArray;
+
+/// A shared secret, as produced by the Hybrid KEM decapsulation/encapsulation
+///
+/// The type is wrapped to ease future changes & traits implementation
+#[derive(Zeroize, ZeroizeOnDrop, Debug)]
+pub(crate) struct HybridKemSharedSecret(pub(crate) HybridKemSharedSecretArray);
+
+impl HybridKemSharedSecret {
+    /// Generate a new HybridKemSharedSecret from a CSPRNG
+    pub fn from_rng<R: CryptoRngCore>(csprng: &mut R) -> Self {
+        Self(csprng.gen::<HybridKemSharedSecretArray>())
+    }
+}
+
+impl PartialEq for HybridKemSharedSecret {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.ct_eq(&other.0).into()
+    }
+}
 
 const HYBRIDKEM_ASSOCIATED_DATA: &[u8; 0] = b"";
 
@@ -86,7 +108,7 @@ fn combine(
 // Use `_ecc` and `_ml` naming rather than a generic approach (`_1``, `_2`)
 // to avoid confusion / prone-to-error code
 
-/// Per-recipient hybrid encapsulated key
+/// Per-recipient hybrid encapsulated shared secret
 #[derive(Serialize, Deserialize)]
 struct HybridRecipientEncapsulatedKey {
     /// Ciphertext for ML-KEM
@@ -94,11 +116,11 @@ struct HybridRecipientEncapsulatedKey {
     ct_ml: MLKEMCiphertext,
     /// Ciphertext for DH-KEM (actually an ECC ephemeral public key)
     ct_ecc: DHKEMCiphertext,
-    /// Wrapped (encrypted) version of the main key
-    /// - Algorithm: AES-GCM 256
-    /// - Key: hybrid shared secret
+    /// Wrapped (encrypted) version of the main shared secret
+    /// - Algorithm: AES-256-GCM
+    /// - Key: per-recipient hybrid shared secret
     /// - Nonce: per-recipient
-    wrapped_key: [u8; KEY_SIZE],
+    wrapped_ss: EncryptedSharedSecret,
     /// Associated tag
     tag: [u8; TAG_LENGTH],
     /// Associated nonce
@@ -141,13 +163,13 @@ impl Zeroize for HybridPrivateKey {
     }
 }
 
-impl Decapsulate<HybridMultiRecipientEncapsulatedKey, Key> for HybridPrivateKey {
+impl Decapsulate<HybridMultiRecipientEncapsulatedKey, HybridKemSharedSecret> for HybridPrivateKey {
     type Error = ConfigError;
 
     fn decapsulate(
         &self,
         encapsulated_key: &HybridMultiRecipientEncapsulatedKey,
-    ) -> Result<Key, Self::Error> {
+    ) -> Result<HybridKemSharedSecret, Self::Error> {
         // For each possible recipient, compute the candidate hybrid shared secret
         for recipient in &encapsulated_key.recipients {
             let ss_ecc = dhkem_decap(&recipient.ct_ecc, &self.private_key_ecc)
@@ -157,29 +179,29 @@ impl Decapsulate<HybridMultiRecipientEncapsulatedKey, Key> for HybridPrivateKey 
                 .decapsulate(&recipient.ct_ml.into())
                 .or(Err(ConfigError::MLKEMComputationError))?;
 
-            let shared_secret = combine(
+            let ss_recipient = combine(
                 &ss_ecc.0,
                 &ss_ml,
                 &recipient.ct_ecc.to_bytes(),
                 &recipient.ct_ml,
             );
 
-            // Unwrap the candidate key and check it using AES-GCM tag validation
+            // Unwrap the candidate shared secret and check it using AES-GCM tag validation
             let mut cipher = crate::crypto::aesgcm::AesGcm256::new(
-                &shared_secret,
+                &ss_recipient,
                 &recipient.nonce,
                 HYBRIDKEM_ASSOCIATED_DATA,
             )
             .or(Err(ConfigError::KeyWrappingComputationError))?;
-            let mut decrypted_key = Key::default();
-            decrypted_key.copy_from_slice(&recipient.wrapped_key);
-            let tag = cipher.decrypt(&mut decrypted_key);
+            let mut decrypted_ss = HybridKemSharedSecretArray::default();
+            decrypted_ss.copy_from_slice(&recipient.wrapped_ss);
+            let tag = cipher.decrypt(&mut decrypted_ss);
             if tag.ct_eq(&recipient.tag).unwrap_u8() == 1 {
-                return Ok(decrypted_key);
+                return Ok(HybridKemSharedSecret(decrypted_ss));
             }
         }
 
-        // No candidate key found
+        // No candidate found
         Err(ConfigError::PrivateKeyNotFound)
     }
 }
@@ -201,15 +223,17 @@ pub(crate) struct HybridMultiRecipientsPublicKeys {
     pub(crate) keys: Vec<HybridPublicKey>,
 }
 
-impl Encapsulate<HybridMultiRecipientEncapsulatedKey, Key> for HybridMultiRecipientsPublicKeys {
+impl Encapsulate<HybridMultiRecipientEncapsulatedKey, HybridKemSharedSecret>
+    for HybridMultiRecipientsPublicKeys
+{
     type Error = ConfigError;
 
     fn encapsulate(
         &self,
         csprng: &mut impl CryptoRngCore,
-    ) -> Result<(HybridMultiRecipientEncapsulatedKey, Key), Self::Error> {
-        // Generate the final Key -- the one each recipient will finally retrieve
-        let key = csprng.gen::<Key>();
+    ) -> Result<(HybridMultiRecipientEncapsulatedKey, HybridKemSharedSecret), Self::Error> {
+        // Generate the final shared secret -- the one each recipient will finally retrieve
+        let final_ss_hybrid = HybridKemSharedSecret::from_rng(csprng);
 
         let mut recipients = Vec::new();
         for recipient in &self.keys {
@@ -223,33 +247,36 @@ impl Encapsulate<HybridMultiRecipientEncapsulatedKey, Key> for HybridMultiRecipi
                 .encapsulate(csprng)
                 .or(Err(ConfigError::MLKEMComputationError))?;
 
-            // Combine them to obtain the hybrid shared secret
-            let ss_hybrid = combine(&ss_ecc.0, ss_ml, &ct_ecc.to_bytes(), ct_ml);
+            // Combine them to obtain the recipient's hybrid key
+            let ss_recipient = combine(&ss_ecc.0, ss_ml, &ct_ecc.to_bytes(), ct_ml);
 
-            // Wrap the final key
+            // Wrap the final shared secret
             let nonce = csprng.gen::<[u8; NONCE_AES_SIZE]>();
             let mut cipher = crate::crypto::aesgcm::AesGcm256::new(
-                &ss_hybrid,
+                &ss_recipient,
                 &nonce,
                 HYBRIDKEM_ASSOCIATED_DATA,
             )
             .or(Err(ConfigError::KeyWrappingComputationError))?;
-            let mut wrapped_key = Key::default();
-            wrapped_key.copy_from_slice(&key);
-            cipher.encrypt(&mut wrapped_key);
+            let mut wrapped_ss = EncryptedSharedSecret::default();
+            wrapped_ss.copy_from_slice(&final_ss_hybrid.0);
+            cipher.encrypt(&mut wrapped_ss);
             let mut tag = [0u8; TAG_LENGTH];
             tag.copy_from_slice(&cipher.into_tag());
 
             recipients.push(HybridRecipientEncapsulatedKey {
                 ct_ml: (*ct_ml).into(),
                 ct_ecc,
-                wrapped_key,
+                wrapped_ss,
                 tag,
                 nonce,
             });
         }
 
-        Ok((HybridMultiRecipientEncapsulatedKey { recipients }, key))
+        Ok((
+            HybridMultiRecipientEncapsulatedKey { recipients },
+            final_ss_hybrid,
+        ))
     }
 }
 
@@ -374,7 +401,7 @@ mod tests {
         assert_eq!(&computed_result, &expected_result);
     }
 
-    /// Test the encapsulation and decapsulation of an hybrid key
+    /// Test the encapsulation and decapsulation of an hybrid shared secret
     #[test]
     fn test_encapsulate_decapsulate() {
         let mut csprng = ChaChaRng::from_entropy();
@@ -399,20 +426,20 @@ mod tests {
             keys: vec![hybrid_public_key],
         };
 
-        // Encapsulate a key
-        let (encapsulated_keys, key_encap) = hybrid_multi_recipient_keys
+        // Encapsulate a shared secret
+        let (encapsulated_keys, ss_hybrid_encap) = hybrid_multi_recipient_keys
             .encapsulate(&mut csprng)
             .unwrap();
 
-        // Decapsulate the key
-        let key_decap = hybrid_private_key.decapsulate(&encapsulated_keys).unwrap();
+        // Decapsulate the shared secret
+        let ss_hybrid_decap = hybrid_private_key.decapsulate(&encapsulated_keys).unwrap();
 
-        // Ensure both key match
-        assert_eq!(key_encap, key_decap);
+        // Ensure both secret match
+        assert_eq!(ss_hybrid_encap, ss_hybrid_decap);
     }
 
     const NB_RECIPIENT: u32 = 10;
-    /// Test the encapsulation and decapsulation of an hybrid key for several recipients
+    /// Test the encapsulation and decapsulation of an hybrid shared secret for several recipients
     #[test]
     fn test_encapsulate_decapsulate_multi() {
         let mut csprng = ChaChaRng::from_entropy();
@@ -442,21 +469,21 @@ mod tests {
             hybrid_multi_recipient_private_keys.push(hybrid_private_key);
         }
 
-        // Encapsulate a key
-        let (encapsulated_keys, key_encap) = hybrid_multi_recipient_public_keys
+        // Encapsulate a shared secret
+        let (encapsulated_keys, ss_hybrid_encap) = hybrid_multi_recipient_public_keys
             .encapsulate(&mut csprng)
             .unwrap();
 
-        // Decapsulate the key for each recipient
+        // Decapsulate the shared secret for each recipient
         for private_key in &hybrid_multi_recipient_private_keys {
-            let key_decap = private_key.decapsulate(&encapsulated_keys).unwrap();
+            let ss_hybrid_decap = private_key.decapsulate(&encapsulated_keys).unwrap();
 
-            // Check the key is the expected one
-            assert_eq!(key_encap, key_decap);
+            // Check the shared secret is the expected one
+            assert_eq!(ss_hybrid_encap, ss_hybrid_decap);
         }
     }
 
-    /// Test cryprographic materials (including the encapsulated key) for entropy
+    /// Test cryptographic materials (including the encapsulated shared secret) for entropy
     #[test]
     fn test_encapsulated_key_entropy() {
         let mut csprng = ChaChaRng::from_entropy();
@@ -474,7 +501,7 @@ mod tests {
         };
 
         // Encapsulate a key
-        let (encapsulated_keys, key_encap) = hybrid_multi_recipient_keys
+        let (encapsulated_keys, ss_hybrid) = hybrid_multi_recipient_keys
             .encapsulate(&mut csprng)
             .unwrap();
         let recipient = &encapsulated_keys.recipients[0];
@@ -482,10 +509,10 @@ mod tests {
         // Ensure materials have enough entropy
         // This is a naive check, using compression, to avoid naive bugs
         let materials: Vec<&[u8]> = vec![
-            &key_encap,
+            &ss_hybrid.0,
             &recipient.nonce,
             &recipient.tag,
-            &recipient.wrapped_key,
+            &recipient.wrapped_ss,
         ];
         for material in materials {
             let mut compressed = brotli::CompressorReader::new(material, 0, 0, 0);
