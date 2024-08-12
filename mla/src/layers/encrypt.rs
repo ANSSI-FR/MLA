@@ -1,7 +1,6 @@
-use crate::crypto::aesgcm::{
-    AesGcm256, ConstantTimeEq, Key, Nonce, Tag, KEY_COMMITMENT_SIZE, TAG_LENGTH,
-};
+use crate::crypto::aesgcm::{AesGcm256, ConstantTimeEq, Key, Tag, KEY_COMMITMENT_SIZE, TAG_LENGTH};
 
+use crate::crypto::hpke::compute_nonce;
 use crate::crypto::hybrid::{
     HybridMultiRecipientEncapsulatedKey, HybridMultiRecipientsPublicKeys, HybridPrivateKey,
     HybridPublicKey,
@@ -15,6 +14,7 @@ use std::io::{BufReader, Cursor, Read, Seek, SeekFrom, Write};
 
 use crate::config::{ArchiveReaderConfig, ArchiveWriterConfig};
 use crate::errors::ConfigError;
+use hpke::HpkeError;
 use kem::{Decapsulate, Encapsulate};
 use rand::{Rng, SeedableRng};
 use rand_chacha::{rand_core::CryptoRngCore, ChaChaRng};
@@ -26,29 +26,12 @@ use super::traits::InnerReaderTrait;
 
 const CIPHER_BUF_SIZE: u64 = 4096;
 // This is the size of the nonce taken as input
-const NONCE_SIZE: usize = 8;
+const NONCE_SIZE: usize = 12;
 /// Type standing for the unique nonce per-archive
 type ArchiveNonce = [u8; NONCE_SIZE];
 const CHUNK_SIZE: u64 = 128 * 1024;
 
 const ASSOCIATED_DATA: &[u8; 0] = b"";
-
-/// Build nonce according to a given state
-///
-/// AesGcm expect a 96 bits nonce.
-/// The nonce build as:
-/// 1. 8 byte nonce, unique per archive
-/// 2. 4 byte counter, unique per chunk and incremental
-///
-/// Inspired from the construction in TLS or STREAM from "Online
-/// Authenticated-Encryption and its Nonce-Reuse Misuse-Resistance"
-fn build_nonce(nonce_prefix: ArchiveNonce, current_ctr: u32) -> Nonce {
-    // This is the Nonce as expected by AesGcm
-    let mut nonce = Nonce::default();
-    nonce[..NONCE_SIZE].copy_from_slice(&nonce_prefix);
-    nonce[NONCE_SIZE..].copy_from_slice(&current_ctr.to_be_bytes());
-    nonce
-}
 
 // ---------- Key commitment ----------
 
@@ -64,7 +47,7 @@ fn build_key_commitment_chain(
 ) -> Result<KeyCommitmentAndTag, Error> {
     let mut key_commitment = [0u8; KEY_COMMITMENT_SIZE];
     key_commitment.copy_from_slice(KEY_COMMITMENT_CHAIN);
-    let mut cipher = AesGcm256::new(key, &build_nonce(*nonce, 0), ASSOCIATED_DATA)?;
+    let mut cipher = AesGcm256::new(key, &compute_nonce(nonce, 0), ASSOCIATED_DATA)?;
     cipher.encrypt(&mut key_commitment);
     let mut tag = [0u8; TAG_LENGTH];
     tag.copy_from_slice(&cipher.into_tag());
@@ -80,7 +63,7 @@ fn check_key_commitment(
     commitment: &KeyCommitmentAndTag,
 ) -> Result<(), ConfigError> {
     let mut key_commitment = commitment.key_commitment;
-    let mut cipher = AesGcm256::new(key, &build_nonce(*nonce, 0), ASSOCIATED_DATA)
+    let mut cipher = AesGcm256::new(key, &compute_nonce(nonce, 0), ASSOCIATED_DATA)
         .or(Err(ConfigError::KeyCommitmentCheckingError))?;
     let tag = cipher.decrypt(&mut key_commitment);
     if tag.ct_eq(&commitment.tag).unwrap_u8() == 1 {
@@ -94,7 +77,7 @@ fn check_key_commitment(
 ///
 /// 0: used to encrypt the key commitment chain
 /// 1-n: used for the actual data
-const FIRST_DATA_CHUNK_NUMBER: u32 = 1;
+const FIRST_DATA_CHUNK_NUMBER: u64 = 1;
 
 // ---------- Config ----------
 /// Encrypted Key commitment and associated tag
@@ -301,10 +284,10 @@ pub(crate) struct EncryptionLayerWriter<'a, W: 'a + InnerWriterTrait> {
     cipher: AesGcm256,
     /// Symmetric encryption Key
     key: Key,
-    /// Symmetric encryption nonce prefix, see `build_nonce`
+    /// Symmetric encryption nonce prefix, see `compute_nonce`
     nonce_prefix: ArchiveNonce,
     current_chunk_offset: u64,
-    current_ctr: u32,
+    current_ctr: u64,
 }
 
 impl<'a, W: 'a + InnerWriterTrait> EncryptionLayerWriter<'a, W> {
@@ -318,7 +301,7 @@ impl<'a, W: 'a + InnerWriterTrait> EncryptionLayerWriter<'a, W> {
             nonce_prefix: internal_config.nonce,
             cipher: AesGcm256::new(
                 &internal_config.key,
-                &build_nonce(internal_config.nonce, FIRST_DATA_CHUNK_NUMBER),
+                &compute_nonce(&internal_config.nonce, FIRST_DATA_CHUNK_NUMBER),
                 ASSOCIATED_DATA,
             )?,
             current_chunk_offset: 0,
@@ -328,11 +311,14 @@ impl<'a, W: 'a + InnerWriterTrait> EncryptionLayerWriter<'a, W> {
 
     fn renew_cipher(&mut self) -> Result<Tag, Error> {
         // Prepare a new cipher
-        self.current_ctr += 1;
+        self.current_ctr = self
+            .current_ctr
+            .checked_add(1)
+            .ok_or(HpkeError::MessageLimitReached)?;
         self.current_chunk_offset = 0;
         let cipher = AesGcm256::new(
             &self.key,
-            &build_nonce(self.nonce_prefix, self.current_ctr),
+            &compute_nonce(&self.nonce_prefix, self.current_ctr),
             ASSOCIATED_DATA,
         )?;
         let old_cipher = std::mem::replace(&mut self.cipher, cipher);
@@ -405,7 +391,7 @@ pub struct EncryptionLayerReader<'a, R: Read + Seek> {
     chunk_cache: Cursor<Vec<u8>>,
     /// Current chunk number in the data.
     /// Note: the actual chunk number used in the cipher is offseted by FIRST_DATA_CHUNK_NUMBER
-    current_chunk_number: u32,
+    current_chunk_number: u64,
 }
 
 impl<'a, R: 'a + Read + Seek> EncryptionLayerReader<'a, R> {
@@ -418,7 +404,7 @@ impl<'a, R: 'a + Read + Seek> EncryptionLayerReader<'a, R> {
                 inner,
                 cipher: AesGcm256::new(
                     &key,
-                    &build_nonce(nonce, FIRST_DATA_CHUNK_NUMBER),
+                    &compute_nonce(&nonce, FIRST_DATA_CHUNK_NUMBER),
                     ASSOCIATED_DATA,
                 )?,
                 key,
@@ -435,8 +421,8 @@ impl<'a, R: 'a + Read + Seek> EncryptionLayerReader<'a, R> {
     fn load_in_cache(&mut self) -> Result<Option<()>, Error> {
         self.cipher = AesGcm256::new(
             &self.key,
-            &build_nonce(
-                self.nonce,
+            &compute_nonce(
+                &self.nonce,
                 self.current_chunk_number + FIRST_DATA_CHUNK_NUMBER,
             ),
             ASSOCIATED_DATA,
@@ -543,7 +529,7 @@ impl<'a, R: 'a + Read + Seek> Seek for EncryptionLayerReader<'a, R> {
                 self.inner.seek(SeekFrom::Start(pos_chunk_start))?;
 
                 // Load and move into the cache
-                self.current_chunk_number = chunk_number as u32;
+                self.current_chunk_number = chunk_number;
                 self.load_in_cache()?;
                 self.chunk_cache.seek(SeekFrom::Start(pos_in_chunk))?;
                 Ok(pos)
@@ -595,7 +581,7 @@ pub struct EncryptionLayerFailSafeReader<'a, R: Read> {
     cipher: AesGcm256,
     key: Key,
     nonce: ArchiveNonce,
-    current_chunk_number: u32,
+    current_chunk_number: u64,
     current_chunk_offset: u64,
 }
 
@@ -609,7 +595,7 @@ impl<'a, R: 'a + Read> EncryptionLayerFailSafeReader<'a, R> {
                 inner,
                 cipher: AesGcm256::new(
                     &key,
-                    &build_nonce(nonce, FIRST_DATA_CHUNK_NUMBER),
+                    &compute_nonce(&nonce, FIRST_DATA_CHUNK_NUMBER),
                     ASSOCIATED_DATA,
                 )?,
                 key,
@@ -640,12 +626,15 @@ impl<'a, R: Read> Read for EncryptionLayerFailSafeReader<'a, R> {
                 &mut (&mut self.inner).take(TAG_LENGTH as u64),
                 &mut io::sink(),
             )?;
-            self.current_chunk_number += 1;
+            self.current_chunk_number = self
+                .current_chunk_number
+                .checked_add(1)
+                .ok_or(Error::HPKEError(HpkeError::MessageLimitReached))?;
             self.current_chunk_offset = 0;
             self.cipher = AesGcm256::new(
                 &self.key,
-                &build_nonce(
-                    self.nonce,
+                &compute_nonce(
+                    &self.nonce,
                     self.current_chunk_number + FIRST_DATA_CHUNK_NUMBER,
                 ),
                 ASSOCIATED_DATA,
@@ -853,7 +842,7 @@ mod tests {
         let key_commitment_and_tag = result.unwrap();
 
         // Decrypt it
-        let mut cipher = AesGcm256::new(&key, &build_nonce(nonce, 0), ASSOCIATED_DATA).unwrap();
+        let mut cipher = AesGcm256::new(&key, &compute_nonce(&nonce, 0), ASSOCIATED_DATA).unwrap();
         let mut decrypted_key_commitment = [0u8; KEY_COMMITMENT_SIZE];
         decrypted_key_commitment.copy_from_slice(&key_commitment_and_tag.key_commitment);
         let tag = cipher.decrypt(&mut decrypted_key_commitment);
