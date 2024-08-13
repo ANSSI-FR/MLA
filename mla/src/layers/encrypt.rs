@@ -75,6 +75,10 @@ fn check_key_commitment(
 const FIRST_DATA_CHUNK_NUMBER: u64 = 1;
 
 // ---------- Config ----------
+
+/// `info` to bound the HPKE usage to the MLA Encrypt Layer
+const HPKE_INFO_LAYER: &[u8] = b"MLA Encrypt Layer";
+
 /// Encrypted Key commitment and associated tag
 struct KeyCommitmentAndTag {
     key_commitment: [u8; KEY_COMMITMENT_SIZE],
@@ -150,7 +154,7 @@ pub(crate) struct InternalEncryptionConfig {
 
 impl InternalEncryptionConfig {
     fn from(shared_secret: HybridKemSharedSecret) -> Result<Self, Error> {
-        let (key, nonce) = key_schedule_s(&shared_secret.0)?;
+        let (key, nonce) = key_schedule_s(&shared_secret.0, HPKE_INFO_LAYER)?;
 
         Ok(Self { key, nonce })
     }
@@ -241,7 +245,7 @@ impl EncryptionReaderConfig {
         }
         for private_key in &self.private_keys {
             if let Ok(ss_hybrid) = private_key.decapsulate(&config.multi_recipient) {
-                let (key, nonce) = key_schedule_s(&ss_hybrid.0)
+                let (key, nonce) = key_schedule_s(&ss_hybrid.0, HPKE_INFO_LAYER)
                     .or(Err(ConfigError::KeyWrappingComputationError))?;
                 self.encrypt_parameters = Some((key, nonce));
                 break;

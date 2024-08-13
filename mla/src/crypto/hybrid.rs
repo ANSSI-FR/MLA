@@ -1,5 +1,5 @@
-use crate::crypto::aesgcm::{ConstantTimeEq, Key, KEY_SIZE, NONCE_AES_SIZE, TAG_LENGTH};
-use crate::crypto::hpke::{dhkem_decap, dhkem_encap, DHKEMCiphertext};
+use crate::crypto::aesgcm::{ConstantTimeEq, Key, KEY_SIZE, TAG_LENGTH};
+use crate::crypto::hpke::{dhkem_decap, dhkem_encap, key_schedule_s, DHKEMCiphertext};
 use crate::errors::ConfigError;
 use crate::layers::encrypt::get_crypto_rng;
 use hkdf::Hkdf;
@@ -12,6 +12,9 @@ use serde_big_array::BigArray;
 use sha2::Sha256;
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
 use zeroize::{Zeroize, ZeroizeOnDrop};
+
+/// `info` to bound the HPKE usage to the MLA Recipient derivation
+const HPKE_INFO_RECIPIENT: &[u8] = b"MLA Recipient";
 
 /// Common structures for ML-KEM 1024
 type MLKEMCiphertext = [u8; 1568];
@@ -123,8 +126,6 @@ struct HybridRecipientEncapsulatedKey {
     wrapped_ss: EncryptedSharedSecret,
     /// Associated tag
     tag: [u8; TAG_LENGTH],
-    /// Associated nonce
-    nonce: [u8; NONCE_AES_SIZE],
 }
 
 /// Key encapsulated for multiple recipient with hybrid cryptography
@@ -186,10 +187,13 @@ impl Decapsulate<HybridMultiRecipientEncapsulatedKey, HybridKemSharedSecret> for
                 &recipient.ct_ml,
             );
 
+            let (unwrap_key, unwrap_nonce) = key_schedule_s(&ss_recipient, HPKE_INFO_RECIPIENT)
+                .or(Err(ConfigError::KeyWrappingComputationError))?;
+
             // Unwrap the candidate shared secret and check it using AES-GCM tag validation
             let mut cipher = crate::crypto::aesgcm::AesGcm256::new(
-                &ss_recipient,
-                &recipient.nonce,
+                &unwrap_key,
+                &unwrap_nonce,
                 HYBRIDKEM_ASSOCIATED_DATA,
             )
             .or(Err(ConfigError::KeyWrappingComputationError))?;
@@ -251,10 +255,11 @@ impl Encapsulate<HybridMultiRecipientEncapsulatedKey, HybridKemSharedSecret>
             let ss_recipient = combine(&ss_ecc.0, ss_ml, &ct_ecc.to_bytes(), ct_ml);
 
             // Wrap the final shared secret
-            let nonce = csprng.gen::<[u8; NONCE_AES_SIZE]>();
+            let (wrap_key, wrap_nonce) = key_schedule_s(&ss_recipient, HPKE_INFO_RECIPIENT)
+                .or(Err(ConfigError::KeyWrappingComputationError))?;
             let mut cipher = crate::crypto::aesgcm::AesGcm256::new(
-                &ss_recipient,
-                &nonce,
+                &wrap_key,
+                &wrap_nonce,
                 HYBRIDKEM_ASSOCIATED_DATA,
             )
             .or(Err(ConfigError::KeyWrappingComputationError))?;
@@ -269,7 +274,6 @@ impl Encapsulate<HybridMultiRecipientEncapsulatedKey, HybridKemSharedSecret>
                 ct_ecc,
                 wrapped_ss,
                 tag,
-                nonce,
             });
         }
 
@@ -508,12 +512,7 @@ mod tests {
 
         // Ensure materials have enough entropy
         // This is a naive check, using compression, to avoid naive bugs
-        let materials: Vec<&[u8]> = vec![
-            &ss_hybrid.0,
-            &recipient.nonce,
-            &recipient.tag,
-            &recipient.wrapped_ss,
-        ];
+        let materials: Vec<&[u8]> = vec![&ss_hybrid.0, &recipient.tag, &recipient.wrapped_ss];
         for material in materials {
             let mut compressed = brotli::CompressorReader::new(material, 0, 0, 0);
             let mut compressed_data = Vec::new();
