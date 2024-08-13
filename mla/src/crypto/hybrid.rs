@@ -1,5 +1,7 @@
 use crate::crypto::aesgcm::{ConstantTimeEq, Key, KEY_SIZE, TAG_LENGTH};
-use crate::crypto::hpke::{dhkem_decap, dhkem_encap, key_schedule_s, DHKEMCiphertext};
+use crate::crypto::hpke::{
+    dhkem_decap, dhkem_encap, key_schedule_base_hybrid_kem_recipient, DHKEMCiphertext,
+};
 use crate::errors::ConfigError;
 use crate::layers::encrypt::get_crypto_rng;
 use hkdf::Hkdf;
@@ -187,8 +189,9 @@ impl Decapsulate<HybridMultiRecipientEncapsulatedKey, HybridKemSharedSecret> for
                 &recipient.ct_ml,
             );
 
-            let (unwrap_key, unwrap_nonce) = key_schedule_s(&ss_recipient, HPKE_INFO_RECIPIENT)
-                .or(Err(ConfigError::KeyWrappingComputationError))?;
+            let (unwrap_key, unwrap_nonce) =
+                key_schedule_base_hybrid_kem_recipient(&ss_recipient, HPKE_INFO_RECIPIENT)
+                    .or(Err(ConfigError::KeyWrappingComputationError))?;
 
             // Unwrap the candidate shared secret and check it using AES-GCM tag validation
             let mut cipher = crate::crypto::aesgcm::AesGcm256::new(
@@ -255,8 +258,9 @@ impl Encapsulate<HybridMultiRecipientEncapsulatedKey, HybridKemSharedSecret>
             let ss_recipient = combine(&ss_ecc.0, ss_ml, &ct_ecc.to_bytes(), ct_ml);
 
             // Wrap the final shared secret
-            let (wrap_key, wrap_nonce) = key_schedule_s(&ss_recipient, HPKE_INFO_RECIPIENT)
-                .or(Err(ConfigError::KeyWrappingComputationError))?;
+            let (wrap_key, wrap_nonce) =
+                key_schedule_base_hybrid_kem_recipient(&ss_recipient, HPKE_INFO_RECIPIENT)
+                    .or(Err(ConfigError::KeyWrappingComputationError))?;
             let mut cipher = crate::crypto::aesgcm::AesGcm256::new(
                 &wrap_key,
                 &wrap_nonce,

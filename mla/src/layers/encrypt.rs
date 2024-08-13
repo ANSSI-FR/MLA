@@ -2,7 +2,7 @@ use crate::crypto::aesgcm::{
     AesGcm256, ConstantTimeEq, Key, Nonce, Tag, KEY_COMMITMENT_SIZE, TAG_LENGTH,
 };
 
-use crate::crypto::hpke::{compute_nonce, key_schedule_s};
+use crate::crypto::hpke::{compute_nonce, key_schedule_base_hybrid_kem};
 use crate::crypto::hybrid::{
     HybridKemSharedSecret, HybridMultiRecipientEncapsulatedKey, HybridMultiRecipientsPublicKeys,
     HybridPrivateKey, HybridPublicKey,
@@ -154,7 +154,7 @@ pub(crate) struct InternalEncryptionConfig {
 
 impl InternalEncryptionConfig {
     fn from(shared_secret: HybridKemSharedSecret) -> Result<Self, Error> {
-        let (key, nonce) = key_schedule_s(&shared_secret.0, HPKE_INFO_LAYER)?;
+        let (key, nonce) = key_schedule_base_hybrid_kem(&shared_secret.0, HPKE_INFO_LAYER)?;
 
         Ok(Self { key, nonce })
     }
@@ -245,7 +245,7 @@ impl EncryptionReaderConfig {
         }
         for private_key in &self.private_keys {
             if let Ok(ss_hybrid) = private_key.decapsulate(&config.multi_recipient) {
-                let (key, nonce) = key_schedule_s(&ss_hybrid.0, HPKE_INFO_LAYER)
+                let (key, nonce) = key_schedule_base_hybrid_kem(&ss_hybrid.0, HPKE_INFO_LAYER)
                     .or(Err(ConfigError::KeyWrappingComputationError))?;
                 self.encrypt_parameters = Some((key, nonce));
                 break;
