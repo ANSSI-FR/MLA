@@ -99,8 +99,11 @@ type HpkeAead = HPKEAesGcm256;
 const HPKE_MODE_BASE: u8 = 0;
 
 /// Custom KEM ID, not in the RFC 9180
-/// Hybrid : DHKEM(X25519, HKDF-SHA256) + MLKEM
+/// Hybrid : DHKEM(X25519, HKDF-SHA256) + MLKEM, wrapping a shared secret to support multi-recipient
 const HYBRID_KEM_ID: u16 = 0x1020;
+/// Custom KEM ID, not in the RFC 9180
+/// Hybrid Recipient : DHKEM(X25519, HKDF-SHA256) + MLKEM, used internally in the Hybrid KEM to wrap the per-recipient shared secret
+const HYBRID_KEM_RECIPIENT_ID: u16 = 0x1120;
 
 /// Return the suite_id for the Hybrid KEM (RFC 9180 §5.1)
 /// suite_id = concat(
@@ -121,9 +124,7 @@ fn build_suite_id(kem_id: u16) -> [u8; 10] {
     out
 }
 
-/// Key schedule for the sender (RFC 9180 §5.1), internal version
-///
-/// This version is kept for testing purpose (against RFC 9180 test vectors)
+/// Key schedule (RFC 9180 §5.1), mode Base
 ///
 /// Parameters are:
 /// - `shared_secret`: the shared secret from the Hybrid KEM
@@ -134,7 +135,7 @@ fn build_suite_id(kem_id: u16) -> [u8; 10] {
 ///     - Kem: `kem_id`
 ///     - Kdf: HKDF-SHA512
 ///     - Aead: AES-GCM-256
-fn key_schedule_s_internal(
+fn key_schedule_base(
     shared_secret: &[u8],
     info: &[u8],
     kem_id: u16,
@@ -164,19 +165,20 @@ fn key_schedule_s_internal(
     Ok((key, base_nonce))
 }
 
-/// Key schedule for the sender (RFC 9180 §5.1)
-///
-/// Parameters are:
-/// - `shared_secret`: the shared secret from the Hybrid KEM
-/// - mode: set to Base (no PSK nor sender key)
-/// - info: set to "MLA Encrypt Layer"
-/// - psk: no PSK, because the mode used is "Base"
-/// - algorithms:
-///     - Kem: HYBRID_KEM_ID (custom value)
-///     - Kdf: HKDF-SHA512
-///     - Aead: AES-GCM-256
-pub(crate) fn key_schedule_s(shared_secret: &[u8], info: &[u8]) -> Result<(Key, Nonce), Error> {
-    key_schedule_s_internal(shared_secret, info, HYBRID_KEM_ID)
+/// Key schedule (RFC 9180 §5.1), mode Base, for the custom multi-recipient Hybrid KEM
+pub(crate) fn key_schedule_base_hybrid_kem(
+    shared_secret: &[u8],
+    info: &[u8],
+) -> Result<(Key, Nonce), Error> {
+    key_schedule_base(shared_secret, info, HYBRID_KEM_ID)
+}
+
+/// Key schedule (RFC 9180 §5.1), mode Base, for the custom per-recipient Hybrid KEM
+pub(crate) fn key_schedule_base_hybrid_kem_recipient(
+    shared_secret: &[u8],
+    info: &[u8],
+) -> Result<(Key, Nonce), Error> {
+    key_schedule_base(shared_secret, info, HYBRID_KEM_RECIPIENT_ID)
 }
 
 /// Compute the nonce for a given sequence number (RFC 9180 §5.2)
@@ -323,9 +325,9 @@ mod tests {
     /// Use A.6 for HKDF-SHA512 and AES-256-GCM
     /// In MLA, we rather use a custom Kem ID (Hybrid KEM), but this method does the main job
     #[test]
-    fn test_key_schedule_s_internal() {
+    fn test_key_schedule_base() {
         let (key, nonce) =
-            key_schedule_s_internal(&RFC_A6_SHARED_SECRET, &RFC_A6_INFO, RFC_A6_KEM_ID).unwrap();
+            key_schedule_base(&RFC_A6_SHARED_SECRET, &RFC_A6_INFO, RFC_A6_KEM_ID).unwrap();
         assert_eq!(key, RFC_A6_KEY);
         assert_eq!(nonce, RFC_A6_BASE_NONCE);
     }
