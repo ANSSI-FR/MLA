@@ -102,9 +102,6 @@ const HPKE_MODE_BASE: u8 = 0;
 /// Hybrid : DHKEM(X25519, HKDF-SHA256) + MLKEM
 const HYBRID_KEM_ID: u16 = 0x1020;
 
-/// `info` to bound the HPKE usage to MLA
-const HPKE_INFO: &[u8] = b"MLA Encrypt Layer";
-
 /// Return the suite_id for the Hybrid KEM (RFC 9180 §5.1)
 /// suite_id = concat(
 ///   "HPKE",
@@ -131,7 +128,7 @@ fn build_suite_id(kem_id: u16) -> [u8; 10] {
 /// Parameters are:
 /// - `shared_secret`: the shared secret from the Hybrid KEM
 /// - mode: set to Base (no PSK nor sender key)
-/// - `info``
+/// - `info`: the info to use in HPKE
 /// - psk: no PSK, because the mode used is "Base"
 /// - algorithms:
 ///     - Kem: `kem_id`
@@ -178,8 +175,8 @@ fn key_schedule_s_internal(
 ///     - Kem: HYBRID_KEM_ID (custom value)
 ///     - Kdf: HKDF-SHA512
 ///     - Aead: AES-GCM-256
-pub(crate) fn key_schedule_s(shared_secret: &[u8]) -> Result<(Key, Nonce), Error> {
-    key_schedule_s_internal(shared_secret, HPKE_INFO, HYBRID_KEM_ID)
+pub(crate) fn key_schedule_s(shared_secret: &[u8], info: &[u8]) -> Result<(Key, Nonce), Error> {
+    key_schedule_s_internal(shared_secret, info, HYBRID_KEM_ID)
 }
 
 /// Compute the nonce for a given sequence number (RFC 9180 §5.2)
