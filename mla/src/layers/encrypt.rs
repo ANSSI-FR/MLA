@@ -22,7 +22,7 @@ use rand::SeedableRng;
 use rand_chacha::{rand_core::CryptoRngCore, ChaChaRng};
 
 use serde::{Deserialize, Deserializer, Serialize};
-use zeroize::Zeroize;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use super::traits::InnerReaderTrait;
 
@@ -140,7 +140,7 @@ pub(crate) fn get_crypto_rng() -> impl CryptoRngCore {
     ChaChaRng::from_entropy()
 }
 
-#[derive(Zeroize)]
+#[derive(Zeroize, ZeroizeOnDrop)]
 /// Cryptographic material used for encryption in the Encrypt layer
 /// Part of this data must be kept secret and drop as soon as possible
 pub(crate) struct InternalEncryptionConfig {
