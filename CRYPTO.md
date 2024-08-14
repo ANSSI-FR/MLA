@@ -19,7 +19,7 @@ This layer **does not provide signature**.
 
 ### General design guidelines
 
-1. The size and the initial computation time used for the encryption needs are not a big issue, if kept reasonable. Indeed, in the author understanding, MLA archive are usually several MB long and the computation time is also spent in compression/decompression and encryption/decryption of the data.
+1. The size and the initial computation time used for the encryption needs are not a big issue, if kept reasonable. Indeed, in the author understanding, MLA archive are usually several MB long and the computation time is also spent in compression/decompression and encryption/decryption of the data
 
 As a result, some optimization have not been performed -- which help keeping an hopefully auditable and conservative design.
 
@@ -30,7 +30,7 @@ As a result, some optimization have not been performed -- which help keeping an 
 ### Main bricks: Encryption
 
 The data is encrypted using AES-256-GCM, an AEAD algorithm.
-To offer a *seekable* layer, data is encrypted using chunks of 4MB each, except for the last one. These encrypted chunks are all present with their associated tag, tag checked during decryption before returning data to the upper layer.
+To offer a *seekable* layer, data is encrypted using chunks of 128KB each, except for the last one. These encrypted chunks are all present with their associated tag, tag checked during decryption before returning data to the upper layer.
 
 The key, the base nonce and the nonce derivation for each data chunk are computed following HPKE (RFC 9180) [^hpke].
 HPKE is parameterized with:
@@ -53,13 +53,13 @@ The algorithms used are:
 - Curve 25519 for pre-quantum cryptography, using DHKEM (RFC 9180) [^hpke]
 - FIPS 203[^fips203] (CRYSTALS Kyber) MLKEM-1024 for post-quantum cryptography
 
-The two keys are mixed together (see below) in a manner keeping the IND-CCA properties of the two algorithms.
+The two keys are mixed together (see below) in a manner keeping the IND-CCA2 properties of the two algorithms.
 
 Sending to multiple recipients is achieved using a two-step process:
 
-1. for each recipient, a per-recipient Hybrid KEM is done, leading to a per-recipient shared secret
-1. these per-recipient shared secret are derived through HPKE to obtained a key and a nonce
-1. these per-recipient key and nonce is used to decrypt a secret shared by all recipient
+1. For each recipient, a per-recipient Hybrid KEM is done, leading to a per-recipient shared secret
+1. These per-recipient shared secret are derived through HPKE to obtained a key and a nonce
+1. These per-recipient key and nonce is used to decrypt a secret shared by all recipient
 
 This final secret is the one later used as an input to the encryption layer.
 The whole process can be viewed as a KEM encapsulating for multiple recipients.
@@ -76,12 +76,12 @@ The implementation also includes tests (including some test vectors) and comment
 
 #### Notations
 
-- $pk_{ecc}^i$, $sk_{ecc}^i$, $pk_{mlkem}^i$ and $sk_{mlkem}^i$: respectively the curve 255519 public key and secret key, and the MLKEM-1024 (FIPS 203 [^fips203]) encapsulating key and decapsulating key.
-- $\textrm{Encapsulate}_{DHKEM}$ and $\textrm{Decapsulate}_{DHKEM}$: key encapsulation methods on the curve 25519, as defined in RFC 9180, section 4 [^hpke]
-- $\textrm{Encapsulate}_{MLKEM}$ and $\textrm{Decapsulate}_{MLKEM}$: key encapsulation methods on MLKEM-1024, as defined in FIPS 203 [^fips203]
-- $ss_{recipients}$: a 32-bytes secret, produced by a cryptographic RNG. Informally, this is the secret shared among recipients, encapsulated separately for each recipient. 
+- $pk_{ecc}^i$, $sk_{ecc}^i$, $pk_{mlkem}^i$ and $sk_{mlkem}^i$: respectively the curve 255519 public key and secret key, and the MLKEM-1024 (FIPS 203 [^fips203]) encapsulating key and decapsulating key
+- $\textrm{DHKEM.Encapsulate}$ and $\textrm{DHKEM.Decapsulate}$: key encapsulation methods on the curve 25519, as defined in RFC 9180, section 4 [^hpke]
+- $\textrm{MLKEM.Encapsulate}$ and $\textrm{MLKEM.Decapsulate}$: key encapsulation methods on MLKEM-1024, as defined in FIPS 203 [^fips203]
+- $ss_{recipients}$: a 32-bytes secret, produced by a cryptographic RNG. Informally, this is the secret shared among recipients, encapsulated separately for each recipient
 - $\textrm{KeySchedule}_{recipient}$: `KeySchedule` function from RFC 9180 [^hpke], instanciated with:
-    - mode: "Base"
+    - Mode: "Base"
     - KDF: HKDF-SHA-512
     - AEAD: AES-256-GCM
     - KEM: a custom KEM ID, numbered 0x1120
@@ -96,8 +96,8 @@ To encrypt to a target recipient $i$, knowing $pk_{ecc}^i$ and $pk_{mlkem}^i$:
 
 ```math
 \begin{align}
-(ss_{ecc}^i, ct_{ecc}^i) &= \textrm{Encapsulate}_{DHKEM}(pk_{ecc}^i) \\
-(ss_{mlkem}^i, ct_{mlkem}^i) &= \textrm{Encapsulate}_{MLKEM}(pk_{mlkem}^i)
+(ss_{ecc}^i, ct_{ecc}^i) &= \textrm{DHKEM.Encapsulate}(pk_{ecc}^i) \\
+(ss_{mlkem}^i, ct_{mlkem}^i) &= \textrm{MLKEM.Encapsulate}(pk_{mlkem}^i)
 \end{align}
 ```
 
@@ -144,8 +144,8 @@ To obtain the shared secret from $ct_{recipient}^i$ for a recipient $i$ knowing 
 
 ```math
 \begin{align}
-ss_{ecc}^i &= \textrm{Decapsulate}_{DHKEM}(sk_{ecc}^i, ct_{ecc}^i) \\
-ss_{mlkem}^i &= \textrm{Decapsulate}_{MLKEM}(sk_{mlkem}^i, ct_{mlkem}^i)\\
+ss_{ecc}^i &= \textrm{DHKEM.Decapsulate}(sk_{ecc}^i, ct_{ecc}^i) \\
+ss_{mlkem}^i &= \textrm{MLKEM.Decapsulate}(sk_{mlkem}^i, ct_{mlkem}^i)\\
 ss_{recipient}^i &= \textrm{combine}(ss_{ecc}^i, ss_{mlkem}^i, ct_{ecc}^i, ct_{mlkem}^i)
 \end{align}
 ```
@@ -166,7 +166,7 @@ If the decryption is a success, returns $ss_{recipients}$. Otherwise, returns an
 
 #### Arguments
 
-- Using HPKE (RFC 9180 [^hpke]) for both elliptic curve encryption and encryption offers several benefits[^issuehpke]:
+- Using HPKE (RFC 9180 [^hpke]) for both elliptic curve encryption (DHKEM) and encryption offers several benefits[^issuehpke]:
     - Easier re-implementation of the format MLA, thanks to the availability of HPKE in cryptographic libraries
     - An existing formal analysis [^hpkeanalysis]
     - Easier code and security auditing, thanks to the use of known bricks
@@ -247,15 +247,16 @@ $\hspace{1cm}\mathtt{throw\ KeyNotFoundError}$
 
 The "Multi-recipient Hybrid KEM" process described above is noted:
 - $\mathrm{HybridKEM.Encapsulate}$, taking a list of public keys $[(pk_{ecc}^0, pk_{mlkem}^0), ..., (pk_{ecc}^{n-1}, pk_{mlkem}^{n-1})]$ and returing a shared secret $ss_{recipients}$ and a ciphertext $ct_{recipients}$
-- $\mathrm{HybridKEM.Decapsulate}$, taking a couple of private key ($sk_{ecc}^i$ and $sk_{mlkem}^i$), a ciphertext $ct_{recipients}$ and returning either a shared secret $ss_{recipients}$ if the recipient $i$ is a legitimate recipient (if the AEAD decryption works), or an error otherwise
+- $\mathrm{HybridKEM.Decapsulate}$, taking a couple of private keys ($sk_{ecc}^i$ and $sk_{mlkem}^i$), a ciphertext $ct_{recipients}$ and returning either a shared secret $ss_{recipients}$ if the recipient $i$ is a legitimate recipient (if the AEAD decryption works), or an error otherwise
 
 `KeyCommitmentChain` is defined as the array of 64-bytes: `-KEY COMMITMENT--KEY COMMITMENT--KEY COMMITMENT--KEY COMMITMENT-`.
 
 $\textrm{KeySchedule}_{hybrid}$: `KeySchedule` function from RFC 9180 [^hpke], instanciated with:
-    - mode: "Base"
-    - KDF: HKDF-SHA-512
-    - AEAD: AES-256-GCM
-    - KEM: a custom KEM ID, numbered 0x1020
+
+- Mode: "Base"
+- KDF: HKDF-SHA-512
+- AEAD: AES-256-GCM
+- KEM: a custom KEM ID, numbered 0x1020
 
 $\mathrm{ComputeNonce}$: function from RFC 9180 [^hpke].
 
@@ -290,7 +291,7 @@ key\_commit& = \textrm{Encrypt}_{AES\ 256\ GCM}(\\
 \end{align*}
 ```
 
-4. For each 4MB $chunk_j$ of data:
+4. For each 128KB $chunk_j$ of data:
 
 ```math
 \begin{align*}
@@ -302,7 +303,9 @@ enc_j& = \textrm{Encrypt}_{AES\ 256\ GCM}(\\
 \end{align*}
 ```
 
-5. When the layer is finalized, the last chunk $chunk_n$ of data (with a length lower than or equals to 4MB) is encrypted the same way
+Note: $j+1$ is used because the sequence numbered 0 has already been used by the Key commitment.
+
+5. When the layer is finalized, the last chunk $chunk_n$ of data (with a length lower than or equals to 128KB) is encrypted the same way
 
 The resulting layer is composed of:
 
@@ -348,6 +351,9 @@ start &= pos - \mathtt{sizeof}(key\_commit)\\
 j &= pos \div 4M\\
 \end{align}
 ```
+
+Where $\div$ is the Euclidian division.
+
 Then:
 ```math
 \begin{align*}
@@ -366,10 +372,10 @@ chunk_j& = \textrm{Decrypt}_{AES\ 256\ GCM}(\\
 - Arguments for HPKE use are very similar to the ones mentioned above. In particular, this is a standardized approach with existing analysis
 - As there is two kind of custom KEM used ("Per-recipient KEM" and "Hybrid KEM"), two distinct KEM ID are used. In addition, two distinct MLA specific `info` are used to bound this derivation to MLA
 - As described in [^keycommit] and [^keycommit2], AES in GCM mode does not ensure "key commitment". This property is added in the layer using the "padding fix" scheme from [^keycommit] with the recommended 512-bits size for a 256-bits security
-- Key commitment is mainly used to ensure that two recipients will decrypt to the same plaintext if given the same ciphertext, ie. an attacker modifying the header of an archive cannot provides two distinct plaintext to two distinct recipient
+- Key commitment is mainly used to ensure that two recipients will decrypt to the same plaintext if given the same ciphertext, i.e. an attacker modifying the header of an archive cannot provides two distinct plaintext to two distinct recipient
 - AES-GCM is used as an industry standard AEAD
     - the base nonce, and therefore each nonce used, are unique per archive because they are generated from the archive-specific shared secret, limiting the nonce-reuse risk to standard acceptability [^hpke]
-    - no more than $2^64$ chunk will be produced, as the sequence's type used in MLA implementation is a `u64` checked for overflow. As this is a widely accepted limit of AES-GCM, this value is also within the range provided by [^hpke]
+    - no more than $2^{64}$ chunks will be produced, as the sequence's type used in MLA implementation is a `u64` checked for overflow. As this is a widely accepted limit of AES-GCM, this value is also within the range provided by [^hpke]
     - the tag size is 128-bits (standard one), avoiding attacks described in [^weaknessgcm]
     - 4MB is lower than the maximum plaintext length for a single message in AES-GCM (64 GiB)[^weaknessgcm]
 
@@ -381,12 +387,12 @@ These API are usually fed with cryptographically generated data, except for the 
 
 This feature is meant to provide a way for client to implement:
 
-- a derivation tree
-- keep the root secret in a safe place, and be able to find back the derives secrets
+- A derivation tree
+- Keep the root secret in a safe place, and be able to find back the derives secrets
 
 The derivation scheme is based on the same ideas than `mla::crypto::hybrid::combine`:
 
-1. a dual-PRF (HKDF-Extract with a uniform random salt [^combinearg7]) to extract entropy from the private key
+1. A dual-PRF (HKDF-Extract with a uniform random salt [^combinearg7]) to extract entropy from the private key
 2. HKDF-Expand to derive along the given path
 
 From a private key ($sk_{ecc}^i$ and $sk_{mlkem}^i$), the secret is derived from the path $path$ through:
@@ -431,13 +437,13 @@ To ensure the implementation follows the standard, it is tested against AES-256-
 
 ### HPKE Key Schedule re-implementation
 
-For several reason described in the code, but mainly due to the availability of API, the possibility to add custom KEM ID and the relative few lines needed for re-implementation, the $\mathrm{KeySchedule}$ method has been re-implemented in MLA.
+For several reasons described in the code, but mainly due to the availability of API, the possibility to add custom KEM ID and the relative few lines needed for re-implementation, the $\mathrm{KeySchedule}$ method has been re-implemented in MLA.
 
 It still use some bricks from `rust-hpke`, has the KDF, $\mathrm{LabeledExtract}$ and $\mathrm{LabeledExpand}$. It is tested against RFC 9180 [^hpke] test vectors in MLA regression tests.
 
 ### MLKEM implementation without a review
 
-Thanks to the hybrid approach, a flawed implementation of MLKEM would have limited consequence.
+Thanks to the hybrid approach, a flawed implementation of MLKEM would have limited consequences.
 
 It is therefore accepted by the author (as a trade-off) to use a MLKEM implementation without existing review to brings as soon as possible a reasonable protection against "Harvest now, decrypt later" attacks.
 
@@ -451,13 +457,13 @@ As there is no signature for now in MLA, an attacker knowing the recipient publi
 
 For this reason, several known attacks are considered acceptable, such as:
 
-- the bit indicating if the `Encrypt` layer is present is not protected in integrity
+- The bit indicating if the `Encrypt` layer is present is not protected in integrity
 
 An attacker can remove it, making the reader treating the archive as if encryption was absent. *The reader is responsible of checking for encryption bit if it was expected in the first place*.
 
 For instance, the `mlar` CLI will refuse to open an archive without the `Encrypt` bit if a private key is provided on the command line.
 
-- an attacker with the ability to modify a real archive in transit can replace what the reader will be able to read with arbitrary data
+- An attacker with the ability to modify a real archive in transit can replace what the reader will be able to read with arbitrary data
 
 To perform this attack, the attacker will have to either remove the `Encrypt` bit or modify the key used for decryption with one she has.
 The remaining encrypted data will then act as random values.
@@ -466,7 +472,7 @@ Still, the attacker could expect to gain enough privilege, like arbitrary code e
 
 Limiting this attack is beyond the scope of this document. It mainly involves the security features of Rust, reviewed implementation, testing & fuzzing, zeroizing secrets when possible [^issuezeroize], etc.
 
-- an attacker can truncate an archive and hope for repair
+- An attacker can truncate an archive and hope for repair
 
 This attack is based on a trade-off: should the `SafeReader` tries to get as many bytes as possible, or should it returns only data that have been authenticated?
 
@@ -482,7 +488,7 @@ Usually, this layer is used with the `Compress` layer. If an attacker know the o
 
 - Forward secrecy
 
-The algorithm used does not provide forward secrecy [^hpke], ie. someone knowing a recipient private key will always be able to read an archive sent to this recipient.
+The algorithm used does not provide forward secrecy [^hpke], i.e. someone knowing a recipient private key will always be able to read an archive sent to this recipient.
 
 Fundamentally, additional information are missing to provide this property (sender public key, pre-sharedkey, etc.).
 
