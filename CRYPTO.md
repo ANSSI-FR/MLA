@@ -224,23 +224,15 @@ To encapsulate to a list of recipient $[(pk_{ecc}^0, pk_{mlkem}^0), ..., (pk_{ec
 
 To decapsulate from a ciphertext $ct_{recipients}$, knowing a recipient private key $(sk_{ecc}^i,sk_{mlkem}^i)$:
 
-```math
-\begin{align*}
-\mathtt{def\ } & \mathrm{HybridKEM.Decapsulate}((sk_{ecc}^i,sk_{mlkem}^i), ct_{recipients})\\
-& \begin{align*}
-\mathtt{foreach\ } & ct_k \mathtt{\ in\ } ct_{recipients}\\
-& \begin{align*}
-\mathtt{try:}&\\
-& ss_{recipients} = \mathrm{PerRecipientKEM.Decapsulate}((sk_{ecc}^i,sk_{mlkem}^i), ct_k)\\
-\mathtt{success:}\\
-& \mathtt{return}\ ss_{recipients}\\
-\mathtt{error:}\\
-& \mathtt{continue\ }\\
-\end{align*}\\
-\end{align*}\\
-& \mathtt{throw\ KeyNotFoundError}
-\end{align*}
-```
+$\mathtt{def\ } \mathrm{HybridKEM.Decapsulate}((sk_{ecc}^i,sk_{mlkem}^i), ct_{recipients})$\
+$\hspace{1cm}\mathtt{foreach\ } ct_k \mathtt{\ in\ } ct_{recipients}$\
+$\hspace{1cm}\mathtt{try:}$\
+$\hspace{2cm}ss_{recipients} = \mathrm{PerRecipientKEM.Decapsulate}((sk_{ecc}^i,sk_{mlkem}^i), ct_k)$\
+$\hspace{1cm}\mathtt{success:}$\
+$\hspace{2cm}\mathtt{return}\ ss_{recipients}$\
+$\hspace{1cm}\mathtt{error:}$\
+$\hspace{2cm}\mathtt{continue}$\
+$\hspace{1cm}\mathtt{throw\ KeyNotFoundError}$
 
 #### Arguments
 
