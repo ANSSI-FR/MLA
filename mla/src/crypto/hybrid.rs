@@ -52,15 +52,15 @@ const HYBRIDKEM_ASSOCIATED_DATA: &[u8; 0] = b"";
 /// Produce a secret key by combining two KEM-Encaps outputs, using a "Nested Dual-PRF Combiner", proved in [6] (3.3)
 ///
 /// Arguments:
-/// - The use of concatenation scheme **including the ciphertext** keeps IND-CCA2 if one of the two
+/// - The use of concatenation scheme **including ciphertexts** keeps IND-CCA2 if one of the two
 ///   underlying scheme is IND-CCA2, as proved in [1] and explained in [4]
 /// - TLS [2] uses a similar scheme, and IKE [3] also uses a concatenation scheme
-/// - This kind of scheme follows ANSSI recommandations [5]
+/// - This kind of scheme follows ANSSI recommendations [5]
 /// - HKDF can be considered as a Dual-PRF if both inputs are uniformly random [7]. In MLA, the `combine` method
 ///   is called with a shared secret from ML-KEM, and the resulting ECC key derivation -- both are uniformly random
 /// - To avoid potential mistake in the future, or a mis-reuse of this method, the "Nested Dual-PRF Combiner" is
 ///   used instead of the "Dual-PRF Combiner" (also from [6]). Indeed, this combiner force the "salt" part of HKDF
-///   to be uniformly random using an additionnal PRF use, ensuring the following HKDF is indeed a Dual-PRF
+///   to be uniformly random using an additional PRF use, ensuring the following HKDF is indeed a Dual-PRF
 ///
 /// uniformly_random_ss1 = HKDF-SHA256-Extract(
 ///     salt=0,
