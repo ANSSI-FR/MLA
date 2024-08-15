@@ -69,7 +69,7 @@ The whole process can be viewed as a KEM encapsulating for multiple recipients.
 The following sections describe the whole process for data encryption and seed derivation.
 They are meant to ease the understanding of the code and MLA format re-implementation. 
 
-The interested reader could also look at the Rust implementation in this repository for more detailed.
+The interested reader could also look at the Rust implementation in this repository for more details.
 The implementation also includes tests (including some test vectors) and comments.
 
 ### Asymmetric encryption - Per-recipient KEM
@@ -87,6 +87,7 @@ The implementation also includes tests (including some test vectors) and comment
     - KEM: a custom KEM ID, numbered 0x1120
 - $\textrm{Encrypt}_{AES\ 256\ GCM}$: AES-256-GCM encryption, returning the encrypted data concatened with the associated tag
 - $\textrm{Decrypt}_{AES\ 256\ GCM}$ AES-256-GCM decryption, returning the decrypted data after verifying the tag
+- $\textrm{Serialize}$ and $\textrm{Deserialize}$: respectively produce a byte string encoding the data in argument, and produce the data from the byte string in argument
 
 #### Process
 
@@ -130,7 +131,7 @@ ss_{recipient}^i = \textrm{combine}(ss_{ecc}^i, ss_{mlkem}^i, ct_{ecc}^i, ct_{ml
     \textrm{info}=\mathtt{"MLA\ Recipient"}
 )\\
 ct_{wrap}^i &= \textrm{Encrypt}_{AES\ 256\ GCM}(\textrm{key}=key^i, \textrm{nonce}=nonce^i, \textrm{data}=ss_{recipients})\\
-ct_{recipient}^i &= ct_{wrap}^i\ .\ ct_{ecc}^i\ .\ ct_{mlkem}^i
+ct_{recipient}^i &= \textrm{Serialize}(ct_{wrap}^i, ct_{ecc}^i, ct_{mlkem}^i)
 \end{align}
 ```
 
@@ -144,6 +145,7 @@ To obtain the shared secret from $ct_{recipient}^i$ for a recipient $i$ knowing 
 
 ```math
 \begin{align}
+(ct_{wrap}^i, ct_{ecc}^i, ct_{mlkem}^i) &= \textrm{Deserialize}(ct_{recipient}^i)\\
 ss_{ecc}^i &= \textrm{DHKEM.Decapsulate}(sk_{ecc}^i, ct_{ecc}^i) \\
 ss_{mlkem}^i &= \textrm{MLKEM.Decapsulate}(sk_{mlkem}^i, ct_{mlkem}^i)\\
 ss_{recipient}^i &= \textrm{combine}(ss_{ecc}^i, ss_{mlkem}^i, ct_{ecc}^i, ct_{mlkem}^i)
@@ -216,7 +218,7 @@ To encapsulate to a list of recipient $[(pk_{ecc}^0, pk_{mlkem}^0), ..., (pk_{ec
 & ct_{recipient}^0 = \mathrm{PerRecipientKEM}((pk_{ecc}^0,pk_{mlkem}^0),ss_{recipients})\\
 & \dots\\
 & ct_{recipient}^{n-1} = \mathrm{PerRecipientKEM}((pk_{ecc}^{n-1},pk_{mlkem}^{n-1}),ss_{recipients})\\
-& ct_{recipients} = ct_{recipient}^0\ .\ \dots\ .\ ct_{recipient}^{n-1}\\
+& ct_{recipients} = \mathrm{Serialize}(ct_{recipient}^0, \dots, ct_{recipient}^{n-1})\\
 & \mathtt{return}\ ss_{recipients},\ ct_{recipients}
 \end{align*}
 ```
@@ -225,13 +227,13 @@ To encapsulate to a list of recipient $[(pk_{ecc}^0, pk_{mlkem}^0), ..., (pk_{ec
 To decapsulate from a ciphertext $ct_{recipients}$, knowing a recipient private key $(sk_{ecc}^i,sk_{mlkem}^i)$:
 
 $\mathtt{def\ } \mathrm{HybridKEM.Decapsulate}((sk_{ecc}^i,sk_{mlkem}^i), ct_{recipients})$\
-$\hspace{1cm}\mathtt{foreach\ } ct_k \mathtt{\ in\ } ct_{recipients}$\
-$\hspace{1cm}\mathtt{try:}$\
-$\hspace{2cm}ss_{recipients} = \mathrm{PerRecipientKEM.Decapsulate}((sk_{ecc}^i,sk_{mlkem}^i), ct_k)$\
-$\hspace{1cm}\mathtt{success:}$\
-$\hspace{2cm}\mathtt{return}\ ss_{recipients}$\
-$\hspace{1cm}\mathtt{error:}$\
-$\hspace{2cm}\mathtt{continue}$\
+$\hspace{1cm}\mathtt{foreach\ } ct_k \mathtt{\ in\ } \mathrm{Deserialize}(ct_{recipients})$\
+$\hspace{2cm}\mathtt{try:}$\
+$\hspace{3cm}ss_{recipients} = \mathrm{PerRecipientKEM.Decapsulate}((sk_{ecc}^i,sk_{mlkem}^i), ct_k)$\
+$\hspace{2cm}\mathtt{success:}$\
+$\hspace{3cm}\mathtt{return}\ ss_{recipients}$\
+$\hspace{2cm}\mathtt{error:}$\
+$\hspace{3cm}\mathtt{continue}$\
 $\hspace{1cm}\mathtt{throw\ KeyNotFoundError}$
 
 #### Arguments
@@ -283,7 +285,7 @@ ss_{recipients},\ ct_{recipients} = \mathrm{HybridKEM.Encapsulate}([(pk_{ecc}^0,
 
 ```math
 \begin{align*}
-key\_commit& = \textrm{Encrypt}_{AES\ 256\ GCM}(\\
+keycommit& = \textrm{Encrypt}_{AES\ 256\ GCM}(\\
     &\textrm{key}=key,\\
     &\textrm{nonce}=\mathrm{ComputeNonce}(base\_nonce, 0),\\
     &\textrm{data}=\textrm{KeyCommitmentChain}\\
@@ -310,7 +312,7 @@ Note: $j+1$ is used because the sequence numbered 0 has already been used by the
 The resulting layer is composed of:
 
 - header: $ct_{recipients}$
-- data: $key\_commit\ .\ enc_0\ . \dots\ enc_n$
+- data: $keycommit \ .\ enc_0\ . \dots\ enc_n$
 
 ----
 
@@ -335,7 +337,7 @@ ss_{recipients} &= \mathrm{HybridKEM.Decapsulate}((sk_{ecc}^i, sk_{mlkem}^i), ct
 commit& = \textrm{Decrypt}_{AES\ 256\ GCM}(\\
     &\textrm{key}=key,\\
     &\textrm{nonce}=\mathrm{ComputeNonce}(base\_nonce, 0),\\
-    &\textrm{data}=key\_commit\\
+    &\textrm{data}=keycommit\\
 )&
 \end{align*}\\
 ```
@@ -347,7 +349,7 @@ commit& = \textrm{Decrypt}_{AES\ 256\ GCM}(\\
 
 ```math
 \begin{align}
-start &= pos - \mathtt{sizeof}(key\_commit)\\
+start &= pos - \mathtt{sizeof}(keycommit)\\
 j &= pos \div 4M\\
 \end{align}
 ```
@@ -492,7 +494,7 @@ The algorithm used does not provide forward secrecy [^hpke], i.e. someone knowin
 
 Fundamentally, additional information are missing to provide this property (sender public key, pre-sharedkey, etc.).
 
-Still, if this property is expected in future MLA usage, it could be added through HPKE Key Scheduling [^hpke], without questionning the claims already made in this document.
+Still, if this property is expected in future MLA usage, it could be added through HPKE Key Scheduling [^hpke], without questioning the claims already made in this document.
 
 - Hided recipient list
 
