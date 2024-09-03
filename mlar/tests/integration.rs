@@ -428,6 +428,129 @@ fn test_truncated_repair_list_tar() {
 }
 
 #[test]
+fn test_repair_auth_unauth() {
+    let mlar_file = NamedTempFile::new("output.mla").unwrap();
+    let mlar_repaired_file = NamedTempFile::new("repaired.mla").unwrap();
+    let ecc_public = Path::new("../samples/test_x25519_pub.pem");
+    let ecc_private = Path::new("../samples/test_x25519.pem");
+
+    // Create files
+    let testfs = setup();
+
+    // `mlar create -o output.mla -l encrypt -p samples/test_x25519_pub.pem file1.bin`
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("create")
+        .arg("-o")
+        .arg(mlar_file.path())
+        .arg("-l")
+        .arg("encrypt")
+        .arg("-p")
+        .arg(ecc_public)
+        .arg(testfs.files[0].path());
+
+    let file_list = format!("{}\n", testfs.files[0].path().to_string_lossy());
+
+    println!("{cmd:?}");
+    let assert = cmd.assert();
+    assert.success().stderr(String::from(&file_list));
+
+    // `mlar list -i output.mla -k samples/test_x25519.pem`
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("list")
+        .arg("-i")
+        .arg(mlar_file.path())
+        .arg("-k")
+        .arg(ecc_private);
+
+    println!("{cmd:?}");
+    let assert = cmd.assert();
+    assert.success().stdout(file_list.clone());
+
+    // Truncate output.mla
+    let mut data = Vec::new();
+    File::open(mlar_file.path())
+        .unwrap()
+        .read_to_end(&mut data)
+        .unwrap();
+    File::create(mlar_file.path())
+        .unwrap()
+        .write_all(&data[..data.len() * 6 / 7])
+        .unwrap();
+
+    // `mlar repair -i output.mla -k samples/test_x25519.pem -p samples/test_x25519_pub.pem -o repaired.mla -l encrypt`
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("repair")
+        .arg("-i")
+        .arg(mlar_file.path())
+        .arg("-k")
+        .arg(ecc_private)
+        .arg("-p")
+        .arg(ecc_public)
+        .arg("-o")
+        .arg(mlar_repaired_file.path())
+        .arg("-l")
+        .arg("encrypt");
+
+    println!("{cmd:?}");
+    let assert = cmd.assert();
+    assert.success();
+
+    // `mlar cat -i repaired.mla -k samples/test_x25519.pem file1.bin`
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("cat")
+        .arg("-i")
+        .arg(mlar_repaired_file.path())
+        .arg("-k")
+        .arg(ecc_private)
+        .arg(testfs.files[0].path());
+
+    println!("{cmd:?}");
+    let assert = cmd.assert();
+    let output_auth = assert.get_output();
+
+    // `mlar repair --allow-unauthenticated-data -i output.mla -k samples/test_x25519.pem -p samples/test_x25519_pub.pem -o repaired.mla -l encrypt`
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("repair")
+        .arg("--allow-unauthenticated-data")
+        .arg("-i")
+        .arg(mlar_file.path())
+        .arg("-k")
+        .arg(ecc_private)
+        .arg("-p")
+        .arg(ecc_public)
+        .arg("-o")
+        .arg(mlar_repaired_file.path())
+        .arg("-l")
+        .arg("encrypt");
+
+    println!("{cmd:?}");
+    let assert = cmd.assert();
+    assert.success();
+
+    // `mlar cat -i repaired.mla -k samples/test_x25519.pem file1.bin`
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("cat")
+        .arg("-i")
+        .arg(mlar_repaired_file.path())
+        .arg("-k")
+        .arg(ecc_private)
+        .arg(testfs.files[0].path());
+
+    println!("{cmd:?}");
+    let assert = cmd.assert();
+    let output_unauth = assert.get_output();
+
+    // Output unauthenticated must be longer than the authenticated one
+    assert!(output_unauth.stdout.len() > output_auth.stdout.len());
+
+    // Data must be the same
+    assert_eq!(
+        output_auth.stdout,
+        output_unauth.stdout[..output_auth.stdout.len()]
+    );
+}
+
+#[test]
 fn test_multiple_keys() {
     // Key parsing is common for each subcommands, so test only one: `list`
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
