@@ -279,12 +279,18 @@ fn open_mla_file<'a>(matches: &ArgMatches) -> Result<ArchiveReader<'a, File>, Ml
 fn open_failsafe_mla_file<'a>(
     matches: &ArgMatches,
 ) -> Result<ArchiveFailSafeReader<'a, File>, MlarError> {
-    let config = readerconfig_from_matches(matches);
+    let mut config = readerconfig_from_matches(matches);
 
     // Safe to use unwrap() because the option is required()
     let mla_file = matches.get_one::<PathBuf>("input").unwrap();
     let path = Path::new(&mla_file);
     let file = File::open(path)?;
+
+    // Handle authenticated/unauthenticated data
+    if matches.get_flag("allow_unauthenticated_data") {
+        eprintln!("[WARNING] Some of the data might be unauthenticated, use it at your own risk");
+        config.failsafe_return_data_even_unauthenticated();
+    }
 
     // Instantiate reader
     Ok(ArchiveFailSafeReader::from_config(file, config)?)
@@ -1161,6 +1167,13 @@ fn app() -> clap::Command {
         .subcommand(
             Command::new("repair")
                 .about("Try to repair a MLA Archive into a fresh MLA Archive")
+                .arg(
+                    Arg::new("allow_unauthenticated_data")
+                        .long("allow-unauthenticated-data")
+                        .help("Allow extraction of unauthenticated data from the archive. USE THIS OPTION ONLY IF NECESSARY")
+                        .action(ArgAction::SetTrue)
+                        .required(false),
+                )
                 .args(&input_args)
                 .args(&output_args),
         )
