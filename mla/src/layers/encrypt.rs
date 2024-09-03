@@ -49,6 +49,7 @@ pub struct EncryptionPersistentConfig {
     nonce: [u8; NONCE_SIZE],
 }
 
+/// Specific config for ArchiveWriter
 pub struct EncryptionConfig {
     /// Public keys with which to encrypt the symmetric encryption key below
     ecc_keys: Vec<PublicKey>,
@@ -129,12 +130,24 @@ impl ArchiveWriterConfig {
     }
 }
 
+/// FailSafeReader decryption mode
+#[derive(Default, Clone, Copy)]
+pub enum FailSafeReaderDecryptionMode {
+    /// Returns only the data that have been authenticated on decryption
+    #[default]
+    OnlyAuthenticatedData,
+    /// Returns all data, even if not authenticated
+    DataEvenUnauthenticated,
+}
+
 #[derive(Default)]
 pub struct EncryptionReaderConfig {
     /// Private key(s) to use
     private_keys: Vec<StaticSecret>,
     /// Symmetric encryption key and nonce, if decrypted successfully from header
     encrypt_parameters: Option<(Key, [u8; NONCE_SIZE])>,
+    /// FailSafeReader consideration for tag on decryption -- FailSafeReader only
+    failsafe_mode: FailSafeReaderDecryptionMode,
 }
 
 impl EncryptionReaderConfig {
@@ -273,8 +286,10 @@ impl<'a, W: InnerWriterTrait> Write for EncryptionLayerWriter<'a, W> {
 
 // In the case of stream cipher, encrypting is the same that decrypting. Here, we
 // keep the struct separated for any possible future difference
-pub struct EncryptionLayerReader<'a, R: Read + Seek> {
-    inner: Box<dyn 'a + LayerReader<'a, R>>,
+
+/// This struct permits code reuse on layer read between "normal" read and "failsafe" read
+struct EncryptionLayerInternal<T: ?Sized> {
+    inner: Box<T>,
     cipher: AesGcm256,
     key: Key,
     nonce: [u8; NONCE_SIZE],
@@ -282,11 +297,8 @@ pub struct EncryptionLayerReader<'a, R: Read + Seek> {
     current_chunk_number: u32,
 }
 
-impl<'a, R: 'a + Read + Seek> EncryptionLayerReader<'a, R> {
-    pub fn new(
-        inner: Box<dyn 'a + LayerReader<'a, R>>,
-        config: &EncryptionReaderConfig,
-    ) -> Result<Self, Error> {
+impl<T: ?Sized> EncryptionLayerInternal<T> {
+    pub fn new(inner: Box<T>, config: &EncryptionReaderConfig) -> Result<Self, Error> {
         match config.encrypt_parameters {
             Some((key, nonce)) => Ok(Self {
                 inner,
@@ -299,7 +311,9 @@ impl<'a, R: 'a + Read + Seek> EncryptionLayerReader<'a, R> {
             None => Err(Error::PrivateKeyNeeded),
         }
     }
+}
 
+impl<T: ?Sized + Read> EncryptionLayerInternal<T> {
     /// Load the `self.current_chunk_number` chunk in cache
     /// Assume the inner layer is in the correct position
     fn load_in_cache(&mut self) -> Result<Option<()>, Error> {
@@ -340,29 +354,46 @@ impl<'a, R: 'a + Read + Seek> EncryptionLayerReader<'a, R> {
             Ok(Some(()))
         }
     }
-}
 
-impl<'a, R: 'a + InnerReaderTrait> LayerReader<'a, R> for EncryptionLayerReader<'a, R> {
-    fn into_inner(self) -> Option<Box<dyn 'a + LayerReader<'a, R>>> {
-        Some(self.inner)
+    /// Load in cache the decrypted data, without checking the authentication tag
+    ///
+    /// Assumption:
+    /// - the inner layer is at the start of a CHUNK
+    fn load_in_cache_unauthenticated(&mut self) -> Result<Option<()>, Error> {
+        self.cipher = AesGcm256::new(
+            &self.key,
+            &build_nonce(self.nonce, self.current_chunk_number),
+            b"",
+        )?;
+
+        // Clear current, now useless, allocated memory
+        self.chunk_cache.get_mut().clear();
+
+        // Load the current encrypted chunk in memory
+        let mut data = Vec::with_capacity(CHUNK_SIZE as usize);
+        let data_read = (&mut self.inner).take(CHUNK_SIZE).read_to_end(&mut data)?;
+        // If the inner is at the end of the stream, we cannot read any
+        // additional byte -> we must stop
+        if data_read == 0 {
+            return Ok(None);
+        }
+
+        // Consume the tag without reading it
+        io::copy(
+            &mut (&mut self.inner).take(TAG_LENGTH as u64),
+            &mut io::sink(),
+        )?;
+
+        // Decrypt the current chunk
+        self.cipher.decrypt_unauthenticated(data.as_mut_slice());
+        self.chunk_cache = Cursor::new(data);
+        Ok(Some(()))
     }
 
-    fn into_raw(self: Box<Self>) -> R {
-        self.inner.into_raw()
-    }
-
-    fn initialize(&mut self) -> Result<(), Error> {
-        // Recursive call
-        self.inner.initialize()?;
-
-        // Load the current buffer in cache
-        self.rewind()?;
-        Ok(())
-    }
-}
-
-impl<'a, R: 'a + Read + Seek> Read for EncryptionLayerReader<'a, R> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+    /// Internal `Read`::read but returning a mla `Error`
+    ///
+    /// This method check the tag of each decrypted block
+    fn read_internal(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
         let cache_to_consume = CHUNK_SIZE - self.chunk_cache.position();
         if cache_to_consume == 0 {
             // Cache totally consumed, renew it
@@ -371,32 +402,43 @@ impl<'a, R: 'a + Read + Seek> Read for EncryptionLayerReader<'a, R> {
                 // No more byte in the inner layer
                 return Ok(0);
             }
-            return self.read(buf);
+            return self.read_internal(buf);
         }
         // Consume at most the bytes leaving in the cache, to detect the renewal need
         let size = std::cmp::min(cache_to_consume as usize, buf.len());
-        self.chunk_cache.read(&mut buf[..size])
+        self.chunk_cache
+            .read(&mut buf[..size])
+            .map_err(|e| e.into())
+    }
+
+    /// Internal `Read`::read but returning a mla `Error`
+    /// /!\ This method does not check the tag of each decrypted block
+    fn read_internal_unauthenticated(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
+        let cache_to_consume = CHUNK_SIZE - self.chunk_cache.position();
+        if cache_to_consume == 0 {
+            // Cache totally consumed, renew it
+            self.current_chunk_number += 1;
+            if self.load_in_cache_unauthenticated()?.is_none() {
+                // No more byte in the inner layer
+                return Ok(0);
+            }
+            return self.read_internal_unauthenticated(buf);
+        }
+        // Consume at most the bytes leaving in the cache, to detect the renewal need
+        let size = std::cmp::min(cache_to_consume as usize, buf.len());
+        self.chunk_cache
+            .read(&mut buf[..size])
+            .map_err(|e| e.into())
     }
 }
 
-// Returns how many chunk are present at position `position`
-const CHUNK_TAG_SIZE: u64 = CHUNK_SIZE + TAG_LENGTH as u64;
-
-fn no_tag_position_to_tag_position(position: u64) -> u64 {
-    let cur_chunk = position / CHUNK_SIZE;
-    let cur_chunk_pos = position % CHUNK_SIZE;
-    cur_chunk * CHUNK_TAG_SIZE + cur_chunk_pos
+impl<R: Read + ?Sized> Read for EncryptionLayerInternal<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.read_internal(buf).map_err(|e| e.into())
+    }
 }
 
-fn tag_position_to_no_tag_position(position: u64) -> u64 {
-    // Assume the position is not inside a tag. If so, round to the end of the
-    // current chunk
-    let cur_chunk = position / CHUNK_TAG_SIZE;
-    let cur_chunk_pos = position % CHUNK_TAG_SIZE;
-    cur_chunk * CHUNK_SIZE + std::cmp::min(cur_chunk_pos, CHUNK_SIZE)
-}
-
-impl<'a, R: 'a + Read + Seek> Seek for EncryptionLayerReader<'a, R> {
+impl<R: Read + Seek + ?Sized> Seek for EncryptionLayerInternal<R> {
     fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
         // `pos` is the position without considering tags
         match pos {
@@ -455,74 +497,118 @@ impl<'a, R: 'a + Read + Seek> Seek for EncryptionLayerReader<'a, R> {
     }
 }
 
+pub struct EncryptionLayerReader<'a, R: Read + Seek>(
+    EncryptionLayerInternal<dyn 'a + LayerReader<'a, R>>,
+);
+
+impl<'a, R: Read + Seek> EncryptionLayerReader<'a, R> {
+    pub fn new(
+        inner: Box<dyn 'a + LayerReader<'a, R>>,
+        config: &EncryptionReaderConfig,
+    ) -> Result<Self, Error> {
+        Ok(EncryptionLayerReader(EncryptionLayerInternal::new(
+            inner, config,
+        )?))
+    }
+}
+
+impl<'a, R: 'a + InnerReaderTrait> LayerReader<'a, R> for EncryptionLayerReader<'a, R> {
+    fn into_inner(self) -> Option<Box<dyn 'a + LayerReader<'a, R>>> {
+        Some(self.0.inner)
+    }
+
+    fn into_raw(self: Box<Self>) -> R {
+        self.0.inner.into_raw()
+    }
+
+    fn initialize(&mut self) -> Result<(), Error> {
+        // Recursive call
+        self.0.inner.initialize()?;
+
+        // Load the current buffer in cache
+        self.rewind()?;
+        Ok(())
+    }
+}
+
+impl<'a, R: 'a + Read + Seek> Read for EncryptionLayerReader<'a, R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.0.read(buf)
+    }
+}
+
+// Returns how many chunk are present at position `position`
+const CHUNK_TAG_SIZE: u64 = CHUNK_SIZE + TAG_LENGTH as u64;
+
+fn no_tag_position_to_tag_position(position: u64) -> u64 {
+    let cur_chunk = position / CHUNK_SIZE;
+    let cur_chunk_pos = position % CHUNK_SIZE;
+    cur_chunk * CHUNK_TAG_SIZE + cur_chunk_pos
+}
+
+fn tag_position_to_no_tag_position(position: u64) -> u64 {
+    // Assume the position is not inside a tag. If so, round to the end of the
+    // current chunk
+    let cur_chunk = position / CHUNK_TAG_SIZE;
+    let cur_chunk_pos = position % CHUNK_TAG_SIZE;
+    cur_chunk * CHUNK_SIZE + std::cmp::min(cur_chunk_pos, CHUNK_SIZE)
+}
+
+impl<'a, R: 'a + Read + Seek> Seek for EncryptionLayerReader<'a, R> {
+    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+        self.0.seek(pos)
+    }
+}
+
 // ---------- Fail-Safe Reader ----------
 
 pub struct EncryptionLayerFailSafeReader<'a, R: Read> {
-    inner: Box<dyn 'a + LayerFailSafeReader<'a, R>>,
-    cipher: AesGcm256,
-    key: Key,
-    nonce: [u8; NONCE_SIZE],
-    current_chunk_number: u32,
-    current_chunk_offset: u64,
+    internal: EncryptionLayerInternal<dyn 'a + LayerFailSafeReader<'a, R>>,
+    decryption_mode: FailSafeReaderDecryptionMode,
 }
 
-impl<'a, R: 'a + Read> EncryptionLayerFailSafeReader<'a, R> {
+impl<'a, R: Read> EncryptionLayerFailSafeReader<'a, R> {
     pub fn new(
         inner: Box<dyn 'a + LayerFailSafeReader<'a, R>>,
         config: &EncryptionReaderConfig,
     ) -> Result<Self, Error> {
-        match config.encrypt_parameters {
-            Some((key, nonce)) => Ok(Self {
-                inner,
-                cipher: AesGcm256::new(&key, &build_nonce(nonce, 0), b"")?,
-                key,
-                nonce,
-                current_chunk_number: 0,
-                current_chunk_offset: 0,
-            }),
-            None => Err(Error::PrivateKeyNeeded),
-        }
+        let mut layer = Self {
+            internal: EncryptionLayerInternal::new(inner, config)?,
+            decryption_mode: config.failsafe_mode,
+        };
+        layer.internal.load_in_cache_unauthenticated()?;
+        Ok(layer)
     }
 }
 
 impl<'a, R: 'a + Read> LayerFailSafeReader<'a, R> for EncryptionLayerFailSafeReader<'a, R> {
     fn into_inner(self) -> Option<Box<dyn 'a + LayerFailSafeReader<'a, R>>> {
-        Some(self.inner)
+        Some(self.internal.inner)
     }
 
     fn into_raw(self: Box<Self>) -> R {
-        self.inner.into_raw()
+        self.internal.inner.into_raw()
     }
 }
 
 impl<'a, R: Read> Read for EncryptionLayerFailSafeReader<'a, R> {
+    /// Behavior changes depending on config.FailSafeReaderDecryptionMode
+    /// - OnlyAuthenticatedData: only authenticated data is returned
+    /// - DataEvenUnauthenticated: all data is returned, even if not authenticated
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        if self.current_chunk_offset == CHUNK_SIZE {
-            // Ignore the tag and renew the cipher
-            io::copy(
-                &mut (&mut self.inner).take(TAG_LENGTH as u64),
-                &mut io::sink(),
-            )?;
-            self.current_chunk_number += 1;
-            self.current_chunk_offset = 0;
-            self.cipher = AesGcm256::new(
-                &self.key,
-                &build_nonce(self.nonce, self.current_chunk_number),
-                b"",
-            )?;
-            return self.read(buf);
+        match self.decryption_mode {
+            FailSafeReaderDecryptionMode::OnlyAuthenticatedData => {
+                // catch AuthenticatedDecryptionWrongTag to gracefully stop the reading
+                match self.internal.read_internal(buf) {
+                    Ok(size) => Ok(size),
+                    Err(Error::AuthenticatedDecryptionWrongTag) => Ok(0),
+                    Err(e) => Err(e.into()),
+                }
+            }
+            FailSafeReaderDecryptionMode::DataEvenUnauthenticated => {
+                Ok(self.internal.read_internal_unauthenticated(buf)?)
+            }
         }
-
-        // AesGcm256 is working in place, so we use a temporary buffer
-        let mut buf_tmp = [0u8; CIPHER_BUF_SIZE as usize];
-        let size = std::cmp::min(CIPHER_BUF_SIZE as usize, buf.len());
-        // Read at most the chunk size, to detect when renewal is needed
-        let size = std::cmp::min((CHUNK_SIZE - self.current_chunk_offset) as usize, size);
-        let len = self.inner.read(&mut buf_tmp[..size])?;
-        self.current_chunk_offset += len as u64;
-        self.cipher.decrypt_unauthenticated(&mut buf_tmp[..len]);
-        (&buf_tmp[..len]).read_exact(&mut buf[..len])?;
-        Ok(len)
     }
 }
 
@@ -573,6 +659,7 @@ mod tests {
         let config = EncryptionReaderConfig {
             private_keys: Vec::new(),
             encrypt_parameters: Some((KEY, NONCE)),
+            failsafe_mode: FailSafeReaderDecryptionMode::OnlyAuthenticatedData,
         };
         let mut encrypt_r =
             EncryptionLayerReader::new(Box::new(RawLayerReader::new(buf)), &config).unwrap();
@@ -590,6 +677,7 @@ mod tests {
         let config = EncryptionReaderConfig {
             private_keys: Vec::new(),
             encrypt_parameters: Some((KEY, NONCE)),
+            failsafe_mode: FailSafeReaderDecryptionMode::OnlyAuthenticatedData,
         };
         let mut encrypt_r = EncryptionLayerFailSafeReader::new(
             Box::new(RawLayerFailSafeReader::new(out.as_slice())),
@@ -613,6 +701,7 @@ mod tests {
         let config = EncryptionReaderConfig {
             private_keys: Vec::new(),
             encrypt_parameters: Some((KEY, NONCE)),
+            failsafe_mode: FailSafeReaderDecryptionMode::OnlyAuthenticatedData,
         };
         let mut encrypt_r = EncryptionLayerFailSafeReader::new(
             Box::new(RawLayerFailSafeReader::new(&out[..stop])),
@@ -621,8 +710,75 @@ mod tests {
         .unwrap();
         let mut output = Vec::new();
         encrypt_r.read_to_end(&mut output).unwrap();
+
         // Thanks to the encrypt layer construction, we can recover `stop` bytes
         assert_eq!(output.as_slice(), &FAKE_FILE[..stop]);
+    }
+
+    #[test]
+    fn failsafe_auth_vs_unauth() {
+        // Prepare inner layer (to be encrypted)
+        let file = Vec::new();
+        let mut encrypt_w = Box::new(
+            EncryptionLayerWriter::new(
+                Box::new(RawLayerWriter::new(file)),
+                &EncryptionConfig {
+                    ecc_keys: Vec::new(),
+                    key: KEY,
+                    nonce: NONCE,
+                },
+            )
+            .unwrap(),
+        );
+
+        // Write a 2*CHUNK_SIZE + 128 bytes stream
+        let length = (2 * CHUNK_SIZE + 128) as usize;
+        let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(0);
+        let data: Vec<u8> = Alphanumeric.sample_iter(&mut rng).take(length).collect();
+        encrypt_w.write_all(&data).unwrap();
+        encrypt_w.finalize().unwrap();
+        let out = encrypt_w.into_raw();
+        assert_eq!(out.len(), length + 3 * TAG_LENGTH);
+
+        // data: [CHUNK1 (CHUNK_SIZE)][TAG1][CHUNK2 (CHUNK_SIZE)][TAG2][CHUNK3 (128)][TAG3]
+        // Truncate to remove the last tag
+        let trunc = &out[..out.len() - TAG_LENGTH];
+
+        // Failsafe read with tag checking
+        let config = EncryptionReaderConfig {
+            private_keys: Vec::new(),
+            encrypt_parameters: Some((KEY, NONCE)),
+            failsafe_mode: FailSafeReaderDecryptionMode::OnlyAuthenticatedData,
+        };
+        let mut encrypt_r = EncryptionLayerFailSafeReader::new(
+            Box::new(RawLayerFailSafeReader::new(trunc)),
+            &config,
+        )
+        .unwrap();
+        let mut output_authent = Vec::new();
+        encrypt_r.read_to_end(&mut output_authent).unwrap();
+
+        // We should have correctly read 2*CHUNK_SIZE inner data, the last 128 bytes being unauthenticated
+        assert_eq!(output_authent.len(), 2 * CHUNK_SIZE as usize);
+        assert_eq!(output_authent, data[..output_authent.len()]);
+
+        // Failsafe read without tag checking
+        let config = EncryptionReaderConfig {
+            private_keys: Vec::new(),
+            encrypt_parameters: Some((KEY, NONCE)),
+            failsafe_mode: FailSafeReaderDecryptionMode::DataEvenUnauthenticated,
+        };
+        let mut encrypt_r = EncryptionLayerFailSafeReader::new(
+            Box::new(RawLayerFailSafeReader::new(trunc)),
+            &config,
+        )
+        .unwrap();
+        let mut output_unauthent = Vec::new();
+        encrypt_r.read_to_end(&mut output_unauthent).unwrap();
+
+        // We should have correctly read 2*CHUNK_SIZE + 128 bytes, the last 128 bytes being unauthenticated
+        assert_eq!(output_unauthent.len(), length);
+        assert_eq!(output_unauthent, data);
     }
 
     #[test]
@@ -636,6 +792,7 @@ mod tests {
         let config = EncryptionReaderConfig {
             private_keys: Vec::new(),
             encrypt_parameters: Some((KEY, NONCE)),
+            failsafe_mode: FailSafeReaderDecryptionMode::OnlyAuthenticatedData,
         };
         let mut encrypt_r =
             EncryptionLayerReader::new(Box::new(RawLayerReader::new(buf)), &config).unwrap();
@@ -689,6 +846,7 @@ mod tests {
         let config = EncryptionReaderConfig {
             private_keys: Vec::new(),
             encrypt_parameters: Some((KEY, NONCE)),
+            failsafe_mode: FailSafeReaderDecryptionMode::OnlyAuthenticatedData,
         };
         let mut encrypt_r =
             EncryptionLayerReader::new(Box::new(RawLayerReader::new(buf)), &config).unwrap();
