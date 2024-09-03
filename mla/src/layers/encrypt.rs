@@ -132,7 +132,7 @@ impl ArchiveWriterConfig {
 
 /// FailSafeReader decryption mode
 #[derive(Default, Clone, Copy)]
-pub enum FailSafeReaderDecryptionMode {
+enum FailSafeReaderDecryptionMode {
     /// Returns only the data that have been authenticated on decryption
     #[default]
     OnlyAuthenticatedData,
@@ -187,6 +187,18 @@ impl ArchiveReaderConfig {
     /// Retrieve key and nonce used for encryption
     pub fn get_encrypt_parameters(&self) -> Option<(Key, [u8; NONCE_SIZE])> {
         self.encrypt.encrypt_parameters
+    }
+
+    /// Set the FailSafeReader decryption mode to return only authenticated data (default)
+    pub fn failsafe_return_only_authenticated_data(&mut self) -> &mut ArchiveReaderConfig {
+        self.encrypt.failsafe_mode = FailSafeReaderDecryptionMode::OnlyAuthenticatedData;
+        self
+    }
+
+    /// Set the FailSafeReader decryption mode to return all data, even if not authenticated
+    pub fn failsafe_return_data_even_unauthenticated(&mut self) -> &mut ArchiveReaderConfig {
+        self.encrypt.failsafe_mode = FailSafeReaderDecryptionMode::DataEvenUnauthenticated;
+        self
     }
 }
 
