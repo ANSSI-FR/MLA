@@ -92,7 +92,12 @@ impl From<bincode::ErrorKind> for Error {
 
 impl From<Error> for io::Error {
     fn from(error: Error) -> Self {
-        io::Error::new(io::ErrorKind::Other, format!("{error}"))
+        match error {
+            // On IOError, unwrap it (MLAError(IOError(err))) -> err
+            Error::IOError(err) => err,
+            // Otherwise, use a generic construction
+            _ => io::Error::new(io::ErrorKind::Other, format!("{error}"))
+        }
     }
 }
 
