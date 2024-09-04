@@ -19,7 +19,7 @@ This layer **does not provide signature**.
 
 ### General design guidelines
 
-1. The size and the initial computation time used for the encryption needs are not a big issue, if kept reasonable. Indeed, in the author understanding, MLA archive are usually several MB long and the computation time is also spent in compression/decompression and encryption/decryption of the data
+1. The size and the initial computation time used for the encryption needs are not a big issue, if kept reasonable. Indeed, in the author understanding, MLA archives are usually several MB long and the computation time is primarily spent in compression/decompression and encryption/decryption of the data
 
 As a result, some optimization have not been performed -- which help keeping an hopefully auditable and conservative design.
 
@@ -30,7 +30,7 @@ As a result, some optimization have not been performed -- which help keeping an 
 ### Main bricks: Encryption
 
 The data is encrypted using AES-256-GCM, an AEAD algorithm.
-To offer a *seekable* layer, data is encrypted using chunks of 128KB each, except for the last one. These encrypted chunks are all present with their associated tag, tag checked during decryption before returning data to the upper layer.
+To offer a *seekable* layer, data is encrypted using chunks of 128KB each, except for the last one. These encrypted chunks are all present with their associated tag. Tags are checked during decryption before returning data to the upper layer.
 
 The key, the base nonce and the nonce derivation for each data chunk are computed following HPKE (RFC 9180) [^hpke].
 HPKE is parameterized with:
@@ -58,11 +58,11 @@ The two keys are mixed together (see below) in a manner keeping the IND-CCA2 pro
 Sending to multiple recipients is achieved using a two-step process:
 
 1. For each recipient, a per-recipient Hybrid KEM is done, leading to a per-recipient shared secret
-1. These per-recipient shared secret are derived through HPKE to obtained a key and a nonce
-1. These per-recipient key and nonce is used to decrypt a secret shared by all recipient
+1. These per-recipient shared secret are derived through HPKE to obtain a key and a nonce
+1. These per-recipient key and nonce are used to decrypt a secret shared by all recipients
 
 This final secret is the one later used as an input to the encryption layer.
-The whole process can be viewed as a KEM encapsulating for multiple recipients.
+The whole process can be viewed as a KEM encapsulation for multiple recipients.
 
 ## Details
 
@@ -76,7 +76,7 @@ The implementation also includes tests (including some test vectors) and comment
 
 #### Notations
 
-- $pk_{ecc}^i$, $sk_{ecc}^i$, $pk_{mlkem}^i$ and $sk_{mlkem}^i$: respectively the curve 255519 public key and secret key, and the MLKEM-1024 (FIPS 203 [^fips203]) encapsulating key and decapsulating key
+- $pk_{ecc}^i$, $sk_{ecc}^i$, $pk_{mlkem}^i$ and $sk_{mlkem}^i$: respectively the curve 25519 public key and secret key, and the MLKEM-1024 (FIPS 203 [^fips203]) encapsulating key and decapsulating key
 - $\textrm{DHKEM.Encapsulate}$ and $\textrm{DHKEM.Decapsulate}$: key encapsulation methods on the curve 25519, as defined in RFC 9180, section 4 [^hpke]
 - $\textrm{MLKEM.Encapsulate}$ and $\textrm{MLKEM.Decapsulate}$: key encapsulation methods on MLKEM-1024, as defined in FIPS 203 [^fips203]
 - $ss_{recipients}$: a 32-bytes secret, produced by a cryptographic RNG. Informally, this is the secret shared among recipients, encapsulated separately for each recipient
