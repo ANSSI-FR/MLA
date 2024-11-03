@@ -478,9 +478,8 @@ impl<W: Write> WriterWithCount<W> {
 
 impl<W: Write> Write for WriterWithCount<W> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.inner.write(buf).map(|i| {
+        self.inner.write(buf).inspect(|&i| {
             self.pos += i as u32;
-            i
         })
     }
 
