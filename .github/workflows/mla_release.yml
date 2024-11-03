@@ -116,27 +116,27 @@ jobs:
           draft: true
 
       - name: Download linux-x86_64 artifact
-        uses: actions/download-artifact@v1
+        uses: actions/download-artifact@v4.1.8
         with:
           name: mla-linux-x86_64
 
       - name: Download windows-i686 artifact
-        uses: actions/download-artifact@v1
+        uses: actions/download-artifact@v4.1.8
         with:
           name: mla-windows-i686
 
       - name: Download windows-x86_64 artifact
-        uses: actions/download-artifact@v1
+        uses: actions/download-artifact@v4.1.8
         with:
           name: mla-windows-x86_64
 
       - name: Download windows-i686-debug artifact
-        uses: actions/download-artifact@v1
+        uses: actions/download-artifact@v4.1.8
         with:
           name: mla-windows-i686-debug
 
       - name: Download windows-x86_64-debug artifact
-        uses: actions/download-artifact@v1
+        uses: actions/download-artifact@v4.1.8
         with:
           name: mla-windows-x86_64-debug
 

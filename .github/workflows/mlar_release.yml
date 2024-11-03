@@ -82,17 +82,17 @@ jobs:
           draft: true
 
       - name: Download Linux artifact
-        uses: actions/download-artifact@v1
+        uses: actions/download-artifact@v4.1.8
         with:
           name: mlar-linux
 
       - name: Download Windows artifact
-        uses: actions/download-artifact@v1
+        uses: actions/download-artifact@v4.1.8
         with:
           name: mlar-windows
 
       - name: Download MacOS artifact
-        uses: actions/download-artifact@v1
+        uses: actions/download-artifact@v4.1.8
         with:
           name: mlar-macos
 
