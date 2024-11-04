@@ -80,7 +80,7 @@ jobs:
         command: build
         args: ${{ matrix.cargo_arg }} --manifest-path=bindings/C/Cargo.toml --target=${{ matrix.target }}
     - name: Upload resulting 'mla'
-      uses: actions/upload-artifact@v4.4.3
+      uses: actions/upload-artifact@v3.2.1
       with:
         name: mla-${{ matrix.build }}
         path: ${{ matrix.path }}
