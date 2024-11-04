@@ -266,7 +266,7 @@ SAMPLE_PATH = os.path.join(MLA_BASE_PATH, "samples")
 def test_public_keys():
     "Test the PublicKeys object"
     # Bad parsing
-    with pytest.raises(mla.InvalidECCKeyFormat):
+    with pytest.raises(mla.InvalidKeyFormat):
         mla.PublicKeys(b"NOT A KEY")
     
     with pytest.raises(FileNotFoundError):
@@ -304,10 +304,10 @@ def test_public_keys():
 def test_private_keys():
     "Test the PrivateKeys object"
     # Bad parsing
-    with pytest.raises(mla.InvalidECCKeyFormat):
+    with pytest.raises(mla.InvalidKeyFormat):
         mla.PrivateKeys(b"NOT A KEY")
     
-    with pytest.raises(mla.InvalidECCKeyFormat):
+    with pytest.raises(mla.InvalidKeyFormat):
         # This is a public key, not a private one
         mla.PrivateKeys(os.path.join(SAMPLE_PATH, "test_ed25519_pub.pem"))
 
@@ -348,7 +348,7 @@ def test_writer_config_public_keys():
 
     # Test API call
     config = mla.WriterConfig()
-    with pytest.raises(mla.InvalidECCKeyFormat):
+    with pytest.raises(mla.InvalidKeyFormat):
         config.set_public_keys(mla.PublicKeys(b"NOT A KEY"))
     
     # Test shortcut on object build
