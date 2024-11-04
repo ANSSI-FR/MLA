@@ -194,7 +194,7 @@ impl From<WrappedError> for PyErr {
                     mla::errors::Error::DuplicateFilename => PyErr::new::<DuplicateFilename, _>("Filename already used"),
                     mla::errors::Error::AuthenticatedDecryptionWrongTag => PyErr::new::<AuthenticatedDecryptionWrongTag, _>("Wrong tag while decrypting authenticated data"),
                     mla::errors::Error::HKDFInvalidKeyLength => PyErr::new::<HKDFInvalidKeyLength, _>("Unable to expand while using the HKDF"),
-                    mla::errors::Error::HPKEError(msg) => PyErr::new::<HPKEError, _>(msg),
+                    mla::errors::Error::HPKEError(msg) => PyErr::new::<HPKEError, _>(format!("{:}", msg)),
                 }
             },
             WrappedError::WrappedPy(inner_err) => inner_err
@@ -339,7 +339,7 @@ impl PrivateKeys {
                 );          
             } else if let Ok(data) = element.downcast::<PyBytes>() {
                 keys.push(
-                    parse_mlakey_privkey(&data.as_bytes())
+                    parse_mlakey_privkey(data.as_bytes())
                         .map_err(|_| mla::errors::Error::InvalidKeyFormat)?,
                 );
             } else {
