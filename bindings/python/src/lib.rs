@@ -5,11 +5,13 @@ use std::{
     io::{self, Read},
 };
 
-use mlakey_parser::{parse_openssl_25519_privkey, parse_openssl_25519_pubkey};
+use mlakey_parser::{parse_mlakey_privkey, parse_mlakey_pubkey};
 use mla::{
+    crypto::hybrid::{HybridPrivateKey, HybridPublicKey},
     config::{ArchiveReaderConfig, ArchiveWriterConfig},
     ArchiveReader, ArchiveWriter, Layers,
 };
+use ml_kem::EncodedSizeUser;
 use pyo3::{
     create_exception,
     exceptions::{PyKeyError, PyRuntimeError, PyTypeError},
@@ -226,7 +228,7 @@ impl FileMetadata {
 
 // -------- mla.PublicKeys --------
 
-/// Represents multiple ECC Public Keys
+/// Represents multiple ECC and MLKEM Public Keys
 ///
 /// Instanciate with path (as string) or data (as bytes)
 /// PEM and DER format are supported
@@ -242,7 +244,7 @@ impl FileMetadata {
 #[derive(Clone)]
 #[pyclass]
 struct PublicKeys {
-    keys: Vec<x25519_dalek::PublicKey>,
+    keys: Vec<HybridPublicKey>
 }
 
 #[pymethods]
@@ -257,16 +259,16 @@ impl PublicKeys {
             // "/path/to/public.pem"
             if let Ok(path) = element.downcast::<PyString>() {
                 let mut file = File::open(path.to_string())?;
-                // Load the the ECC key in-memory and parse it
+                // Load the the ECC and MLKEM keys in-memory and parse it
                 let mut buf = Vec::new();
                 file.read_to_end(&mut buf)?;
                 keys.push(
-                    parse_openssl_25519_pubkey(&buf)
+                    parse_mlakey_pubkey(&buf)
                         .map_err(|_| mla::errors::Error::InvalidKeyFormat)?,
                 );
             } else if let Ok(data) = element.downcast::<PyBytes>() {
                 keys.push(
-                    parse_openssl_25519_pubkey(data.as_bytes())
+                    parse_mlakey_pubkey(data.as_bytes())
                         .map_err(|_| mla::errors::Error::InvalidKeyFormat)?,
                 );
             } else {
@@ -283,14 +285,20 @@ impl PublicKeys {
     fn keys(&self) -> Vec<Cow<[u8]>> {
         self.keys
             .iter()
-            .map(|pubkey| Cow::Owned(Vec::from(pubkey.to_bytes())))
+            .map(|pubkey| {
+                let mut result = Vec::new();
+                result.extend(pubkey.public_key_ecc.to_bytes());
+                result.extend(pubkey.public_key_ml.as_bytes());
+                Cow::Owned(result)
+            })
+            //Cow::Owned(Vec::from(pubkey.public_key_ecc.to_bytes())))
             .collect()
     }
 }
 
 // -------- mla.PrivateKeys --------
 
-/// Represents multiple ECC Private Keys
+/// Represents multiple ECC and MLKEM Private Keys
 ///
 /// Instanciate with path (as string) or data (as bytes)
 /// PEM and DER format are supported
@@ -306,7 +314,7 @@ impl PublicKeys {
 #[derive(Clone)]
 #[pyclass]
 struct PrivateKeys {
-    keys: Vec<x25519_dalek::StaticSecret>,
+    keys: Vec<HybridPrivateKey>,
 }
 
 #[pymethods]
@@ -314,23 +322,24 @@ impl PrivateKeys {
     #[new]
     #[pyo3(signature = (*args))]
     fn new(args: &PyTuple) -> Result<Self, WrappedError> {
-        let mut keys = Vec::new();
+        let mut keys: Vec<HybridPrivateKey> = Vec::new();
 
         for element in args {
             // String argument: this is a path
             // "/path/to/public.pem"
             if let Ok(path) = element.downcast::<PyString>() {
                 let mut file = File::open(path.to_string())?;
-                // Load the the ECC key in-memory and parse it
+                // Load the the ECC and MLKEM keys in-memory and parse it
                 let mut buf = Vec::new();
                 file.read_to_end(&mut buf)?;
+
                 keys.push(
-                    parse_openssl_25519_privkey(&buf)
+                    parse_mlakey_privkey(&buf)
                         .map_err(|_| mla::errors::Error::InvalidKeyFormat)?,
-                );
+                );          
             } else if let Ok(data) = element.downcast::<PyBytes>() {
                 keys.push(
-                    parse_openssl_25519_privkey(data.as_bytes())
+                    parse_mlakey_privkey(&data.as_bytes())
                         .map_err(|_| mla::errors::Error::InvalidKeyFormat)?,
                 );
             } else {
@@ -348,7 +357,12 @@ impl PrivateKeys {
     fn keys(&self) -> Vec<Cow<[u8]>> {
         self.keys
             .iter()
-            .map(|privkey| Cow::Owned(Vec::from(privkey.to_bytes())))
+            .map(|privkey| {
+                let mut result = Vec::new();
+                result.extend(privkey.private_key_ecc.to_bytes());
+                result.extend(privkey.private_key_ml.as_bytes());
+                Cow::Owned(result)
+            })
             .collect()
     }
 }

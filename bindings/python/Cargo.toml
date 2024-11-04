@@ -21,5 +21,6 @@ crate-type = ["cdylib"]
 [dependencies]
 pyo3 = {version = "0", features = ["gil-refs"]}
 mla = { version = "1", features = ["send"], path = "../../mla"}
+ml-kem = "0.1.1"
 x25519-dalek = "2"
 mlakey-parser = { path = "../../mlakey-parser", version = "0.1" }
