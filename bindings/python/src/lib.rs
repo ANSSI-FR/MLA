@@ -5,7 +5,7 @@ use std::{
     io::{self, Read},
 };
 
-use curve25519_parser::{parse_openssl_25519_privkey, parse_openssl_25519_pubkey};
+use mlakey_parser::{parse_openssl_25519_privkey, parse_openssl_25519_pubkey};
 use mla::{
     config::{ArchiveReaderConfig, ArchiveWriterConfig},
     ArchiveReader, ArchiveWriter, Layers,

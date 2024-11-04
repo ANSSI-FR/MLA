@@ -22,4 +22,4 @@ crate-type = ["cdylib"]
 pyo3 = "0"
 mla = { version = "1", features = ["send"], path = "../../mla"}
 x25519-dalek = "2"
-curve25519-parser = { path = "../../curve25519-parser", version = "0.4" }
+mlakey-parser = { path = "../../mlakey-parser", version = "0.1" }
