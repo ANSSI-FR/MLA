@@ -42,7 +42,7 @@ jobs:
     - name: Run tests
       run: cargo test --all --exclude mla-fuzz-afl --release --verbose
     - name: Upload resulting 'mlar'
-      uses: actions/upload-artifact@v3.2.1
+      uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.build }}
         path: ./target/release/mlar${{ matrix.extension }}
