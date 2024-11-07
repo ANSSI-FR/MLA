@@ -46,7 +46,7 @@ jobs:
       if: matrix.build == 'linux'
       run: strip ./target/${{ matrix.target }}/release/mlar${{ matrix.extension }}
     - name: Upload resulting 'mlar'
-      uses: actions/upload-artifact@v3.2.1
+      uses: actions/upload-artifact@v4
       with:
         name: mlar-${{ matrix.build }}
         path: ./target/${{ matrix.target }}/release/mlar${{ matrix.extension }}
