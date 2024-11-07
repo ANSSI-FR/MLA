@@ -24,7 +24,7 @@ int main()
     MLAStatus status;
 
     ArchiveInfo archive_info;
-    FILE *f = fopen("../../../../samples/archive_v1.mla", "r");
+    FILE *f = fopen("../../../../samples/archive_v2.mla", "r");
     if (!f)
     {
         fprintf(stderr, " [!] Cannot open file: %d\n", errno);
