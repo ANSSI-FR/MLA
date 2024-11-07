@@ -6,3 +6,6 @@ target/
 
 # cargo lock file
 Cargo.lock
+
+# pycache for Py-bindings
+__pycache__/
