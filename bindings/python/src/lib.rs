@@ -639,7 +639,7 @@ macro_rules! check_mode {
 impl MLAFile {
     #[new]
     #[pyo3(signature = (path, mode="r", config=None))]
-    fn new(path: &str, mode: &str, config: Option<&PyAny>) -> Result<Self, WrappedError> {
+    fn new(path: &str, mode: &str, config: Option<&Bound<'_, PyAny>>) -> Result<Self, WrappedError> {
         match mode {
             "r" => {
                 let rconfig = match config {
@@ -807,11 +807,13 @@ impl MLAFile {
         slf
     }
 
+    // cf. https://pyo3.rs/v0.22.5/function/signature
+    #[pyo3(signature = (exc_type=None, _exc_value=None, _traceback=None))]
     fn __exit__(
         &mut self,
-        exc_type: Option<&PyAny>,
-        _exc_value: Option<&PyAny>,
-        _traceback: Option<&PyAny>,
+        exc_type: Option<&Bound<'_, PyAny>>,
+        _exc_value: Option<&Bound<'_, PyAny>>,
+        _traceback: Option<&Bound<'_, PyAny>>,
     ) -> Result<bool, WrappedError> {
         if exc_type.is_some() {
             // An exception occured, let it be raised again
@@ -834,7 +836,7 @@ impl MLAFile {
     // Purpose: only one import
     #[classattr]
     fn _buffered_type(py: Python) -> Result<&PyType, WrappedError> {
-        Ok(py.import("io")?.getattr("BufferedIOBase")?.extract()?)
+        Ok(py.import_bound("io")?.getattr("BufferedIOBase")?.extract()?)
     }
 
     /// Write an archive file to @dest, which can be:
@@ -857,7 +859,7 @@ impl MLAFile {
         &mut self,
         py: Python,
         key: &str,
-        dest: &PyAny,
+        dest: &Bound<'_, PyAny>,
         chunk_size: usize,
     ) -> Result<(), WrappedError> {
         let reader = check_mode!(mut self, Read);
@@ -871,7 +873,7 @@ impl MLAFile {
             // `/path/to/dest`
             let mut output = std::fs::File::create(dest.to_string())?;
             io::copy(&mut archive_file.unwrap().data, &mut output)?;
-        } else if dest.is_instance(py.get_type::<MLAFile>().getattr("_buffered_type")?)? {
+        } else if dest.is_instance(&py.get_type_bound::<MLAFile>().getattr("_buffered_type")?)? {
             // isinstance(dest, io.BufferedIOBase)
             // offer `.write` (`.close` must be called from the caller)
 
@@ -912,7 +914,7 @@ impl MLAFile {
         &mut self,
         py: Python,
         key: &str,
-        src: &PyAny,
+        src: &Bound<'_, PyAny>,
         chunk_size: usize,
     ) -> Result<(), WrappedError> {
         let writer = check_mode!(mut self, Write);
@@ -922,7 +924,7 @@ impl MLAFile {
             // `/path/to/src`
             let mut input = std::fs::File::open(src.to_string())?;
             writer.add_file(key, input.metadata()?.len(), &mut input)?;
-        } else if src.is_instance(py.get_type::<MLAFile>().getattr("_buffered_type")?)? {
+        } else if src.is_instance(&py.get_type_bound::<MLAFile>().getattr("_buffered_type")?)? {
             // isinstance(src, io.BufferedIOBase)
             // offer `.read` (`.close` must be called from the caller)
 
@@ -953,7 +955,7 @@ impl MLAFile {
 /// Instanciate the Python module
 #[pymodule]
 #[pyo3(name = "mla")]
-fn pymla(py: Python, m: &PyModule) -> PyResult<()> {
+fn pymla(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Classes
     m.add_class::<MLAFile>()?;
     m.add_class::<FileMetadata>()?;
@@ -963,41 +965,41 @@ fn pymla(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<ReaderConfig>()?;
 
     // Exceptions
-    m.add("MLAError", py.get_type::<MLAError>())?;
-    m.add("WrongMagic", py.get_type::<WrongMagic>())?;
-    m.add("UnsupportedVersion", py.get_type::<UnsupportedVersion>())?;
-    m.add("InvalidECCKeyFormat", py.get_type::<InvalidECCKeyFormat>())?;
+    m.add("MLAError", py.get_type_bound::<MLAError>())?;
+    m.add("WrongMagic", py.get_type_bound::<WrongMagic>())?;
+    m.add("UnsupportedVersion", py.get_type_bound::<UnsupportedVersion>())?;
+    m.add("InvalidECCKeyFormat", py.get_type_bound::<InvalidECCKeyFormat>())?;
     m.add(
         "WrongBlockSubFileType",
-        py.get_type::<WrongBlockSubFileType>(),
+        py.get_type_bound::<WrongBlockSubFileType>(),
     )?;
-    m.add("UTF8ConversionError", py.get_type::<UTF8ConversionError>())?;
-    m.add("FilenameTooLong", py.get_type::<FilenameTooLong>())?;
+    m.add("UTF8ConversionError", py.get_type_bound::<UTF8ConversionError>())?;
+    m.add("FilenameTooLong", py.get_type_bound::<FilenameTooLong>())?;
     m.add(
         "WrongArchiveWriterState",
-        py.get_type::<WrongArchiveWriterState>(),
+        py.get_type_bound::<WrongArchiveWriterState>(),
     )?;
-    m.add("WrongReaderState", py.get_type::<WrongReaderState>())?;
-    m.add("WrongWriterState", py.get_type::<WrongWriterState>())?;
-    m.add("RandError", py.get_type::<RandError>())?;
-    m.add("PrivateKeyNeeded", py.get_type::<PrivateKeyNeeded>())?;
+    m.add("WrongReaderState", py.get_type_bound::<WrongReaderState>())?;
+    m.add("WrongWriterState", py.get_type_bound::<WrongWriterState>())?;
+    m.add("RandError", py.get_type_bound::<RandError>())?;
+    m.add("PrivateKeyNeeded", py.get_type_bound::<PrivateKeyNeeded>())?;
     m.add(
         "DeserializationError",
-        py.get_type::<DeserializationError>(),
+        py.get_type_bound::<DeserializationError>(),
     )?;
-    m.add("SerializationError", py.get_type::<SerializationError>())?;
-    m.add("MissingMetadata", py.get_type::<MissingMetadata>())?;
-    m.add("BadAPIArgument", py.get_type::<BadAPIArgument>())?;
-    m.add("EndOfStream", py.get_type::<EndOfStream>())?;
-    m.add("ConfigError", py.get_type::<ConfigError>())?;
-    m.add("DuplicateFilename", py.get_type::<DuplicateFilename>())?;
+    m.add("SerializationError", py.get_type_bound::<SerializationError>())?;
+    m.add("MissingMetadata", py.get_type_bound::<MissingMetadata>())?;
+    m.add("BadAPIArgument", py.get_type_bound::<BadAPIArgument>())?;
+    m.add("EndOfStream", py.get_type_bound::<EndOfStream>())?;
+    m.add("ConfigError", py.get_type_bound::<ConfigError>())?;
+    m.add("DuplicateFilename", py.get_type_bound::<DuplicateFilename>())?;
     m.add(
         "AuthenticatedDecryptionWrongTag",
-        py.get_type::<AuthenticatedDecryptionWrongTag>(),
+        py.get_type_bound::<AuthenticatedDecryptionWrongTag>(),
     )?;
     m.add(
         "HKDFInvalidKeyLength",
-        py.get_type::<HKDFInvalidKeyLength>(),
+        py.get_type_bound::<HKDFInvalidKeyLength>(),
     )?;
 
     // Add constants
