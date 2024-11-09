@@ -46,7 +46,7 @@ jobs:
       if: matrix.build == 'linux'
       run: strip ./target/${{ matrix.target }}/release/mlar${{ matrix.extension }}
     - name: Upload resulting 'mlar'
-      uses: actions/upload-artifact@v1
+      uses: actions/upload-artifact@v3.2.1
       with:
         name: mlar-${{ matrix.build }}
         path: ./target/${{ matrix.target }}/release/mlar${{ matrix.extension }}
@@ -82,22 +82,22 @@ jobs:
           draft: true
 
       - name: Download Linux artifact
-        uses: actions/download-artifact@v1
+        uses: actions/download-artifact@v4.1.8
         with:
           name: mlar-linux
 
       - name: Download Windows artifact
-        uses: actions/download-artifact@v1
+        uses: actions/download-artifact@v4.1.8
         with:
           name: mlar-windows
 
       - name: Download MacOS artifact
-        uses: actions/download-artifact@v1
+        uses: actions/download-artifact@v4.1.8
         with:
           name: mlar-macos
 
       - name: Release Linux artifact
-        uses: actions/upload-release-asset@v1
+        uses: actions/upload-release-asset@v1.0.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -107,7 +107,7 @@ jobs:
           asset_name: mlar-linux-static-${{ steps.get_version.outputs.VERSION }}
 
       - name: Release Windows artifact
-        uses: actions/upload-release-asset@v1
+        uses: actions/upload-release-asset@v1.0.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -117,7 +117,7 @@ jobs:
           asset_name: mlar-windows-${{ steps.get_version.outputs.VERSION }}.exe
 
       - name: Release MacOS artifact
-        uses: actions/upload-release-asset@v1
+        uses: actions/upload-release-asset@v1.0.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
