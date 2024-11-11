@@ -4,8 +4,5 @@ debug/
 debugs/
 target/
 
-# cargo lock file
-Cargo.lock
-
-# pycache for Py-bindings
+# pycache for py-bindings
 __pycache__/
