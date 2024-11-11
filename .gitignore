@@ -3,6 +3,3 @@
 debug/
 debugs/
 target/
-
-# cargo lock file
-Cargo.lock
