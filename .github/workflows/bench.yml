@@ -1,19 +1,36 @@
+# According to:
+#  - https://docs.github.com/en/actions/writing-workflows/choosing-when-your-workflow-runs/events-that-trigger-workflows#issue_comment
+#  - https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/accessing-contextual-information-about-workflow-runs#github-context
+#
 name: Benchmark PR
 
 permissions:
   contents: read
   pull-requests: write
 
-on: workflow_dispatch
+on:
+  issue_comment:
+    types: [created]
 
 jobs:
   runBenchmark:
+    if: |
+      github.event.issue.pull_request && 
+      contains(github.event.comment.body, '/benchmark')
     name: Criterion benchmark
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: boa-dev/criterion-compare-action@v3
+      - name: Checkout to init the repository
+        uses: actions/checkout@v4
+      - name: Get PR base branch name
+        run: |
+          branchName=$(curl -s https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.issue.number }} | python3 -c "import sys, json; print(json.load(sys.stdin)['base']['ref'])")
+          echo "branchName=$branchName" >> $GITHUB_ENV
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Compares PR branch to target
+        uses: boa-dev/criterion-compare-action@v3
         with:
-          branchName: ${{ github.base_ref }}
+          branchName: ${{ env.branchName }}
           benchName: "bench_archive"
           token: ${{ secrets.GITHUB_TOKEN }}
