@@ -427,7 +427,7 @@ Some of the external cryptographic libraries have been reviewed:
 
 In addition to the review, `rust-hpke` is mainly based on `RustCrypto`, avoiding the need for additional newer dependencies.
 
-The MLKEM implementation used is the one of `RustCrypto`, as MLA already depends on this project and the code quality / auditability is, in the author understanding, rather good.
+The MLKEM implementation used is the one of `RustCrypto`, as MLA already depends on this project and the code quality and auditability are, in the author understanding, rather good.
 
 ### AES-GCM re-implementation
 
@@ -441,13 +441,13 @@ To ensure the implementation follows the standard, it is tested against AES-256-
 
 For several reasons described in the code, but mainly due to the availability of API, the possibility to add custom KEM ID and the relative few lines needed for re-implementation, the $\mathrm{KeySchedule}$ method has been re-implemented in MLA.
 
-It still use some bricks from `rust-hpke`, has the KDF, $\mathrm{LabeledExtract}$ and $\mathrm{LabeledExpand}$. It is tested against RFC 9180 [^hpke] test vectors in MLA regression tests.
+It still use some bricks from `rust-hpke`, as the KDF, $\mathrm{LabeledExtract}$ and $\mathrm{LabeledExpand}$. It is tested against RFC 9180 [^hpke] test vectors in MLA regression tests.
 
 ### MLKEM implementation without a review
 
 Thanks to the hybrid approach, a flawed implementation of MLKEM would have limited consequences.
 
-It is therefore accepted by the author (as a trade-off) to use a MLKEM implementation without existing review to brings as soon as possible a reasonable protection against "Harvest now, decrypt later" attacks.
+It is therefore accepted by the author (as a trade-off) to use a MLKEM implementation without existing review to bring as soon as possible a reasonable protection against "Harvest now, decrypt later" attacks.
 
 If a reviewed implementation with acceptable dependency emerges in the future, it can be easily swapped in MLA.
 
@@ -486,7 +486,7 @@ The choice has been made to report the decision to the user of the library[^issu
 
 The `Encrypt` layer does not hide the plaintext length.
 
-Usually, this layer is used with the `Compress` layer. If an attacker know the original file size, it might learn information about the original data entropy.
+Usually, this layer is used with the `Compress` layer. If an attacker knows the original file size, he might learn information about the original data entropy.
 
 - Forward secrecy
 
@@ -517,7 +517,7 @@ In other words, the list of recipient is not public. Still, the number of recipi
 [^signal]: https://signal.org/docs/specifications/pqxdh/
 [^imessage]: https://security.apple.com/blog/imessage-pq3/
 [^dualnest]: https://eprint.iacr.org/2018/903.pdf
-[^combinearg1]: "F. Giacon, F. Heuer, and B. Poettering. Kem combiners, Cham, 2018"
+[^combinearg1]: https://eprint.iacr.org/2018/024
 [^combinearg2]: https://datatracker.ietf.org/doc/draft-ietf-tls-hybrid-design/
 [^combinearg3]: https://datatracker.ietf.org/doc/html/rfc9370
 [^combinearg4]: https://eprint.iacr.org/2024/039 
