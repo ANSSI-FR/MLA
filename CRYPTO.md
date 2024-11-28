@@ -278,7 +278,7 @@ ss_{recipients},\ ct_{recipients} = \mathrm{HybridKEM.Encapsulate}([(pk_{ecc}^0,
 (key, base\_nonce) = \textrm{KeySchedule}_{hybrid}(
         \textrm{shared\ secret}=ss_{recipients},
     \textrm{info}=\mathtt{"MLA\ Encrypt\ Layer"}
-)\\
+)
 ```
 
 3. Ensure key-commitment
@@ -339,8 +339,9 @@ commit& = \textrm{Decrypt}_{AES\ 256\ GCM}(\\
     &\textrm{nonce}=\mathrm{ComputeNonce}(base\_nonce, 0),\\
     &\textrm{data}=keycommit\\
 )&
-\end{align*}\\
+\end{align*}
 ```
+
 ```math
 \mathtt{assert\ }commit = \textrm{KeyCommitmentChain}
 ```
