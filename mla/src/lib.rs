@@ -136,7 +136,7 @@ impl ArchiveFooter {
     /// ```ascii-art
     /// [files_info][files_info length]
     /// ```
-    /// 
+    ///
     /// Performs zero-copy serialization of a footer
     fn serialize_into<W: Write>(
         mut dest: W,
