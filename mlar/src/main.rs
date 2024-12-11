@@ -469,7 +469,7 @@ struct FileWriter<'a> {
 /// Max number of fd simultaneously opened
 pub const FILE_WRITER_POOL_SIZE: usize = 1000;
 
-impl<'a> Write for FileWriter<'a> {
+impl Write for FileWriter<'_> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         // Only one thread is using the FileWriter, safe to `.unwrap()`
         let mut cache = self.cache.lock().unwrap();
@@ -912,7 +912,7 @@ fn keyderive(matches: &ArgMatches) -> Result<(), MlarError> {
 
 pub struct ArchiveInfoReader {
     /// MLA Archive format Reader
-
+    ///
     /// User's reading configuration
     pub config: ArchiveReaderConfig,
     /// Compressed sizes from CompressionLayer

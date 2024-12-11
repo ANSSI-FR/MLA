@@ -136,7 +136,7 @@ impl ArchiveFooter {
     /// ```ascii-art
     /// [files_info][files_info length]
     /// ```
-
+    /// 
     /// Performs zero-copy serialization of a footer
     fn serialize_into<W: Write>(
         mut dest: W,
@@ -468,7 +468,7 @@ pub fn vec_remove_item<T: std::cmp::PartialEq>(vec: &mut Vec<T>, item: &T) -> Op
     Some(vec.remove(pos))
 }
 
-impl<'a, W: InnerWriterTrait> ArchiveWriter<'a, W> {
+impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
     pub fn from_config(dest: W, config: ArchiveWriterConfig) -> Result<Self, Error> {
         // Ensure config is correct
         config.check()?;
@@ -772,7 +772,7 @@ impl<'a, R: Read + Seek> BlocksToFileReader<'a, R> {
     }
 }
 
-impl<'a, T: Read + Seek> Read for BlocksToFileReader<'a, T> {
+impl<T: Read + Seek> Read for BlocksToFileReader<'_, T> {
     fn read(&mut self, into: &mut [u8]) -> io::Result<usize> {
         let (remaining, count) = match self.state {
             BlocksToFileReaderState::Ready => {
@@ -849,7 +849,7 @@ pub struct FileInfo {
 
 pub struct ArchiveReader<'a, R: 'a + InnerReaderTrait> {
     /// MLA Archive format Reader
-
+    ///
     /// User's reading configuration
     pub config: ArchiveReaderConfig,
     /// Source
@@ -930,8 +930,8 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
     }
 
     #[allow(clippy::type_complexity)]
-    pub fn get_file<'a>(
-        &'a mut self,
+    pub fn get_file(
+        &mut self,
         filename: String,
     ) -> Result<Option<ArchiveFile<BlocksToFileReader<Box<dyn 'b + LayerReader<'b, R>>>>>, Error>
     {
@@ -964,7 +964,7 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
 
 pub struct ArchiveFailSafeReader<'a, R: 'a + Read> {
     /// MLA Archive format Reader (fail-safe)
-
+    ///
     /// User's reading configuration
     // config is not used for now after reader creation,
     // but it could in the future
