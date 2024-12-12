@@ -242,7 +242,7 @@ struct PublicKeys {
 impl PublicKeys {
     #[new]
     #[pyo3(signature = (*args))]
-    fn new(args: &PyTuple) -> Result<Self, WrappedError> {
+    fn new(args: Bound<PyTuple>) -> Result<Self, WrappedError> {
         let mut keys = Vec::new();
 
         for element in args {
@@ -306,7 +306,7 @@ struct PrivateKeys {
 impl PrivateKeys {
     #[new]
     #[pyo3(signature = (*args))]
-    fn new(args: &PyTuple) -> Result<Self, WrappedError> {
+    fn new(args: Bound<PyTuple>) -> Result<Self, WrappedError> {
         let mut keys = Vec::new();
 
         for element in args {
@@ -838,7 +838,7 @@ impl MLAFile {
     /// alias for io.BufferedIOBase
     // Purpose: only one import
     #[classattr]
-    fn _buffered_type(py: Python) -> Result<&PyType, WrappedError> {
+    fn _buffered_type(py: Python) -> Result<Py<PyType>, WrappedError> {
         Ok(py.import("io")?.getattr("BufferedIOBase")?.extract()?)
     }
 
@@ -932,19 +932,14 @@ impl MLAFile {
             // offer `.read` (`.close` must be called from the caller)
 
             let id = writer.start_file(key)?;
-            loop {
-                match Some(PyBytesMethods::as_bytes(&src
-                    .call_method1("read", (chunk_size,))?
-                    .extract::<Bound<_>>()?)) {
-                    Some(data) => {
-                        if data.is_empty() {
-                           break;
-                        }
-                        writer.append_file_content(id, data.len(), data)?;
+            while let Some(data) = Some(PyBytesMethods::as_bytes(&src
+                .call_method1("read", (chunk_size,))?
+                .extract::<Bound<_>>()?)) {
+                    if data.is_empty() {
+                        break;
                     }
-                    _ => break,
+                    writer.append_file_content(id, data.len(), data)?;
                 }
-            }
             writer.end_file(id)?;
         } else {
             return Err(PyTypeError::new_err(
