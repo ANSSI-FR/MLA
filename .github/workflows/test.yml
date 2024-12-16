@@ -106,13 +106,14 @@ jobs:
     - uses: actions/checkout@v2
     - uses: actions-rs/toolchain@v1
       with:
-        toolchain: stable
+        # pin to 1.82 cf. https://github.com/ANSSI-FR/MLA/pull/227#issuecomment-2545916785
+        toolchain: 1.82
+        default: true
         target: ${{ matrix.target }}
     - uses: microsoft/setup-msbuild@v1.0.2
     - name: Compile C/CPP bindings test program for Windows
       working-directory: bindings/C/tests/windows-msvc/
-      run: cargo rustc -- --print=native-static-libs
-      # run: msbuild mla-bindings-test.sln /p:Platform=${{ matrix.msvc_platform }} /p:Configuration=${{ matrix.version }}
+      run: msbuild mla-bindings-test.sln /p:Platform=${{ matrix.msvc_platform }} /p:Configuration=${{ matrix.version }}
     - name: Run C/CPP bindings test program on Windows
       working-directory: bindings/C/tests/windows-msvc/
       run: ./${{ matrix.msvc_platform }}/${{ matrix.version }}/mla-bindings-test.exe
