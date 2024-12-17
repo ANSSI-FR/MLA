@@ -9,6 +9,7 @@ members = [
 ]
 
 [profile.release]
-codegen-units = 1
-opt-level = 'z'     # Optimize for size.
+codegen-units = 1   # Use minimum codegen units for best size and runtime performances
+opt-level = 'z'     # Size optimization
 lto = true          # Enable Link Time Optimization
+strip = true        # Removes symbols, reducing size
