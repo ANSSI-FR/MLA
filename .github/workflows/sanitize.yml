@@ -17,7 +17,7 @@ jobs:
     # Assert .h and .hpp bindings files are the ones generated
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4.2.2
     - uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
@@ -47,7 +47,7 @@ jobs:
 
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4.2.2
     - name: Get ${{ matrix.changelog }} Changelog Entry
       uses: mindsers/changelog-reader-action@v2
       id: changelog_reader

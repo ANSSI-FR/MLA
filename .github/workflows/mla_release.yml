@@ -67,7 +67,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4.2.2
     - uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
@@ -80,7 +80,7 @@ jobs:
         command: build
         args: ${{ matrix.cargo_arg }} --manifest-path=bindings/C/Cargo.toml --target=${{ matrix.target }}
     - name: Upload resulting 'mla'
-      uses: actions/upload-artifact@v3.2.1
+      uses: actions/upload-artifact@v4.4.3
       with:
         name: mla-${{ matrix.build }}
         path: ${{ matrix.path }}
@@ -98,7 +98,7 @@ jobs:
           echo "using version tag ${GITHUB_REF:15}"
           echo "version=${GITHUB_REF:15}" >> $GITHUB_OUTPUT
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4.2.2
       - name: Get Changelog Entry
         id: changelog_reader
         uses: mindsers/changelog-reader-action@v2
@@ -106,7 +106,7 @@ jobs:
           path: ./mla/CHANGELOG.md
       - name: Create Release
         id: create_release
-        uses: actions/create-release@v1
+        uses: actions/create-release@v1.1.4
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -197,7 +197,7 @@ jobs:
           asset_content_type: application/zip
           asset_name: libmla-windows-x86_64-debug-${{ steps.get_version.outputs.VERSION }}.zip
 
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4.2.2
       - name: Release C Header file
         uses: actions/upload-release-asset@v1.0.2
         env:

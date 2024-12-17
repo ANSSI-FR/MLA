@@ -28,7 +28,7 @@ jobs:
     runs-on: ${{matrix.os}}
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4.2.2
     - uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
@@ -42,7 +42,7 @@ jobs:
     - name: Run tests
       run: cargo test --all --exclude mla-fuzz-afl --release --verbose
     - name: Upload resulting 'mlar'
-      uses: actions/upload-artifact@v3.2.1
+      uses: actions/upload-artifact@v4.4.3
       with:
         name: ${{ matrix.build }}
         path: ./target/release/mlar${{ matrix.extension }}
@@ -51,7 +51,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4.2.2
     - uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
@@ -62,7 +62,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4.2.2
     - uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
@@ -72,7 +72,7 @@ jobs:
   test-bindings-c-cpp-linux:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4.2.2
     - uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
@@ -103,7 +103,7 @@ jobs:
             msvc_platform: x64
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4.2.2
     - uses: actions-rs/toolchain@v1
       with:
         # pin to 1.82 cf. https://github.com/ANSSI-FR/MLA/pull/227#issuecomment-2545916785
@@ -122,7 +122,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4.2.2
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
@@ -142,7 +142,7 @@ jobs:
   fmt:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4.2.2
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
@@ -153,7 +153,7 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4.2.2
       - name: Security audit
         uses: actions-rs/audit-check@v1
         with:
@@ -162,7 +162,7 @@ jobs:
   clippy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4.2.2
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
@@ -184,7 +184,7 @@ jobs:
       runs-on: ubuntu-latest
 
       steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4.2.2
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable

@@ -11,8 +11,8 @@ jobs:
     name: Criterion benchmark
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: boa-dev/criterion-compare-action@v3
+      - uses: actions/checkout@v4.2.2
+      - uses: boa-dev/criterion-compare-action@v3.2.4
         with:
           branchName: ${{ github.base_ref }}
           benchName: "bench_archive"
