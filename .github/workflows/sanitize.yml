@@ -17,11 +17,11 @@ jobs:
     # Assert .h and .hpp bindings files are the ones generated
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4.2.2
-    - uses: actions-rs/toolchain@v1
+    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+    - uses: actions-rs/toolchain@b2417cde72dcf67f306c0ae8e0828a81bf0b189f # v1.0.6
       with:
         toolchain: stable
-    - uses: actions-rs/cargo@v1
+    - uses: actions-rs/cargo@ae10961054e4aa8b4aa7dffede299aaf087aa33b # v1.0.1
       with:
         command: install
         args: cbindgen
@@ -47,9 +47,9 @@ jobs:
 
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4.2.2
+    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
     - name: Get ${{ matrix.changelog }} Changelog Entry
-      uses: mindsers/changelog-reader-action@v2
+      uses: mindsers/changelog-reader-action@32aa5b4c155d76c94e4ec883a223c947b2f02656 # v2.2.3
       id: changelog_reader
       with:
         # Check format for the last 10 entries
