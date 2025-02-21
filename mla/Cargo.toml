@@ -36,7 +36,7 @@ zeroize = { version = "1", default-features = false}
 # Post-quantum
 ml-kem = { version = "0.1.1", default-features = false }
 kem = {version = "0.3.0-pre.0", default-features = false }
-
+hpke = { version = "0.12", default-features = false, features = ["alloc", "x25519"] }
 
 [dev-dependencies]
 hex-literal = { version = "0.4", default-features = false}
