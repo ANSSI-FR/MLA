@@ -11,7 +11,7 @@ use rand::Rng;
 use rand_chacha::rand_core::CryptoRngCore;
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
-use sha2::Sha256;
+use sha2::Sha512;
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -88,10 +88,10 @@ fn combine(
     ciphertext2: &[u8],
 ) -> Key {
     // Make the first shared-secret uniformly random
-    let (uniformly_random_ss1, _hkdf) = Hkdf::<Sha256>::extract(None, shared_secret1);
+    let (uniformly_random_ss1, _hkdf) = Hkdf::<Sha512>::extract(None, shared_secret1);
 
     // As uniformly_random_ss1 is uniformly random, HKDF-Extract act as a Dual-PRF
-    let hkdf = Hkdf::<Sha256>::new(
+    let hkdf = Hkdf::<Sha512>::new(
         Some(&uniformly_random_ss1),
         // Combine with the second shared secret
         shared_secret2,
@@ -100,7 +100,7 @@ fn combine(
     // Include ciphertexts to keep IND-CCA2 even if one of the KEM is not
     let mut key = [0u8; KEY_SIZE];
     hkdf.expand_multi_info(&[ciphertext1, ciphertext2], &mut key)
-        .expect("Safe to unwrap, 32 is a valid length for SHA256");
+        .expect("Safe to unwrap, 32 is a valid length for SHA512");
 
     key
 }
@@ -403,8 +403,8 @@ mod tests {
             b"ciphertext2",
         );
         let expected_result = [
-            48, 101, 217, 203, 204, 40, 30, 190, 224, 0, 235, 53, 164, 222, 55, 98, 101, 174, 142,
-            98, 125, 204, 252, 210, 251, 111, 59, 45, 110, 150, 250, 11,
+            147, 69, 15, 150, 130, 155, 67, 230, 172, 36, 219, 184, 233, 104, 18, 142, 
+            225, 251, 62, 222, 149, 181, 39, 58, 182, 235, 181, 250, 45, 173, 134, 129,
         ];
         assert_eq!(&computed_result, &expected_result);
     }

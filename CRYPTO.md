@@ -351,7 +351,7 @@ commit& = \textrm{Decrypt}_{AES\ 256\ GCM}(\\
 ```math
 \begin{align}
 start &= pos - \mathtt{sizeof}(keycommit)\\
-j &= pos \div 4M\\
+j &= pos \div 128KiB\\
 \end{align}
 ```
 
@@ -373,14 +373,14 @@ chunk_j& = \textrm{Decrypt}_{AES\ 256\ GCM}(\\
 - Key commitment is always checked before returning clear-text data to the caller
 - AEAD tag of a chunk is always checked before returning the corresponding clear-text data to the caller
 - Arguments for HPKE use are very similar to the ones mentioned above. In particular, this is a standardized approach with existing analysis
-- As there is two kind of custom KEM used ("Per-recipient KEM" and "Hybrid KEM"), two distinct KEM ID are used. In addition, two distinct MLA specific `info` are used to bound this derivation to MLA
+- As there is two kind of custom KEM used ("Per-recipient KEM" and "Hybrid KEM"), two distinct KEM ID are used. In addition, two distinct MLA specific `info` are used to bind this derivation to MLA
 - As described in [^keycommit] and [^keycommit2], AES in GCM mode does not ensure "key commitment". This property is added in the layer using the "padding fix" scheme from [^keycommit] with the recommended 512-bits size for a 256-bits security
-- Key commitment is mainly used to ensure that two recipients will decrypt to the same plaintext if given the same ciphertext, i.e. an attacker modifying the header of an archive cannot provides two distinct plaintext to two distinct recipient
+- Key commitment is mainly used to ensure that two recipients will decrypt to the same plaintext if given the same ciphertext, i.e. an attacker modifying the header of an archive cannot provide two distinct plaintext to two distinct recipient
 - AES-GCM is used as an industry standard AEAD
     - the base nonce, and therefore each nonce used, are unique per archive because they are generated from the archive-specific shared secret, limiting the nonce-reuse risk to standard acceptability [^hpke]
     - no more than $2^{64}$ chunks will be produced, as the sequence's type used in MLA implementation is a `u64` checked for overflow. As this is a widely accepted limit of AES-GCM, this value is also within the range provided by [^hpke]
     - the tag size is 128-bits (standard one), avoiding attacks described in [^weaknessgcm]
-    - 4MB is lower than the maximum plaintext length for a single message in AES-GCM (64 GiB)[^weaknessgcm]
+    - 128KiB is lower than the maximum plaintext length for a single message in AES-GCM (64 GiB)[^weaknessgcm]
 
 ### Seed derivation
 
@@ -391,7 +391,7 @@ These API are usually fed with cryptographically generated data, except for the 
 This feature is meant to provide a way for client to implement:
 
 - A derivation tree
-- Keep the root secret in a safe place, and be able to find back the derives secrets
+- Keep the root secret in a safe place, and be able to find back the derived secrets
 
 The derivation scheme is based on the same ideas than `mla::crypto::hybrid::combine`:
 
@@ -416,7 +416,7 @@ If a `seed` is provided, the `ChaChaRng` is seeded with the first 32-bytes of $\
 
 The CSRNG is then provided to MLA deterministic APIs.
 
-## Implementation specifics
+## Implementation specifications
 
 ### External dependencies
 
@@ -471,13 +471,13 @@ For instance, the `mlar` CLI will refuse to open an archive without the `Encrypt
 To perform this attack, the attacker will have to either remove the `Encrypt` bit or modify the key used for decryption with one she has.
 The remaining encrypted data will then act as random values.
 
-Still, the attacker could expect to gain enough privilege, like arbitrary code execution in the process, during the archive read. She can then tries to re-use the provided key to decrypt, then act on the real data.
+Still, the attacker could expect to gain enough privilege, like arbitrary code execution in the process, during the archive read. One can then try to reuse the provided key to decrypt, then act on the real data.
 
 Limiting this attack is beyond the scope of this document. It mainly involves the security features of Rust, reviewed implementation, testing & fuzzing, zeroizing secrets when possible [^issuezeroize], etc.
 
 - An attacker can truncate an archive and hope for repair
 
-This attack is based on a trade-off: should the `SafeReader` tries to get as many bytes as possible, or should it returns only data that have been authenticated?
+This attack is based on a trade-off: should the `SafeReader` try to get as many bytes as possible, or should it return only data that have been authenticated?
 
 The choice has been made to report the decision to the user of the library[^issueallowunauth].
 
@@ -497,7 +497,7 @@ Fundamentally, additional information are missing to provide this property (send
 
 Still, if this property is expected in future MLA usage, it could be added through HPKE Key Scheduling [^hpke], without questioning the claims already made in this document.
 
-- Hided recipient list
+- Hidden recipient list
 
 Only the owner of a recipient private key can learn that it is an archive's recipient. 
 

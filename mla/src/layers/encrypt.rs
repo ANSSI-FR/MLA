@@ -164,7 +164,7 @@ impl InternalEncryptionConfig {
 #[derive(Serialize, Deserialize)]
 pub struct EncryptionPersistentConfig {
     /// Key-wrapping for each recipients
-    pub multi_recipient: HybridMultiRecipientEncapsulatedKey,
+    pub hybrid_multi_recipient_encapsulate_key: HybridMultiRecipientEncapsulatedKey,
     /// Encrypted version of the hardcoded `KEY_COMMITMENT_CHAIN`
     key_commitment: KeyCommitmentAndTag,
 }
@@ -195,7 +195,7 @@ impl EncryptionConfig {
         &self,
     ) -> Result<(EncryptionPersistentConfig, InternalEncryptionConfig), ConfigError> {
         // Generate then encapsulate the main key for each recipients
-        let (multi_recipient, ss_hybrid) = self.public_keys.encapsulate(&mut get_crypto_rng())?;
+        let (hybrid_multi_recipient_encapsulate_key, ss_hybrid) = self.public_keys.encapsulate(&mut get_crypto_rng())?;
 
         // Generate the main encrypt layer nonce and keep the main key for internal use
         let cryptographic_material = InternalEncryptionConfig::from(ss_hybrid)
@@ -209,7 +209,7 @@ impl EncryptionConfig {
         // Create the persistent version, to be exported
         Ok((
             EncryptionPersistentConfig {
-                multi_recipient,
+                hybrid_multi_recipient_encapsulate_key,
                 key_commitment,
             },
             cryptographic_material,
@@ -244,7 +244,7 @@ impl EncryptionReaderConfig {
             return Err(ConfigError::PrivateKeyNotSet);
         }
         for private_key in &self.private_keys {
-            if let Ok(ss_hybrid) = private_key.decapsulate(&config.multi_recipient) {
+            if let Ok(ss_hybrid) = private_key.decapsulate(&config.hybrid_multi_recipient_encapsulate_key) {
                 let (key, nonce) = key_schedule_base_hybrid_kem(&ss_hybrid.0, HPKE_INFO_LAYER)
                     .or(Err(ConfigError::KeyWrappingComputationError))?;
                 self.encrypt_parameters = Some((key, nonce));
@@ -342,7 +342,7 @@ impl<'a, W: 'a + InnerWriterTrait> LayerWriter<'a, W> for EncryptionLayerWriter<
     }
 }
 
-impl<'a, W: InnerWriterTrait> Write for EncryptionLayerWriter<'a, W> {
+impl<W: InnerWriterTrait> Write for EncryptionLayerWriter<'_, W> {
     #[allow(clippy::comparison_chain)]
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         if self.current_chunk_offset > CHUNK_SIZE {
@@ -615,7 +615,7 @@ impl<'a, R: 'a + Read> LayerFailSafeReader<'a, R> for EncryptionLayerFailSafeRea
     }
 }
 
-impl<'a, R: Read> Read for EncryptionLayerFailSafeReader<'a, R> {
+impl<R: Read> Read for EncryptionLayerFailSafeReader<'_, R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         if self.current_chunk_offset == CHUNK_SIZE {
             // Ignore the tag and renew the cipher
