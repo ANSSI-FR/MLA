@@ -157,7 +157,7 @@ The resulting data is the concatenation of all decompressed `compressed_block_i`
 ### Example
 
 For example, on [samples/archive_v1.mla](samples/archive_v1.mla), after decryption:
-* Reading from the end of `data` leads to `sizes_info_length = 24`
+* Reading from the end of `data` leads to `sizes_info_length = 24`, as [bincode Vec encoding](https://github.com/bincode-org/bincode/blob/trunk/docs/spec.md#collections) puts its size before its content on 8 bytes.
 * The corresponding `SizesInfo` is:
 ```rust
 SizesInfo {
@@ -274,7 +274,7 @@ Off5: [EndOfFile ID 1]
 ...
 ```
 
-The `offsets` for the file with ID 1 will be ̀`Off0`, `Off2`, `Off5`.
+The `offsets` for the file with ID 1 will be `Off0`, `Off2`, `Off3` and `Off5`.
 Additionally, for faster `hash` retrieval, `files_info.eof_offset` is the offset of the `EndOfFile` block for the corresponding file. In this example, `eof_offset = Off5` for ID 1.
 
 Finally, the `files_info.size` is the size in bytes of the corresponding file content.
