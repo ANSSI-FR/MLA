@@ -461,10 +461,7 @@ pub struct ArchiveWriter<'a, W: 'a + InnerWriterTrait> {
 // This is an unstable feature for now (`Vec.remove_item`), use a function
 // instead to keep stable compatibility
 pub fn vec_remove_item<T: std::cmp::PartialEq>(vec: &mut Vec<T>, item: &T) -> Option<T> {
-    let pos = match vec.iter().position(|x| *x == *item) {
-        Some(x) => x,
-        None => return None,
-    };
+    let pos = vec.iter().position(|x| *x == *item)?;
     Some(vec.remove(pos))
 }
 
