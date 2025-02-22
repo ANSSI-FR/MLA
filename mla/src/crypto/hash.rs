@@ -16,7 +16,7 @@ impl<'a, R: Read> HashWrapperReader<'a, R> {
     }
 }
 
-impl<'a, R: Read> Read for HashWrapperReader<'a, R> {
+impl<R: Read> Read for HashWrapperReader<'_, R> {
     /// Wrapper on inner with hash update
     fn read(&mut self, into: &mut [u8]) -> io::Result<usize> {
         let read = self.inner.read(into)?;

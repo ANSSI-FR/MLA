@@ -260,7 +260,7 @@ impl<'a, W: 'a + InnerWriterTrait> LayerWriter<'a, W> for EncryptionLayerWriter<
     }
 }
 
-impl<'a, W: InnerWriterTrait> Write for EncryptionLayerWriter<'a, W> {
+impl<W: InnerWriterTrait> Write for EncryptionLayerWriter<'_, W> {
     #[allow(clippy::comparison_chain)]
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         if self.current_chunk_offset > CHUNK_SIZE {
@@ -603,7 +603,7 @@ impl<'a, R: 'a + Read> LayerFailSafeReader<'a, R> for EncryptionLayerFailSafeRea
     }
 }
 
-impl<'a, R: Read> Read for EncryptionLayerFailSafeReader<'a, R> {
+impl<R: Read> Read for EncryptionLayerFailSafeReader<'_, R> {
     /// Behavior changes depending on config.FailSafeReaderDecryptionMode
     /// - OnlyAuthenticatedData: only authenticated data is returned
     /// - DataEvenUnauthenticated: all data is returned, even if not authenticated

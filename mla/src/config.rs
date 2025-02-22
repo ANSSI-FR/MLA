@@ -7,7 +7,7 @@ use crate::Layers;
 use serde::{Deserialize, Serialize};
 
 /// This module implements the configuration capabilities of MLA Archive
-
+///
 /// User's configuration used to prepare an archive
 pub struct ArchiveWriterConfig {
     layers_enabled: Layers,

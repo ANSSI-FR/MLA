@@ -242,7 +242,7 @@ struct PublicKeys {
 impl PublicKeys {
     #[new]
     #[pyo3(signature = (*args))]
-    fn new(args: &PyTuple) -> Result<Self, WrappedError> {
+    fn new(args: Bound<PyTuple>) -> Result<Self, WrappedError> {
         let mut keys = Vec::new();
 
         for element in args {
@@ -306,7 +306,7 @@ struct PrivateKeys {
 impl PrivateKeys {
     #[new]
     #[pyo3(signature = (*args))]
-    fn new(args: &PyTuple) -> Result<Self, WrappedError> {
+    fn new(args: Bound<PyTuple>) -> Result<Self, WrappedError> {
         let mut keys = Vec::new();
 
         for element in args {
@@ -603,6 +603,9 @@ pub struct MLAFile {
     path: String,
 }
 
+/// Thread safety is assured by Send and Sync traits (marker traits, hence unsafe)
+unsafe impl Sync for MLAFile {}
+
 /// Used to check whether the opening mode is the expected one, and unwrap it
 /// return a BadAPI argument error if not
 /// ```text
@@ -639,7 +642,7 @@ macro_rules! check_mode {
 impl MLAFile {
     #[new]
     #[pyo3(signature = (path, mode="r", config=None))]
-    fn new(path: &str, mode: &str, config: Option<&PyAny>) -> Result<Self, WrappedError> {
+    fn new(path: &str, mode: &str, config: Option<&Bound<'_, PyAny>>) -> Result<Self, WrappedError> {
         match mode {
             "r" => {
                 let rconfig = match config {
@@ -807,11 +810,13 @@ impl MLAFile {
         slf
     }
 
+    // cf. https://pyo3.rs/v0.22.5/function/signature
+    #[pyo3(signature = (exc_type=None, _exc_value=None, _traceback=None))]
     fn __exit__(
         &mut self,
-        exc_type: Option<&PyAny>,
-        _exc_value: Option<&PyAny>,
-        _traceback: Option<&PyAny>,
+        exc_type: Option<&Bound<'_, PyAny>>,
+        _exc_value: Option<&Bound<'_, PyAny>>,
+        _traceback: Option<&Bound<'_, PyAny>>,
     ) -> Result<bool, WrappedError> {
         if exc_type.is_some() {
             // An exception occured, let it be raised again
@@ -833,7 +838,7 @@ impl MLAFile {
     /// alias for io.BufferedIOBase
     // Purpose: only one import
     #[classattr]
-    fn _buffered_type(py: Python) -> Result<&PyType, WrappedError> {
+    fn _buffered_type(py: Python) -> Result<Py<PyType>, WrappedError> {
         Ok(py.import("io")?.getattr("BufferedIOBase")?.extract()?)
     }
 
@@ -857,7 +862,7 @@ impl MLAFile {
         &mut self,
         py: Python,
         key: &str,
-        dest: &PyAny,
+        dest: &Bound<'_, PyAny>,
         chunk_size: usize,
     ) -> Result<(), WrappedError> {
         let reader = check_mode!(mut self, Read);
@@ -871,7 +876,7 @@ impl MLAFile {
             // `/path/to/dest`
             let mut output = std::fs::File::create(dest.to_string())?;
             io::copy(&mut archive_file.unwrap().data, &mut output)?;
-        } else if dest.is_instance(py.get_type::<MLAFile>().getattr("_buffered_type")?)? {
+        } else if dest.is_instance(&py.get_type::<MLAFile>().getattr("_buffered_type")?)? {
             // isinstance(dest, io.BufferedIOBase)
             // offer `.write` (`.close` must be called from the caller)
 
@@ -912,7 +917,7 @@ impl MLAFile {
         &mut self,
         py: Python,
         key: &str,
-        src: &PyAny,
+        src: &Bound<'_, PyAny>,
         chunk_size: usize,
     ) -> Result<(), WrappedError> {
         let writer = check_mode!(mut self, Write);
@@ -922,21 +927,19 @@ impl MLAFile {
             // `/path/to/src`
             let mut input = std::fs::File::open(src.to_string())?;
             writer.add_file(key, input.metadata()?.len(), &mut input)?;
-        } else if src.is_instance(py.get_type::<MLAFile>().getattr("_buffered_type")?)? {
+        } else if src.is_instance(&py.get_type::<MLAFile>().getattr("_buffered_type")?)? {
             // isinstance(src, io.BufferedIOBase)
             // offer `.read` (`.close` must be called from the caller)
 
             let id = writer.start_file(key)?;
-            loop {
-                let data = src
-                    .call_method1("read", (chunk_size,))?
-                    .extract::<&PyBytes>()?
-                    .as_bytes();
-                if data.is_empty() {
-                    break;
+            while let Some(data) = Some(PyBytesMethods::as_bytes(&src
+                .call_method1("read", (chunk_size,))?
+                .extract::<Bound<_>>()?)) {
+                    if data.is_empty() {
+                        break;
+                    }
+                    writer.append_file_content(id, data.len(), data)?;
                 }
-                writer.append_file_content(id, data.len(), data)?;
-            }
             writer.end_file(id)?;
         } else {
             return Err(PyTypeError::new_err(
@@ -953,7 +956,7 @@ impl MLAFile {
 /// Instanciate the Python module
 #[pymodule]
 #[pyo3(name = "mla")]
-fn pymla(py: Python, m: &PyModule) -> PyResult<()> {
+fn pymla(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Classes
     m.add_class::<MLAFile>()?;
     m.add_class::<FileMetadata>()?;
