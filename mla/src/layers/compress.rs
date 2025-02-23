@@ -396,7 +396,7 @@ impl<'a, R: 'a + Read + Seek> Read for CompressionLayerReader<'a, R> {
     }
 }
 
-impl<'a, R: Read + Seek> Seek for CompressionLayerReader<'a, R> {
+impl<R: Read + Seek> Seek for CompressionLayerReader<'_, R> {
     /// Seek to the position `pos` in the uncompressed stream
     fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
         // Seeking may instantiate a decompressor, and therefore position the

@@ -20,7 +20,6 @@ use serde::{Deserialize, Serialize};
 /// MLA specifics <= InternalConfig  PersistentConfig => to be stored in the header,
 ///                                                      for futur reloaded by the Reader
 /// ```
-
 /// User's configuration used to prepare an archive
 pub struct ArchiveWriterConfig {
     layers_enabled: Layers,

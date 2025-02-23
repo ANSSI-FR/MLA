@@ -91,7 +91,7 @@ impl<'a, 'b, W: InnerWriterTrait> StreamWriter<'a, 'b, W> {
     }
 }
 
-impl<'a, 'b, W: InnerWriterTrait> Write for StreamWriter<'a, 'b, W> {
+impl<W: InnerWriterTrait> Write for StreamWriter<'_, '_, W> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.archive
             .append_file_content(self.file_id, buf.len() as u64, buf)?;
