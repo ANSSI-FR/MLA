@@ -48,7 +48,7 @@ pub enum MLAStatus {
     ConfigErrorEncryptionKeyIsMissing = 0x140003,
     ConfigErrorPrivateKeyNotSet = 0x140004,
     ConfigErrorPrivateKeyNotFound = 0x140005,
-    ConfigErrorECIESComputationError = 0x140006,
+    ConfigErrorDHKEMComputationError = 0x140006,
     ConfigErrorKeyCommitmentComputationError = 0x140007,
     ConfigErrorKeyCommitmentCheckingError = 0x140008,
     ConfigErrorNoRecipients = 0x140009,
@@ -57,6 +57,7 @@ pub enum MLAStatus {
     DuplicateFilename = 0x150000,
     AuthenticatedDecryptionWrongTag = 0x160000,
     HKDFInvalidKeyLength = 0x170000,
+    HPKEError = 0x18000,
     Curve25519ParserError = 0xF10000,
 }
 /// Implemented by the developper. Takes a buffer of a certain number of bytes of MLA
@@ -175,8 +176,8 @@ impl From<MLAError> for MLAStatus {
             MLAError::ConfigError(ConfigError::PrivateKeyNotFound) => {
                 MLAStatus::ConfigErrorPrivateKeyNotFound
             }
-            MLAError::ConfigError(ConfigError::ECIESComputationError) => {
-                MLAStatus::ConfigErrorECIESComputationError
+            MLAError::ConfigError(ConfigError::DHKEMComputationError) => {
+                MLAStatus::ConfigErrorDHKEMComputationError
             }
             MLAError::ConfigError(ConfigError::KeyCommitmentComputationError) => {
                 MLAStatus::ConfigErrorKeyCommitmentComputationError
@@ -193,6 +194,7 @@ impl From<MLAError> for MLAStatus {
             MLAError::DuplicateFilename => MLAStatus::DuplicateFilename,
             MLAError::AuthenticatedDecryptionWrongTag => MLAStatus::AuthenticatedDecryptionWrongTag,
             MLAError::HKDFInvalidKeyLength => MLAStatus::HKDFInvalidKeyLength,
+            MLAError::HPKEError(_) => MLAStatus::HPKEError,
         }
     }
 }
