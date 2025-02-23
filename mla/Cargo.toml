@@ -14,7 +14,7 @@ readme = "../README.md"
 [dependencies]
 rand = { version = "0.8", default-features = false, features = ["getrandom", "std"]}
 rand_chacha = { version = "0.3", default-features = false}
-brotli = { version = "6.0", default-features = false, features = ["std"]}
+brotli = { version = "7.0", default-features = false, features = ["std"]}
 bitflags = { version = "2.1", default-features = false, features = ["serde"]}
 byteorder = { version = "1.3", default-features = false, features = ["std"] }
 serde = { version = "1", default-features = false, features = ["derive"] }
@@ -36,14 +36,15 @@ zeroize = { version = "1", default-features = false}
 # Post-quantum
 ml-kem = { version = "0.1.1", default-features = false }
 kem = {version = "0.3.0-pre.0", default-features = false }
-
+hpke = { version = "0.12", default-features = false, features = ["alloc", "x25519"] }
 
 [dev-dependencies]
 hex-literal = { version = "0.4", default-features = false}
 aes-gcm = { version = "0.10", default-features = false, features = ["aes"]}
 aead = { version = "0.5", default-features = false, features = ["alloc"]}
 criterion = { version = "0.5", default-features = false}
-curve25519-parser = { version = "0.4", default-features = false }
+# mlakey-parser = { version = "0.4", default-features = false }
+mlakey-parser = { path = "../mlakey-parser", version = "0.1", default-features = false }
 hex = { version = "0.4", default-features = false, features = ["alloc"]}
 static_assertions = { version = "1", default-features = false }
 
