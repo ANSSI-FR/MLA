@@ -26,7 +26,7 @@ hkdf = { version = "0", default-features = false}
 zeroize = { version = "1", default-features = false}
 # Could be made optional / feature to enable (for binary size)
 tar = "0.4"
-rand_chacha = "0.3"
+rand_chacha = "0.9"
 lru = "0"
 
 [dev-dependencies]

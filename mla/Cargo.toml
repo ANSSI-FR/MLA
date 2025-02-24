@@ -13,7 +13,7 @@ readme = "../README.md"
 
 [dependencies]
 rand = { version = "0.8", default-features = false, features = ["getrandom", "std"]}
-rand_chacha = { version = "0.3", default-features = false}
+rand_chacha = { version = "0.9", default-features = false}
 brotli = { version = "7.0", default-features = false, features = ["std"]}
 bitflags = { version = "2.1", default-features = false, features = ["serde"]}
 byteorder = { version = "1.3", default-features = false, features = ["std"] }
