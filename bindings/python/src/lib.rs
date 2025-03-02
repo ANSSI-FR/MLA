@@ -77,12 +77,6 @@ create_exception!(
 );
 create_exception!(
     mla,
-    RandError,
-    MLAError,
-    "Error with the inner random generator"
-);
-create_exception!(
-    mla,
     PrivateKeyNeeded,
     MLAError,
     "A Private Key is required to decrypt the encrypted cipher key"
@@ -175,7 +169,6 @@ impl From<WrappedError> for PyErr {
                     mla::errors::Error::WrongArchiveWriterState { current_state, expected_state } => PyErr::new::<WrongArchiveWriterState, _>(format!("The writer state is not in the expected state for the current operation. Current state: {:?}, expected state: {:?}", current_state, expected_state)),
                     mla::errors::Error::WrongReaderState(msg) => PyErr::new::<WrongReaderState, _>(msg),
                     mla::errors::Error::WrongWriterState(msg) => PyErr::new::<WrongWriterState, _>(msg),
-                    mla::errors::Error::RandError(err) => PyErr::new::<RandError, _>(format!("{:}", err)),
                     mla::errors::Error::PrivateKeyNeeded => PyErr::new::<PrivateKeyNeeded, _>("A Private Key is required to decrypt the encrypted cipher key"),
                     mla::errors::Error::DeserializationError => PyErr::new::<DeserializationError, _>("Deserialization error. May happens when starting from a wrong offset / version mismatch"),
                     mla::errors::Error::SerializationError => PyErr::new::<SerializationError, _>("Serialization error. May happens on I/O errors"),
@@ -982,7 +975,6 @@ fn pymla(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     )?;
     m.add("WrongReaderState", py.get_type::<WrongReaderState>())?;
     m.add("WrongWriterState", py.get_type::<WrongWriterState>())?;
-    m.add("RandError", py.get_type::<RandError>())?;
     m.add("PrivateKeyNeeded", py.get_type::<PrivateKeyNeeded>())?;
     m.add(
         "DeserializationError",

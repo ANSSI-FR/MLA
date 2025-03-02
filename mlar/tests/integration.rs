@@ -1,7 +1,7 @@
 use assert_cmd::Command;
 use assert_fs::fixture::{FileWriteBin, NamedTempFile, TempDir};
 use permutate::Permutator;
-use rand::distributions::{Alphanumeric, Distribution, Standard};
+use rand::distr::{Alphanumeric, Distribution, StandardUniform};
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use std::collections::{HashMap, HashSet};
@@ -36,7 +36,10 @@ fn setup() -> TestFS {
 
     // `file2.bin`: Use full charset for bad compression
     let mut rng: StdRng = SeedableRng::from_seed([0u8; 32]);
-    let data: Vec<u8> = Standard.sample_iter(&mut rng).take(SIZE_FILE2).collect();
+    let data: Vec<u8> = StandardUniform
+        .sample_iter(&mut rng)
+        .take(SIZE_FILE2)
+        .collect();
     tmp_file2.write_binary(data.as_slice()).unwrap();
 
     // `file3.bin`: tiny file

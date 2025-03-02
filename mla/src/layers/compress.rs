@@ -939,7 +939,7 @@ mod tests {
 
     use crate::layers::raw::{RawLayerFailSafeReader, RawLayerReader, RawLayerWriter};
     use brotli::writer::StandardAlloc;
-    use rand::distributions::{Alphanumeric, Distribution, Standard};
+    use rand::distr::{Alphanumeric, Distribution, StandardUniform};
     use rand::SeedableRng;
     use std::io::{Cursor, Read, Write};
     use std::time::Instant;
@@ -961,7 +961,7 @@ mod tests {
     fn get_uncompressable_data() -> Vec<u8> {
         // Use only alphanumeric charset to allow for compression
         let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(0);
-        let data: Vec<u8> = Standard.sample_iter(&mut rng).take(SIZE).collect();
+        let data: Vec<u8> = StandardUniform.sample_iter(&mut rng).take(SIZE).collect();
         assert_eq!(data.len(), SIZE);
         data
     }

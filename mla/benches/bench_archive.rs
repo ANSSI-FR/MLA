@@ -7,7 +7,7 @@ use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
 use mla::helpers::linear_extract;
 use mla::{ArchiveFailSafeReader, Layers};
 use mla::{ArchiveReader, ArchiveWriter};
-use rand::distributions::{Alphanumeric, Distribution};
+use rand::distr::{Alphanumeric, Distribution};
 use rand::seq::index::sample;
 use rand::RngCore;
 use rand::SeedableRng;

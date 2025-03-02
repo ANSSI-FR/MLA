@@ -829,7 +829,7 @@ fn keygen(matches: &ArgMatches) -> Result<(), MlarError> {
             hseed.copy_from_slice(&Sha512::digest(seed.as_bytes())[0..32]);
             ChaChaRng::from_seed(hseed)
         }
-        None => ChaChaRng::from_entropy(),
+        None => ChaChaRng::from_os_rng(),
     };
 
     let key_pair = generate_keypair(&mut csprng).expect("Error while generating the key-pair");

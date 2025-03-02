@@ -1245,7 +1245,7 @@ impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
 pub(crate) mod tests {
     use super::*;
     use curve25519_parser::{parse_openssl_25519_privkey, parse_openssl_25519_pubkey};
-    use rand::distributions::{Distribution, Standard};
+    use rand::distr::{Distribution, StandardUniform};
     use rand::{RngCore, SeedableRng};
     use rand_chacha::ChaChaRng;
     #[cfg(feature = "send")]
@@ -2114,7 +2114,7 @@ pub(crate) mod tests {
         let mut cur_size = 0;
         while cur_size < MORE_THAN_U32 {
             let size = std::cmp::min(rng.next_u32() as u64, MORE_THAN_U32 - cur_size);
-            let data: Vec<u8> = Standard
+            let data: Vec<u8> = StandardUniform
                 .sample_iter(&mut rng_data)
                 .take(size as usize)
                 .collect();
@@ -2131,7 +2131,7 @@ pub(crate) mod tests {
                 .start_file(format!("file_{:}", nb_file).as_str())
                 .unwrap();
             let size = std::cmp::min(rng.next_u32() as u64, MAX_SIZE - cur_size);
-            let data: Vec<u8> = Standard
+            let data: Vec<u8> = StandardUniform
                 .sample_iter(&mut rng_data)
                 .take(size as usize)
                 .collect();
@@ -2169,7 +2169,10 @@ pub(crate) mod tests {
             let mut file_stream = mla_read.get_file(file_name).unwrap().unwrap().data;
             loop {
                 let read = file_stream.read(&mut chunk).unwrap();
-                let expect: Vec<u8> = Standard.sample_iter(&mut rng_data).take(read).collect();
+                let expect: Vec<u8> = StandardUniform
+                    .sample_iter(&mut rng_data)
+                    .take(read)
+                    .collect();
                 assert_eq!(&chunk[..read], expect.as_slice());
                 if read == 0 {
                     break;

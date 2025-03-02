@@ -105,7 +105,7 @@ impl<W: InnerWriterTrait> Write for StreamWriter<'_, '_, W> {
 
 #[cfg(test)]
 mod tests {
-    use rand::distributions::Standard;
+    use rand::distr::StandardUniform;
     use rand::prelude::Distribution;
     use rand::{RngCore, SeedableRng};
     use rand_chacha::ChaChaRng;
@@ -192,7 +192,10 @@ mod tests {
         let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
 
         let fname = "my_file".to_string();
-        let data: Vec<u8> = Standard.sample_iter(&mut rng).take(file_length).collect();
+        let data: Vec<u8> = StandardUniform
+            .sample_iter(&mut rng)
+            .take(file_length)
+            .collect();
         assert_eq!(data.len(), file_length);
         mla.add_file(&fname, data.len() as u64, data.as_slice())
             .unwrap();
