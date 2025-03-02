@@ -33,8 +33,6 @@ pub enum Error {
     WrongReaderState(String),
     /// The writer state is not in the expected state for the current operation
     WrongWriterState(String),
-    /// Error with the inner random generator
-    RandError(rand::Error),
     /// A Private Key is required to decrypt the encrypted cipher key
     PrivateKeyNeeded,
     /// Deserialization error. May happens when starting from a wrong offset /
@@ -78,12 +76,6 @@ impl From<std::string::FromUtf8Error> for Error {
     }
 }
 
-impl From<rand::Error> for Error {
-    fn from(error: rand::Error) -> Self {
-        Error::RandError(error)
-    }
-}
-
 impl From<bincode::ErrorKind> for Error {
     fn from(_error: bincode::ErrorKind) -> Self {
         Error::DeserializationError
@@ -121,7 +113,6 @@ impl error::Error for Error {
         match &self {
             Error::IOError(err) => Some(err),
             Error::UTF8ConversionError(err) => Some(err),
-            Error::RandError(err) => Some(err),
             Error::ConfigError(err) => Some(err),
             _ => None,
         }

@@ -115,7 +115,7 @@ mod tests {
 
     #[test]
     fn ecies() {
-        let mut csprng = ChaChaRng::from_entropy();
+        let mut csprng = ChaChaRng::from_os_rng();
         let mut bytes = [0u8; 32];
         csprng.fill_bytes(&mut bytes);
         let ephemeral_scalar = StaticSecret::from(bytes);
@@ -135,7 +135,7 @@ mod tests {
     #[test]
     fn multi_recipients() {
         // Create fake recipients
-        let mut csprng = ChaChaRng::from_entropy();
+        let mut csprng = ChaChaRng::from_os_rng();
         let mut bytes = [0u8; 32];
         let mut recipients_priv = Vec::new();
         let mut recipients_pub = Vec::new();
@@ -147,7 +147,7 @@ mod tests {
         }
 
         // Perform multi-recipients ECIES
-        let key = csprng.gen::<[u8; KEY_SIZE]>();
+        let key = csprng.random::<[u8; KEY_SIZE]>();
         let persist = store_key_for_multi_recipients(&recipients_pub, &key, &mut csprng).unwrap();
 
         // Count keys
