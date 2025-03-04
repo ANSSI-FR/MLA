@@ -2,7 +2,7 @@
 name = "mlakey-parser"
 version = "0.1.0"
 authors = ["Camille Mougey <camille.mougey@ssi.gouv.fr>"]
-edition = "2018"
+edition = "2024"
 license = "LGPL-3.0-only"
 description = "MLA Key Parser - DER/PEM parser for MLA Hybrid keys"
 homepage = "https://github.com/ANSSI-FR/MLA"
