@@ -2,7 +2,7 @@
 name = "mla-fuzz-afl"
 version = "0.1.0"
 authors = ["Camille Mougey <camille.mougey@ssi.gouv.fr>"]
-edition = "2018"
+edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
