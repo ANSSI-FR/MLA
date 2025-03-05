@@ -19,7 +19,7 @@ name = "pymla"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = "0"
+pyo3 = "0.23"
 mla = { version = "1", features = ["send"], path = "../../mla"}
-x25519-dalek = "2"
+x25519-dalek = "2.0"
 curve25519-parser = { path = "../../curve25519-parser", version = "0.4" }

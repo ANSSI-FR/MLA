@@ -1008,6 +1008,7 @@ const PRIVATE_KEY_TESTSEED2_SHA256: [u8; 32] = [
     105, 16, 134, 58, 98, 154, 243, 28, 1, 155, 68,
 ];
 
+// TODO: fix after crates upgrades
 #[test]
 fn test_keygen_seed() {
     // Gen deterministic keypairs
