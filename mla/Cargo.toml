@@ -12,9 +12,9 @@ readme = "../README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-# TODO: find a way to upgrade crate with traits changes (CryptoRngCore -> CryptoRng + RngCore)
+# Wait that all MLA dependencies upgrade below crate to do it too as there is a trait modification (CryptoRngCore -> CryptoRng + RngCore)
 rand = { version = "0.8", default-features = false, features = ["getrandom", "std"]}
-# TODO: find a way to upgrade crate with traits changes (CryptoRngCore -> CryptoRng + RngCore)
+# Wait that all MLA dependencies upgrade below crate to do it too as there is a trait modification (CryptoRngCore -> CryptoRng + RngCore)
 rand_chacha = { version = "0.3", default-features = false}
 brotli = { version = "7.0", default-features = false, features = ["std"]}
 bitflags = { version = "2.9", default-features = false, features = ["serde"]}
@@ -38,7 +38,7 @@ zeroize = { version = "1.8", default-features = false}
 # Post-quantum
 ml-kem = { version = "0.3.0-pre", default-features = false }
 kem = {version = "0.3.0-pre.0", default-features = false }
-# TODO: find a way to upgrade crate with traits changes (CryptoRngCore -> CryptoRng + RngCore)
+# Wait that all MLA dependencies upgrade below crate to do it too as there is a trait modification (CryptoRngCore -> CryptoRng + RngCore)
 hpke = { version = "0.12", default-features = false, features = ["alloc", "x25519"] }
 
 [dev-dependencies]
