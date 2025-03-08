@@ -3,3 +3,6 @@
 debug/
 debugs/
 target/
+
+# pycache for py-bindings
+__pycache__/

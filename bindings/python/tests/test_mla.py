@@ -266,29 +266,29 @@ SAMPLE_PATH = os.path.join(MLA_BASE_PATH, "samples")
 def test_public_keys():
     "Test the PublicKeys object"
     # Bad parsing
-    with pytest.raises(mla.InvalidECCKeyFormat):
+    with pytest.raises(mla.InvalidKeyFormat):
         mla.PublicKeys(b"NOT A KEY")
     
     with pytest.raises(FileNotFoundError):
         mla.PublicKeys("/tmp/does_not_exists")
     
     # Open a PEM key, through path
-    pkeys_pem = mla.PublicKeys(os.path.join(SAMPLE_PATH, "test_ed25519_pub.pem"))
+    pkeys_pem = mla.PublicKeys(os.path.join(SAMPLE_PATH, "test_mlakey_pub.pem"))
     assert len(pkeys_pem.keys) == 1
     
     # Open a DER key, through path
-    pkeys_der = mla.PublicKeys(os.path.join(SAMPLE_PATH, "test_ed25519_pub.der"))
+    pkeys_der = mla.PublicKeys(os.path.join(SAMPLE_PATH, "test_mlakey_pub.der"))
     assert len(pkeys_pem.keys) == 1
 
     # Keys must be the same
     assert pkeys_pem.keys == pkeys_der.keys
 
     # Open a PEM key, through data
-    pkeys_pem = mla.PublicKeys(open(os.path.join(SAMPLE_PATH, "test_ed25519_pub.pem"), "rb").read())
+    pkeys_pem = mla.PublicKeys(open(os.path.join(SAMPLE_PATH, "test_mlakey_pub.pem"), "rb").read())
     assert len(pkeys_pem.keys) == 1
     
     # Open a DER key, through data
-    pkeys_pem = mla.PublicKeys(open(os.path.join(SAMPLE_PATH, "test_ed25519_pub.der"), "rb").read())
+    pkeys_pem = mla.PublicKeys(open(os.path.join(SAMPLE_PATH, "test_mlakey_pub.der"), "rb").read())
     assert len(pkeys_pem.keys) == 1
     
     # Keys must be the same
@@ -296,41 +296,41 @@ def test_public_keys():
 
     # Open several keys, using both path and data
     pkeys =  mla.PublicKeys(
-        os.path.join(SAMPLE_PATH, "test_ed25519_pub.pem"),
-        open(os.path.join(SAMPLE_PATH, "test_x25519_2_pub.pem"), "rb").read()
+        os.path.join(SAMPLE_PATH, "test_mlakey_pub.pem"),
+        open(os.path.join(SAMPLE_PATH, "test_mlakey_2_pub.pem"), "rb").read()
     )
     assert len(pkeys.keys) == 2
 
 def test_private_keys():
     "Test the PrivateKeys object"
     # Bad parsing
-    with pytest.raises(mla.InvalidECCKeyFormat):
+    with pytest.raises(mla.InvalidKeyFormat):
         mla.PrivateKeys(b"NOT A KEY")
     
-    with pytest.raises(mla.InvalidECCKeyFormat):
+    with pytest.raises(mla.InvalidKeyFormat):
         # This is a public key, not a private one
-        mla.PrivateKeys(os.path.join(SAMPLE_PATH, "test_ed25519_pub.pem"))
+        mla.PrivateKeys(os.path.join(SAMPLE_PATH, "test_mlakey_pub.pem"))
 
     with pytest.raises(FileNotFoundError):
         mla.PrivateKeys("/tmp/does_not_exists")
     
     # Open a PEM key, through path
-    pkeys_pem = mla.PrivateKeys(os.path.join(SAMPLE_PATH, "test_ed25519.pem"))
+    pkeys_pem = mla.PrivateKeys(os.path.join(SAMPLE_PATH, "test_mlakey.pem"))
     assert len(pkeys_pem.keys) == 1
     
     # Open a DER key, through path
-    pkeys_der = mla.PrivateKeys(os.path.join(SAMPLE_PATH, "test_ed25519.der"))
+    pkeys_der = mla.PrivateKeys(os.path.join(SAMPLE_PATH, "test_mlakey.der"))
     assert len(pkeys_pem.keys) == 1
 
     # Keys must be the same
     assert pkeys_pem.keys == pkeys_der.keys
 
     # Open a PEM key, through data
-    pkeys_pem = mla.PrivateKeys(open(os.path.join(SAMPLE_PATH, "test_ed25519.pem"), "rb").read())
+    pkeys_pem = mla.PrivateKeys(open(os.path.join(SAMPLE_PATH, "test_mlakey.pem"), "rb").read())
     assert len(pkeys_pem.keys) == 1
     
     # Open a DER key, through data
-    pkeys_pem = mla.PrivateKeys(open(os.path.join(SAMPLE_PATH, "test_ed25519.der"), "rb").read())
+    pkeys_pem = mla.PrivateKeys(open(os.path.join(SAMPLE_PATH, "test_mlakey.der"), "rb").read())
     assert len(pkeys_pem.keys) == 1
     
     # Keys must be the same
@@ -338,8 +338,8 @@ def test_private_keys():
 
     # Open several keys, using both path and data
     pkeys =  mla.PrivateKeys(
-        os.path.join(SAMPLE_PATH, "test_ed25519.pem"),
-        open(os.path.join(SAMPLE_PATH, "test_x25519_2.pem"), "rb").read()
+        os.path.join(SAMPLE_PATH, "test_mlakey.pem"),
+        open(os.path.join(SAMPLE_PATH, "test_mlakey_2.pem"), "rb").read()
     )
     assert len(pkeys.keys) == 2
 
@@ -348,20 +348,20 @@ def test_writer_config_public_keys():
 
     # Test API call
     config = mla.WriterConfig()
-    with pytest.raises(mla.InvalidECCKeyFormat):
+    with pytest.raises(mla.InvalidKeyFormat):
         config.set_public_keys(mla.PublicKeys(b"NOT A KEY"))
     
     # Test shortcut on object build
     config = mla.WriterConfig(
-        public_keys=mla.PublicKeys(os.path.join(SAMPLE_PATH, "test_ed25519_pub.pem"))
+        public_keys=mla.PublicKeys(os.path.join(SAMPLE_PATH, "test_mlakey_pub.pem"))
     )
     # Test the getter
     assert len(config.public_keys.keys) == 1
 
     # Chaining
     out = config.set_public_keys(mla.PublicKeys(
-        os.path.join(SAMPLE_PATH, "test_ed25519_pub.pem"),
-        open(os.path.join(SAMPLE_PATH, "test_x25519_2_pub.pem"), "rb").read()
+        os.path.join(SAMPLE_PATH, "test_mlakey_pub.pem"),
+        open(os.path.join(SAMPLE_PATH, "test_mlakey_2_pub.pem"), "rb").read()
     ))
     assert out is config
     assert len(config.public_keys.keys) == 2
@@ -385,17 +385,17 @@ def test_reader_config_api():
     assert config.private_keys is None
 
     config.set_private_keys(
-        mla.PrivateKeys(os.path.join(SAMPLE_PATH, "test_ed25519.pem"))
+        mla.PrivateKeys(os.path.join(SAMPLE_PATH, "test_mlakey.pem"))
     )
     assert len(config.private_keys.keys) == 1
 
-    config = mla.ReaderConfig(private_keys=mla.PrivateKeys(os.path.join(SAMPLE_PATH, "test_ed25519.pem")))
+    config = mla.ReaderConfig(private_keys=mla.PrivateKeys(os.path.join(SAMPLE_PATH, "test_mlakey.pem")))
     assert len(config.private_keys.keys) == 1
 
     # Chaining
     config = mla.ReaderConfig()
     out = config.set_private_keys(
-        mla.PrivateKeys(os.path.join(SAMPLE_PATH, "test_ed25519.pem")),
+        mla.PrivateKeys(os.path.join(SAMPLE_PATH, "test_mlakey.pem")),
     )
     assert out is config
 
@@ -404,7 +404,7 @@ def test_write_then_read_encrypted():
     # Create the archive
     path = tempfile.mkstemp(suffix=".mla")[1]
     with MLAFile(path, "w", config=mla.WriterConfig(
-        public_keys=mla.PublicKeys(os.path.join(SAMPLE_PATH, "test_ed25519_pub.pem")),
+        public_keys=mla.PublicKeys(os.path.join(SAMPLE_PATH, "test_mlakey_pub.pem")),
         layers=mla.LAYER_ENCRYPT
     )) as archive:
         for name, data in FILES.items():
@@ -412,7 +412,7 @@ def test_write_then_read_encrypted():
     
     # Read the archive
     with MLAFile(path, config=mla.ReaderConfig(
-        private_keys=mla.PrivateKeys(os.path.join(SAMPLE_PATH, "test_ed25519.pem"))
+        private_keys=mla.PrivateKeys(os.path.join(SAMPLE_PATH, "test_mlakey.pem"))
     )) as archive:
         assert sorted(archive.keys()) == sorted(list(FILES.keys()))
         for name, data in FILES.items():
@@ -423,7 +423,7 @@ def test_read_encrypted_archive_bad_key():
     # Create the archive
     path = tempfile.mkstemp(suffix=".mla")[1]
     with MLAFile(path, "w", config=mla.WriterConfig(
-        public_keys=mla.PublicKeys(os.path.join(SAMPLE_PATH, "test_ed25519_pub.pem")),
+        public_keys=mla.PublicKeys(os.path.join(SAMPLE_PATH, "test_mlakey_pub.pem")),
         layers=mla.LAYER_ENCRYPT
     )) as archive:
         for name, data in FILES.items():
@@ -437,7 +437,7 @@ def test_read_encrypted_archive_bad_key():
     # Try to read with an incorrect key (mla.ConfigError: PrivateKeyNotFound)
     with pytest.raises(mla.ConfigError):
         with MLAFile(path, config=mla.ReaderConfig(
-            private_keys=mla.PrivateKeys(os.path.join(SAMPLE_PATH, "test_x25519_2.pem"))
+            private_keys=mla.PrivateKeys(os.path.join(SAMPLE_PATH, "test_mlakey_2.pem"))
         )) as archive:
             pass
 

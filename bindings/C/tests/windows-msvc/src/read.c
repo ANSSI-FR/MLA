@@ -90,7 +90,7 @@ int test_reader_info()
     MLAStatus status;
 
     ArchiveInfo archive_info;
-    HANDLE hFile = CreateFile(TEXT("../../../../samples/archive_v1.mla"), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    HANDLE hFile = CreateFile(TEXT("../../../../samples/archive_v2.mla"), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (hFile == INVALID_HANDLE_VALUE)
     {
         fprintf(stderr, " [!] Cannot open file: %d\n", GetLastError());
@@ -166,7 +166,7 @@ int test_reader_extract()
     }
 
     FILE *f;
-    if (fopen_s(&f, "../../../../samples/archive_v1.mla", "r"))
+    if (fopen_s(&f, "../../../../samples/archive_v2.mla", "r"))
     {
         fprintf(stderr, " [!] Cannot open file: %d\n", errno);
         return 1;

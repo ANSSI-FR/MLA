@@ -178,4 +178,4 @@ MLAStatus mla_roarchive_extract(MLAConfigHandle *config,
 /// Get info on an existing MLA archive
 MLAStatus mla_roarchive_info(MlaReadCallback read_callback, void *context, ArchiveInfo *info_out);
 
-} // extern "C"
+}  // extern "C"
