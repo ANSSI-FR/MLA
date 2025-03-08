@@ -938,7 +938,7 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
 
     #[allow(clippy::type_complexity)]
     pub fn get_file(
-        &'_ mut self,
+        &mut self,
         filename: String,
     ) -> Result<Option<ArchiveFile<BlocksToFileReader<Box<dyn 'b + LayerReader<'b, R>>>>>, Error>
     {
