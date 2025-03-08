@@ -1,9 +1,9 @@
+use crate::Layers;
 use crate::errors::ConfigError;
 use crate::layers::compress::CompressionConfig;
 use crate::layers::encrypt::{
     EncryptionConfig, EncryptionPersistentConfig, EncryptionReaderConfig, InternalEncryptionConfig,
 };
-use crate::Layers;
 use serde::{Deserialize, Serialize};
 
 /// This module implements the configuration capabilities of MLA Archive

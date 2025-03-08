@@ -106,9 +106,9 @@ impl<W: InnerWriterTrait> Write for StreamWriter<'_, '_, W> {
 #[cfg(test)]
 mod tests {
     use crypto::hybrid::generate_keypair_from_rng;
+    use rand::SeedableRng;
     use rand::distributions::Standard;
     use rand::prelude::Distribution;
-    use rand::SeedableRng;
     use rand_chacha::ChaChaRng;
 
     use super::*;
