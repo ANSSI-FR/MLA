@@ -1,7 +1,7 @@
-use clap::{value_parser, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use glob::Pattern;
 use hkdf::Hkdf;
-use humansize::{FormatSize, DECIMAL};
+use humansize::{DECIMAL, FormatSize};
 use lru::LruCache;
 use ml_kem::EncodedSizeUser;
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
@@ -23,7 +23,7 @@ use sha2::{Digest, Sha512};
 use std::collections::{HashMap, HashSet};
 use std::error;
 use std::fmt;
-use std::fs::{self, read_dir, File};
+use std::fs::{self, File, read_dir};
 use std::io::{self, BufRead};
 use std::io::{Read, Seek, Write};
 use std::num::NonZeroUsize;
@@ -192,7 +192,9 @@ fn config_from_matches(matches: &ArgMatches) -> ArchiveWriterConfig {
     // Compression specifics
     if matches.contains_id("compression_level") {
         if !config.is_layers_enabled(Layers::COMPRESS) {
-            eprintln!("[WARNING] 'compression_level' argument ignored, because 'compress' layer is not enabled");
+            eprintln!(
+                "[WARNING] 'compression_level' argument ignored, because 'compress' layer is not enabled"
+            );
         } else {
             let comp_level: u32 = *matches
                 .get_one::<u32>("compression_level")
@@ -349,10 +351,8 @@ impl ExtractFileNameMatcher {
     }
     fn match_file_name(&self, file_name: &str) -> bool {
         match self {
-            ExtractFileNameMatcher::Files(ref files) => {
-                files.is_empty() || files.contains(file_name)
-            }
-            ExtractFileNameMatcher::GlobPatterns(ref patterns) => {
+            ExtractFileNameMatcher::Files(files) => files.is_empty() || files.contains(file_name),
+            ExtractFileNameMatcher::GlobPatterns(patterns) => {
                 patterns.is_empty() || patterns.iter().any(|pat| pat.matches(file_name))
             }
             ExtractFileNameMatcher::Anything => true,
@@ -431,7 +431,8 @@ fn create_file<P1: AsRef<Path>>(
     if !containing_directory.starts_with(output_dir) {
         eprintln!(
             " [!] Skipping file \"{}\" because it would be extracted outside of the output directory, in {}",
-            fname, containing_directory.display()
+            fname,
+            containing_directory.display()
         );
         return Ok(None);
     }
@@ -1018,7 +1019,9 @@ fn info(matches: &ArgMatches) -> Result<(), MlarError> {
         let encrypt_config = header.config.encrypt.expect("Encryption config not found");
         println!(
             "  Recipients: {}",
-            encrypt_config.hybrid_multi_recipient_encapsulate_key.count_keys()
+            encrypt_config
+                .hybrid_multi_recipient_encapsulate_key
+                .count_keys()
         );
     }
 
@@ -1296,7 +1299,7 @@ fn main() {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use mla::crypto::hybrid::{generate_keypair_from_rng, MLKEMDecapsulationKey};
+    use mla::crypto::hybrid::{MLKEMDecapsulationKey, generate_keypair_from_rng};
     use std::iter::FromIterator;
     use x25519_dalek::StaticSecret;
 

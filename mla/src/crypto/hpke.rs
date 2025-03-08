@@ -1,8 +1,8 @@
 /// Implements RFC 9180 for MLA needs
 use hpke::aead::{Aead as HPKEAeadTrait, AesGcm256 as HPKEAesGcm256};
-use hpke::kdf::{labeled_extract, HkdfSha512, Kdf as HpkeKdfTrait, LabeledExpand};
-use hpke::{kem::X25519HkdfSha256, Kem as KemTrait};
+use hpke::kdf::{HkdfSha512, Kdf as HpkeKdfTrait, LabeledExpand, labeled_extract};
 use hpke::{Deserializable, Serializable};
+use hpke::{Kem as KemTrait, kem::X25519HkdfSha256};
 use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 use x25519_dalek::PublicKey as X25519PublicKey;
@@ -314,7 +314,9 @@ mod tests {
 
     /// RFC 9180 §A.6.1 - DHKEM(P-521, HKDF-SHA512), HKDF-SHA512, AES-256-GCM
     const RFC_A6_INFO: [u8; 20] = hex!("4f6465206f6e2061204772656369616e2055726e");
-    const RFC_A6_SHARED_SECRET: [u8; 64] = hex!("776ab421302f6eff7d7cb5cb1adaea0cd50872c71c2d63c30c4f1d5e43653336fef33b103c67e7a98add2d3b66e2fda95b5b2a667aa9dac7e59cc1d46d30e818");
+    const RFC_A6_SHARED_SECRET: [u8; 64] = hex!(
+        "776ab421302f6eff7d7cb5cb1adaea0cd50872c71c2d63c30c4f1d5e43653336fef33b103c67e7a98add2d3b66e2fda95b5b2a667aa9dac7e59cc1d46d30e818"
+    );
     const RFC_A6_KEM_ID: u16 = 18;
     const RFC_A6_KEY: [u8; 32] =
         hex!("751e346ce8f0ddb2305c8a2a85c70d5cf559c53093656be636b9406d4d7d1b70");
@@ -352,12 +354,24 @@ mod tests {
     ];
     const RFC_A6_PT: &[u8] = &hex!("4265617574792069732074727574682c20747275746820626561757479");
     const RFC_A6_CT: [&[u8]; 6] = [
-        &hex!("170f8beddfe949b75ef9c387e201baf4132fa7374593dfafa90768788b7b2b200aafcc6d80ea4c795a7c5b841a"), // sequence number: 0
-        &hex!("d9ee248e220ca24ac00bbbe7e221a832e4f7fa64c4fbab3945b6f3af0c5ecd5e16815b328be4954a05fd352256"), // sequence number: 1
-        &hex!("142cf1e02d1f58d9285f2af7dcfa44f7c3f2d15c73d460c48c6e0e506a3144bae35284e7e221105b61d24e1c7a"), // sequence number: 2
-        &hex!("3bb3a5a07100e5a12805327bf3b152df728b1c1be75a9fd2cb2bf5eac0cca1fb80addb37eb2a32938c7268e3e5"), // sequence number: 4
-        &hex!("4f268d0930f8d50b8fd9d0f26657ba25b5cb08b308c92e33382f369c768b558e113ac95a4c70dd60909ad1adc7"), // sequence number: 255
-        &hex!("dbbfc44ae037864e75f136e8b4b4123351d480e6619ae0e0ae437f036f2f8f1ef677686323977a1ccbb4b4f16a"), // sequence number: 256
+        &hex!(
+            "170f8beddfe949b75ef9c387e201baf4132fa7374593dfafa90768788b7b2b200aafcc6d80ea4c795a7c5b841a"
+        ), // sequence number: 0
+        &hex!(
+            "d9ee248e220ca24ac00bbbe7e221a832e4f7fa64c4fbab3945b6f3af0c5ecd5e16815b328be4954a05fd352256"
+        ), // sequence number: 1
+        &hex!(
+            "142cf1e02d1f58d9285f2af7dcfa44f7c3f2d15c73d460c48c6e0e506a3144bae35284e7e221105b61d24e1c7a"
+        ), // sequence number: 2
+        &hex!(
+            "3bb3a5a07100e5a12805327bf3b152df728b1c1be75a9fd2cb2bf5eac0cca1fb80addb37eb2a32938c7268e3e5"
+        ), // sequence number: 4
+        &hex!(
+            "4f268d0930f8d50b8fd9d0f26657ba25b5cb08b308c92e33382f369c768b558e113ac95a4c70dd60909ad1adc7"
+        ), // sequence number: 255
+        &hex!(
+            "dbbfc44ae037864e75f136e8b4b4123351d480e6619ae0e0ae437f036f2f8f1ef677686323977a1ccbb4b4f16a"
+        ), // sequence number: 256
     ];
 
     /// RFC 9180 §A.6.1.1

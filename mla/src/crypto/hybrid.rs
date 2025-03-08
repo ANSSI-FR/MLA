@@ -1,6 +1,6 @@
-use crate::crypto::aesgcm::{ConstantTimeEq, Key, KEY_SIZE, TAG_LENGTH};
+use crate::crypto::aesgcm::{ConstantTimeEq, KEY_SIZE, Key, TAG_LENGTH};
 use crate::crypto::hpke::{
-    dhkem_decap, dhkem_encap, key_schedule_base_hybrid_kem_recipient, DHKEMCiphertext,
+    DHKEMCiphertext, dhkem_decap, dhkem_encap, key_schedule_base_hybrid_kem_recipient,
 };
 use crate::errors::ConfigError;
 use crate::layers::encrypt::get_crypto_rng;
@@ -37,7 +37,7 @@ pub(crate) struct HybridKemSharedSecret(pub(crate) HybridKemSharedSecretArray);
 impl HybridKemSharedSecret {
     /// Generate a new HybridKemSharedSecret from a CSPRNG
     pub fn from_rng<R: CryptoRngCore>(csprng: &mut R) -> Self {
-        Self(csprng.gen::<HybridKemSharedSecretArray>())
+        Self(csprng.r#gen::<HybridKemSharedSecretArray>())
     }
 }
 
@@ -403,8 +403,8 @@ mod tests {
             b"ciphertext2",
         );
         let expected_result = [
-            147, 69, 15, 150, 130, 155, 67, 230, 172, 36, 219, 184, 233, 104, 18, 142, 
-            225, 251, 62, 222, 149, 181, 39, 58, 182, 235, 181, 250, 45, 173, 134, 129,
+            147, 69, 15, 150, 130, 155, 67, 230, 172, 36, 219, 184, 233, 104, 18, 142, 225, 251,
+            62, 222, 149, 181, 39, 58, 182, 235, 181, 250, 45, 173, 134, 129,
         ];
         assert_eq!(&computed_result, &expected_result);
     }
@@ -415,7 +415,7 @@ mod tests {
         let mut csprng = ChaChaRng::from_entropy();
 
         // Create public and private keys
-        let private_key_ecc = X25519StaticSecret::from(csprng.gen::<[u8; 32]>());
+        let private_key_ecc = X25519StaticSecret::from(csprng.r#gen::<[u8; 32]>());
         let public_key_ecc = X25519PublicKey::from(&private_key_ecc);
         let (private_key_ml, public_key_ml) = MlKem1024::generate(&mut csprng);
 
@@ -457,7 +457,7 @@ mod tests {
         let mut hybrid_multi_recipient_private_keys = Vec::new();
         for _ in 0..NB_RECIPIENT {
             // Create public and private keys
-            let private_key_ecc = X25519StaticSecret::from(csprng.gen::<[u8; 32]>());
+            let private_key_ecc = X25519StaticSecret::from(csprng.r#gen::<[u8; 32]>());
             let public_key_ecc = X25519PublicKey::from(&private_key_ecc);
             let (private_key_ml, public_key_ml) = MlKem1024::generate(&mut csprng);
 
@@ -497,7 +497,7 @@ mod tests {
         let mut csprng = ChaChaRng::from_entropy();
 
         // Create initial materials
-        let private_key_ecc = X25519StaticSecret::from(csprng.gen::<[u8; 32]>());
+        let private_key_ecc = X25519StaticSecret::from(csprng.r#gen::<[u8; 32]>());
         let public_key_ecc = X25519PublicKey::from(&private_key_ecc);
         let (_private_key_ml, public_key_ml) = MlKem1024::generate(&mut csprng);
         let hybrid_public_key = HybridPublicKey {

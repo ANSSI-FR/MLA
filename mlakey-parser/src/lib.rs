@@ -3,8 +3,8 @@ use der_parser::error::BerError;
 
 use der_parser::oid::Oid;
 use der_parser::*;
-use nom::combinator::{complete, eof};
 use nom::IResult;
+use nom::combinator::{complete, eof};
 
 use core::convert::{From, TryInto};
 
@@ -22,15 +22,15 @@ use mla::crypto::hybrid::{
     HybridPrivateKey, HybridPublicKey, MLKEMDecapsulationKey, MLKEMEncapsulationKey,
 };
 
-const ED_25519_OID: Oid<'static> = oid!(1.3.101 .112);
-const X_25519_OID: Oid<'static> = oid!(1.3.101 .110);
+const ED_25519_OID: Oid<'static> = oid!(1.3.101.112);
+const X_25519_OID: Oid<'static> = oid!(1.3.101.110);
 const ECC_PRIVKEY_SIZE: usize = 32;
 const ECC_PUBKEY_SIZE: usize = 32;
 
 // TODO: update with actual OID once attribued by NIST/IANA
 // For now, use a ANSSI factice OID
 // https://datatracker.ietf.org/doc/html/draft-ietf-lamps-kyber-certificates
-const MLKEM_1024_OID: Oid<'static> = oid!(1.2.250 .1 .223 .201);
+const MLKEM_1024_OID: Oid<'static> = oid!(1.2.250.1.223.201);
 
 const MLKEM_1024_PUBKEY_SIZE: usize = 1568;
 const MLKEM_1024_PRIVKEY_SIZE: usize = 3168;
@@ -651,7 +651,7 @@ where
 mod tests {
     use super::*;
     use kem::{Decapsulate, Encapsulate};
-    use rand::{rngs::OsRng, SeedableRng};
+    use rand::{SeedableRng, rngs::OsRng};
     use rand_chacha::ChaChaRng;
     use x25519_dalek::PublicKey;
 
