@@ -319,7 +319,7 @@ impl PublicKeys {
                 );
             } else if let Ok(data) = element.downcast::<PyBytes>() {
                 keys.push(
-                    parse_mlakey_pubkey(data.as_bytes())
+                    parse_mlakey_pubkey(&data[..])
                         .map_err(|_| mla::errors::Error::InvalidKeyFormat)?,
                 );
             } else {
@@ -389,7 +389,7 @@ impl PrivateKeys {
                 );
             } else if let Ok(data) = element.downcast::<PyBytes>() {
                 keys.push(
-                    parse_mlakey_privkey(data.as_bytes())
+                    parse_mlakey_privkey(&data[..])
                         .map_err(|_| mla::errors::Error::InvalidKeyFormat)?,
                 );
             } else {
@@ -917,7 +917,7 @@ impl MLAFile {
     /// alias for io.BufferedIOBase
     // Purpose: only one import
     #[classattr]
-    fn _buffered_type(py: Python) -> Result<&PyType, WrappedError> {
+    fn _buffered_type(py: Python) -> PyResult<Py<PyType>> {
         Ok(py
             .import("io")?
             .getattr("BufferedIOBase")?
@@ -1015,10 +1015,10 @@ impl MLAFile {
 
             let id = writer.start_file(key)?;
             loop {
-                let data = src
+                let py_bytes = src
                     .call_method1("read", (chunk_size,))?
-                    .extract::<&PyBytes>()?
-                    .as_bytes();
+                    .extract::<Py<PyBytes>>()?;
+                let data = py_bytes.as_bytes(py);
                 if data.is_empty() {
                     break;
                 }
