@@ -1,17 +1,18 @@
 use std::{
     borrow::Cow,
     collections::HashMap,
+    sync::{Arc, Mutex},
     fs::File,
     io::{self, Read},
 };
 
-use mlakey_parser::{parse_mlakey_privkey, parse_mlakey_pubkey};
-use mla::{
-    crypto::hybrid::{HybridPrivateKey, HybridPublicKey},
-    config::{ArchiveReaderConfig, ArchiveWriterConfig},
-    ArchiveReader, ArchiveWriter, Layers,
-};
 use ml_kem::EncodedSizeUser;
+use mla::{
+    ArchiveReader, ArchiveWriter, Layers,
+    config::{ArchiveReaderConfig, ArchiveWriterConfig},
+    crypto::hybrid::{HybridPrivateKey, HybridPublicKey},
+};
+use mlakey_parser::{parse_mlakey_privkey, parse_mlakey_pubkey};
 use pyo3::{
     create_exception,
     exceptions::{PyKeyError, PyRuntimeError, PyTypeError},
@@ -46,7 +47,12 @@ create_exception!(
     MLAError,
     "Supplied MLA key is not in the expected format"
 );
-create_exception!(mla, WrongBlockSubFileType, MLAError, "Wrong BlockSubFile magic has been encountered. Is the deserializion tarting at the beginning of a block?");
+create_exception!(
+    mla,
+    WrongBlockSubFileType,
+    MLAError,
+    "Wrong BlockSubFile magic has been encountered. Is the deserializion tarting at the beginning of a block?"
+);
 create_exception!(
     mla,
     UTF8ConversionError,
@@ -101,7 +107,12 @@ create_exception!(
     MLAError,
     "Serialization error. May happens on I/O errors"
 );
-create_exception!(mla, MissingMetadata, MLAError, "Missing metadata (usually means the footer has not been correctly read, a repair might be needed)");
+create_exception!(
+    mla,
+    MissingMetadata,
+    MLAError,
+    "Missing metadata (usually means the footer has not been correctly read, a repair might be needed)"
+);
 create_exception!(
     mla,
     BadAPIArgument,
@@ -133,12 +144,7 @@ create_exception!(
     MLAError,
     "Unable to expand while using the HKDF"
 );
-create_exception!(
-    mla,
-    HPKEError,
-    MLAError,
-    "Error during HPKE computation"
-);
+create_exception!(mla, HPKEError, MLAError, "Error during HPKE computation");
 
 // Convert potentials errors to the wrapped type
 
@@ -170,34 +176,80 @@ impl From<PyErr> for WrappedError {
 impl From<WrappedError> for PyErr {
     fn from(err: WrappedError) -> PyErr {
         match err {
-            WrappedError::WrappedMLA(inner_err) => {
-                match inner_err {
-                    mla::errors::Error::IOError(err) => PyErr::new::<pyo3::exceptions::PyIOError, _>(err),
-                    mla::errors::Error::AssertionError(msg) => PyErr::new::<pyo3::exceptions::PyAssertionError, _>(msg),
-                    mla::errors::Error::WrongMagic => PyErr::new::<WrongMagic, _>("Wrong magic, must be \"MLA\""),
-                    mla::errors::Error::UnsupportedVersion => PyErr::new::<UnsupportedVersion, _>("Unsupported version, must be 1"),
-                    mla::errors::Error::InvalidKeyFormat => PyErr::new::<InvalidKeyFormat, _>("Supplied MLA key is not in the expected format"),
-                    mla::errors::Error::WrongBlockSubFileType => PyErr::new::<WrongBlockSubFileType, _>("Wrong BlockSubFile magic has been encountered. Is the deserializion tarting at the beginning of a block?"),
-                    mla::errors::Error::UTF8ConversionError(err) => PyErr::new::<UTF8ConversionError, _>(err),
-                    mla::errors::Error::FilenameTooLong => PyErr::new::<FilenameTooLong, _>("Filenames have a limited size `FILENAME_MAX_SIZE`"),
-                    mla::errors::Error::WrongArchiveWriterState { current_state, expected_state } => PyErr::new::<WrongArchiveWriterState, _>(format!("The writer state is not in the expected state for the current operation. Current state: {:?}, expected state: {:?}", current_state, expected_state)),
-                    mla::errors::Error::WrongReaderState(msg) => PyErr::new::<WrongReaderState, _>(msg),
-                    mla::errors::Error::WrongWriterState(msg) => PyErr::new::<WrongWriterState, _>(msg),
-                    mla::errors::Error::RandError(err) => PyErr::new::<RandError, _>(format!("{:}", err)),
-                    mla::errors::Error::PrivateKeyNeeded => PyErr::new::<PrivateKeyNeeded, _>("A Private Key is required to decrypt the encrypted cipher key"),
-                    mla::errors::Error::DeserializationError => PyErr::new::<DeserializationError, _>("Deserialization error. May happens when starting from a wrong offset / version mismatch"),
-                    mla::errors::Error::SerializationError => PyErr::new::<SerializationError, _>("Serialization error. May happens on I/O errors"),
-                    mla::errors::Error::MissingMetadata => PyErr::new::<MissingMetadata, _>("Missing metadata (usually means the footer has not been correctly read, a repair might be needed)"),
-                    mla::errors::Error::BadAPIArgument(msg) => PyErr::new::<BadAPIArgument, _>(msg),
-                    mla::errors::Error::EndOfStream => PyErr::new::<EndOfStream, _>("End of stream reached, no more data should be expected"),
-                    mla::errors::Error::ConfigError(err) => PyErr::new::<ConfigError, _>(format!("{:}", err)),
-                    mla::errors::Error::DuplicateFilename => PyErr::new::<DuplicateFilename, _>("Filename already used"),
-                    mla::errors::Error::AuthenticatedDecryptionWrongTag => PyErr::new::<AuthenticatedDecryptionWrongTag, _>("Wrong tag while decrypting authenticated data"),
-                    mla::errors::Error::HKDFInvalidKeyLength => PyErr::new::<HKDFInvalidKeyLength, _>("Unable to expand while using the HKDF"),
-                    mla::errors::Error::HPKEError(msg) => PyErr::new::<HPKEError, _>(format!("{:}", msg)),
+            WrappedError::WrappedMLA(inner_err) => match inner_err {
+                mla::errors::Error::IOError(err) => {
+                    PyErr::new::<pyo3::exceptions::PyIOError, _>(err)
+                }
+                mla::errors::Error::AssertionError(msg) => {
+                    PyErr::new::<pyo3::exceptions::PyAssertionError, _>(msg)
+                }
+                mla::errors::Error::WrongMagic => {
+                    PyErr::new::<WrongMagic, _>("Wrong magic, must be \"MLA\"")
+                }
+                mla::errors::Error::UnsupportedVersion => {
+                    PyErr::new::<UnsupportedVersion, _>("Unsupported version, must be 1")
+                }
+                mla::errors::Error::InvalidKeyFormat => PyErr::new::<InvalidKeyFormat, _>(
+                    "Supplied MLA key is not in the expected format",
+                ),
+                mla::errors::Error::WrongBlockSubFileType => {
+                    PyErr::new::<WrongBlockSubFileType, _>(
+                        "Wrong BlockSubFile magic has been encountered. Is the deserializion tarting at the beginning of a block?",
+                    )
+                }
+                mla::errors::Error::UTF8ConversionError(err) => {
+                    PyErr::new::<UTF8ConversionError, _>(err)
+                }
+                mla::errors::Error::FilenameTooLong => PyErr::new::<FilenameTooLong, _>(
+                    "Filenames have a limited size `FILENAME_MAX_SIZE`",
+                ),
+                mla::errors::Error::WrongArchiveWriterState {
+                    current_state,
+                    expected_state,
+                } => PyErr::new::<WrongArchiveWriterState, _>(format!(
+                    "The writer state is not in the expected state for the current operation. Current state: {:?}, expected state: {:?}",
+                    current_state, expected_state
+                )),
+                mla::errors::Error::WrongReaderState(msg) => PyErr::new::<WrongReaderState, _>(msg),
+                mla::errors::Error::WrongWriterState(msg) => PyErr::new::<WrongWriterState, _>(msg),
+                mla::errors::Error::RandError(err) => {
+                    PyErr::new::<RandError, _>(format!("{:}", err))
+                }
+                mla::errors::Error::PrivateKeyNeeded => PyErr::new::<PrivateKeyNeeded, _>(
+                    "A Private Key is required to decrypt the encrypted cipher key",
+                ),
+                mla::errors::Error::DeserializationError => PyErr::new::<DeserializationError, _>(
+                    "Deserialization error. May happens when starting from a wrong offset / version mismatch",
+                ),
+                mla::errors::Error::SerializationError => PyErr::new::<SerializationError, _>(
+                    "Serialization error. May happens on I/O errors",
+                ),
+                mla::errors::Error::MissingMetadata => PyErr::new::<MissingMetadata, _>(
+                    "Missing metadata (usually means the footer has not been correctly read, a repair might be needed)",
+                ),
+                mla::errors::Error::BadAPIArgument(msg) => PyErr::new::<BadAPIArgument, _>(msg),
+                mla::errors::Error::EndOfStream => PyErr::new::<EndOfStream, _>(
+                    "End of stream reached, no more data should be expected",
+                ),
+                mla::errors::Error::ConfigError(err) => {
+                    PyErr::new::<ConfigError, _>(format!("{:}", err))
+                }
+                mla::errors::Error::DuplicateFilename => {
+                    PyErr::new::<DuplicateFilename, _>("Filename already used")
+                }
+                mla::errors::Error::AuthenticatedDecryptionWrongTag => {
+                    PyErr::new::<AuthenticatedDecryptionWrongTag, _>(
+                        "Wrong tag while decrypting authenticated data",
+                    )
+                }
+                mla::errors::Error::HKDFInvalidKeyLength => {
+                    PyErr::new::<HKDFInvalidKeyLength, _>("Unable to expand while using the HKDF")
+                }
+                mla::errors::Error::HPKEError(msg) => {
+                    PyErr::new::<HPKEError, _>(format!("{:}", msg))
                 }
             },
-            WrappedError::WrappedPy(inner_err) => inner_err
+            WrappedError::WrappedPy(inner_err) => inner_err,
         }
     }
 }
@@ -244,7 +296,7 @@ impl FileMetadata {
 #[derive(Clone)]
 #[pyclass]
 struct PublicKeys {
-    keys: Vec<HybridPublicKey>
+    keys: Vec<HybridPublicKey>,
 }
 
 #[pymethods]
@@ -263,8 +315,7 @@ impl PublicKeys {
                 let mut buf = Vec::new();
                 file.read_to_end(&mut buf)?;
                 keys.push(
-                    parse_mlakey_pubkey(&buf)
-                        .map_err(|_| mla::errors::Error::InvalidKeyFormat)?,
+                    parse_mlakey_pubkey(&buf).map_err(|_| mla::errors::Error::InvalidKeyFormat)?,
                 );
             } else if let Ok(data) = element.downcast::<PyBytes>() {
                 keys.push(
@@ -334,9 +385,8 @@ impl PrivateKeys {
                 file.read_to_end(&mut buf)?;
 
                 keys.push(
-                    parse_mlakey_privkey(&buf)
-                        .map_err(|_| mla::errors::Error::InvalidKeyFormat)?,
-                );          
+                    parse_mlakey_privkey(&buf).map_err(|_| mla::errors::Error::InvalidKeyFormat)?,
+                );
             } else if let Ok(data) = element.downcast::<PyBytes>() {
                 keys.push(
                     parse_mlakey_privkey(data.as_bytes())
@@ -622,6 +672,7 @@ pub struct MLAFile {
     inner: OpeningModeInner,
     /// Path of the file, used for messages
     path: String,
+    mutex: Arc<Mutex<()>>,
 }
 
 /// Used to check whether the opening mode is the expected one, and unwrap it
@@ -631,6 +682,7 @@ pub struct MLAFile {
 /// ```
 macro_rules! check_mode {
     ( $self:expr, $x:ident ) => {{
+        let _lock = $self.mutex.lock().unwrap();
         match &$self.inner {
             OpeningModeInner::$x(inner) => inner,
             _ => {
@@ -638,11 +690,12 @@ macro_rules! check_mode {
                     "This API is only callable in {:} mode",
                     stringify!($x)
                 ))
-                .into())
+                .into());
             }
         }
     }};
     ( mut $self:expr, $x:ident ) => {{
+        let _lock = $self.mutex.lock().unwrap();
         match &mut $self.inner {
             OpeningModeInner::$x(inner) => inner,
             _ => {
@@ -650,17 +703,23 @@ macro_rules! check_mode {
                     "This API is only callable in {:} mode",
                     stringify!($x)
                 ))
-                .into())
+                .into());
             }
         }
     }};
 }
 
+unsafe impl Sync for MLAFile {}
+
 #[pymethods]
 impl MLAFile {
     #[new]
     #[pyo3(signature = (path, mode="r", config=None))]
-    fn new(path: &str, mode: &str, config: Option<&Bound<'_, PyAny>>) -> Result<Self, WrappedError> {
+    fn new(
+        path: &str,
+        mode: &str,
+        config: Option<&Bound<'_, PyAny>>,
+    ) -> Result<Self, WrappedError> {
         match mode {
             "r" => {
                 let rconfig = match config {
@@ -677,6 +736,7 @@ impl MLAFile {
                 Ok(MLAFile {
                     inner: OpeningModeInner::Read(ExplicitReaders::FileReader(arch_reader)),
                     path: path.to_string(),
+                    mutex: Arc::new(Mutex::new(())),
                 })
             }
             "w" => {
@@ -694,6 +754,7 @@ impl MLAFile {
                 Ok(MLAFile {
                     inner: OpeningModeInner::Write(ExplicitWriters::FileWriter(arch_writer)),
                     path: path.to_string(),
+                    mutex: Arc::new(Mutex::new(())),
                 })
             }
             _ => Err(mla::errors::Error::BadAPIArgument(format!(
@@ -857,7 +918,10 @@ impl MLAFile {
     // Purpose: only one import
     #[classattr]
     fn _buffered_type(py: Python) -> Result<&PyType, WrappedError> {
-        Ok(py.import_bound("io")?.getattr("BufferedIOBase")?.extract()?)
+        Ok(py
+            .import("io")?
+            .getattr("BufferedIOBase")?
+            .extract()?)
     }
 
     /// Write an archive file to @dest, which can be:
@@ -894,7 +958,7 @@ impl MLAFile {
             // `/path/to/dest`
             let mut output = std::fs::File::create(dest.to_string())?;
             io::copy(&mut archive_file.unwrap().data, &mut output)?;
-        } else if dest.is_instance(&py.get_type_bound::<MLAFile>().getattr("_buffered_type")?)? {
+        } else if dest.is_instance(&py.get_type::<MLAFile>().getattr("_buffered_type")?)? {
             // isinstance(dest, io.BufferedIOBase)
             // offer `.write` (`.close` must be called from the caller)
 
@@ -945,7 +1009,7 @@ impl MLAFile {
             // `/path/to/src`
             let mut input = std::fs::File::open(src.to_string())?;
             writer.add_file(key, input.metadata()?.len(), &mut input)?;
-        } else if src.is_instance(&py.get_type_bound::<MLAFile>().getattr("_buffered_type")?)? {
+        } else if src.is_instance(&py.get_type::<MLAFile>().getattr("_buffered_type")?)? {
             // isinstance(src, io.BufferedIOBase)
             // offer `.read` (`.close` must be called from the caller)
 
@@ -986,46 +1050,55 @@ fn pymla(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<ReaderConfig>()?;
 
     // Exceptions
-    m.add("MLAError", py.get_type_bound::<MLAError>())?;
-    m.add("WrongMagic", py.get_type_bound::<WrongMagic>())?;
-    m.add("UnsupportedVersion", py.get_type_bound::<UnsupportedVersion>())?;
-    m.add("InvalidKeyFormat", py.get_type_bound::<InvalidKeyFormat>())?;
+    m.add("MLAError", py.get_type::<MLAError>())?;
+    m.add("WrongMagic", py.get_type::<WrongMagic>())?;
+    m.add(
+        "UnsupportedVersion",
+        py.get_type::<UnsupportedVersion>(),
+    )?;
+    m.add("InvalidKeyFormat", py.get_type::<InvalidKeyFormat>())?;
     m.add(
         "WrongBlockSubFileType",
-        py.get_type_bound::<WrongBlockSubFileType>(),
+        py.get_type::<WrongBlockSubFileType>(),
     )?;
-    m.add("UTF8ConversionError", py.get_type_bound::<UTF8ConversionError>())?;
-    m.add("FilenameTooLong", py.get_type_bound::<FilenameTooLong>())?;
+    m.add(
+        "UTF8ConversionError",
+        py.get_type::<UTF8ConversionError>(),
+    )?;
+    m.add("FilenameTooLong", py.get_type::<FilenameTooLong>())?;
     m.add(
         "WrongArchiveWriterState",
-        py.get_type_bound::<WrongArchiveWriterState>(),
+        py.get_type::<WrongArchiveWriterState>(),
     )?;
-    m.add("WrongReaderState", py.get_type_bound::<WrongReaderState>())?;
-    m.add("WrongWriterState", py.get_type_bound::<WrongWriterState>())?;
-    m.add("RandError", py.get_type_bound::<RandError>())?;
-    m.add("PrivateKeyNeeded", py.get_type_bound::<PrivateKeyNeeded>())?;
+    m.add("WrongReaderState", py.get_type::<WrongReaderState>())?;
+    m.add("WrongWriterState", py.get_type::<WrongWriterState>())?;
+    m.add("RandError", py.get_type::<RandError>())?;
+    m.add("PrivateKeyNeeded", py.get_type::<PrivateKeyNeeded>())?;
     m.add(
         "DeserializationError",
-        py.get_type_bound::<DeserializationError>(),
+        py.get_type::<DeserializationError>(),
     )?;
-    m.add("SerializationError", py.get_type_bound::<SerializationError>())?;
-    m.add("MissingMetadata", py.get_type_bound::<MissingMetadata>())?;
-    m.add("BadAPIArgument", py.get_type_bound::<BadAPIArgument>())?;
-    m.add("EndOfStream", py.get_type_bound::<EndOfStream>())?;
-    m.add("ConfigError", py.get_type_bound::<ConfigError>())?;
-    m.add("DuplicateFilename", py.get_type_bound::<DuplicateFilename>())?;
+    m.add(
+        "SerializationError",
+        py.get_type::<SerializationError>(),
+    )?;
+    m.add("MissingMetadata", py.get_type::<MissingMetadata>())?;
+    m.add("BadAPIArgument", py.get_type::<BadAPIArgument>())?;
+    m.add("EndOfStream", py.get_type::<EndOfStream>())?;
+    m.add("ConfigError", py.get_type::<ConfigError>())?;
+    m.add(
+        "DuplicateFilename",
+        py.get_type::<DuplicateFilename>(),
+    )?;
     m.add(
         "AuthenticatedDecryptionWrongTag",
-        py.get_type_bound::<AuthenticatedDecryptionWrongTag>(),
+        py.get_type::<AuthenticatedDecryptionWrongTag>(),
     )?;
     m.add(
         "HKDFInvalidKeyLength",
-        py.get_type_bound::<HKDFInvalidKeyLength>(),
+        py.get_type::<HKDFInvalidKeyLength>(),
     )?;
-    m.add(
-        "HPKEError",
-        py.get_type_bound::<HPKEError>(),
-    )?;
+    m.add("HPKEError", py.get_type::<HPKEError>())?;
 
     // Add constants
     m.add("LAYER_COMPRESS", Layers::COMPRESS.bits())?;
