@@ -303,7 +303,7 @@ struct PublicKeys {
 impl PublicKeys {
     #[new]
     #[pyo3(signature = (*args))]
-    fn new(args: &PyTuple) -> Result<Self, WrappedError> {
+    fn new<'py>(args: &Bound<'py, PyTuple>) -> Result<Self, WrappedError> {
         let mut keys = Vec::new();
 
         for element in args {
@@ -372,7 +372,7 @@ struct PrivateKeys {
 impl PrivateKeys {
     #[new]
     #[pyo3(signature = (*args))]
-    fn new(args: &PyTuple) -> Result<Self, WrappedError> {
+    fn new<'py>(args: &Bound<'py, PyTuple>) -> Result<Self, WrappedError> {
         let mut keys: Vec<HybridPrivateKey> = Vec::new();
 
         for element in args {
@@ -708,8 +708,6 @@ macro_rules! check_mode {
         }
     }};
 }
-
-unsafe impl Sync for MLAFile {}
 
 #[pymethods]
 impl MLAFile {
