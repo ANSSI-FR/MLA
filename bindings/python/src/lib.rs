@@ -1,9 +1,9 @@
 use std::{
     borrow::Cow,
     collections::HashMap,
-    sync::Mutex,
     fs::File,
     io::{self, Read},
+    sync::{Mutex, PoisonError},
 };
 
 use ml_kem::EncodedSizeUser;
@@ -300,12 +300,12 @@ struct PublicKeysInner {
 
 #[pyclass]
 struct PublicKeys {
-    inner: Mutex<PublicKeysInner>
+    inner: Mutex<PublicKeysInner>,
 }
 
 impl Clone for PublicKeys {
     fn clone(&self) -> Self {
-        let inner = self.inner.lock().expect("Mutex poisoned").clone();
+        let inner = self.inner.lock().unwrap_or_else(PoisonError::into_inner).clone();
         PublicKeys {
             inner: Mutex::new(inner),
         }
@@ -341,13 +341,18 @@ impl PublicKeys {
                 );
             }
         }
-        Ok(Self { inner: Mutex::new(PublicKeysInner { keys }) })
+        Ok(Self {
+            inner: Mutex::new(PublicKeysInner { keys }),
+        })
     }
 
     /// DER representation of keys
     #[getter]
     fn keys(&self) -> Vec<Cow<[u8]>> {
-        self.inner.lock().expect("Mutex poisoned").keys
+        self.inner
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .keys
             .iter()
             .map(|pubkey| {
                 let mut result = Vec::new();
@@ -387,7 +392,7 @@ struct PrivateKeys {
 
 impl Clone for PrivateKeys {
     fn clone(&self) -> Self {
-        let inner = self.inner.lock().expect("Mutex poisoned").clone();
+        let inner = self.inner.lock().unwrap_or_else(PoisonError::into_inner).clone();
         PrivateKeys {
             inner: Mutex::new(inner),
         }
@@ -424,14 +429,19 @@ impl PrivateKeys {
                 );
             }
         }
-        Ok(Self { inner: Mutex::new(PrivateKeysInner { keys }) })
+        Ok(Self {
+            inner: Mutex::new(PrivateKeysInner { keys }),
+        })
     }
 
     /// DER representation of keys
     /// :warning: This keys must be kept secrets!
     #[getter]
     fn keys(&self) -> Vec<Cow<[u8]>> {
-        self.inner.lock().expect("Mutex poisoned").keys
+        self.inner
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .keys
             .iter()
             .map(|privkey| {
                 let mut result = Vec::new();
@@ -493,7 +503,7 @@ impl WriterConfig {
 
     #[getter]
     fn layers(&self) -> u8 {
-        self.inner.lock().expect("Mutex poisoned").layers.bits()
+        self.inner.lock().unwrap_or_else(PoisonError::into_inner).layers.bits()
     }
 
     /// Enable a layer
@@ -501,7 +511,7 @@ impl WriterConfig {
         let layer = Layers::from_bits(layer).ok_or(mla::errors::Error::BadAPIArgument(
             "Unknown layer".to_string(),
         ))?;
-        slf.inner.lock().expect("Mutex poisoned").layers |= layer;
+        slf.inner.lock().unwrap_or_else(PoisonError::into_inner).layers |= layer;
         Ok(slf)
     }
 
@@ -510,15 +520,15 @@ impl WriterConfig {
         let layer = Layers::from_bits(layer).ok_or(mla::errors::Error::BadAPIArgument(
             "Unknown layer".to_string(),
         ))?;
-        slf.inner.lock().expect("Mutex poisoned").layers &= !layer;
+        slf.inner.lock().unwrap_or_else(PoisonError::into_inner).layers &= !layer;
         Ok(slf)
     }
 
     /// Set several layers at once
     fn set_layers(slf: PyRefMut<Self>, layers: u8) -> Result<PyRefMut<Self>, WrappedError> {
-        slf.inner.lock().expect("Mutex poisoned").layers = Layers::from_bits(layers).ok_or(mla::errors::Error::BadAPIArgument(
-            "Unknown layer".to_string(),
-        ))?;
+        slf.inner.lock().unwrap_or_else(PoisonError::into_inner).layers = Layers::from_bits(layers).ok_or(
+            mla::errors::Error::BadAPIArgument("Unknown layer".to_string()),
+        )?;
         Ok(slf)
     }
 
@@ -531,13 +541,13 @@ impl WriterConfig {
         // Check compression level is correct using a fake object
         ArchiveWriterConfig::new().with_compression_level(compression_level)?;
 
-        slf.inner.lock().expect("Mutex poisoned").compression_level = compression_level;
+        slf.inner.lock().unwrap_or_else(PoisonError::into_inner).compression_level = compression_level;
         Ok(slf)
     }
 
     #[getter]
     fn compression_level(&self) -> u32 {
-        self.inner.lock().expect("Mutex poisoned").compression_level
+        self.inner.lock().unwrap_or_else(PoisonError::into_inner).compression_level
     }
 
     /// Set public keys
@@ -545,13 +555,17 @@ impl WriterConfig {
         slf: PyRefMut<Self>,
         public_keys: PublicKeys,
     ) -> Result<PyRefMut<Self>, WrappedError> {
-        slf.inner.lock().expect("Mutex poisoned").public_keys = Some(public_keys);
+        slf.inner.lock().unwrap_or_else(PoisonError::into_inner).public_keys = Some(public_keys);
         Ok(slf)
     }
 
     #[getter]
     fn get_public_keys(&self) -> Option<PublicKeys> {
-        self.inner.lock().expect("Mutex poisoned").public_keys.clone()
+        self.inner
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .public_keys
+            .clone()
     }
 }
 
@@ -559,11 +573,11 @@ impl WriterConfig {
     /// Create an `ArchiveWriterConfig` out of the python object
     fn to_archive_writer_config(&self) -> Result<ArchiveWriterConfig, WrappedError> {
         let mut config = ArchiveWriterConfig::new();
-        let inner = self.inner.lock().expect("Mutex poisoned");
+        let inner = self.inner.lock().unwrap_or_else(PoisonError::into_inner);
         config.set_layers(inner.layers);
         config.with_compression_level(inner.compression_level)?;
         if let Some(ref public_keys) = inner.public_keys {
-            config.add_public_keys(&public_keys.inner.lock().expect("Mutex poisoned").keys);
+            config.add_public_keys(&public_keys.inner.lock().unwrap_or_else(PoisonError::into_inner).keys);
         }
         Ok(config)
     }
@@ -598,13 +612,17 @@ impl ReaderConfig {
         slf: PyRefMut<Self>,
         private_keys: PrivateKeys,
     ) -> Result<PyRefMut<Self>, WrappedError> {
-        slf.inner.lock().expect("Mutex poisoned").private_keys = Some(private_keys);
+        slf.inner.lock().unwrap_or_else(PoisonError::into_inner).private_keys = Some(private_keys);
         Ok(slf)
     }
 
     #[getter]
     fn private_keys(&self) -> Option<PrivateKeys> {
-        self.inner.lock().expect("Mutex poisoned").private_keys.clone()
+        self.inner
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .private_keys
+            .clone()
     }
 }
 
@@ -612,8 +630,8 @@ impl ReaderConfig {
     /// Create an `ArchiveReaderConfig` out of the python object
     fn to_archive_reader_config(&self) -> Result<ArchiveReaderConfig, WrappedError> {
         let mut config = ArchiveReaderConfig::new();
-        if let Some(ref private_keys) = self.inner.lock().expect("Mutex poisoned").private_keys {
-            config.add_private_keys(&private_keys.inner.lock().expect("Mutex poisoned").keys);
+        if let Some(ref private_keys) = self.inner.lock().unwrap_or_else(PoisonError::into_inner).private_keys {
+            config.add_private_keys(&private_keys.inner.lock().unwrap_or_else(PoisonError::into_inner).keys);
             config.layers_enabled |= Layers::ENCRYPT;
         }
         Ok(config)
@@ -714,7 +732,7 @@ pub struct MLAFileInner {
 
 #[pyclass]
 struct MLAFile {
-    inner: Mutex<MLAFileInner>
+    inner: Mutex<MLAFileInner>,
 }
 
 /// Used to check whether the opening mode is the expected one, and unwrap it
@@ -724,7 +742,7 @@ struct MLAFile {
 /// ```
 macro_rules! check_mode {
     ( $self:expr, $x:ident ) => {{
-        let inner_lock = $self.inner.lock().expect("Mutex poisoned");
+        let inner_lock = $self.inner.lock().unwrap_or_else(PoisonError::into_inner);
         match &inner_lock.inner {
             OpeningModeInner::$x(inner) => inner,
             _ => {
@@ -732,12 +750,12 @@ macro_rules! check_mode {
                     "This API is only callable in {:} mode",
                     stringify!($x)
                 ))
-                .into())
+                .into());
             }
         }
     }};
     ( mut $self:expr, $x:ident ) => {{
-        let mut inner_lock = $self.inner.lock().expect("Mutex poisoned");
+        let mut inner_lock = $self.inner.lock().unwrap_or_else(PoisonError::into_inner);
         match &mut inner_lock.inner {
             OpeningModeInner::$x(inner) => inner,
             _ => {
@@ -745,7 +763,7 @@ macro_rules! check_mode {
                     "This API is only callable in {:} mode",
                     stringify!($x)
                 ))
-                .into())
+                .into());
             }
         }
     }};
@@ -777,7 +795,7 @@ impl MLAFile {
                     inner: Mutex::new(MLAFileInner {
                         inner: OpeningModeInner::Read(ExplicitReaders::FileReader(arch_reader)),
                         path: path.to_string(),
-                    })
+                    }),
                 })
             }
             "w" => {
@@ -796,7 +814,7 @@ impl MLAFile {
                     inner: Mutex::new(MLAFileInner {
                         inner: OpeningModeInner::Write(ExplicitWriters::FileWriter(arch_writer)),
                         path: path.to_string(),
-                    })
+                    }),
                 })
             }
             _ => Err(mla::errors::Error::BadAPIArgument(format!(
@@ -810,8 +828,8 @@ impl MLAFile {
     fn __repr__(&self) -> String {
         format!(
             "<MLAFile path='{:}' mode='{:}'>",
-            self.inner.lock().expect("Mutex poisoned").path,
-            match self.inner.lock().expect("Mutex poisoned").inner {
+            self.inner.lock().unwrap_or_else(PoisonError::into_inner).path,
+            match self.inner.lock().unwrap_or_else(PoisonError::into_inner).inner {
                 OpeningModeInner::Read(_) => "r",
                 OpeningModeInner::Write(_) => "w",
             }
@@ -820,6 +838,7 @@ impl MLAFile {
 
     /// Return the list of files in the archive
     fn keys(&self) -> Result<Vec<String>, WrappedError> {
+        // let inner = check_mode!(self, Read);
         let inner = check_mode!(self, Read);
         Ok(inner.list_files()?.map(|x| x.to_string()).collect())
     }
@@ -944,7 +963,7 @@ impl MLAFile {
             return Ok(false);
         }
 
-        match self.inner.lock().expect("Mutex poisoned").inner {
+        match self.inner.lock().unwrap_or_else(PoisonError::into_inner).inner {
             OpeningModeInner::Read(_) => {
                 // Nothing to do, dropping this object should close the inner stream
             }
@@ -960,10 +979,7 @@ impl MLAFile {
     // Purpose: only one import
     #[classattr]
     fn _buffered_type(py: Python) -> PyResult<Py<PyType>> {
-        Ok(py
-            .import("io")?
-            .getattr("BufferedIOBase")?
-            .extract()?)
+        Ok(py.import("io")?.getattr("BufferedIOBase")?.extract()?)
     }
 
     /// Write an archive file to @dest, which can be:
@@ -1094,19 +1110,13 @@ fn pymla(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Exceptions
     m.add("MLAError", py.get_type::<MLAError>())?;
     m.add("WrongMagic", py.get_type::<WrongMagic>())?;
-    m.add(
-        "UnsupportedVersion",
-        py.get_type::<UnsupportedVersion>(),
-    )?;
+    m.add("UnsupportedVersion", py.get_type::<UnsupportedVersion>())?;
     m.add("InvalidKeyFormat", py.get_type::<InvalidKeyFormat>())?;
     m.add(
         "WrongBlockSubFileType",
         py.get_type::<WrongBlockSubFileType>(),
     )?;
-    m.add(
-        "UTF8ConversionError",
-        py.get_type::<UTF8ConversionError>(),
-    )?;
+    m.add("UTF8ConversionError", py.get_type::<UTF8ConversionError>())?;
     m.add("FilenameTooLong", py.get_type::<FilenameTooLong>())?;
     m.add(
         "WrongArchiveWriterState",
@@ -1120,18 +1130,12 @@ fn pymla(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
         "DeserializationError",
         py.get_type::<DeserializationError>(),
     )?;
-    m.add(
-        "SerializationError",
-        py.get_type::<SerializationError>(),
-    )?;
+    m.add("SerializationError", py.get_type::<SerializationError>())?;
     m.add("MissingMetadata", py.get_type::<MissingMetadata>())?;
     m.add("BadAPIArgument", py.get_type::<BadAPIArgument>())?;
     m.add("EndOfStream", py.get_type::<EndOfStream>())?;
     m.add("ConfigError", py.get_type::<ConfigError>())?;
-    m.add(
-        "DuplicateFilename",
-        py.get_type::<DuplicateFilename>(),
-    )?;
+    m.add("DuplicateFilename", py.get_type::<DuplicateFilename>())?;
     m.add(
         "AuthenticatedDecryptionWrongTag",
         py.get_type::<AuthenticatedDecryptionWrongTag>(),
