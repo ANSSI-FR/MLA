@@ -1,7 +1,7 @@
 use std::{
     borrow::Cow,
     collections::HashMap,
-    sync::{Arc, Mutex},
+    sync::Mutex,
     fs::File,
     io::{self, Read},
 };
@@ -294,9 +294,22 @@ impl FileMetadata {
 /// """)
 /// ```
 #[derive(Clone)]
+struct PublicKeysInner {
+    keys: Vec<HybridPublicKey>,
+}
+
 #[pyclass]
 struct PublicKeys {
-    keys: Vec<HybridPublicKey>,
+    inner: Mutex<PublicKeysInner>
+}
+
+impl Clone for PublicKeys {
+    fn clone(&self) -> Self {
+        let inner = self.inner.lock().expect("Mutex poisoned").clone();
+        PublicKeys {
+            inner: Mutex::new(inner),
+        }
+    }
 }
 
 #[pymethods]
@@ -328,13 +341,13 @@ impl PublicKeys {
                 );
             }
         }
-        Ok(Self { keys })
+        Ok(Self { inner: Mutex::new(PublicKeysInner { keys }) })
     }
 
     /// DER representation of keys
     #[getter]
     fn keys(&self) -> Vec<Cow<[u8]>> {
-        self.keys
+        self.inner.lock().expect("Mutex poisoned").keys
             .iter()
             .map(|pubkey| {
                 let mut result = Vec::new();
@@ -363,9 +376,22 @@ impl PublicKeys {
 /// """)
 /// ```
 #[derive(Clone)]
+struct PrivateKeysInner {
+    keys: Vec<HybridPrivateKey>,
+}
+
 #[pyclass]
 struct PrivateKeys {
-    keys: Vec<HybridPrivateKey>,
+    inner: Mutex<PrivateKeysInner>,
+}
+
+impl Clone for PrivateKeys {
+    fn clone(&self) -> Self {
+        let inner = self.inner.lock().expect("Mutex poisoned").clone();
+        PrivateKeys {
+            inner: Mutex::new(inner),
+        }
+    }
 }
 
 #[pymethods]
@@ -398,14 +424,14 @@ impl PrivateKeys {
                 );
             }
         }
-        Ok(Self { keys })
+        Ok(Self { inner: Mutex::new(PrivateKeysInner { keys }) })
     }
 
     /// DER representation of keys
     /// :warning: This keys must be kept secrets!
     #[getter]
     fn keys(&self) -> Vec<Cow<[u8]>> {
-        self.keys
+        self.inner.lock().expect("Mutex poisoned").keys
             .iter()
             .map(|privkey| {
                 let mut result = Vec::new();
@@ -425,11 +451,15 @@ const DEFAULT_COMPRESSION_LEVEL: u32 = 5;
 // This class keep the values of configured object, and can be used to produce an actual
 // `ArchiveWriterConfig`. That way, it can be used to produced many of them, as they are
 // consumed during the `ArchiveWriter` init (to avoid reusing cryptographic materials)
-#[pyclass]
-struct WriterConfig {
+struct WriterConfigInner {
     layers: Layers,
     compression_level: u32,
     public_keys: Option<PublicKeys>,
+}
+
+#[pyclass]
+struct WriterConfig {
+    inner: Mutex<WriterConfigInner>,
 }
 
 #[pymethods]
@@ -453,38 +483,40 @@ impl WriterConfig {
         ArchiveWriterConfig::new().with_compression_level(compression_level)?;
 
         Ok(WriterConfig {
-            layers,
-            compression_level,
-            public_keys,
+            inner: Mutex::new(WriterConfigInner {
+                layers,
+                compression_level,
+                public_keys,
+            }),
         })
     }
 
     #[getter]
     fn layers(&self) -> u8 {
-        self.layers.bits()
+        self.inner.lock().expect("Mutex poisoned").layers.bits()
     }
 
     /// Enable a layer
-    fn enable_layer(mut slf: PyRefMut<Self>, layer: u8) -> Result<PyRefMut<Self>, WrappedError> {
+    fn enable_layer(slf: PyRefMut<Self>, layer: u8) -> Result<PyRefMut<Self>, WrappedError> {
         let layer = Layers::from_bits(layer).ok_or(mla::errors::Error::BadAPIArgument(
             "Unknown layer".to_string(),
         ))?;
-        slf.layers |= layer;
+        slf.inner.lock().expect("Mutex poisoned").layers |= layer;
         Ok(slf)
     }
 
     /// Disable a layer
-    fn disable_layer(mut slf: PyRefMut<Self>, layer: u8) -> Result<PyRefMut<Self>, WrappedError> {
+    fn disable_layer(slf: PyRefMut<Self>, layer: u8) -> Result<PyRefMut<Self>, WrappedError> {
         let layer = Layers::from_bits(layer).ok_or(mla::errors::Error::BadAPIArgument(
             "Unknown layer".to_string(),
         ))?;
-        slf.layers &= !layer;
+        slf.inner.lock().expect("Mutex poisoned").layers &= !layer;
         Ok(slf)
     }
 
     /// Set several layers at once
-    fn set_layers(mut slf: PyRefMut<Self>, layers: u8) -> Result<PyRefMut<Self>, WrappedError> {
-        slf.layers = Layers::from_bits(layers).ok_or(mla::errors::Error::BadAPIArgument(
+    fn set_layers(slf: PyRefMut<Self>, layers: u8) -> Result<PyRefMut<Self>, WrappedError> {
+        slf.inner.lock().expect("Mutex poisoned").layers = Layers::from_bits(layers).ok_or(mla::errors::Error::BadAPIArgument(
             "Unknown layer".to_string(),
         ))?;
         Ok(slf)
@@ -493,33 +525,33 @@ impl WriterConfig {
     /// Set the compression level
     /// compression level (0-11); bigger values cause denser, but slower compression
     fn with_compression_level(
-        mut slf: PyRefMut<Self>,
+        slf: PyRefMut<Self>,
         compression_level: u32,
     ) -> Result<PyRefMut<Self>, WrappedError> {
         // Check compression level is correct using a fake object
         ArchiveWriterConfig::new().with_compression_level(compression_level)?;
 
-        slf.compression_level = compression_level;
+        slf.inner.lock().expect("Mutex poisoned").compression_level = compression_level;
         Ok(slf)
     }
 
     #[getter]
     fn compression_level(&self) -> u32 {
-        self.compression_level
+        self.inner.lock().expect("Mutex poisoned").compression_level
     }
 
     /// Set public keys
     fn set_public_keys(
-        mut slf: PyRefMut<Self>,
+        slf: PyRefMut<Self>,
         public_keys: PublicKeys,
     ) -> Result<PyRefMut<Self>, WrappedError> {
-        slf.public_keys = Some(public_keys);
+        slf.inner.lock().expect("Mutex poisoned").public_keys = Some(public_keys);
         Ok(slf)
     }
 
     #[getter]
-    fn public_keys(&self) -> Option<PublicKeys> {
-        self.public_keys.clone()
+    fn get_public_keys(&self) -> Option<PublicKeys> {
+        self.inner.lock().expect("Mutex poisoned").public_keys.clone()
     }
 }
 
@@ -527,10 +559,11 @@ impl WriterConfig {
     /// Create an `ArchiveWriterConfig` out of the python object
     fn to_archive_writer_config(&self) -> Result<ArchiveWriterConfig, WrappedError> {
         let mut config = ArchiveWriterConfig::new();
-        config.set_layers(self.layers);
-        config.with_compression_level(self.compression_level)?;
-        if let Some(ref public_keys) = self.public_keys {
-            config.add_public_keys(&public_keys.keys);
+        let inner = self.inner.lock().expect("Mutex poisoned");
+        config.set_layers(inner.layers);
+        config.with_compression_level(inner.compression_level)?;
+        if let Some(ref public_keys) = inner.public_keys {
+            config.add_public_keys(&public_keys.inner.lock().expect("Mutex poisoned").keys);
         }
         Ok(config)
     }
@@ -541,9 +574,13 @@ impl WriterConfig {
 // This class keep the values of configured object, and can be used to produce an actual
 // `ArchiveReaderConfig`. That way, it can be used to produced many of them, as they are
 // consumed during the `ArchiveReader` init
+struct ReaderConfigInner {
+    private_keys: Option<PrivateKeys>,
+}
+
 #[pyclass]
 struct ReaderConfig {
-    private_keys: Option<PrivateKeys>,
+    inner: Mutex<ReaderConfigInner>,
 }
 
 #[pymethods]
@@ -551,21 +588,23 @@ impl ReaderConfig {
     #[new]
     #[pyo3(signature = (private_keys=None))]
     fn new(private_keys: Option<PrivateKeys>) -> Self {
-        ReaderConfig { private_keys }
+        ReaderConfig {
+            inner: Mutex::new(ReaderConfigInner { private_keys }),
+        }
     }
 
     /// Set private keys
     fn set_private_keys(
-        mut slf: PyRefMut<Self>,
+        slf: PyRefMut<Self>,
         private_keys: PrivateKeys,
     ) -> Result<PyRefMut<Self>, WrappedError> {
-        slf.private_keys = Some(private_keys);
+        slf.inner.lock().expect("Mutex poisoned").private_keys = Some(private_keys);
         Ok(slf)
     }
 
     #[getter]
     fn private_keys(&self) -> Option<PrivateKeys> {
-        self.private_keys.clone()
+        self.inner.lock().expect("Mutex poisoned").private_keys.clone()
     }
 }
 
@@ -573,8 +612,8 @@ impl ReaderConfig {
     /// Create an `ArchiveReaderConfig` out of the python object
     fn to_archive_reader_config(&self) -> Result<ArchiveReaderConfig, WrappedError> {
         let mut config = ArchiveReaderConfig::new();
-        if let Some(ref private_keys) = self.private_keys {
-            config.add_private_keys(&private_keys.keys);
+        if let Some(ref private_keys) = self.inner.lock().expect("Mutex poisoned").private_keys {
+            config.add_private_keys(&private_keys.inner.lock().expect("Mutex poisoned").keys);
             config.layers_enabled |= Layers::ENCRYPT;
         }
         Ok(config)
@@ -666,13 +705,16 @@ enum OpeningModeInner {
     Write(ExplicitWriters),
 }
 
-#[pyclass]
-pub struct MLAFile {
+pub struct MLAFileInner {
     /// Wrapping over the rust object, depending on the opening mode
     inner: OpeningModeInner,
     /// Path of the file, used for messages
     path: String,
-    mutex: Arc<Mutex<()>>,
+}
+
+#[pyclass]
+struct MLAFile {
+    inner: Mutex<MLAFileInner>
 }
 
 /// Used to check whether the opening mode is the expected one, and unwrap it
@@ -682,28 +724,28 @@ pub struct MLAFile {
 /// ```
 macro_rules! check_mode {
     ( $self:expr, $x:ident ) => {{
-        let _lock = $self.mutex.lock().unwrap();
-        match &$self.inner {
+        let inner_lock = $self.inner.lock().expect("Mutex poisoned");
+        match &inner_lock.inner {
             OpeningModeInner::$x(inner) => inner,
             _ => {
                 return Err(mla::errors::Error::BadAPIArgument(format!(
                     "This API is only callable in {:} mode",
                     stringify!($x)
                 ))
-                .into());
+                .into())
             }
         }
     }};
     ( mut $self:expr, $x:ident ) => {{
-        let _lock = $self.mutex.lock().unwrap();
-        match &mut $self.inner {
+        let mut inner_lock = $self.inner.lock().expect("Mutex poisoned");
+        match &mut inner_lock.inner {
             OpeningModeInner::$x(inner) => inner,
             _ => {
                 return Err(mla::errors::Error::BadAPIArgument(format!(
                     "This API is only callable in {:} mode",
                     stringify!($x)
                 ))
-                .into());
+                .into())
             }
         }
     }};
@@ -732,9 +774,10 @@ impl MLAFile {
                 let input_file = std::fs::File::open(path)?;
                 let arch_reader = ArchiveReader::from_config(input_file, rconfig)?;
                 Ok(MLAFile {
-                    inner: OpeningModeInner::Read(ExplicitReaders::FileReader(arch_reader)),
-                    path: path.to_string(),
-                    mutex: Arc::new(Mutex::new(())),
+                    inner: Mutex::new(MLAFileInner {
+                        inner: OpeningModeInner::Read(ExplicitReaders::FileReader(arch_reader)),
+                        path: path.to_string(),
+                    })
                 })
             }
             "w" => {
@@ -750,9 +793,10 @@ impl MLAFile {
                 let output_file = std::fs::File::create(path)?;
                 let arch_writer = ArchiveWriter::from_config(output_file, wconfig)?;
                 Ok(MLAFile {
-                    inner: OpeningModeInner::Write(ExplicitWriters::FileWriter(arch_writer)),
-                    path: path.to_string(),
-                    mutex: Arc::new(Mutex::new(())),
+                    inner: Mutex::new(MLAFileInner {
+                        inner: OpeningModeInner::Write(ExplicitWriters::FileWriter(arch_writer)),
+                        path: path.to_string(),
+                    })
                 })
             }
             _ => Err(mla::errors::Error::BadAPIArgument(format!(
@@ -766,8 +810,8 @@ impl MLAFile {
     fn __repr__(&self) -> String {
         format!(
             "<MLAFile path='{:}' mode='{:}'>",
-            self.path,
-            match self.inner {
+            self.inner.lock().expect("Mutex poisoned").path,
+            match self.inner.lock().expect("Mutex poisoned").inner {
                 OpeningModeInner::Read(_) => "r",
                 OpeningModeInner::Write(_) => "w",
             }
@@ -900,7 +944,7 @@ impl MLAFile {
             return Ok(false);
         }
 
-        match self.inner {
+        match self.inner.lock().expect("Mutex poisoned").inner {
             OpeningModeInner::Read(_) => {
                 // Nothing to do, dropping this object should close the inner stream
             }
