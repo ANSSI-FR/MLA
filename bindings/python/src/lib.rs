@@ -316,7 +316,7 @@ impl Clone for PublicKeys {
 impl PublicKeys {
     #[new]
     #[pyo3(signature = (*args))]
-    fn new<'py>(args: &Bound<'py, PyTuple>) -> Result<Self, WrappedError> {
+    fn new(args: &Bound<PyTuple>) -> Result<Self, WrappedError> {
         let mut keys = Vec::new();
 
         for element in args {
@@ -403,7 +403,7 @@ impl Clone for PrivateKeys {
 impl PrivateKeys {
     #[new]
     #[pyo3(signature = (*args))]
-    fn new<'py>(args: &Bound<'py, PyTuple>) -> Result<Self, WrappedError> {
+    fn new(args: &Bound<PyTuple>) -> Result<Self, WrappedError> {
         let mut keys: Vec<HybridPrivateKey> = Vec::new();
 
         for element in args {
@@ -720,7 +720,7 @@ impl ExplicitReaders {
 /// Opening Mode for a MLAFile
 enum OpeningModeInner {
     Read(ExplicitReaders),
-    Write(ExplicitWriters),
+    Write(Box<ExplicitWriters>),
 }
 
 pub struct MLAFileInner {
@@ -735,38 +735,44 @@ struct MLAFile {
     inner: Mutex<MLAFileInner>,
 }
 
-/// Used to check whether the opening mode is the expected one, and unwrap it
-/// return a BadAPI argument error if not
-/// ```text
-/// let inner = check_mode!(self, Read);
-/// ```
-macro_rules! check_mode {
-    ( $self:expr, $x:ident ) => {{
-        let inner_lock = $self.inner.lock().unwrap_or_else(PoisonError::into_inner);
-        match &inner_lock.inner {
-            OpeningModeInner::$x(inner) => inner,
-            _ => {
-                return Err(mla::errors::Error::BadAPIArgument(format!(
-                    "This API is only callable in {:} mode",
-                    stringify!($x)
-                ))
-                .into());
-            }
-        }
-    }};
-    ( mut $self:expr, $x:ident ) => {{
-        let mut inner_lock = $self.inner.lock().unwrap_or_else(PoisonError::into_inner);
+impl MLAFile {
+    /// Used to check whether the opening mode is the expected one, and unwrap it
+    /// return a BadAPI argument error if not
+    /// ```text
+    /// self.with_reader(|inner| {});
+    /// ```
+    fn with_reader<F, R>(&self, f: F) -> Result<R, WrappedError>
+    where
+        F: FnOnce(&mut ExplicitReaders) -> Result<R, WrappedError>,
+    {
+        let mut inner_lock = self.inner.lock().unwrap_or_else(PoisonError::into_inner);
         match &mut inner_lock.inner {
-            OpeningModeInner::$x(inner) => inner,
-            _ => {
-                return Err(mla::errors::Error::BadAPIArgument(format!(
-                    "This API is only callable in {:} mode",
-                    stringify!($x)
-                ))
-                .into());
-            }
+            OpeningModeInner::Read(inner) => f(inner),
+            _ => Err(mla::errors::Error::BadAPIArgument(
+                "This API is only callable in Read mode".to_string(),
+            )
+            .into()),
         }
-    }};
+    }
+
+    /// Used to check whether the opening mode is the expected one, and unwrap it
+    /// return a BadAPI argument error if not
+    /// ```text
+    /// self.with_writer|inner| {});
+    /// ```
+    fn with_writer<F, R>(&self, f: F) -> Result<R, WrappedError>
+    where
+        F: FnOnce(&mut ExplicitWriters) -> Result<R, WrappedError>,
+    {
+        let mut inner_lock = self.inner.lock().unwrap_or_else(PoisonError::into_inner);
+        match &mut inner_lock.inner {
+            OpeningModeInner::Write(inner) => f(inner),
+            _ => Err(mla::errors::Error::BadAPIArgument(
+                "This API is only callable in Write mode".to_string(),
+            )
+            .into()),
+        }
+    }
 }
 
 #[pymethods]
@@ -812,7 +818,7 @@ impl MLAFile {
                 let arch_writer = ArchiveWriter::from_config(output_file, wconfig)?;
                 Ok(MLAFile {
                     inner: Mutex::new(MLAFileInner {
-                        inner: OpeningModeInner::Write(ExplicitWriters::FileWriter(arch_writer)),
+                        inner: OpeningModeInner::Write(Box::new(ExplicitWriters::FileWriter(arch_writer))),
                         path: path.to_string(),
                     }),
                 })
@@ -838,9 +844,9 @@ impl MLAFile {
 
     /// Return the list of files in the archive
     fn keys(&self) -> Result<Vec<String>, WrappedError> {
-        // let inner = check_mode!(self, Read);
-        let inner = check_mode!(self, Read);
-        Ok(inner.list_files()?.map(|x| x.to_string()).collect())
+        self.with_reader(|inner| {
+            Ok(inner.list_files()?.map(|x| x.to_string()).collect())
+        })
     }
 
     /// Return the list of the files in the archive, along with metadata
@@ -859,89 +865,88 @@ impl MLAFile {
         include_size: bool,
         include_hash: bool,
     ) -> Result<HashMap<String, FileMetadata>, WrappedError> {
-        let inner = check_mode!(mut self, Read);
-
-        let mut output = HashMap::new();
-        let iter: Vec<String> = inner.list_files()?.cloned().collect();
-        for fname in iter {
-            let mut metadata = FileMetadata {
-                size: None,
-                hash: None,
-            };
-            match inner {
-                ExplicitReaders::FileReader(mla) => {
-                    if include_size {
-                        metadata.size = Some(
-                            mla.get_file(fname.clone())?
-                                .ok_or(PyRuntimeError::new_err(format!(
-                                    "File {} not found",
-                                    fname
-                                )))?
-                                .size,
-                        );
-                    }
-                    if include_hash {
-                        metadata.hash = Some(
-                            mla.get_hash(&fname)?
-                                .ok_or(PyRuntimeError::new_err(format!(
-                                    "File {} not found",
-                                    fname
-                                )))?,
-                        );
+        self.with_reader(|inner| {
+            let mut output = HashMap::new();
+            let iter: Vec<String> = inner.list_files()?.cloned().collect();
+            for fname in iter {
+                let mut metadata = FileMetadata {
+                    size: None,
+                    hash: None,
+                };
+                match inner {
+                    ExplicitReaders::FileReader(reader) => {
+                        if include_size {
+                            metadata.size = Some(
+                                reader.get_file(fname.clone())?
+                                    .ok_or(PyRuntimeError::new_err(format!(
+                                        "File {} not found",
+                                        fname
+                                    )))?
+                                    .size,
+                            );
+                        }
+                        if include_hash {
+                            metadata.hash = Some(
+                                reader.get_hash(&fname)?
+                                    .ok_or(PyRuntimeError::new_err(format!(
+                                        "File {} not found",
+                                        fname
+                                    )))?,
+                            );
+                        }
                     }
                 }
+                output.insert(fname.to_string(), metadata);
             }
-            output.insert(fname.to_string(), metadata);
-        }
-        Ok(output)
+            Ok(output)
+        })
     }
 
     /// Return whether the file is in the archive
     fn __contains__(&self, key: &str) -> Result<bool, WrappedError> {
-        let inner = check_mode!(self, Read);
-        Ok(inner.list_files()?.any(|x| x == key))
+        self.with_reader(|inner| Ok(inner.list_files()?.any(|x| x == key)))
     }
 
     /// Return the content of a file as bytes
     fn __getitem__(&mut self, key: &str) -> Result<Cow<[u8]>, WrappedError> {
-        let inner = check_mode!(mut self, Read);
-        match inner {
-            ExplicitReaders::FileReader(reader) => {
-                let mut buf = Vec::new();
-                let file = reader.get_file(key.to_string())?;
-                if let Some(mut archive_file) = file {
-                    archive_file.data.read_to_end(&mut buf)?;
-                    Ok(Cow::Owned(buf))
-                } else {
-                    Err(PyKeyError::new_err(format!("File {} not found", key)).into())
+        self.with_reader(|inner| {
+            match inner {
+                ExplicitReaders::FileReader(reader) => {
+                    let mut buf = Vec::new();
+                    let file = reader.get_file(key.to_string())?;
+                    if let Some(mut archive_file) = file {
+                        archive_file.data.read_to_end(&mut buf)?;
+                        Ok(Cow::Owned(buf))
+                    } else {
+                        Err(PyKeyError::new_err(format!("File {} not found", key)).into())
+                    }
                 }
             }
-        }
+        })
     }
 
     /// Add a file to the archive
     fn __setitem__(&mut self, key: &str, value: &[u8]) -> Result<(), WrappedError> {
-        let writer = check_mode!(mut self, Write);
-        match writer {
-            ExplicitWriters::FileWriter(writer) => {
-                let mut reader = std::io::Cursor::new(value);
-                writer.add_file(key, value.len() as u64, &mut reader)?;
-                Ok(())
+        self.with_writer(|writer| {
+            match writer {
+                ExplicitWriters::FileWriter(writer) => {
+                    let mut reader = std::io::Cursor::new(value);
+                    writer.add_file(key, value.len() as u64, &mut reader)?;
+                    Ok(())
+                }
             }
-        }
+        })
     }
 
     /// Return the number of file in the archive
     fn __len__(&self) -> Result<usize, WrappedError> {
-        let inner = check_mode!(self, Read);
-        Ok(inner.list_files()?.count())
+        self.with_reader(|inner| Ok(inner.list_files()?.count()))
     }
 
     /// Finalize the archive creation. This API *must* be called or essential records will no be written
     /// An archive can only be finalized once
     fn finalize(&mut self) -> Result<(), WrappedError> {
-        let inner = check_mode!(mut self, Write);
-        Ok(inner.finalize()?)
+        self.with_writer(|writer| writer.finalize().map_err(WrappedError::from))
     }
 
     // Context management protocol (PEP 0343)
@@ -979,7 +984,7 @@ impl MLAFile {
     // Purpose: only one import
     #[classattr]
     fn _buffered_type(py: Python) -> PyResult<Py<PyType>> {
-        Ok(py.import("io")?.getattr("BufferedIOBase")?.extract()?)
+        py.import("io")?.getattr("BufferedIOBase")?.extract()
     }
 
     /// Write an archive file to @dest, which can be:
@@ -1005,36 +1010,31 @@ impl MLAFile {
         dest: &Bound<PyAny>,
         chunk_size: usize,
     ) -> Result<(), WrappedError> {
-        let reader = check_mode!(mut self, Read);
+        self.with_reader(|reader| {
+            let archive_file = match reader {
+                ExplicitReaders::FileReader(reader) => reader.get_file(key.to_string())?,
+            };
 
-        let archive_file = match reader {
-            ExplicitReaders::FileReader(reader) => reader.get_file(key.to_string())?,
-        };
-
-        if let Ok(dest) = dest.downcast::<PyString>() {
-            // dest is a String, this is a path
-            // `/path/to/dest`
-            let mut output = std::fs::File::create(dest.to_string())?;
-            io::copy(&mut archive_file.unwrap().data, &mut output)?;
-        } else if dest.is_instance(&py.get_type::<MLAFile>().getattr("_buffered_type")?)? {
-            // isinstance(dest, io.BufferedIOBase)
-            // offer `.write` (`.close` must be called from the caller)
-
-            let src = &mut archive_file.unwrap().data;
-            let mut buf = Vec::from_iter(std::iter::repeat(0).take(chunk_size));
-            while let Ok(n) = src.read(&mut buf) {
-                if n == 0 {
-                    break;
+            if let Ok(dest) = dest.downcast::<PyString>() {
+                let mut output = std::fs::File::create(dest.to_string())?;
+                io::copy(&mut archive_file.unwrap().data, &mut output)?;
+            } else if dest.is_instance(&py.get_type::<MLAFile>().getattr("_buffered_type")?)? {
+                let src = &mut archive_file.unwrap().data;
+                let mut buf = Vec::from_iter(std::iter::repeat(0).take(chunk_size));
+                while let Ok(n) = src.read(&mut buf) {
+                    if n == 0 {
+                        break;
+                    }
+                    dest.call_method1("write", (&buf[..n],))?;
                 }
-                dest.call_method1("write", (&buf[..n],))?;
+            } else {
+                return Err(PyTypeError::new_err(
+                    "Expected a string or a file-object like (subclass of io.RawIOBase)",
+                )
+                .into());
             }
-        } else {
-            return Err(PyTypeError::new_err(
-                "Expected a string or a file-object like (subclass of io.RawIOBase)",
-            )
-            .into());
-        }
-        Ok(())
+            Ok(())
+        })
     }
 
     /// Add a file to an archive from @src, which can be:
@@ -1060,36 +1060,31 @@ impl MLAFile {
         src: &Bound<PyAny>,
         chunk_size: usize,
     ) -> Result<(), WrappedError> {
-        let writer = check_mode!(mut self, Write);
-
-        if let Ok(src) = src.downcast::<PyString>() {
-            // src is a String, this is a path
-            // `/path/to/src`
-            let mut input = std::fs::File::open(src.to_string())?;
-            writer.add_file(key, input.metadata()?.len(), &mut input)?;
-        } else if src.is_instance(&py.get_type::<MLAFile>().getattr("_buffered_type")?)? {
-            // isinstance(src, io.BufferedIOBase)
-            // offer `.read` (`.close` must be called from the caller)
-
-            let id = writer.start_file(key)?;
-            loop {
-                let py_bytes = src
-                    .call_method1("read", (chunk_size,))?
-                    .extract::<Py<PyBytes>>()?;
-                let data = py_bytes.as_bytes(py);
-                if data.is_empty() {
-                    break;
+        self.with_writer(|writer| {
+            if let Ok(src) = src.downcast::<PyString>() {
+                let mut input = std::fs::File::open(src.to_string())?;
+                writer.add_file(key, input.metadata()?.len(), &mut input)?;
+            } else if src.is_instance(&py.get_type::<MLAFile>().getattr("_buffered_type")?)? {
+                let id = writer.start_file(key)?;
+                loop {
+                    let py_bytes = src
+                        .call_method1("read", (chunk_size,))?
+                        .extract::<Py<PyBytes>>()?;
+                    let data = py_bytes.as_bytes(py);
+                    if data.is_empty() {
+                        break;
+                    }
+                    writer.append_file_content(id, data.len(), data)?;
                 }
-                writer.append_file_content(id, data.len(), data)?;
+                writer.end_file(id)?;
+            } else {
+                return Err(PyTypeError::new_err(
+                    "Expected a string or a file-object like (subclass of io.RawIOBase)",
+                )
+                .into());
             }
-            writer.end_file(id)?;
-        } else {
-            return Err(PyTypeError::new_err(
-                "Expected a string or a file-object like (subclass of io.RawIOBase)",
-            )
-            .into());
-        }
-        Ok(())
+            Ok(())
+        })
     }
 }
 
