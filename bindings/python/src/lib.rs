@@ -482,7 +482,7 @@ impl WriterConfig {
         // Check parameters
         let layers = match layers {
             Some(layers_enabled) => Layers::from_bits(layers_enabled).ok_or(
-                mla::errors::Error::BadAPIArgument("Unknown layers".to_string()),
+                mla::errors::Error::BadAPIArgument("Unknown layers".to_owned()),
             )?,
             None => Layers::DEFAULT,
         };
@@ -507,7 +507,7 @@ impl WriterConfig {
     /// Enable a layer
     fn enable_layer(slf: PyRefMut<Self>, layer: u8) -> Result<PyRefMut<Self>, WrappedError> {
         let layer = Layers::from_bits(layer).ok_or(mla::errors::Error::BadAPIArgument(
-            "Unknown layer".to_string(),
+            "Unknown layer".to_owned(),
         ))?;
         slf.inner.lock().expect("Mutex poisoned").layers |= layer;
         Ok(slf)
@@ -516,7 +516,7 @@ impl WriterConfig {
     /// Disable a layer
     fn disable_layer(slf: PyRefMut<Self>, layer: u8) -> Result<PyRefMut<Self>, WrappedError> {
         let layer = Layers::from_bits(layer).ok_or(mla::errors::Error::BadAPIArgument(
-            "Unknown layer".to_string(),
+            "Unknown layer".to_owned(),
         ))?;
         slf.inner.lock().expect("Mutex poisoned").layers &= !layer;
         Ok(slf)
@@ -525,7 +525,7 @@ impl WriterConfig {
     /// Set several layers at once
     fn set_layers(slf: PyRefMut<Self>, layers: u8) -> Result<PyRefMut<Self>, WrappedError> {
         slf.inner.lock().expect("Mutex poisoned").layers = Layers::from_bits(layers).ok_or(
-            mla::errors::Error::BadAPIArgument("Unknown layer".to_string()),
+            mla::errors::Error::BadAPIArgument("Unknown layer".to_owned()),
         )?;
         Ok(slf)
     }
@@ -639,13 +639,13 @@ impl ReaderConfig {
 // -------- mla.MLAFile --------
 
 /// `ArchiveWriter` is a generic type. To avoid generating several Python implementation
-/// (see https://pyo3.rs/v0.20.2/class.html#no-generic-parameters), this enum explicitely
+/// (see https://pyo3.rs/v0.24.0/class#no-generic-parameters), this enum explicitely
 /// instanciate `ArchiveWriter` for common & expected types
 ///
 /// Additionnaly, as the GC in Python might drop objects at any time, we need to use
 /// `'static` lifetime for the writer. This should not be a problem as the writer is not
 /// supposed to be used after the drop of the parent object
-/// (see https://pyo3.rs/v0.20.2/class.html#no-lifetime-parameters)
+/// (see https://pyo3.rs/v0.24.0/class#no-lifetime-parameters)
 enum ExplicitWriters {
     FileWriter(ArchiveWriter<'static, std::fs::File>),
 }
@@ -747,7 +747,7 @@ impl MLAFile {
         match &mut inner_lock.inner {
             OpeningModeInner::Read(inner) => f(inner),
             _ => Err(mla::errors::Error::BadAPIArgument(
-                "This API is only callable in Read mode".to_string(),
+                "This API is only callable in Read mode".to_owned(),
             )
             .into()),
         }
@@ -766,7 +766,7 @@ impl MLAFile {
         match &mut inner_lock.inner {
             OpeningModeInner::Write(inner) => f(inner),
             _ => Err(mla::errors::Error::BadAPIArgument(
-                "This API is only callable in Write mode".to_string(),
+                "This API is only callable in Write mode".to_owned(),
             )
             .into()),
         }
@@ -798,7 +798,7 @@ impl MLAFile {
                 Ok(MLAFile {
                     inner: Mutex::new(MLAFileInner {
                         inner: OpeningModeInner::Read(ExplicitReaders::FileReader(arch_reader)),
-                        path: path.to_string(),
+                        path: path.to_owned(),
                     }),
                 })
             }
@@ -819,7 +819,7 @@ impl MLAFile {
                         inner: OpeningModeInner::Write(Box::new(ExplicitWriters::FileWriter(
                             arch_writer,
                         ))),
-                        path: path.to_string(),
+                        path: path.to_owned(),
                     }),
                 })
             }
@@ -892,7 +892,7 @@ impl MLAFile {
                         }
                     }
                 }
-                output.insert(fname.to_string(), metadata);
+                output.insert(fname.to_owned(), metadata);
             }
             Ok(output)
         })
@@ -907,9 +907,9 @@ impl MLAFile {
     fn __getitem__(&mut self, key: &str) -> Result<Vec<u8>, WrappedError> {
         self.with_reader(|inner| match inner {
             ExplicitReaders::FileReader(reader) => {
-                let mut buf = Vec::new();
-                let file = reader.get_file(key.to_string())?;
+                let file = reader.get_file(key.to_owned())?;
                 if let Some(mut archive_file) = file {
+                    let mut buf = Vec::new();
                     archive_file.data.read_to_end(&mut buf)?;
                     Ok(buf)
                 } else {
@@ -947,7 +947,7 @@ impl MLAFile {
         slf
     }
 
-    // cf. https://pyo3.rs/v0.22.5/function/signature
+    // cf. https://pyo3.rs/v0.24.0/function/signature.html
     #[pyo3(signature = (exc_type=None, _exc_value=None, _traceback=None))]
     fn __exit__(
         &mut self,
@@ -1004,7 +1004,7 @@ impl MLAFile {
     ) -> Result<(), WrappedError> {
         self.with_reader(|reader| {
             let archive_file = match reader {
-                ExplicitReaders::FileReader(reader) => reader.get_file(key.to_string())?,
+                ExplicitReaders::FileReader(reader) => reader.get_file(key.to_owned())?,
             };
 
             if let Ok(dest) = dest.downcast::<PyString>() {
