@@ -834,10 +834,11 @@ impl MLAFile {
     }
 
     fn __repr__(&self) -> String {
+        let inner = self.inner.lock().expect("Mutex poisoned");
         format!(
             "<MLAFile path='{:}' mode='{:}'>",
-            self.inner.lock().expect("Mutex poisoned").path,
-            match self.inner.lock().expect("Mutex poisoned").inner {
+            inner.path,
+            match inner.inner {
                 OpeningModeInner::Read(_) => "r",
                 OpeningModeInner::Write(_) => "w",
             }
