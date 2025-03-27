@@ -3,7 +3,7 @@ use std::{
     collections::HashMap,
     fs::File,
     io::{self, Read},
-    sync::{Mutex, PoisonError},
+    sync::Mutex,
 };
 
 use ml_kem::EncodedSizeUser;
@@ -305,7 +305,7 @@ struct PublicKeys {
 
 impl Clone for PublicKeys {
     fn clone(&self) -> Self {
-        let inner = self.inner.lock().unwrap_or_else(PoisonError::into_inner).clone();
+        let inner = self.inner.lock().expect("Mutex poisoned").clone();
         PublicKeys {
             inner: Mutex::new(inner),
         }
@@ -351,7 +351,7 @@ impl PublicKeys {
     fn keys(&self) -> Vec<Cow<[u8]>> {
         self.inner
             .lock()
-            .unwrap_or_else(PoisonError::into_inner)
+            .expect("Mutex poisoned")
             .keys
             .iter()
             .map(|pubkey| {
@@ -392,7 +392,7 @@ struct PrivateKeys {
 
 impl Clone for PrivateKeys {
     fn clone(&self) -> Self {
-        let inner = self.inner.lock().unwrap_or_else(PoisonError::into_inner).clone();
+        let inner = self.inner.lock().expect("Mutex poisoned").clone();
         PrivateKeys {
             inner: Mutex::new(inner),
         }
@@ -440,7 +440,7 @@ impl PrivateKeys {
     fn keys(&self) -> Vec<Cow<[u8]>> {
         self.inner
             .lock()
-            .unwrap_or_else(PoisonError::into_inner)
+            .expect("Mutex poisoned")
             .keys
             .iter()
             .map(|privkey| {
@@ -503,7 +503,7 @@ impl WriterConfig {
 
     #[getter]
     fn layers(&self) -> u8 {
-        self.inner.lock().unwrap_or_else(PoisonError::into_inner).layers.bits()
+        self.inner.lock().expect("Mutex poisoned").layers.bits()
     }
 
     /// Enable a layer
@@ -511,7 +511,7 @@ impl WriterConfig {
         let layer = Layers::from_bits(layer).ok_or(mla::errors::Error::BadAPIArgument(
             "Unknown layer".to_string(),
         ))?;
-        slf.inner.lock().unwrap_or_else(PoisonError::into_inner).layers |= layer;
+        slf.inner.lock().expect("Mutex poisoned").layers |= layer;
         Ok(slf)
     }
 
@@ -520,13 +520,13 @@ impl WriterConfig {
         let layer = Layers::from_bits(layer).ok_or(mla::errors::Error::BadAPIArgument(
             "Unknown layer".to_string(),
         ))?;
-        slf.inner.lock().unwrap_or_else(PoisonError::into_inner).layers &= !layer;
+        slf.inner.lock().expect("Mutex poisoned").layers &= !layer;
         Ok(slf)
     }
 
     /// Set several layers at once
     fn set_layers(slf: PyRefMut<Self>, layers: u8) -> Result<PyRefMut<Self>, WrappedError> {
-        slf.inner.lock().unwrap_or_else(PoisonError::into_inner).layers = Layers::from_bits(layers).ok_or(
+        slf.inner.lock().expect("Mutex poisoned").layers = Layers::from_bits(layers).ok_or(
             mla::errors::Error::BadAPIArgument("Unknown layer".to_string()),
         )?;
         Ok(slf)
@@ -541,13 +541,13 @@ impl WriterConfig {
         // Check compression level is correct using a fake object
         ArchiveWriterConfig::new().with_compression_level(compression_level)?;
 
-        slf.inner.lock().unwrap_or_else(PoisonError::into_inner).compression_level = compression_level;
+        slf.inner.lock().expect("Mutex poisoned").compression_level = compression_level;
         Ok(slf)
     }
 
     #[getter]
     fn compression_level(&self) -> u32 {
-        self.inner.lock().unwrap_or_else(PoisonError::into_inner).compression_level
+        self.inner.lock().expect("Mutex poisoned").compression_level
     }
 
     /// Set public keys
@@ -555,7 +555,7 @@ impl WriterConfig {
         slf: PyRefMut<Self>,
         public_keys: PublicKeys,
     ) -> Result<PyRefMut<Self>, WrappedError> {
-        slf.inner.lock().unwrap_or_else(PoisonError::into_inner).public_keys = Some(public_keys);
+        slf.inner.lock().expect("Mutex poisoned").public_keys = Some(public_keys);
         Ok(slf)
     }
 
@@ -563,7 +563,7 @@ impl WriterConfig {
     fn get_public_keys(&self) -> Option<PublicKeys> {
         self.inner
             .lock()
-            .unwrap_or_else(PoisonError::into_inner)
+            .expect("Mutex poisoned")
             .public_keys
             .clone()
     }
@@ -573,11 +573,11 @@ impl WriterConfig {
     /// Create an `ArchiveWriterConfig` out of the python object
     fn to_archive_writer_config(&self) -> Result<ArchiveWriterConfig, WrappedError> {
         let mut config = ArchiveWriterConfig::new();
-        let inner = self.inner.lock().unwrap_or_else(PoisonError::into_inner);
+        let inner = self.inner.lock().expect("Mutex poisoned");
         config.set_layers(inner.layers);
         config.with_compression_level(inner.compression_level)?;
         if let Some(ref public_keys) = inner.public_keys {
-            config.add_public_keys(&public_keys.inner.lock().unwrap_or_else(PoisonError::into_inner).keys);
+            config.add_public_keys(&public_keys.inner.lock().expect("Mutex poisoned").keys);
         }
         Ok(config)
     }
@@ -612,7 +612,7 @@ impl ReaderConfig {
         slf: PyRefMut<Self>,
         private_keys: PrivateKeys,
     ) -> Result<PyRefMut<Self>, WrappedError> {
-        slf.inner.lock().unwrap_or_else(PoisonError::into_inner).private_keys = Some(private_keys);
+        slf.inner.lock().expect("Mutex poisoned").private_keys = Some(private_keys);
         Ok(slf)
     }
 
@@ -620,7 +620,7 @@ impl ReaderConfig {
     fn private_keys(&self) -> Option<PrivateKeys> {
         self.inner
             .lock()
-            .unwrap_or_else(PoisonError::into_inner)
+            .expect("Mutex poisoned")
             .private_keys
             .clone()
     }
@@ -630,8 +630,8 @@ impl ReaderConfig {
     /// Create an `ArchiveReaderConfig` out of the python object
     fn to_archive_reader_config(&self) -> Result<ArchiveReaderConfig, WrappedError> {
         let mut config = ArchiveReaderConfig::new();
-        if let Some(ref private_keys) = self.inner.lock().unwrap_or_else(PoisonError::into_inner).private_keys {
-            config.add_private_keys(&private_keys.inner.lock().unwrap_or_else(PoisonError::into_inner).keys);
+        if let Some(ref private_keys) = self.inner.lock().expect("Mutex poisoned").private_keys {
+            config.add_private_keys(&private_keys.inner.lock().expect("Mutex poisoned").keys);
             config.layers_enabled |= Layers::ENCRYPT;
         }
         Ok(config)
@@ -745,7 +745,7 @@ impl MLAFile {
     where
         F: FnOnce(&mut ExplicitReaders) -> Result<R, WrappedError>,
     {
-        let mut inner_lock = self.inner.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut inner_lock = self.inner.lock().expect("Mutex poisoned");
         match &mut inner_lock.inner {
             OpeningModeInner::Read(inner) => f(inner),
             _ => Err(mla::errors::Error::BadAPIArgument(
@@ -764,7 +764,7 @@ impl MLAFile {
     where
         F: FnOnce(&mut ExplicitWriters) -> Result<R, WrappedError>,
     {
-        let mut inner_lock = self.inner.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut inner_lock = self.inner.lock().expect("Mutex poisoned");
         match &mut inner_lock.inner {
             OpeningModeInner::Write(inner) => f(inner),
             _ => Err(mla::errors::Error::BadAPIArgument(
@@ -818,7 +818,9 @@ impl MLAFile {
                 let arch_writer = ArchiveWriter::from_config(output_file, wconfig)?;
                 Ok(MLAFile {
                     inner: Mutex::new(MLAFileInner {
-                        inner: OpeningModeInner::Write(Box::new(ExplicitWriters::FileWriter(arch_writer))),
+                        inner: OpeningModeInner::Write(Box::new(ExplicitWriters::FileWriter(
+                            arch_writer,
+                        ))),
                         path: path.to_string(),
                     }),
                 })
@@ -834,8 +836,8 @@ impl MLAFile {
     fn __repr__(&self) -> String {
         format!(
             "<MLAFile path='{:}' mode='{:}'>",
-            self.inner.lock().unwrap_or_else(PoisonError::into_inner).path,
-            match self.inner.lock().unwrap_or_else(PoisonError::into_inner).inner {
+            self.inner.lock().expect("Mutex poisoned").path,
+            match self.inner.lock().expect("Mutex poisoned").inner {
                 OpeningModeInner::Read(_) => "r",
                 OpeningModeInner::Write(_) => "w",
             }
@@ -844,9 +846,7 @@ impl MLAFile {
 
     /// Return the list of files in the archive
     fn keys(&self) -> Result<Vec<String>, WrappedError> {
-        self.with_reader(|inner| {
-            Ok(inner.list_files()?.map(|x| x.to_string()).collect())
-        })
+        self.with_reader(|inner| Ok(inner.list_files()?.map(|x| x.to_string()).collect()))
     }
 
     /// Return the list of the files in the archive, along with metadata
@@ -877,7 +877,8 @@ impl MLAFile {
                     ExplicitReaders::FileReader(reader) => {
                         if include_size {
                             metadata.size = Some(
-                                reader.get_file(fname.clone())?
+                                reader
+                                    .get_file(fname.clone())?
                                     .ok_or(PyRuntimeError::new_err(format!(
                                         "File {} not found",
                                         fname
@@ -886,13 +887,9 @@ impl MLAFile {
                             );
                         }
                         if include_hash {
-                            metadata.hash = Some(
-                                reader.get_hash(&fname)?
-                                    .ok_or(PyRuntimeError::new_err(format!(
-                                        "File {} not found",
-                                        fname
-                                    )))?,
-                            );
+                            metadata.hash = Some(reader.get_hash(&fname)?.ok_or(
+                                PyRuntimeError::new_err(format!("File {} not found", fname)),
+                            )?);
                         }
                     }
                 }
@@ -909,17 +906,15 @@ impl MLAFile {
 
     /// Return the content of a file as bytes
     fn __getitem__(&mut self, key: &str) -> Result<Cow<[u8]>, WrappedError> {
-        self.with_reader(|inner| {
-            match inner {
-                ExplicitReaders::FileReader(reader) => {
-                    let mut buf = Vec::new();
-                    let file = reader.get_file(key.to_string())?;
-                    if let Some(mut archive_file) = file {
-                        archive_file.data.read_to_end(&mut buf)?;
-                        Ok(Cow::Owned(buf))
-                    } else {
-                        Err(PyKeyError::new_err(format!("File {} not found", key)).into())
-                    }
+        self.with_reader(|inner| match inner {
+            ExplicitReaders::FileReader(reader) => {
+                let mut buf = Vec::new();
+                let file = reader.get_file(key.to_string())?;
+                if let Some(mut archive_file) = file {
+                    archive_file.data.read_to_end(&mut buf)?;
+                    Ok(Cow::Owned(buf))
+                } else {
+                    Err(PyKeyError::new_err(format!("File {} not found", key)).into())
                 }
             }
         })
@@ -927,13 +922,11 @@ impl MLAFile {
 
     /// Add a file to the archive
     fn __setitem__(&mut self, key: &str, value: &[u8]) -> Result<(), WrappedError> {
-        self.with_writer(|writer| {
-            match writer {
-                ExplicitWriters::FileWriter(writer) => {
-                    let mut reader = std::io::Cursor::new(value);
-                    writer.add_file(key, value.len() as u64, &mut reader)?;
-                    Ok(())
-                }
+        self.with_writer(|writer| match writer {
+            ExplicitWriters::FileWriter(writer) => {
+                let mut reader = std::io::Cursor::new(value);
+                writer.add_file(key, value.len() as u64, &mut reader)?;
+                Ok(())
             }
         })
     }
@@ -968,7 +961,7 @@ impl MLAFile {
             return Ok(false);
         }
 
-        match self.inner.lock().unwrap_or_else(PoisonError::into_inner).inner {
+        match self.inner.lock().expect("Mutex poisoned").inner {
             OpeningModeInner::Read(_) => {
                 // Nothing to do, dropping this object should close the inner stream
             }
