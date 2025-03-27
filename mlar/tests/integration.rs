@@ -1,12 +1,12 @@
 use assert_cmd::Command;
 use assert_fs::fixture::{FileWriteBin, NamedTempFile, TempDir};
 use permutate::Permutator;
+use rand::SeedableRng;
 use rand::distributions::{Alphanumeric, Distribution, Standard};
 use rand::rngs::StdRng;
-use rand::SeedableRng;
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
-use std::fs::{self, metadata, read_dir, File};
+use std::fs::{self, File, metadata, read_dir};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use tar::Archive;
@@ -999,13 +999,13 @@ fn test_keygen() {
 }
 
 const PRIVATE_KEY_TESTSEED_SHA256: [u8; 32] = [
-    212, 205, 105, 106, 149, 28, 64, 238, 70, 197, 49, 91, 75, 253, 150, 226, 174, 5, 134, 185, 47,
-    121, 2, 26, 114, 70, 38, 230, 90, 218, 192, 134,
+    80, 201, 118, 246, 241, 104, 158, 97, 217, 191, 79, 125, 41, 188, 240, 85, 139, 146, 81, 45,
+    168, 157, 13, 116, 136, 199, 142, 73, 153, 58, 219, 52,
 ];
 
 const PRIVATE_KEY_TESTSEED2_SHA256: [u8; 32] = [
-    251, 35, 11, 29, 107, 109, 156, 198, 23, 130, 6, 57, 242, 223, 179, 15, 21, 143, 4, 189, 219,
-    105, 16, 134, 58, 98, 154, 243, 28, 1, 155, 68,
+    107, 226, 84, 141, 92, 112, 140, 195, 136, 48, 184, 57, 145, 66, 180, 10, 188, 41, 111, 108,
+    106, 125, 23, 45, 7, 237, 249, 187, 27, 37, 156, 235,
 ];
 
 #[test]
@@ -1033,15 +1033,15 @@ fn test_keygen_seed() {
     cmd.arg("keygen").arg(&base_name).arg("-s").arg("TESTSEED2");
     cmd.assert().success();
 
-    let mut pkey_testseed = vec![];
+    let mut pkey_testseed2 = vec![];
     File::open(&base_name)
         .unwrap()
-        .read_to_end(&mut pkey_testseed)
+        .read_to_end(&mut pkey_testseed2)
         .unwrap();
     // Check the SHA256, as private key are ~3KB long
-    let hash_testseed = Sha256::digest(&pkey_testseed);
+    let hash_testseed2 = Sha256::digest(&pkey_testseed2);
 
-    assert_eq!(hash_testseed, PRIVATE_KEY_TESTSEED2_SHA256.into());
+    assert_eq!(hash_testseed2, PRIVATE_KEY_TESTSEED2_SHA256.into());
 
     assert_ne!(PRIVATE_KEY_TESTSEED_SHA256, PRIVATE_KEY_TESTSEED2_SHA256);
 }
