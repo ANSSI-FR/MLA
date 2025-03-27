@@ -2,7 +2,7 @@
 name = "mlakey-parser"
 version = "0.1.0"
 authors = ["Camille Mougey <camille.mougey@ssi.gouv.fr>"]
-edition = "2018"
+edition = "2024"
 license = "LGPL-3.0-only"
 description = "MLA Key Parser - DER/PEM parser for MLA Hybrid keys"
 homepage = "https://github.com/ANSSI-FR/MLA"
@@ -10,20 +10,20 @@ repository = "https://github.com/ANSSI-FR/MLA"
 readme = "../README.md"
 
 [dependencies]
-der-parser = { version = "9", default-features = false}
-curve25519-dalek = { version = "4", default-features = false}
-x25519-dalek = { version = "2", default-features = false, features=["static_secrets"]}
-sha2 = { version = "0", default-features = false}
-pem = { version = "3", default-features = false}
+der-parser = { version = "10.0", default-features = false}
+curve25519-dalek = { version = "4.1", default-features = false}
+x25519-dalek = { version = "2.0", default-features = false, features=["static_secrets"]}
+sha2 = { version = "0.10", default-features = false}
+pem = { version = "3.0", default-features = false}
 mla = { path = "../mla", version = "1" }
-ml-kem = "0.1.1"
-
-[dependencies.rand_core]
-version = "0.6"
-default-features = false
+ml-kem = "0.3.0-pre"
+# Wait that all MLA dependencies upgrade below crate to do it too as there is a trait modification (CryptoRngCore -> CryptoRng + RngCore)
+rand_core = { version = "0.6", default-features = false}
 
 [dev-dependencies]
+# Wait that all MLA dependencies upgrade below crate to do it too as there is a trait modification (CryptoRngCore -> CryptoRng + RngCore)
 rand = "0.8"
+# Wait that all MLA dependencies upgrade below crate to do it too as there is a trait modification (CryptoRngCore -> CryptoRng + RngCore)
 rand_chacha = { version = "0.3", default-features = false}
 kem = {version = "0.3.0-pre.0", default-features = false }
 

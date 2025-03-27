@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 
 use criterion::BenchmarkId;
 use criterion::Throughput;
@@ -8,9 +8,9 @@ use mla::crypto::hybrid::generate_keypair_from_rng;
 use mla::helpers::linear_extract;
 use mla::{ArchiveFailSafeReader, Layers};
 use mla::{ArchiveReader, ArchiveWriter};
+use rand::SeedableRng;
 use rand::distributions::{Alphanumeric, Distribution};
 use rand::seq::index::sample;
-use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use std::collections::HashMap;
 use std::io::{self, Cursor, Read};

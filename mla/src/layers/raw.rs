@@ -1,10 +1,10 @@
 use std::io;
 use std::io::{Read, Seek, SeekFrom, Write};
 
+use crate::Error;
 use crate::layers::traits::{
     InnerWriterTrait, InnerWriterType, LayerFailSafeReader, LayerReader, LayerWriter,
 };
-use crate::Error;
 
 use super::traits::InnerReaderTrait;
 

@@ -1,5 +1,4 @@
 [workspace]
-
 members = [
     "mla",
     "mlakey-parser",
@@ -7,6 +6,7 @@ members = [
     "mla-fuzz-afl",
     "bindings/C",
 ]
+resolver = "3"
 
 [profile.release]
 opt-level = 'z'     # Optimize for size.
