@@ -1,5 +1,4 @@
 use std::{
-    borrow::Cow,
     collections::HashMap,
     fs::File,
     io::{self, Read},
@@ -269,8 +268,8 @@ impl FileMetadata {
     }
 
     #[getter]
-    fn hash(&self) -> Option<Cow<[u8]>> {
-        self.hash.as_ref().map(|h| Cow::Borrowed::<[u8]>(h))
+    fn hash(&self) -> Option<&[u8; 32]> {
+        self.hash.as_ref()
     }
 
     fn __repr__(&self) -> String {
@@ -348,7 +347,7 @@ impl PublicKeys {
 
     /// DER representation of keys
     #[getter]
-    fn keys(&self) -> Vec<Cow<[u8]>> {
+    fn keys(&self) -> Vec<Vec<u8>> {
         self.inner
             .lock()
             .expect("Mutex poisoned")
@@ -358,9 +357,8 @@ impl PublicKeys {
                 let mut result = Vec::new();
                 result.extend(pubkey.public_key_ecc.to_bytes());
                 result.extend(pubkey.public_key_ml.as_bytes());
-                Cow::Owned(result)
+                result
             })
-            //Cow::Owned(Vec::from(pubkey.public_key_ecc.to_bytes())))
             .collect()
     }
 }
@@ -437,7 +435,7 @@ impl PrivateKeys {
     /// DER representation of keys
     /// :warning: This keys must be kept secrets!
     #[getter]
-    fn keys(&self) -> Vec<Cow<[u8]>> {
+    fn keys(&self) -> Vec<Vec<u8>> {
         self.inner
             .lock()
             .expect("Mutex poisoned")
@@ -447,7 +445,7 @@ impl PrivateKeys {
                 let mut result = Vec::new();
                 result.extend(privkey.private_key_ecc.to_bytes());
                 result.extend(privkey.private_key_ml.as_bytes());
-                Cow::Owned(result)
+                result
             })
             .collect()
     }
@@ -847,7 +845,7 @@ impl MLAFile {
 
     /// Return the list of files in the archive
     fn keys(&self) -> Result<Vec<String>, WrappedError> {
-        self.with_reader(|inner| Ok(inner.list_files()?.map(|x| x.to_string()).collect()))
+        self.with_reader(|inner| Ok(inner.list_files()?.cloned().collect()))
     }
 
     /// Return the list of the files in the archive, along with metadata
@@ -906,14 +904,14 @@ impl MLAFile {
     }
 
     /// Return the content of a file as bytes
-    fn __getitem__(&mut self, key: &str) -> Result<Cow<[u8]>, WrappedError> {
+    fn __getitem__(&mut self, key: &str) -> Result<Vec<u8>, WrappedError> {
         self.with_reader(|inner| match inner {
             ExplicitReaders::FileReader(reader) => {
                 let mut buf = Vec::new();
                 let file = reader.get_file(key.to_string())?;
                 if let Some(mut archive_file) = file {
                     archive_file.data.read_to_end(&mut buf)?;
-                    Ok(Cow::Owned(buf))
+                    Ok(buf)
                 } else {
                     Err(PyKeyError::new_err(format!("File {} not found", key)).into())
                 }
