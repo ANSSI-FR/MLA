@@ -40,6 +40,8 @@ HPKE is parameterized with:
 - AEAD: AES-256-GCM
 - KEM: Hybrid KEM, a custom KEM described later in this document
 
+Thus, only one cryptography suite is available for now. Therefore, MLA lacks cryptography agility which is an encouraged property regarding post-quantum cryptography by ANSSI [^pqcanssi]. However, HPKE improves this aspect of MLA [^issuehpke].
+
 Full details are available below.
 
 Additionally, "key commitment" is included using a method described in [^keycommit] and detailed in [^issuekeycommit].
@@ -173,7 +175,6 @@ If the decryption is a success, returns $ss_{recipients}$. Otherwise, returns an
     - An existing formal analysis [^hpkeanalysis]
     - Easier code and security auditing, thanks to the use of known bricks
     - Availability of test vectors in the RFC, making the implementation more reliable
-    - The pre-shared key mode could be considered in the future of MLA to provide additional properties, such as forward secrecy (RFC 9180 section 9.1) in some situation
     - If signature is added to MLA in a future version, it could also be integrated using HPKE
 - To the knowledge of the author, no HPKE algorithm has been standardized for quantum hybridation, hence the custom algorithm
 - FIPS 203 is used as, at the time of writing:
@@ -239,7 +240,7 @@ $\hspace{1cm}\mathtt{throw\ KeyNotFoundError}$
 #### Arguments
 
 - The shared secret is cryptographically generated, so it can later be used as a shared secret in HPKE encryption
-- This secret is unique per archive, as it is generated on archive creation. Even "converting" or "repairing" an archive in `mlar` CLI will force a newly fresh secret
+- This secret is unique per archive, as it is generated on archive creation. Even "converting" or "repairing" an archive in `mlar` CLI will force a newly fresh secret. It is a new secret as there is no edit feature implemented, even if it is doable. Hence, a new random symetric key is used to encrypt its content while "converting" or "repairing" an archive. 
 - Even if the AEAD decryption worked for an non legitimate recipient, for instance following an intentional manipulation, the shared secret obtained will later be checked using Key commitment before decrypting actual data (see below)
 - Optimization would have been possible here, such as sharing a common ephemeral key for the DHKEM. But the size gain is not worth enough regarding the ciphertext size of MLKEM and would move the implementation away from the DHKEM in RFC 9180
 
@@ -489,14 +490,6 @@ The `Encrypt` layer does not hide the plaintext length.
 
 Usually, this layer is used with the `Compress` layer. If an attacker knows the original file size, he might learn information about the original data entropy.
 
-- Forward secrecy
-
-The algorithm used does not provide forward secrecy [^hpke], i.e. someone knowing a recipient private key will always be able to read an archive sent to this recipient.
-
-Fundamentally, additional information are missing to provide this property (sender public key, pre-sharedkey, etc.).
-
-Still, if this property is expected in future MLA usage, it could be added through HPKE Key Scheduling [^hpke], without questioning the claims already made in this document.
-
 - Hidden recipient list
 
 Only the owner of a recipient private key can learn that it is an archive's recipient. 
@@ -507,6 +500,7 @@ In other words, the list of recipient is not public. Still, the number of recipi
 [^keycommit]: ["How to Abuse and Fix Authenticated Encryption Without Key Commitment", Usenix'22](https://www.usenix.org/conference/usenixsecurity22/presentation/albertini)
 [^issuekeycommit]: https://github.com/ANSSI-FR/MLA/issues/206
 [^hpke]: [Hybrid Public Key Encryption, RFC 9180](https://datatracker.ietf.org/doc/rfc9180/)
+[^pqcanssi]: [PQC transition in France](https://cyber.gouv.fr/sites/default/files/document/pqc-transition-in-france.pdf)
 [^fips203]: [FIPS 203 - MLKEM Standard](https://csrc.nist.gov/pubs/fips/203/ipd)
 [^issuehpke]: https://github.com/ANSSI-FR/MLA/issues/211
 [^hpkeanalysis]: https://eprint.iacr.org/2020/1499.pdf
