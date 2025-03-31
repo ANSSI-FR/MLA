@@ -175,7 +175,6 @@ If the decryption is a success, returns $ss_{recipients}$. Otherwise, returns an
     - An existing formal analysis [^hpkeanalysis]
     - Easier code and security auditing, thanks to the use of known bricks
     - Availability of test vectors in the RFC, making the implementation more reliable
-    - The pre-shared key mode could be considered in the future of MLA to provide additional properties, such as forward secrecy (RFC 9180 section 9.1) in some situation
     - If signature is added to MLA in a future version, it could also be integrated using HPKE
 - To the knowledge of the author, no HPKE algorithm has been standardized for quantum hybridation, hence the custom algorithm
 - FIPS 203 is used as, at the time of writing:
@@ -490,14 +489,6 @@ The choice has been made to report the decision to the user of the library[^issu
 The `Encrypt` layer does not hide the plaintext length.
 
 Usually, this layer is used with the `Compress` layer. If an attacker knows the original file size, he might learn information about the original data entropy.
-
-- Forward secrecy
-
-The algorithm used does not provide forward secrecy [^hpke], i.e. someone knowing a recipient private key will always be able to read an archive sent to this recipient.
-
-Fundamentally, additional information are missing to provide this property (sender public key, pre-sharedkey, etc.).
-
-Still, if this property is expected in future MLA usage, it could be added through HPKE Key Scheduling [^hpke], without questioning the claims already made in this document.
 
 - Hidden recipient list
 
