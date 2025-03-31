@@ -240,7 +240,7 @@ $\hspace{1cm}\mathtt{throw\ KeyNotFoundError}$
 #### Arguments
 
 - The shared secret is cryptographically generated, so it can later be used as a shared secret in HPKE encryption
-- This secret is unique per archive, as it is generated on archive creation. Even "converting" or "repairing" an archive in `mlar` CLI will force a newly fresh secret
+- This secret is unique per archive, as it is generated on archive creation. Even "converting" or "repairing" an archive in `mlar` CLI will force a newly fresh secret. It is a new secret as there is no edit feature implemented, even if it is doable. Hence, a new random symetric key is used to encrypt its content while "converting" or "repairing" an archive. 
 - Even if the AEAD decryption worked for an non legitimate recipient, for instance following an intentional manipulation, the shared secret obtained will later be checked using Key commitment before decrypting actual data (see below)
 - Optimization would have been possible here, such as sharing a common ephemeral key for the DHKEM. But the size gain is not worth enough regarding the ciphertext size of MLKEM and would move the implementation away from the DHKEM in RFC 9180
 
