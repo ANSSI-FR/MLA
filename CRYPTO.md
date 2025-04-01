@@ -492,10 +492,9 @@ Usually, this layer is used with the `Compress` layer. If an attacker knows the 
 
 - Hidden recipient list
 
-Only the owner of a recipient private key can learn that it is an archive's recipient. 
+Only the owner of a recipient's private key can determine that they are a recipient of the archive. In other words, while the recipient list remains private, the total number of recipients is still visible. 
 
-In other words, the list of recipient is not public. Still, the number of recipient is.
-
+This is an intentional privacy feature.
 
 [^keycommit]: ["How to Abuse and Fix Authenticated Encryption Without Key Commitment", Usenix'22](https://www.usenix.org/conference/usenixsecurity22/presentation/albertini)
 [^issuekeycommit]: https://github.com/ANSSI-FR/MLA/issues/206
