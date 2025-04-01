@@ -40,7 +40,7 @@ HPKE is parameterized with:
 - AEAD: AES-256-GCM
 - KEM: Hybrid KEM, a custom KEM described later in this document
 
-Thus, only one cryptography suite is available for now. Therefore, MLA lacks cryptography agility which is an encouraged property regarding post-quantum cryptography by ANSSI [^pqcanssi]. However, HPKE improves this aspect of MLA [^issuehpke].
+Thus, only one cryptography suite is available for now. If this setting ends up broken by cryptanalysis, we will move users onward to the next MLA version, using appropriate cryptography, satisfying cryptography agility which is an encouraged property regarding post-quantum cryptography by ANSSI [^frsuggest]. Moreover, HPKE improves this aspect of MLA [^hpke].
 
 Full details are available below.
 
@@ -500,7 +500,6 @@ In other words, the list of recipient is not public. Still, the number of recipi
 [^keycommit]: ["How to Abuse and Fix Authenticated Encryption Without Key Commitment", Usenix'22](https://www.usenix.org/conference/usenixsecurity22/presentation/albertini)
 [^issuekeycommit]: https://github.com/ANSSI-FR/MLA/issues/206
 [^hpke]: [Hybrid Public Key Encryption, RFC 9180](https://datatracker.ietf.org/doc/rfc9180/)
-[^pqcanssi]: [PQC transition in France](https://cyber.gouv.fr/sites/default/files/document/pqc-transition-in-france.pdf)
 [^fips203]: [FIPS 203 - MLKEM Standard](https://csrc.nist.gov/pubs/fips/203/ipd)
 [^issuehpke]: https://github.com/ANSSI-FR/MLA/issues/211
 [^hpkeanalysis]: https://eprint.iacr.org/2020/1499.pdf
