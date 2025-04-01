@@ -447,11 +447,11 @@ It still use some bricks from `rust-hpke`, as the KDF, $\mathrm{LabeledExtract}$
 
 ### MLKEM implementation without a review
 
-Thanks to the hybrid approach, a flawed implementation of MLKEM would have limited consequences.
+Thanks to the hybrid approach, a flawed implementation of MLKEM would have limited consequences. It satisfies ANSSI guidelines for the transition first phase to PQC hybridization [^frsuggest]. For this reason, MLA is eligible for a security visa evaluation.
 
-It is therefore accepted by the author (as a trade-off) to use a MLKEM implementation without existing review to bring as soon as possible a reasonable protection against "Harvest now, decrypt later" attacks.
+For now, it is therefore accepted by the author (as a trade-off) to use a MLKEM implementation without existing review to bring as soon as possible a reasonable protection against "Harvest now, decrypt later" attacks.
 
-If a reviewed implementation with acceptable dependency emerges in the future, it can be easily swapped in MLA.
+If a reviewed implementation with acceptable dependency emerges in the future, it can be easily swapped in MLA. Thus, MLA would also satisfy the requirements to get a security visa evaluation in the second and third phases of these guidelines by including its PQC implementation.
 
 ## Security consideration
 
