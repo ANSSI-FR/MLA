@@ -1,6 +1,6 @@
-use crate::crypto::aesgcm::{ConstantTimeEq, Key, KEY_SIZE, TAG_LENGTH};
+use crate::crypto::aesgcm::{ConstantTimeEq, KEY_SIZE, Key, TAG_LENGTH};
 use crate::crypto::hpke::{
-    dhkem_decap, dhkem_encap, key_schedule_base_hybrid_kem_recipient, DHKEMCiphertext,
+    DHKEMCiphertext, dhkem_decap, dhkem_encap, key_schedule_base_hybrid_kem_recipient,
 };
 use crate::errors::ConfigError;
 use crate::layers::encrypt::get_crypto_rng;
@@ -11,7 +11,7 @@ use rand::Rng;
 use rand_chacha::rand_core::CryptoRngCore;
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
-use sha2::Sha256;
+use sha2::Sha512;
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -37,7 +37,7 @@ pub(crate) struct HybridKemSharedSecret(pub(crate) HybridKemSharedSecretArray);
 impl HybridKemSharedSecret {
     /// Generate a new HybridKemSharedSecret from a CSPRNG
     pub fn from_rng<R: CryptoRngCore>(csprng: &mut R) -> Self {
-        Self(csprng.gen::<HybridKemSharedSecretArray>())
+        Self(csprng.r#gen::<HybridKemSharedSecretArray>())
     }
 }
 
@@ -52,15 +52,15 @@ const HYBRIDKEM_ASSOCIATED_DATA: &[u8; 0] = b"";
 /// Produce a secret key by combining two KEM-Encaps outputs, using a "Nested Dual-PRF Combiner", proved in [6] (3.3)
 ///
 /// Arguments:
-/// - The use of concatenation scheme **including the ciphertext** keeps IND-CCA2 if one of the two
+/// - The use of concatenation scheme **including ciphertexts** keeps IND-CCA2 if one of the two
 ///   underlying scheme is IND-CCA2, as proved in [1] and explained in [4]
 /// - TLS [2] uses a similar scheme, and IKE [3] also uses a concatenation scheme
-/// - This kind of scheme follows ANSSI recommandations [5]
+/// - This kind of scheme follows ANSSI recommendations [5]
 /// - HKDF can be considered as a Dual-PRF if both inputs are uniformly random [7]. In MLA, the `combine` method
 ///   is called with a shared secret from ML-KEM, and the resulting ECC key derivation -- both are uniformly random
 /// - To avoid potential mistake in the future, or a mis-reuse of this method, the "Nested Dual-PRF Combiner" is
 ///   used instead of the "Dual-PRF Combiner" (also from [6]). Indeed, this combiner force the "salt" part of HKDF
-///   to be uniformly random using an additionnal PRF use, ensuring the following HKDF is indeed a Dual-PRF
+///   to be uniformly random using an additional PRF use, ensuring the following HKDF is indeed a Dual-PRF
 ///
 /// uniformly_random_ss1 = HKDF-SHA256-Extract(
 ///     salt=0,
@@ -88,10 +88,10 @@ fn combine(
     ciphertext2: &[u8],
 ) -> Key {
     // Make the first shared-secret uniformly random
-    let (uniformly_random_ss1, _hkdf) = Hkdf::<Sha256>::extract(None, shared_secret1);
+    let (uniformly_random_ss1, _hkdf) = Hkdf::<Sha512>::extract(None, shared_secret1);
 
     // As uniformly_random_ss1 is uniformly random, HKDF-Extract act as a Dual-PRF
-    let hkdf = Hkdf::<Sha256>::new(
+    let hkdf = Hkdf::<Sha512>::new(
         Some(&uniformly_random_ss1),
         // Combine with the second shared secret
         shared_secret2,
@@ -100,7 +100,7 @@ fn combine(
     // Include ciphertexts to keep IND-CCA2 even if one of the KEM is not
     let mut key = [0u8; KEY_SIZE];
     hkdf.expand_multi_info(&[ciphertext1, ciphertext2], &mut key)
-        .expect("Safe to unwrap, 32 is a valid length for SHA256");
+        .expect("Safe to unwrap, 32 is a valid length for SHA512");
 
     key
 }
@@ -403,8 +403,8 @@ mod tests {
             b"ciphertext2",
         );
         let expected_result = [
-            48, 101, 217, 203, 204, 40, 30, 190, 224, 0, 235, 53, 164, 222, 55, 98, 101, 174, 142,
-            98, 125, 204, 252, 210, 251, 111, 59, 45, 110, 150, 250, 11,
+            147, 69, 15, 150, 130, 155, 67, 230, 172, 36, 219, 184, 233, 104, 18, 142, 225, 251,
+            62, 222, 149, 181, 39, 58, 182, 235, 181, 250, 45, 173, 134, 129,
         ];
         assert_eq!(&computed_result, &expected_result);
     }
@@ -415,7 +415,7 @@ mod tests {
         let mut csprng = ChaChaRng::from_entropy();
 
         // Create public and private keys
-        let private_key_ecc = X25519StaticSecret::from(csprng.gen::<[u8; 32]>());
+        let private_key_ecc = X25519StaticSecret::from(csprng.r#gen::<[u8; 32]>());
         let public_key_ecc = X25519PublicKey::from(&private_key_ecc);
         let (private_key_ml, public_key_ml) = MlKem1024::generate(&mut csprng);
 
@@ -457,7 +457,7 @@ mod tests {
         let mut hybrid_multi_recipient_private_keys = Vec::new();
         for _ in 0..NB_RECIPIENT {
             // Create public and private keys
-            let private_key_ecc = X25519StaticSecret::from(csprng.gen::<[u8; 32]>());
+            let private_key_ecc = X25519StaticSecret::from(csprng.r#gen::<[u8; 32]>());
             let public_key_ecc = X25519PublicKey::from(&private_key_ecc);
             let (private_key_ml, public_key_ml) = MlKem1024::generate(&mut csprng);
 
@@ -497,7 +497,7 @@ mod tests {
         let mut csprng = ChaChaRng::from_entropy();
 
         // Create initial materials
-        let private_key_ecc = X25519StaticSecret::from(csprng.gen::<[u8; 32]>());
+        let private_key_ecc = X25519StaticSecret::from(csprng.r#gen::<[u8; 32]>());
         let public_key_ecc = X25519PublicKey::from(&private_key_ecc);
         let (_private_key_ml, public_key_ml) = MlKem1024::generate(&mut csprng);
         let hybrid_public_key = HybridPublicKey {
