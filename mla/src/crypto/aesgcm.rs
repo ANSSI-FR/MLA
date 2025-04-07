@@ -4,8 +4,8 @@ use crate::Error;
 
 use aes::Aes256;
 
-use generic_array::{typenum::U16, GenericArray};
-use ghash::{universal_hash::UniversalHash, GHash};
+use generic_array::{GenericArray, typenum::U16};
+use ghash::{GHash, universal_hash::UniversalHash};
 pub use subtle::ConstantTimeEq;
 
 use ctr::cipher::{BlockEncrypt, KeyInit, KeyIvInit, StreamCipher, StreamCipherSeek};
@@ -185,7 +185,7 @@ impl AesGcm256 {
 mod tests {
     use super::*;
     use aead::Payload;
-    use aes_gcm::{aead::Aead, Aes256Gcm};
+    use aes_gcm::{Aes256Gcm, aead::Aead};
 
     fn test_against_aesgcm(key: &Key, nonce: &Nonce, associated_data: &[u8], msg: &[u8]) {
         // Full (all at once)

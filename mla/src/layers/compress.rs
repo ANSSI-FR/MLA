@@ -2,15 +2,15 @@ use std::fmt;
 use std::io::{self, Read, Seek, SeekFrom, Take, Write};
 
 use bincode::Options;
-use brotli::writer::StandardAlloc;
 use brotli::BrotliState;
+use brotli::writer::StandardAlloc;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use serde::{Deserialize, Serialize};
 
 use crate::layers::traits::{
     InnerWriterTrait, InnerWriterType, LayerFailSafeReader, LayerReader, LayerWriter,
 };
-use crate::{Error, BINCODE_MAX_DESERIALIZE};
+use crate::{BINCODE_MAX_DESERIALIZE, Error};
 
 use crate::config::{ArchiveWriterConfig, ConfigResult};
 use crate::errors::ConfigError;
@@ -939,8 +939,8 @@ mod tests {
 
     use crate::layers::raw::{RawLayerFailSafeReader, RawLayerReader, RawLayerWriter};
     use brotli::writer::StandardAlloc;
-    use rand::distributions::{Alphanumeric, Distribution, Standard};
     use rand::SeedableRng;
+    use rand::distributions::{Alphanumeric, Distribution, Standard};
     use std::io::{Cursor, Read, Write};
     use std::time::Instant;
 
