@@ -66,7 +66,7 @@ pub fn linear_extract<W1: InnerWriterTrait, R: InnerReaderTrait, S: BuildHasher>
                     io::copy(copy_src, &mut io::sink())?;
                 }
             }
-            ArchiveFileBlock::EndOfArchiveData {} => {
+            ArchiveFileBlock::EndOfArchiveData => {
                 // Proper termination
                 break 'read_block;
             }
