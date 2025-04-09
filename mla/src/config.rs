@@ -51,7 +51,7 @@ impl ArchiveWriterConfig {
     }
 
     /// Set several layers at once
-    pub fn set_layers(&mut self, layers: Layers) -> &mut Self {
+    pub const fn set_layers(&mut self, layers: Layers) -> &mut Self {
         self.layers_enabled = layers;
         self
     }

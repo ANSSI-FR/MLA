@@ -23,7 +23,7 @@ impl<'a, W: 'a + InnerWriterTrait> PositionLayerWriter<'a, W> {
         self.pos
     }
 
-    pub fn reset_position(&mut self) -> u64 {
+    pub const fn reset_position(&mut self) -> u64 {
         let before = self.pos;
         self.pos = 0;
         before

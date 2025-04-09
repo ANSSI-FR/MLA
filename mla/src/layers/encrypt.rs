@@ -160,15 +160,10 @@ impl EncryptionReaderConfig {
             return Err(ConfigError::PrivateKeyNotSet);
         }
         for private_key in &self.private_keys {
-            match retrieve_key(&config.multi_recipient, private_key) {
-                Ok(Some(key)) => {
-                    self.encrypt_parameters = Some((key, config.nonce));
-                    break;
-                }
-                _ => {
-                    continue;
-                }
-            };
+            if let Ok(Some(key)) = retrieve_key(&config.multi_recipient, private_key) {
+                self.encrypt_parameters = Some((key, config.nonce));
+                break;
+            }
         }
 
         if self.encrypt_parameters.is_none() {
@@ -191,13 +186,13 @@ impl ArchiveReaderConfig {
     }
 
     /// Set the `FailSafeReader` decryption mode to return only authenticated data (default)
-    pub fn failsafe_return_only_authenticated_data(&mut self) -> &mut Self {
+    pub const fn failsafe_return_only_authenticated_data(&mut self) -> &mut Self {
         self.encrypt.failsafe_mode = FailSafeReaderDecryptionMode::OnlyAuthenticatedData;
         self
     }
 
     /// Set the `FailSafeReader` decryption mode to return all data, even if not authenticated
-    pub fn failsafe_return_data_even_unauthenticated(&mut self) -> &mut Self {
+    pub const fn failsafe_return_data_even_unauthenticated(&mut self) -> &mut Self {
         self.encrypt.failsafe_mode = FailSafeReaderDecryptionMode::DataEvenUnauthenticated;
         self
     }

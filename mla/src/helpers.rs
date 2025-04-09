@@ -60,13 +60,13 @@ pub fn linear_extract<W1: InnerWriterTrait, R: InnerReaderTrait, S: BuildHasher>
                         io::copy(copy_src, writer)?;
                         extracted = true;
                     }
-                };
+                }
                 if !extracted {
                     // Exhaust the block to Sink to forward the reader
                     io::copy(copy_src, &mut io::sink())?;
                 }
             }
-            ArchiveFileBlock::EndOfArchiveData {} => {
+            ArchiveFileBlock::EndOfArchiveData => {
                 // Proper termination
                 break 'read_block;
             }
@@ -86,7 +86,7 @@ pub struct StreamWriter<'a, 'b, W: InnerWriterTrait> {
 }
 
 impl<'a, 'b, W: InnerWriterTrait> StreamWriter<'a, 'b, W> {
-    pub fn new(archive: &'b mut ArchiveWriter<'a, W>, file_id: ArchiveFileID) -> Self {
+    pub const fn new(archive: &'b mut ArchiveWriter<'a, W>, file_id: ArchiveFileID) -> Self {
         Self { archive, file_id }
     }
 }

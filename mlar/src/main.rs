@@ -119,9 +119,9 @@ fn open_ecc_private_keys(matches: &ArgMatches) -> Result<Vec<x25519_dalek::Stati
             match parse_openssl_25519_privkey(&buf) {
                 Err(_) => return Err(Error::InvalidECCKeyFormat),
                 Ok(private_key) => private_keys.push(private_key),
-            };
+            }
         }
-    };
+    }
     Ok(private_keys)
 }
 
@@ -137,7 +137,7 @@ fn open_ecc_public_keys(matches: &ArgMatches) -> Result<Vec<x25519_dalek::Public
             match parse_openssl_25519_pubkey(&buf) {
                 Err(_) => return Err(Error::InvalidECCKeyFormat),
                 Ok(public_key) => public_keys.push(public_key),
-            };
+            }
         }
     }
     Ok(public_keys)
@@ -158,7 +158,7 @@ fn config_from_matches(matches: &ArgMatches) -> ArchiveWriterConfig {
         // Default
         layers.push("compress");
         layers.push("encrypt");
-    };
+    }
 
     for layer in layers {
         if layer == "compress" {
@@ -371,7 +371,7 @@ fn get_extracted_path(output_dir: &Path, file_name: &str) -> Option<PathBuf> {
             // Leading '/' characters, root paths, and '.'
             // components are just ignored and treated as "empty
             // components"
-            Component::Prefix(..) | Component::RootDir | Component::CurDir => continue,
+            Component::Prefix(..) | Component::RootDir | Component::CurDir => {},
 
             // If any part of the filename is '..', then skip over
             // unpacking the file to prevent directory traversal
@@ -536,7 +536,7 @@ fn create(matches: &ArgMatches) -> Result<(), MlarError> {
                 add_file_or_dir(&mut mla, path)?;
             }
         }
-    };
+    }
 
     mla.finalize()?;
     Ok(())
@@ -605,19 +605,16 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
         ));
         let mut export: HashMap<&String, FileWriter> = HashMap::new();
         for fname in &iter {
-            match create_file(&output_dir, fname)? {
-                Some((_file, path)) => {
-                    export.insert(
+            if let Some((_file, path)) = create_file(&output_dir, fname)? {
+                export.insert(
+                    fname,
+                    FileWriter {
+                        path,
+                        cache: &cache,
+                        verbose,
                         fname,
-                        FileWriter {
-                            path,
-                            cache: &cache,
-                            verbose,
-                            fname,
-                        },
-                    );
-                }
-                None => continue,
+                    },
+                );
             }
         }
         return Ok(linear_extract(&mut mla, &mut export)?);
@@ -681,13 +678,11 @@ fn cat(matches: &ArgMatches) -> Result<(), MlarError> {
                 match mla.get_file(fname.to_string()) {
                     Err(err) => {
                         eprintln!(" [!] Error while looking up file \"{fname}\" ({err:?})");
-                        continue;
                     }
                     Ok(None) => {
                         eprintln!(
                             " [!] Subfile \"{fname}\" indexed in metadata could not be found"
                         );
-                        continue;
                     }
                     Ok(Some(mut subfile)) => {
                         io::copy(&mut subfile.data, &mut destination).map_err(|err| {
@@ -704,11 +699,9 @@ fn cat(matches: &ArgMatches) -> Result<(), MlarError> {
             match mla.get_file(fname.to_string()) {
                 Err(err) => {
                     eprintln!(" [!] Error while looking up file \"{fname}\" ({err:?})");
-                    continue;
                 }
                 Ok(None) => {
                     eprintln!(" [!] File not found: \"{fname}\"");
-                    continue;
                 }
                 Ok(Some(mut subfile)) => {
                     io::copy(&mut subfile.data, &mut destination).map_err(|err| {
@@ -765,7 +758,7 @@ fn repair(matches: &ArgMatches) -> Result<(), MlarError> {
         _ => {
             eprintln!("[WARNING] Conversion ends with {status}");
         }
-    };
+    }
     Ok(())
 }
 

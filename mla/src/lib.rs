@@ -164,7 +164,7 @@ impl ArchiveFooter {
             .is_err()
         {
             return Err(Error::SerializationError);
-        };
+        }
         serialization_len += match bincode::serialized_size(&tmp) {
             Ok(size) => size,
             Err(_) => {
@@ -565,7 +565,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
                         "[mark_continuous_block] Unable to find the ID".to_string(),
                     ));
                 }
-            };
+            }
             self.current_id = id;
         }
         Ok(())
@@ -1201,7 +1201,7 @@ impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
                                 // Synchronisation error
                                 update_error!(error = FailSafeReadError::FailSafeReadInternalError);
                                 break 'read_block;
-                            };
+                            }
 
                             output.end_file(id_output)?;
                             id_failsafe_done.push(id);
@@ -1213,7 +1213,7 @@ impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
                         }
                     }
                 }
-            };
+            }
         }
 
         let mut unfinished_files = Vec::new();
@@ -1640,7 +1640,7 @@ pub(crate) mod tests {
             status => {
                 panic!("Unexpected status: {status}");
             }
-        };
+        }
 
         // New archive can now be checked
         let dest2 = mla_w.into_raw();
@@ -1839,7 +1839,7 @@ pub(crate) mod tests {
             status => {
                 panic!("Unexpected status: {status}");
             }
-        };
+        }
     }
 
     #[test]
@@ -1890,7 +1890,7 @@ pub(crate) mod tests {
         for i in 0..=255 {
             files.insert(
                 format!("file_{i}").to_string(),
-                std::iter::repeat(i).take(0x1000).collect::<Vec<u8>>(),
+                std::iter::repeat_n(i, 0x1000).collect::<Vec<u8>>(),
             );
         }
 

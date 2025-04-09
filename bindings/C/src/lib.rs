@@ -628,33 +628,30 @@ fn mla_roarchive_extract_internal<'a, R: Read + Seek + 'a>(
     let mut export: HashMap<&String, CallbackOutput> = HashMap::new();
     for fname in &iter {
         let mut file_writer: MaybeUninit<FileWriter> = MaybeUninit::uninit();
-        match (file_callback)(
+        if (file_callback)(
             context,
             fname.as_ptr(),
             fname.len(),
             file_writer.as_mut_ptr(),
-        ) {
-            0 => {
-                let file_writer = unsafe { file_writer.assume_init() };
-                export.insert(
-                    fname,
-                    CallbackOutput {
-                        write_callback: match file_writer.write_callback {
-                            // Rust FFI garantees Option<x> as equal to x
-                            Some(x) => x,
-                            None => return MLAStatus::BadAPIArgument,
-                        },
-                        flush_callback: match file_writer.flush_callback {
-                            // Rust FFI garantees Option<x> as equal to x
-                            Some(x) => x,
-                            None => return MLAStatus::BadAPIArgument,
-                        },
-                        context: file_writer.context,
-                    },
-                );
-            }
-            _ => continue,
-        };
+        ) == 0 {
+            let file_writer = unsafe { file_writer.assume_init() };
+            export.insert(
+            fname,
+            CallbackOutput {
+                write_callback: match file_writer.write_callback {
+                // Rust FFI guarantees Option<x> as equal to x
+                Some(x) => x,
+                None => return MLAStatus::BadAPIArgument,
+                },
+                flush_callback: match file_writer.flush_callback {
+                // Rust FFI guarantees Option<x> as equal to x
+                Some(x) => x,
+                None => return MLAStatus::BadAPIArgument,
+                },
+                context: file_writer.context,
+            },
+            );
+        }
     }
     match linear_extract(&mut mla, &mut export) {
         Ok(()) => MLAStatus::Success,

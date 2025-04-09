@@ -52,7 +52,7 @@ impl std::default::Default for CompressionConfig {
 impl ArchiveWriterConfig {
     /// Set the compression level
     /// compression level (0-11); bigger values cause denser, but slower compression
-    pub fn with_compression_level(&mut self, compression_level: u32) -> ConfigResult {
+    pub const fn with_compression_level(&mut self, compression_level: u32) -> ConfigResult {
         if compression_level > 11 {
             Err(ConfigError::CompressionLevelOutOfRange)
         } else {
@@ -650,7 +650,7 @@ impl<'a, W: 'a + InnerWriterTrait> LayerWriter<'a, W> for CompressionLayerWriter
             .is_err()
         {
             return Err(Error::SerializationError);
-        };
+        }
         match bincode::serialized_size(&sinfo) {
             Ok(size) => {
                 inner.write_u32::<LittleEndian>(
@@ -660,7 +660,7 @@ impl<'a, W: 'a + InnerWriterTrait> LayerWriter<'a, W> for CompressionLayerWriter
             Err(_) => {
                 return Err(Error::SerializationError);
             }
-        };
+        }
         self.compressed_sizes = sinfo.compressed_sizes;
 
         // Recursive call
@@ -751,8 +751,8 @@ enum CompressionLayerFailSafeReaderState<R: Read> {
         ///     - if there is still data to decompress, go to 1.
         ///     - if this is the end of the stream, continue to 3.
         /// 3. the decompressor may have read too many byte, ie. `[end of stream n-1][start of stream n]`
-        ///                                                                          ^                 ^
-        ///                                                                     `input_offset`    last read position
+        ///    `                                                                     ^                 ^
+        ///    `                                                                 `input_offset`    last read position
         /// 4. rewind, using the cache, to `input_offset`
         ///
         /// A cache must be used, as the source is `Read` but not `Seek`.
@@ -1103,7 +1103,7 @@ mod tests {
         let mut output_offset = 0;
         let mut written = 0;
 
-        if let brotli::BrotliResult::ResultSuccess = brotli::BrotliDecompressStream(
+        if matches!(brotli::BrotliDecompressStream(
             &mut available_in,
             &mut input_offset,
             src.get_ref(),
@@ -1112,10 +1112,10 @@ mod tests {
             &mut buf,
             &mut written,
             &mut brotli_state,
-        ) {
+        ), brotli::BrotliResult::ResultSuccess) {
         } else {
             panic!()
-        };
+        }
 
         // Ensure the decompression is correct
         assert_eq!(written, buf.len());
