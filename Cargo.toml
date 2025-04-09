@@ -15,7 +15,7 @@ all = {level = "deny", priority = -1}
 # lints which are rather strict or have occasional false positives
 pedantic = {level = "deny", priority = -1}
 # new lints that are still under development
-# nursery = {level = "deny", priority = -1}
+nursery = {level = "deny", priority = -1}
 # lints which prevent the use of language and library features
 # restriction = {level = "deny", priority = -1}
 # lints for the cargo manifest
