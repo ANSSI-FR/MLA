@@ -40,19 +40,19 @@ pub enum Curve25519ParserError {
 }
 impl From<der_parser::error::BerError> for Curve25519ParserError {
     fn from(error: der_parser::error::BerError) -> Self {
-        Curve25519ParserError::BerError(error)
+        Self::BerError(error)
     }
 }
 
 impl From<pem::PemError> for Curve25519ParserError {
     fn from(error: pem::PemError) -> Self {
-        Curve25519ParserError::PemError(error)
+        Self::PemError(error)
     }
 }
 
 impl From<nom::Err<der_parser::error::BerError>> for Curve25519ParserError {
     fn from(error: nom::Err<der_parser::error::BerError>) -> Self {
-        Curve25519ParserError::NomError(error)
+        Self::NomError(error)
     }
 }
 

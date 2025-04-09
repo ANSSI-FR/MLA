@@ -16,7 +16,7 @@ pub struct RawLayerWriter<W: InnerWriterTrait> {
 }
 
 impl<W: InnerWriterTrait> RawLayerWriter<W> {
-    pub fn new(inner: W) -> Self {
+    pub const fn new(inner: W) -> Self {
         Self { inner }
     }
 }
@@ -58,7 +58,7 @@ pub struct RawLayerReader<R: InnerReaderTrait> {
 }
 
 impl<R: InnerReaderTrait> RawLayerReader<R> {
-    pub fn new(inner: R) -> Self {
+    pub const fn new(inner: R) -> Self {
         Self {
             inner,
             offset_pos: 0,
@@ -132,7 +132,7 @@ pub struct RawLayerFailSafeReader<R: Read> {
 }
 
 impl<R: Read> RawLayerFailSafeReader<R> {
-    pub fn new(inner: R) -> Self {
+    pub const fn new(inner: R) -> Self {
         Self { inner }
     }
 }

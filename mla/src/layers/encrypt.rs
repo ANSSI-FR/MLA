@@ -81,7 +81,7 @@ impl std::default::Default for EncryptionConfig {
         let mut csprng = ChaChaRng::from_os_rng();
         let key = csprng.random::<Key>();
         let nonce = csprng.random::<[u8; NONCE_SIZE]>();
-        EncryptionConfig {
+        Self {
             ecc_keys: Vec::new(),
             key,
             nonce,
@@ -101,33 +101,32 @@ impl EncryptionConfig {
 
     pub fn to_persistent(&self) -> Result<EncryptionPersistentConfig, ConfigError> {
         let mut rng = ChaChaRng::from_os_rng();
-        if let Ok(multi_recipient) =
-            store_key_for_multi_recipients(&self.ecc_keys, &self.key, &mut rng)
-        {
-            Ok(EncryptionPersistentConfig {
-                multi_recipient,
-                nonce: self.nonce,
-            })
-        } else {
-            Err(ConfigError::ECIESComputationError)
-        }
+        store_key_for_multi_recipients(&self.ecc_keys, &self.key, &mut rng).map_or(
+            Err(ConfigError::ECIESComputationError),
+            |multi_recipient| {
+                Ok(EncryptionPersistentConfig {
+                    multi_recipient,
+                    nonce: self.nonce,
+                })
+            },
+        )
     }
 }
 
 impl ArchiveWriterConfig {
     /// Set public keys to use
-    pub fn add_public_keys(&mut self, keys: &[PublicKey]) -> &mut ArchiveWriterConfig {
+    pub fn add_public_keys(&mut self, keys: &[PublicKey]) -> &mut Self {
         self.encrypt.ecc_keys.extend_from_slice(keys);
         self
     }
 
     /// Return the key used for encryption
-    pub fn encryption_key(&self) -> &Key {
+    pub const fn encryption_key(&self) -> &Key {
         &self.encrypt.key
     }
 
     /// Return the nonce used for encryption
-    pub fn encryption_nonce(&self) -> &[u8; NONCE_SIZE] {
+    pub const fn encryption_nonce(&self) -> &[u8; NONCE_SIZE] {
         &self.encrypt.nonce
     }
 }
@@ -181,24 +180,24 @@ impl EncryptionReaderConfig {
 
 impl ArchiveReaderConfig {
     /// Set private key to use
-    pub fn add_private_keys(&mut self, keys: &[StaticSecret]) -> &mut ArchiveReaderConfig {
+    pub fn add_private_keys(&mut self, keys: &[StaticSecret]) -> &mut Self {
         self.encrypt.private_keys.extend_from_slice(keys);
         self
     }
 
     /// Retrieve key and nonce used for encryption
-    pub fn get_encrypt_parameters(&self) -> Option<(Key, [u8; NONCE_SIZE])> {
+    pub const fn get_encrypt_parameters(&self) -> Option<(Key, [u8; NONCE_SIZE])> {
         self.encrypt.encrypt_parameters
     }
 
     /// Set the `FailSafeReader` decryption mode to return only authenticated data (default)
-    pub fn failsafe_return_only_authenticated_data(&mut self) -> &mut ArchiveReaderConfig {
+    pub fn failsafe_return_only_authenticated_data(&mut self) -> &mut Self {
         self.encrypt.failsafe_mode = FailSafeReaderDecryptionMode::OnlyAuthenticatedData;
         self
     }
 
     /// Set the `FailSafeReader` decryption mode to return all data, even if not authenticated
-    pub fn failsafe_return_data_even_unauthenticated(&mut self) -> &mut ArchiveReaderConfig {
+    pub fn failsafe_return_data_even_unauthenticated(&mut self) -> &mut Self {
         self.encrypt.failsafe_mode = FailSafeReaderDecryptionMode::DataEvenUnauthenticated;
         self
     }
@@ -589,7 +588,7 @@ impl<'a, R: 'a + Read + Seek> Read for EncryptionLayerReader<'a, R> {
 // Returns how many chunk are present at position `position`
 const CHUNK_TAG_SIZE: u64 = CHUNK_SIZE + TAG_LENGTH as u64;
 
-fn no_tag_position_to_tag_position(position: u64) -> u64 {
+const fn no_tag_position_to_tag_position(position: u64) -> u64 {
     let cur_chunk = position / CHUNK_SIZE;
     let cur_chunk_pos = position % CHUNK_SIZE;
     cur_chunk * CHUNK_TAG_SIZE + cur_chunk_pos

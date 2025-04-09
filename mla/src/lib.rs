@@ -55,7 +55,7 @@ bitflags! {
     /// [Encryption (ENCRYPT)]
     /// [Raw File I/O]
     /// ```
-    #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
     pub struct Layers: u8 {
         const ENCRYPT = 0b0000_0001;
         const COMPRESS = 0b0000_0010;
@@ -69,7 +69,7 @@ bitflags! {
 
 impl std::default::Default for Layers {
     fn default() -> Self {
-        Layers::DEFAULT
+        Self::DEFAULT
     }
 }
 
@@ -103,7 +103,7 @@ impl ArchiveHeader {
                 return Err(Error::DeserializationError);
             }
         };
-        Ok(ArchiveHeader {
+        Ok(Self {
             format_version,
             config,
         })
@@ -180,7 +180,7 @@ impl ArchiveFooter {
     }
 
     /// Parses and instantiates a footer from serialized data
-    pub fn deserialize_from<R: Read + Seek>(mut src: R) -> Result<ArchiveFooter, Error> {
+    pub fn deserialize_from<R: Read + Seek>(mut src: R) -> Result<Self, Error> {
         // Read the footer length
         let pos = src.seek(SeekFrom::End(-4))?;
         let len = u64::from(src.read_u32::<LittleEndian>()?);
@@ -199,7 +199,7 @@ impl ArchiveFooter {
                 return Err(Error::DeserializationError);
             }
         };
-        Ok(ArchiveFooter { files_info })
+        Ok(Self { files_info })
     }
 }
 
@@ -220,14 +220,14 @@ impl TryFrom<u8> for ArchiveFileBlockType {
     type Error = Error;
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
-        if value == ArchiveFileBlockType::FileStart as u8 {
-            Ok(ArchiveFileBlockType::FileStart)
-        } else if value == ArchiveFileBlockType::FileContent as u8 {
-            Ok(ArchiveFileBlockType::FileContent)
-        } else if value == ArchiveFileBlockType::EndOfFile as u8 {
-            Ok(ArchiveFileBlockType::EndOfFile)
-        } else if value == ArchiveFileBlockType::EndOfArchiveData as u8 {
-            Ok(ArchiveFileBlockType::EndOfArchiveData)
+        if value == Self::FileStart as u8 {
+            Ok(Self::FileStart)
+        } else if value == Self::FileContent as u8 {
+            Ok(Self::FileContent)
+        } else if value == Self::EndOfFile as u8 {
+            Ok(Self::EndOfFile)
+        } else if value == Self::EndOfArchiveData as u8 {
+            Ok(Self::EndOfArchiveData)
         } else {
             Err(Error::WrongBlockSubFileType)
         }
@@ -264,7 +264,7 @@ where
 {
     fn dump<U: Write>(&mut self, dest: &mut U) -> Result<(), Error> {
         match self {
-            ArchiveFileBlock::FileStart { filename, id } => {
+            Self::FileStart { filename, id } => {
                 dest.write_u8(ArchiveFileBlockType::FileStart as u8)?;
                 dest.write_u64::<LittleEndian>(*id)?;
                 let bytes = filename.as_bytes();
@@ -276,7 +276,7 @@ where
                 dest.write_all(bytes)?;
                 Ok(())
             }
-            ArchiveFileBlock::FileContent { length, data, id } => {
+            Self::FileContent { length, data, id } => {
                 dest.write_u8(ArchiveFileBlockType::FileContent as u8)?;
                 dest.write_u64::<LittleEndian>(*id)?;
                 dest.write_u64::<LittleEndian>(*length)?;
@@ -293,13 +293,13 @@ where
                 }
                 Ok(())
             }
-            ArchiveFileBlock::EndOfFile { id, hash } => {
+            Self::EndOfFile { id, hash } => {
                 dest.write_u8(ArchiveFileBlockType::EndOfFile as u8)?;
                 dest.write_u64::<LittleEndian>(*id)?;
                 dest.write_all(hash)?;
                 Ok(())
             }
-            ArchiveFileBlock::EndOfArchiveData => {
+            Self::EndOfArchiveData => {
                 dest.write_u8(ArchiveFileBlockType::EndOfArchiveData as u8)?;
                 Ok(())
             }
@@ -325,7 +325,7 @@ where
                     })?
                 ];
                 src.read_exact(&mut filename)?;
-                Ok(ArchiveFileBlock::FileStart {
+                Ok(Self::FileStart {
                     id,
                     filename: String::from_utf8(filename)?,
                 })
@@ -336,7 +336,7 @@ where
                 // /!\ WARNING: to avoid loading this entire subfileblock's contents
                 // in-memory, the `data` reader is None; the `src` now starts at the
                 // beginning of the data
-                Ok(ArchiveFileBlock::FileContent {
+                Ok(Self::FileContent {
                     length,
                     data: None,
                     id,
@@ -346,9 +346,9 @@ where
                 let id = src.read_u64::<LittleEndian>()?;
                 let mut hash = Sha256Hash::default();
                 src.read_exact(&mut hash)?;
-                Ok(ArchiveFileBlock::EndOfFile { id, hash })
+                Ok(Self::EndOfFile { id, hash })
             }
-            ArchiveFileBlockType::EndOfArchiveData => Ok(ArchiveFileBlock::EndOfArchiveData),
+            ArchiveFileBlockType::EndOfArchiveData => Ok(Self::EndOfArchiveData),
         }
     }
 }
@@ -372,7 +372,7 @@ impl ArchiveWriterState {
         src: R,
     ) -> Result<HashWrapperReader<R>, Error> {
         let hash = match self {
-            ArchiveWriterState::OpenedFiles { hashes, .. } => match hashes.get_mut(&id) {
+            Self::OpenedFiles { hashes, .. } => match hashes.get_mut(&id) {
                 Some(hash) => hash,
                 None => {
                     return Err(Error::WrongWriterState(
@@ -380,7 +380,7 @@ impl ArchiveWriterState {
                     ))
                 }
             },
-            ArchiveWriterState::Finalized => {
+            Self::Finalized => {
                 return Err(Error::WrongWriterState(
                     "[wrap_with_hash] Wrong state".to_string(),
                 ))
@@ -402,7 +402,7 @@ macro_rules! check_state {
             _ => {
                 return Err(Error::WrongArchiveWriterState {
                     current_state: format!("{:?}", $x).to_string(),
-                    expected_state: format! {"{}", "ArchiveWriterState::$y"}.to_string(),
+                    expected_state: format!("{}", "ArchiveWriterState::$y").to_string(),
                 });
             }
         }
@@ -742,7 +742,7 @@ pub struct BlocksToFileReader<'a, R: Read + Seek> {
 }
 
 impl<'a, R: Read + Seek> BlocksToFileReader<'a, R> {
-    fn new(src: &'a mut R, offsets: &'a [u64]) -> Result<BlocksToFileReader<'a, R>, Error> {
+    fn new(src: &'a mut R, offsets: &'a [u64]) -> Result<Self, Error> {
         // Set the inner layer at the start of the file
         src.seek(SeekFrom::Start(offsets[0]))?;
 
@@ -1047,7 +1047,7 @@ impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
         'read_block: loop {
             match ArchiveFileBlock::from(&mut self.src) {
                 Err(Error::IOError(err)) => {
-                    if let std::io::ErrorKind::UnexpectedEof = err.kind() {
+                    if err.kind() == std::io::ErrorKind::UnexpectedEof {
                         update_error!(error = FailSafeReadError::UnexpectedEOFOnNextBlock);
                         break;
                     }
@@ -1403,7 +1403,7 @@ pub(crate) mod tests {
     }
 
     #[allow(clippy::type_complexity)]
-    pub(crate) fn build_archive(
+    pub fn build_archive(
         layers: Option<Layers>,
         interleaved: bool,
     ) -> (
@@ -1638,7 +1638,7 @@ pub(crate) mod tests {
                 // read and we stop on the tag before the footer
             }
             status => {
-                panic!("Unexpected status: {}", status);
+                panic!("Unexpected status: {status}");
             }
         };
 
@@ -1831,12 +1831,12 @@ pub(crate) mod tests {
                 match *stopping_error {
                     FailSafeReadError::HashDiffers { .. } => {}
                     _ => {
-                        panic!("Unexpected stopping_error: {}", stopping_error);
+                        panic!("Unexpected stopping_error: {stopping_error}");
                     }
                 }
             }
             status => {
-                panic!("Unexpected status: {}", status);
+                panic!("Unexpected status: {status}");
             }
         };
     }
@@ -2030,8 +2030,7 @@ pub(crate) mod tests {
         let dest_w = Vec::new();
         let mut mla_w = ArchiveWriter::from_config(dest_w, ArchiveWriterConfig::new())
             .expect("Writer init failed");
-        if let FailSafeReadError::EndOfOriginalArchiveData =
-            mla_fsread.convert_to_archive(&mut mla_w).unwrap()
+        if matches!(mla_fsread.convert_to_archive(&mut mla_w).unwrap(), FailSafeReadError::EndOfOriginalArchiveData)
         {
             // Everything runs as expected
         } else {

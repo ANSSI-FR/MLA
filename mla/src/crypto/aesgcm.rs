@@ -46,7 +46,7 @@ pub struct AesGcm256 {
 pub type Tag = GenericArray<u8, U16>;
 
 impl AesGcm256 {
-    pub fn new(key: &Key, nonce: &Nonce, associated_data: &[u8]) -> Result<AesGcm256, Error> {
+    pub fn new(key: &Key, nonce: &Nonce, associated_data: &[u8]) -> Result<Self, Error> {
         // Convert the nonce (96 bits) to the AES-GCM form
         let mut counter_block = [0u8; BLOCK_SIZE];
         counter_block[..12].copy_from_slice(nonce);
@@ -66,7 +66,7 @@ impl AesGcm256 {
         // First block is ignored, as it has been used for the GHash
         cipher.seek(BLOCK_SIZE as u64);
 
-        Ok(AesGcm256 {
+        Ok(Self {
             cipher,
             ghash,
             associated_data_bits_len: (associated_data.len() as u64) * 8,

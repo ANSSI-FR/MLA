@@ -87,16 +87,11 @@ fn run(data: &[u8]) {
         mla.append_file_content(id, part.len() as u64, &part[..])
             .expect("Add part failed");
 
-        let content = {
-            let filename = test_case.filenames.get(num as usize).unwrap();
-            if let Some(content) = filename2content.get_mut(filename) {
-                content
-            } else {
-                let content = Vec::new();
-                filename2content.insert(filename.clone(), content);
-                filename2content.get_mut(filename).unwrap()
-            }
-        };
+        let filename = &test_case.filenames[num as usize];
+        if !filename2content.contains_key(filename) {
+            filename2content.insert(filename.clone(), Vec::new());
+        }
+        let content = filename2content.get_mut(filename).unwrap();
         content.extend(part);
     }
 
@@ -163,8 +158,7 @@ fn run(data: &[u8]) {
     let dest_w = Vec::new();
     let mut mla_w =
         ArchiveWriter::from_config(dest_w, ArchiveWriterConfig::new()).expect("Writer init failed");
-    if let FailSafeReadError::EndOfOriginalArchiveData =
-        mla_fsread.convert_to_archive(&mut mla_w).unwrap()
+    if matches!(mla_fsread.convert_to_archive(&mut mla_w).unwrap(), FailSafeReadError::EndOfOriginalArchiveData)
     {
         // Everything runs as expected
     } else {

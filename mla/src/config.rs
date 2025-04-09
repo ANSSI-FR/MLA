@@ -30,8 +30,8 @@ pub type ConfigResult<'a> = Result<&'a mut ArchiveWriterConfig, ConfigError>;
 
 impl ArchiveWriterConfig {
     /// Start a builder without any layers configured
-    pub fn new() -> ArchiveWriterConfig {
-        ArchiveWriterConfig {
+    pub fn new() -> Self {
+        Self {
             layers_enabled: Layers::EMPTY,
             compress: CompressionConfig::default(),
             encrypt: EncryptionConfig::default(),
@@ -39,19 +39,19 @@ impl ArchiveWriterConfig {
     }
 
     /// Enable a layer
-    pub fn enable_layer(&mut self, layer: Layers) -> &mut ArchiveWriterConfig {
+    pub fn enable_layer(&mut self, layer: Layers) -> &mut Self {
         self.layers_enabled |= layer;
         self
     }
 
     /// Disable a layer
-    pub fn disable_layer(&mut self, layer: Layers) -> &mut ArchiveWriterConfig {
+    pub fn disable_layer(&mut self, layer: Layers) -> &mut Self {
         self.layers_enabled &= !layer;
         self
     }
 
     /// Set several layers at once
-    pub fn set_layers(&mut self, layers: Layers) -> &mut ArchiveWriterConfig {
+    pub fn set_layers(&mut self, layers: Layers) -> &mut Self {
         self.layers_enabled = layers;
         self
     }
@@ -71,7 +71,7 @@ impl ArchiveWriterConfig {
     }
 
     /// Check if layers are enabled
-    pub fn is_layers_enabled(&self, layer: Layers) -> bool {
+    pub const fn is_layers_enabled(&self, layer: Layers) -> bool {
         self.layers_enabled.contains(layer)
     }
 
@@ -89,7 +89,7 @@ impl std::default::Default for ArchiveWriterConfig {
     /// Missing parameters:
     /// - `ecc_encryption_key`
     fn default() -> Self {
-        ArchiveWriterConfig {
+        Self {
             layers_enabled: Layers::default(),
             compress: CompressionConfig::default(),
             encrypt: EncryptionConfig::default(),
@@ -118,7 +118,7 @@ impl ArchiveReaderConfig {
     pub fn load_persistent(
         &mut self,
         config: ArchivePersistentConfig,
-    ) -> Result<&mut ArchiveReaderConfig, ConfigError> {
+    ) -> Result<&mut Self, ConfigError> {
         self.layers_enabled = config.layers_enabled;
         if self.layers_enabled.contains(Layers::ENCRYPT) {
             match config.encrypt {

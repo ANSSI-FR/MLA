@@ -43,7 +43,7 @@ pub struct CompressionConfig {
 
 impl std::default::Default for CompressionConfig {
     fn default() -> Self {
-        CompressionConfig {
+        Self {
             compression_level: DEFAULT_COMPRESSION_LEVEL,
         }
     }
@@ -84,9 +84,9 @@ enum CompressionLayerReaderState<R: Read> {
 impl<R: Read> fmt::Debug for CompressionLayerReaderState<R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            CompressionLayerReaderState::Ready(_inner) => write!(f, "Ready"),
-            CompressionLayerReaderState::InData { .. } => write!(f, "InData"),
-            CompressionLayerReaderState::Empty => write!(f, "Empty"),
+            Self::Ready(_inner) => write!(f, "Ready"),
+            Self::InData { .. } => write!(f, "InData"),
+            Self::Empty => write!(f, "Empty"),
         }
     }
 }
@@ -155,14 +155,14 @@ pub struct CompressionLayerReader<'a, R: 'a + Read> {
 impl<R: Read> CompressionLayerReaderState<R> {
     fn into_inner(self) -> R {
         match self {
-            CompressionLayerReaderState::Ready(inner) => inner,
-            CompressionLayerReaderState::InData { decompressor, .. } => {
+            Self::Ready(inner) => inner,
+            Self::InData { decompressor, .. } => {
                 decompressor.into_inner().into_inner()
             }
             // `panic!` explicitly called to avoid propagating an error which
             // must never happens (ie, calling `into_inner` in an inconsistent
             // internal state)
-            CompressionLayerReaderState::Empty => panic!("[Reader] Empty type to inner is impossible"),
+            Self::Empty => panic!("[Reader] Empty type to inner is impossible"),
         }
     }
 }
@@ -180,13 +180,9 @@ impl<'a, R: 'a + Read> CompressionLayerReader<'a, R> {
     /// Returns whether `uncompressed_pos` is in the data stream
     /// If no index is used, always return `true`
     fn pos_in_stream(&self, uncompressed_pos: u64) -> bool {
-        match &self.sizes_info {
-            Some(sizes_info) => {
-                let pos_max = sizes_info.max_uncompressed_pos();
-                uncompressed_pos < pos_max
-            }
-            None => true,
-        }
+        self.sizes_info
+            .as_ref()
+            .is_none_or(|sizes_info| uncompressed_pos < sizes_info.max_uncompressed_pos())
     }
 
     /// Instantiate a new decompressor at position `uncompressed_pos`
@@ -481,7 +477,7 @@ struct WriterWithCount<W: Write> {
 }
 
 impl<W: Write> WriterWithCount<W> {
-    fn new(inner: W) -> Self {
+    const fn new(inner: W) -> Self {
         Self { inner, pos: 0 }
     }
 
@@ -551,14 +547,14 @@ pub struct CompressionLayerWriter<'a, W: 'a + InnerWriterTrait> {
 impl<W: InnerWriterTrait> CompressionLayerWriterState<W> {
     fn into_inner(self) -> W {
         match self {
-            CompressionLayerWriterState::Ready(inner) => inner,
-            CompressionLayerWriterState::InData(_written, compress) => {
+            Self::Ready(inner) => inner,
+            Self::InData(_written, compress) => {
                 compress.into_inner().into_inner()
             }
             // `panic!` explicitly called to avoid propagating an error which
             // must never happens (ie, calling `into_inner` in an inconsistent
             // internal state)
-            CompressionLayerWriterState::Empty => panic!("[Writer] Empty type to inner is impossible"),
+            Self::Empty => panic!("[Writer] Empty type to inner is impossible"),
         }
     }
 }
@@ -567,7 +563,7 @@ impl<'a, W: 'a + InnerWriterTrait> CompressionLayerWriter<'a, W> {
     pub fn new(
         inner: InnerWriterType<'a, W>,
         config: &CompressionConfig,
-    ) -> CompressionLayerWriter<'a, W> {
+    ) -> Self {
         Self {
             state: CompressionLayerWriterState::Ready(inner),
             compressed_sizes: Vec::new(),
@@ -762,11 +758,11 @@ enum CompressionLayerFailSafeReaderState<R: Read> {
 impl<R: Read> CompressionLayerFailSafeReaderState<R> {
     fn into_inner(self) -> R {
         match self {
-            CompressionLayerFailSafeReaderState::InData { inner, .. } | CompressionLayerFailSafeReaderState::Ready(inner) => inner,
+            Self::InData { inner, .. } | Self::Ready(inner) => inner,
             // `panic!` explicitly called to avoid propagating an error which
             // must never happens (ie, calling `into_inner` in an inconsistent
             // internal state)
-            CompressionLayerFailSafeReaderState::Empty => panic!("[Reader] Empty type to inner is impossible"),
+            Self::Empty => panic!("[Reader] Empty type to inner is impossible"),
         }
     }
 }
@@ -1074,7 +1070,7 @@ mod tests {
         let mut output_offset = 0;
         let mut written = 0;
 
-        match brotli::BrotliDecompressStream(
+        if let brotli::BrotliResult::ResultSuccess = brotli::BrotliDecompressStream(
             &mut available_in,
             &mut input_offset,
             src.get_ref(),
@@ -1083,10 +1079,7 @@ mod tests {
             &mut buf,
             &mut written,
             &mut brotli_state,
-        ) {
-            brotli::BrotliResult::ResultSuccess => {}
-            _ => panic!(),
-        };
+        ) {} else { panic!() };
 
         // Ensure the decompression is correct
         assert_eq!(written, buf.len());

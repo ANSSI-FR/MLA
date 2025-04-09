@@ -104,6 +104,7 @@ type MlaFileCalbackRaw = extern "C" fn(
     file_writer: *mut FileWriter,
 ) -> i32;
 /// Implemented by the developper. Read between 0 and `buffer_len` into buffer.
+///
 /// If successful, returns 0 and sets the number of bytes actually read to its last
 /// parameter. Otherwise, returns an error code on failure.
 pub type MlaReadCallback = Option<
@@ -133,47 +134,47 @@ pub type MlaSeekCallbackRaw =
 impl From<MLAError> for MLAStatus {
     fn from(err: MLAError) -> Self {
         match err {
-            MLAError::IOError(_) => MLAStatus::IOError,
-            MLAError::WrongMagic => MLAStatus::WrongMagic,
-            MLAError::UnsupportedVersion => MLAStatus::UnsupportedVersion,
-            MLAError::InvalidECCKeyFormat => MLAStatus::InvalidECCKeyFormat,
-            MLAError::WrongBlockSubFileType => MLAStatus::WrongBlockSubFileType,
-            MLAError::UTF8ConversionError(_) => MLAStatus::UTF8ConversionError,
-            MLAError::FilenameTooLong => MLAStatus::FilenameTooLong,
+            MLAError::IOError(_) => Self::IOError,
+            MLAError::WrongMagic => Self::WrongMagic,
+            MLAError::UnsupportedVersion => Self::UnsupportedVersion,
+            MLAError::InvalidECCKeyFormat => Self::InvalidECCKeyFormat,
+            MLAError::WrongBlockSubFileType => Self::WrongBlockSubFileType,
+            MLAError::UTF8ConversionError(_) => Self::UTF8ConversionError,
+            MLAError::FilenameTooLong => Self::FilenameTooLong,
             MLAError::WrongArchiveWriterState {
                 current_state: _,
                 expected_state: _,
-            } => MLAStatus::WrongArchiveWriterState,
-            MLAError::AssertionError(_) => MLAStatus::AssertionError,
-            MLAError::WrongReaderState(_) => MLAStatus::WrongReaderState,
-            MLAError::WrongWriterState(_) => MLAStatus::WrongWriterState,
-            MLAError::PrivateKeyNeeded => MLAStatus::PrivateKeyNeeded,
-            MLAError::DeserializationError => MLAStatus::DeserializationError,
-            MLAError::SerializationError => MLAStatus::SerializationError,
-            MLAError::MissingMetadata => MLAStatus::MissingMetadata,
-            MLAError::BadAPIArgument(_) => MLAStatus::BadAPIArgument,
-            MLAError::EndOfStream => MLAStatus::EndOfStream,
+            } => Self::WrongArchiveWriterState,
+            MLAError::AssertionError(_) => Self::AssertionError,
+            MLAError::WrongReaderState(_) => Self::WrongReaderState,
+            MLAError::WrongWriterState(_) => Self::WrongWriterState,
+            MLAError::PrivateKeyNeeded => Self::PrivateKeyNeeded,
+            MLAError::DeserializationError => Self::DeserializationError,
+            MLAError::SerializationError => Self::SerializationError,
+            MLAError::MissingMetadata => Self::MissingMetadata,
+            MLAError::BadAPIArgument(_) => Self::BadAPIArgument,
+            MLAError::EndOfStream => Self::EndOfStream,
             MLAError::ConfigError(ConfigError::IncoherentPersistentConfig) => {
-                MLAStatus::ConfigErrorIncoherentPersistentConfig
+                Self::ConfigErrorIncoherentPersistentConfig
             }
             MLAError::ConfigError(ConfigError::CompressionLevelOutOfRange) => {
-                MLAStatus::ConfigErrorCompressionLevelOutOfRange
+                Self::ConfigErrorCompressionLevelOutOfRange
             }
             MLAError::ConfigError(ConfigError::EncryptionKeyIsMissing) => {
-                MLAStatus::ConfigErrorEncryptionKeyIsMissing
+                Self::ConfigErrorEncryptionKeyIsMissing
             }
             MLAError::ConfigError(ConfigError::PrivateKeyNotSet) => {
-                MLAStatus::ConfigErrorPrivateKeyNotSet
+                Self::ConfigErrorPrivateKeyNotSet
             }
             MLAError::ConfigError(ConfigError::PrivateKeyNotFound) => {
-                MLAStatus::ConfigErrorPrivateKeyNotFound
+                Self::ConfigErrorPrivateKeyNotFound
             }
             MLAError::ConfigError(ConfigError::ECIESComputationError) => {
-                MLAStatus::ConfigErrorECIESComputationError
+                Self::ConfigErrorECIESComputationError
             }
-            MLAError::DuplicateFilename => MLAStatus::DuplicateFilename,
-            MLAError::AuthenticatedDecryptionWrongTag => MLAStatus::AuthenticatedDecryptionWrongTag,
-            MLAError::HKDFInvalidKeyLength => MLAStatus::HKDFInvalidKeyLength,
+            MLAError::DuplicateFilename => Self::DuplicateFilename,
+            MLAError::AuthenticatedDecryptionWrongTag => Self::AuthenticatedDecryptionWrongTag,
+            MLAError::HKDFInvalidKeyLength => Self::HKDFInvalidKeyLength,
         }
     }
 }
@@ -195,10 +196,7 @@ struct CallbackOutput {
 
 impl Write for CallbackOutput {
     fn write(&mut self, buf: &[u8]) -> Result<usize, std::io::Error> {
-        let len = match u32::try_from(buf.len()) {
-            Ok(n) => n,
-            _ => u32::MAX - 1, // only write the first 4GB, the callback will get called multiple times
-        };
+        let len = u32::try_from(buf.len()).map_or(u32::MAX - 1, |n| n); // only write the first 4GB, the callback will get called multiple times
         let mut len_written: u32 = 0;
         match (self.write_callback)(buf.as_ptr(), len, self.context, &raw mut len_written) {
             0 => Ok(len_written as usize),
@@ -263,6 +261,7 @@ pub extern "C" fn mla_config_add_public_keys(
 
 /// Sets the compression level in an existing given configuration
 /// (referenced by the handle returned by `mla_config_default_new()`).
+/// 
 /// Currently this level can only be an integer N with 0 <= N <= 11,
 /// and bigger values cause denser but slower compression.
 #[unsafe(no_mangle)]
@@ -318,22 +317,20 @@ pub extern "C" fn mla_reader_config_add_private_key(
     // Create a slice from the NULL-terminated string
     let private_key = unsafe { CStr::from_ptr(private_key) }.to_bytes();
     // Parse as OpenSSL Ed25519 private key(s)
-    let res = match parse_openssl_25519_privkey(private_key) {
-        Ok(v) => {
-            private_keys.push(v);
-            config.add_private_keys(&private_keys);
-            MLAStatus::Success
-        }
-        _ => MLAStatus::Curve25519ParserError,
-    };
+    let res = parse_openssl_25519_privkey(private_key).map_or(MLAStatus::Curve25519ParserError, |v| {
+        private_keys.push(v);
+        config.add_private_keys(&private_keys);
+        MLAStatus::Success
+    });
 
     Box::leak(config);
     res
 }
 
 /// Open a new MLA archive using the given configuration, which is consumed and freed
-/// (its handle cannot be reused to create another archive). The archive is streamed
-/// through the `write_callback`, and flushed at least at the end when the last byte is
+/// (its handle cannot be reused to create another archive). 
+/// 
+/// The archive is streamed through the `write_callback`, and flushed at least at the end when the last byte is
 /// written. The context pointer can be used to hold any information, and is passed
 /// as an argument when any of the two callbacks are called.
 #[unsafe(no_mangle)]
@@ -385,7 +382,9 @@ pub extern "C" fn mla_archive_new(
 }
 
 /// Open a new file in the archive identified by the handle returned by
-/// `mla_archive_new()`. The given name must be a unique NULL-terminated string.
+/// `mla_archive_new()`. 
+/// 
+/// The given name must be a unique NULL-terminated string.
 /// Returns `MLA_STATUS_SUCCESS` on success, or an error code.
 #[unsafe(no_mangle)]
 pub extern "C" fn mla_archive_file_new(
@@ -461,8 +460,9 @@ pub extern "C" fn mla_archive_flush(archive: MLAArchiveHandle) -> MLAStatus {
 }
 
 /// Close the given file, which queues its End-Of-File marker and integrity
-/// checks to be written to the callback. Must be called before closing the
-/// archive. The file handle must be passed as a mutable reference so it is
+/// checks to be written to the callback. 
+/// 
+/// Must be called before closing the archive. The file handle must be passed as a mutable reference so it is
 /// cleared and cannot be reused after free by accident. Returns
 /// `MLA_STATUS_SUCCESS` on success, or an error code.
 #[unsafe(no_mangle)]
@@ -495,8 +495,9 @@ pub extern "C" fn mla_archive_file_close(
 }
 
 /// Close the given archive (must only be called after all files have been
-/// closed), flush the output and free any allocated resource. The archive
-/// handle must be passed as a mutable reference so it is cleared and
+/// closed), flush the output and free any allocated resource. 
+/// 
+/// The archive handle must be passed as a mutable reference so it is cleared and
 /// cannot be reused after free by accident. Returns `MLA_STATUS_SUCCESS` on success,
 /// or an error code.
 #[unsafe(no_mangle)]
@@ -529,10 +530,7 @@ struct CallbackInputRead {
 
 impl Read for CallbackInputRead {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, std::io::Error> {
-        let len = match u32::try_from(buf.len()) {
-            Ok(n) => n,
-            _ => u32::MAX - 1, // only read the first 4GB, the callback will get called multiple times
-        };
+        let len = u32::try_from(buf.len()).map_or(u32::MAX - 1, |n| n); // only read the first 4GB, the callback will get called multiple times
         let mut len_read: u32 = 0;
         match (self.read_callback)(buf.as_mut_ptr(), len, self.context, &raw mut len_read) {
             0 => Ok(len_read as usize),
@@ -557,6 +555,7 @@ impl Seek for CallbackInputRead {
 }
 
 /// Open and extract an existing MLA archive, using the given configuration.
+///
 /// `read_callback` and `seek_callback` are used to read the archive data
 /// `file_callback` is used to convert each archive file's name to pathes where extract the data
 /// The caller is responsible of all security checks related to callback provided paths

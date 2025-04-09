@@ -19,7 +19,7 @@ impl<'a, W: 'a + InnerWriterTrait> PositionLayerWriter<'a, W> {
 
     /// Get the current position (ie, how many bytes written since last position
     /// reset)
-    pub fn position(&self) -> u64 {
+    pub const fn position(&self) -> u64 {
         self.pos
     }
 

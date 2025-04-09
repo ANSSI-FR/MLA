@@ -55,29 +55,29 @@ impl fmt::Display for MlarError {
 
 impl From<Error> for MlarError {
     fn from(error: Error) -> Self {
-        MlarError::MlaError(error)
+        Self::MlaError(error)
     }
 }
 
 impl From<io::Error> for MlarError {
     fn from(error: io::Error) -> Self {
-        MlarError::IOError(error)
+        Self::IOError(error)
     }
 }
 
 impl From<mla::errors::ConfigError> for MlarError {
     fn from(error: mla::errors::ConfigError) -> Self {
-        MlarError::ConfigError(error)
+        Self::ConfigError(error)
     }
 }
 
 impl error::Error for MlarError {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match &self {
-            MlarError::IOError(err) => Some(err),
-            MlarError::MlaError(err) => Some(err),
-            MlarError::ConfigError(err) => Some(err),
-            MlarError::PrivateKeyProvidedButNotUsed => None,
+            Self::IOError(err) => Some(err),
+            Self::MlaError(err) => Some(err),
+            Self::ConfigError(err) => Some(err),
+            Self::PrivateKeyProvidedButNotUsed => None,
         }
     }
 }
@@ -95,15 +95,15 @@ enum OutputTypes {
 impl Write for OutputTypes {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         match self {
-            OutputTypes::Stdout => io::stdout().write(buf),
-            OutputTypes::File { file } => file.write(buf),
+            Self::Stdout => io::stdout().write(buf),
+            Self::File { file } => file.write(buf),
         }
     }
 
     fn flush(&mut self) -> io::Result<()> {
         match self {
-            OutputTypes::Stdout => io::stdout().flush(),
-            OutputTypes::File { file } => file.flush(),
+            Self::Stdout => io::stdout().flush(),
+            Self::File { file } => file.flush(),
         }
     }
 }
@@ -328,11 +328,11 @@ enum ExtractFileNameMatcher {
 impl ExtractFileNameMatcher {
     fn from_matches(matches: &ArgMatches) -> Self {
         let Some(files) = matches.get_many::<String>("files") else {
-            return ExtractFileNameMatcher::Anything;
+            return Self::Anything;
         };
         if matches.get_flag("glob") {
             // Use glob patterns
-            ExtractFileNameMatcher::GlobPatterns(
+            Self::GlobPatterns(
                 files
                     .map(|pat| {
                         Pattern::new(pat)
@@ -345,18 +345,18 @@ impl ExtractFileNameMatcher {
             )
         } else {
             // Use file names
-            ExtractFileNameMatcher::Files(files.map(std::string::ToString::to_string).collect())
+            Self::Files(files.map(std::string::ToString::to_string).collect())
         }
     }
     fn match_file_name(&self, file_name: &str) -> bool {
         match self {
-            ExtractFileNameMatcher::Files(files) => {
+            Self::Files(files) => {
                 files.is_empty() || files.contains(file_name)
             }
-            ExtractFileNameMatcher::GlobPatterns(patterns) => {
+            Self::GlobPatterns(patterns) => {
                 patterns.is_empty() || patterns.iter().any(|pat| pat.matches(file_name))
             }
-            ExtractFileNameMatcher::Anything => true,
+            Self::Anything => true,
         }
     }
 }
@@ -475,7 +475,9 @@ impl Write for FileWriter<'_> {
         }
         // Safe to `unwrap` here cause we ensure the element is in the cache (mono-threaded)
         let file = cache.get_mut(&self.path).unwrap();
-        file.write(buf)
+        let result = file.write(buf);
+        drop(cache);
+        result
 
         // `file` will be closed on deletion from the cache
     }
@@ -592,7 +594,7 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
     let mut iter: Vec<String> = mla.list_files()?.cloned().collect();
     iter.sort();
 
-    if let ExtractFileNameMatcher::Anything = file_name_matcher {
+    if matches!(file_name_matcher, ExtractFileNameMatcher::Anything) {
         // Optimisation: use linear extraction
         if verbose {
             println!("Extracting the whole archive using a linear extraction");
@@ -766,12 +768,10 @@ fn repair(matches: &ArgMatches) -> Result<(), MlarError> {
 
 fn convert(matches: &ArgMatches) -> Result<(), MlarError> {
     let mut mla = open_mla_file(matches)?;
-    let mut fnames: Vec<String> = if let Ok(iter) = mla.list_files() {
-        // Read the file list using metadata
-        iter.cloned().collect()
-    } else {
-        panic!("Files is malformed. Please consider repairing the file");
-    };
+    let mut fnames: Vec<String> = mla.list_files().map_or_else(
+        |_| panic!("Files is malformed. Please consider repairing the file"),
+        |iter| iter.cloned().collect(),
+    );
     fnames.sort();
 
     let mut mla_out = writer_from_matches(matches)?;
@@ -810,17 +810,17 @@ fn keygen(matches: &ArgMatches) -> Result<(), MlarError> {
     //
     // if set, seed the PRNG with `SHA512(seed bytes as UTF8)[0..32]`
     // if not, seed the PRNG with the dedicated API
-    let mut csprng = match matches.get_one::<String>("seed") {
-        Some(seed) => {
+    let mut csprng = matches.get_one::<String>("seed").map_or_else(
+        ChaChaRng::from_os_rng,
+        |seed| {
             eprintln!(
                 "[WARNING] A seed-based keygen operation is deterministic. An attacker knowing the seed knows the private key and is able to decrypt associated messages"
             );
             let mut hseed = [0u8; 32];
             hseed.copy_from_slice(&Sha512::digest(seed.as_bytes())[0..32]);
             ChaChaRng::from_seed(hseed)
-        }
-        None => ChaChaRng::from_os_rng(),
-    };
+        },
+    );
 
     let key_pair = generate_keypair(&mut csprng).expect("Error while generating the key-pair");
 
@@ -950,7 +950,7 @@ impl ArchiveInfoReader {
         let metadata = Some(ArchiveFooter::deserialize_from(&mut src)?);
 
         src.rewind()?;
-        Ok(ArchiveInfoReader {
+        Ok(Self {
             config,
             compressed_size,
             metadata,
@@ -1245,31 +1245,30 @@ fn main() {
     // Launch sub-command
     let help = app.render_long_help();
     let matches = app.get_matches();
-    let res = if let Some(matches) = matches.subcommand_matches("create") {
-        create(matches)
-    } else if let Some(matches) = matches.subcommand_matches("list") {
-        list(matches)
-    } else if let Some(matches) = matches.subcommand_matches("extract") {
-        extract(matches)
-    } else if let Some(matches) = matches.subcommand_matches("cat") {
-        cat(matches)
-    } else if let Some(matches) = matches.subcommand_matches("to-tar") {
-        to_tar(matches)
-    } else if let Some(matches) = matches.subcommand_matches("repair") {
-        repair(matches)
-    } else if let Some(matches) = matches.subcommand_matches("convert") {
-        convert(matches)
-    } else if let Some(matches) = matches.subcommand_matches("keygen") {
-        keygen(matches)
-    } else if let Some(matches) = matches.subcommand_matches("keyderive") {
-        keyderive(matches)
-    } else if let Some(matches) = matches.subcommand_matches("info") {
-        info(matches)
-    } else {
-        eprintln!("Error: at least one command required.");
-        eprintln!("{}", &help);
-        std::process::exit(1);
-    };
+    let res = matches.subcommand().map_or_else(
+        || {
+            eprintln!("Error: at least one command required.");
+            eprintln!("{}", &help);
+            std::process::exit(1);
+        },
+        |(cmd, matches)| match cmd {
+            "create" => create(matches),
+            "list" => list(matches),
+            "extract" => extract(matches),
+            "cat" => cat(matches),
+            "to-tar" => to_tar(matches),
+            "repair" => repair(matches),
+            "convert" => convert(matches),
+            "keygen" => keygen(matches),
+            "keyderive" => keyderive(matches),
+            "info" => info(matches),
+            _ => {
+                eprintln!("Error: unknown command.");
+                eprintln!("{}", &help);
+                std::process::exit(1);
+            }
+        },
+    );
 
     if let Err(err) = res {
         eprintln!("[!] Command ended with error: {err:?}");

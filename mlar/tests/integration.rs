@@ -467,7 +467,7 @@ fn test_repair_auth_unauth() {
 
     println!("{cmd:?}");
     let assert = cmd.assert();
-    assert.success().stdout(file_list.clone());
+    assert.success().stdout(file_list);
 
     // Truncate output.mla
     let mut data = Vec::new();
