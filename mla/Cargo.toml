@@ -9,8 +9,6 @@ homepage = "https://github.com/ANSSI-FR/MLA"
 repository = "https://github.com/ANSSI-FR/MLA"
 readme = "../README.md"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 rand = { version = "0.9", default-features = false, features = ["os_rng", "std"]}
 rand_chacha = { version = "0.9", default-features = false}
@@ -50,3 +48,6 @@ send = []
 [[bench]]
 name = "bench_archive"
 harness = false
+
+[lints]
+workspace = true

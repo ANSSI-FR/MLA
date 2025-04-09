@@ -20,5 +20,8 @@ pem = { version = "3.0", default-features = false}
 rand_core = { version = "0.9", default-features = false}
 rand_chacha = { version = "0.9", default-features = false}
 
+[lints]
+workspace = true
+
 [dev-dependencies]
 rand = "0.9"

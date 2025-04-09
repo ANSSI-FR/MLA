@@ -9,9 +9,6 @@ homepage = "https://github.com/ANSSI-FR/MLA"
 repository = "https://github.com/ANSSI-FR/MLA"
 readme = "../README.md"
 
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 clap = { version = "4.5", features = ["wrap_help"] }
 glob = "0.3"
@@ -28,6 +25,9 @@ zeroize = { version = "1", default-features = false}
 tar = "0.4"
 rand_chacha = "0.9"
 lru = "0.13"
+
+[lints]
+workspace = true
 
 [dev-dependencies]
 assert_cmd = "2.0"
