@@ -87,7 +87,7 @@ impl ArchiveWriterConfig {
 impl std::default::Default for ArchiveWriterConfig {
     /// The default version is missing some parameters to work properly; this is intended
     /// Missing parameters:
-    /// - ecc_encryption_key
+    /// - `ecc_encryption_key`
     fn default() -> Self {
         ArchiveWriterConfig {
             layers_enabled: Layers::default(),
@@ -123,7 +123,7 @@ impl ArchiveReaderConfig {
         if self.layers_enabled.contains(Layers::ENCRYPT) {
             match config.encrypt {
                 Some(to_load) => {
-                    self.encrypt.load_persistent(to_load)?;
+                    self.encrypt.load_persistent(&to_load)?;
                 }
                 None => {
                     return Err(ConfigError::IncoherentPersistentConfig);

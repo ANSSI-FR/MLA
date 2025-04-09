@@ -77,15 +77,15 @@ impl error::Error for MlarError {
             MlarError::IOError(err) => Some(err),
             MlarError::MlaError(err) => Some(err),
             MlarError::ConfigError(err) => Some(err),
-            _ => None,
+            MlarError::PrivateKeyProvidedButNotUsed => None,
         }
     }
 }
 
 // ----- Utils ------
 
-/// Allow for different kind of output. As ArchiveWriter is parametrized over
-/// a Writable type, ArchiveWriter<File> and ArchiveWriter<io::stdout>
+/// Allow for different kind of output. As `ArchiveWriter` is parametrized over
+/// a Writable type, `ArchiveWriter`<File> and `ArchiveWriter`<io::stdout>
 /// can't coexist in the same code path.
 enum OutputTypes {
     Stdout,
@@ -143,7 +143,7 @@ fn open_ecc_public_keys(matches: &ArgMatches) -> Result<Vec<x25519_dalek::Public
     Ok(public_keys)
 }
 
-/// Return the ArchiveWriterConfig corresponding to provided arguments
+/// Return the `ArchiveWriterConfig` corresponding to provided arguments
 fn config_from_matches(matches: &ArgMatches) -> ArchiveWriterConfig {
     let mut config = ArchiveWriterConfig::new();
 
@@ -166,39 +166,37 @@ fn config_from_matches(matches: &ArgMatches) -> ArchiveWriterConfig {
         } else if layer == "encrypt" {
             config.enable_layer(Layers::ENCRYPT);
         } else {
-            panic!("[ERROR] Unknown layer {}", layer);
+            panic!("[ERROR] Unknown layer {layer}");
         }
     }
 
     // Encryption specifics
     if matches.contains_id("public_keys") {
-        if !config.is_layers_enabled(Layers::ENCRYPT) {
-            eprintln!(
-                "[WARNING] 'public_keys' argument ignored, because 'encrypt' layer is not enabled"
-            );
-        } else {
+        if config.is_layers_enabled(Layers::ENCRYPT) {
             let public_keys = match open_ecc_public_keys(matches) {
                 Ok(public_keys) => public_keys,
                 Err(error) => {
-                    panic!("[ERROR] Unable to open public keys: {}", error);
+                    panic!("[ERROR] Unable to open public keys: {error}");
                 }
             };
             config.add_public_keys(&public_keys);
+        } else {
+            eprintln!(
+                "[WARNING] 'public_keys' argument ignored, because 'encrypt' layer is not enabled"
+            );
         }
     }
 
     // Compression specifics
     if matches.contains_id("compression_level") {
-        if !config.is_layers_enabled(Layers::COMPRESS) {
-            eprintln!("[WARNING] 'compression_level' argument ignored, because 'compress' layer is not enabled");
-        } else {
+        if config.is_layers_enabled(Layers::COMPRESS) {
             let comp_level: u32 = *matches
                 .get_one::<u32>("compression_level")
                 .expect("compression_level must be an int");
-            if comp_level > 11 {
-                panic!("compression_level must be in [0 .. 11]");
-            }
+            assert!((comp_level <= 11), "compression_level must be in [0 .. 11]");
             config.with_compression_level(comp_level).unwrap();
+        } else {
+            eprintln!("[WARNING] 'compression_level' argument ignored, because 'compress' layer is not enabled");
         }
     }
 
@@ -206,18 +204,18 @@ fn config_from_matches(matches: &ArgMatches) -> ArchiveWriterConfig {
 }
 
 fn destination_from_output_argument(output_argument: &PathBuf) -> Result<OutputTypes, MlarError> {
-    let destination = if output_argument.as_os_str() != "-" {
+    let destination = if output_argument.as_os_str() == "-" {
+        OutputTypes::Stdout
+    } else {
         let path = Path::new(&output_argument);
         OutputTypes::File {
             file: File::create(path)?,
         }
-    } else {
-        OutputTypes::Stdout
     };
     Ok(destination)
 }
 
-/// Return an ArchiveWriter corresponding to provided arguments
+/// Return an `ArchiveWriter` corresponding to provided arguments
 fn writer_from_matches<'a>(
     matches: &ArgMatches,
 ) -> Result<ArchiveWriter<'a, OutputTypes>, MlarError> {
@@ -232,8 +230,8 @@ fn writer_from_matches<'a>(
     Ok(ArchiveWriter::from_config(destination, config)?)
 }
 
-/// Return the ArchiveReaderConfig corresponding to provided arguments and set
-/// Layers::ENCRYPT if a key is provided
+/// Return the `ArchiveReaderConfig` corresponding to provided arguments and set
+/// `Layers::ENCRYPT` if a key is provided
 fn readerconfig_from_matches(matches: &ArgMatches) -> ArchiveReaderConfig {
     let mut config = ArchiveReaderConfig::new();
 
@@ -241,7 +239,7 @@ fn readerconfig_from_matches(matches: &ArgMatches) -> ArchiveReaderConfig {
         let private_keys = match open_ecc_private_keys(matches) {
             Ok(private_keys) => private_keys,
             Err(error) => {
-                panic!("[ERROR] Unable to open private keys: {}", error);
+                panic!("[ERROR] Unable to open private keys: {error}");
             }
         };
         config.add_private_keys(&private_keys);
@@ -329,9 +327,8 @@ enum ExtractFileNameMatcher {
 }
 impl ExtractFileNameMatcher {
     fn from_matches(matches: &ArgMatches) -> Self {
-        let files = match matches.get_many::<String>("files") {
-            Some(values) => values,
-            None => return ExtractFileNameMatcher::Anything,
+        let Some(files) = matches.get_many::<String>("files") else {
+            return ExtractFileNameMatcher::Anything;
         };
         if matches.get_flag("glob") {
             // Use glob patterns
@@ -348,15 +345,15 @@ impl ExtractFileNameMatcher {
             )
         } else {
             // Use file names
-            ExtractFileNameMatcher::Files(files.map(|s| s.to_string()).collect())
+            ExtractFileNameMatcher::Files(files.map(std::string::ToString::to_string).collect())
         }
     }
     fn match_file_name(&self, file_name: &str) -> bool {
         match self {
-            ExtractFileNameMatcher::Files(ref files) => {
+            ExtractFileNameMatcher::Files(files) => {
                 files.is_empty() || files.contains(file_name)
             }
-            ExtractFileNameMatcher::GlobPatterns(ref patterns) => {
+            ExtractFileNameMatcher::GlobPatterns(patterns) => {
                 patterns.is_empty() || patterns.iter().any(|pat| pat.matches(file_name))
             }
             ExtractFileNameMatcher::Anything => true,
@@ -366,7 +363,7 @@ impl ExtractFileNameMatcher {
 
 /// Compute the full path of the final file, using defensive measures
 /// similar as what tar-rs does for `Entry::unpack_in`:
-/// https://github.com/alexcrichton/tar-rs/blob/0.4.26/src/entry.rs#L344
+/// <https://github.com/alexcrichton/tar-rs/blob/0.4.26/src/entry.rs#L344>
 fn get_extracted_path(output_dir: &Path, file_name: &str) -> Option<PathBuf> {
     let mut file_dst = output_dir.to_path_buf();
     for part in Path::new(&file_name).components() {
@@ -396,21 +393,17 @@ fn create_file<P1: AsRef<Path>>(
     output_dir: P1,
     fname: &str,
 ) -> Result<Option<(File, PathBuf)>, MlarError> {
-    let extracted_path = match get_extracted_path(output_dir.as_ref(), fname) {
-        Some(p) => p,
-        None => return Ok(None),
+    let Some(extracted_path) = get_extracted_path(output_dir.as_ref(), fname) else {
+        return Ok(None);
     };
     // Create all directories leading to the file
-    let containing_directory = match extracted_path.parent() {
-        Some(p) => p,
-        None => {
-            eprintln!(
-                "[!] Skipping file \"{}\" because it does not have a parent (from {})",
-                &fname,
-                extracted_path.display()
-            );
-            return Ok(None);
-        }
+    let Some(containing_directory) = extracted_path.parent() else {
+        eprintln!(
+            "[!] Skipping file \"{}\" because it does not have a parent (from {})",
+            &fname,
+            extracted_path.display()
+        );
+        return Ok(None);
     };
     if !containing_directory.exists() {
         fs::create_dir_all(containing_directory).map_err(|err| {
@@ -645,10 +638,7 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
             }
             Ok(Some(subfile)) => subfile,
         };
-        let (mut extracted_file, _path) = match create_file(&output_dir, &fname)? {
-            Some(file) => file,
-            None => continue,
-        };
+        let Some((mut extracted_file, _path)) = create_file(&output_dir, &fname)? else { continue };
 
         if verbose {
             println!("{fname}");
@@ -679,7 +669,7 @@ fn cat(matches: &ArgMatches) -> Result<(), MlarError> {
                     continue;
                 }
             };
-            for fname in archive_files.iter() {
+            for fname in &archive_files {
                 if !pat.matches(fname) {
                     continue;
                 }
@@ -915,7 +905,7 @@ pub struct ArchiveInfoReader {
     ///
     /// User's reading configuration
     pub config: ArchiveReaderConfig,
-    /// Compressed sizes from CompressionLayer
+    /// Compressed sizes from `CompressionLayer`
     pub compressed_size: Option<u64>,
     /// Metadata (from footer if any)
     metadata: Option<ArchiveFooter>,
@@ -941,7 +931,7 @@ impl ArchiveInfoReader {
         // Enable layers depending on user option. Order is relevant
         let mut src: Box<dyn 'a + LayerReader<'a, R>> = raw_src;
         if config.layers_enabled.contains(Layers::ENCRYPT) {
-            src = Box::new(EncryptionLayerReader::new(src, &config.encrypt)?)
+            src = Box::new(EncryptionLayerReader::new(src, &config.encrypt)?);
         }
         let compressed_size = if config.layers_enabled.contains(Layers::COMPRESS) {
             let mut src_compress = Box::new(CompressionLayerReader::new(src)?);
@@ -949,7 +939,7 @@ impl ArchiveInfoReader {
             let size = src_compress
                 .sizes_info
                 .as_ref()
-                .map(|v| v.get_compressed_size());
+                .map(mla::layers::compress::SizesInfo::get_compressed_size);
             src = src_compress;
             size
         } else {

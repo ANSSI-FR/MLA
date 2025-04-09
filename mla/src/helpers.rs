@@ -75,7 +75,7 @@ pub fn linear_extract<W1: InnerWriterTrait, R: InnerReaderTrait, S: BuildHasher>
     Ok(())
 }
 
-/// Provides a Write interface on an ArchiveWriter file
+/// Provides a Write interface on an `ArchiveWriter` file
 ///
 /// This interface is meant to be used in situations where length of the data
 /// source is unknown, such as a stream. One can then use the `io::copy`
@@ -141,7 +141,7 @@ mod tests {
         linear_extract(&mut mla_read, &mut export).expect("Extract error");
 
         // Check file per file
-        for (fname, content) in files.iter() {
+        for (fname, content) in &files {
             assert_eq!(export.get(fname).unwrap(), content);
         }
     }

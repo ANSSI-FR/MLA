@@ -1,5 +1,6 @@
 [workspace]
 
+resolver = "3"
 members = [
     "mla",
     "curve25519-parser",
@@ -20,8 +21,11 @@ pedantic = {level = "deny", priority = -1}
 # lints for the cargo manifest
 # cargo = {level = "deny", priority = -1}
 # specific lints
-must_use_candidate = "allow"
+cast_precision_loss = "allow"
 missing-errors-doc = "allow"
+missing-panics-doc = "allow"
+must_use_candidate = "allow"
+too-many-lines = "allow"
 
 [workspace.lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }

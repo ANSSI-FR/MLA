@@ -14,7 +14,7 @@ pub enum Error {
     UnsupportedVersion,
     /// Supplied ECC key is not in the expected format
     InvalidECCKeyFormat,
-    /// Wrong BlockSubFile magic has been encountered. Is the deserializion
+    /// Wrong `BlockSubFile` magic has been encountered. Is the deserializion
     /// starting at the beginning of a block?
     WrongBlockSubFileType,
     /// An error has occurred while converting into UTF8. This error could
@@ -149,7 +149,7 @@ pub enum FailSafeReadError {
     },
     /// End of original archive reached - this is the best case
     EndOfOriginalArchiveData,
-    /// Error in the FailSafeReader internal state
+    /// Error in the `FailSafeReader` internal state
     FailSafeReadInternalError,
     /// The file's hash does not correspond to the expected one
     HashDiffers {

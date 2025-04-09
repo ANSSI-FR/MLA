@@ -95,7 +95,7 @@ pub fn writer_multiple_layers_multiple_block_size(c: &mut Criterion) {
     let mut group = c.benchmark_group("writer_multiple_layers_multiple_block_size");
     group.measurement_time(Duration::from_secs(10));
     group.sample_size(SAMPLE_SIZE_SMALL);
-    for size in SIZE_LIST.iter() {
+    for size in &SIZE_LIST {
         group.throughput(Throughput::Bytes(*size as u64));
 
         let data: Vec<u8> = Alphanumeric.sample_iter(&mut rng).take(*size).collect();
@@ -190,12 +190,12 @@ pub fn reader_multiple_layers_multiple_block_size(c: &mut Criterion) {
     // Reduce the number of sample to avoid taking too much time
     group.sample_size(SAMPLE_SIZE_SMALL);
 
-    for size in SIZE_LIST.iter() {
+    for size in &SIZE_LIST {
         group.throughput(Throughput::Bytes(*size as u64));
 
         for layers in &LAYERS_POSSIBILITIES {
             group.bench_function(BenchmarkId::new(format!("{layers:?}"), size), move |b| {
-                b.iter_custom(|iters| read_one_file_by_chunk(iters, *size as u64, *layers))
+                b.iter_custom(|iters| read_one_file_by_chunk(iters, *size as u64, *layers));
             });
         }
     }
@@ -205,7 +205,7 @@ pub fn reader_multiple_layers_multiple_block_size(c: &mut Criterion) {
 /// Create an archive with a `iters` files of `size` bytes using `layers` and
 /// measure the time needed to read them (in a random order)
 ///
-/// This function is used to measure only the get_file + read time without the
+/// This function is used to measure only the `get_file` + read time without the
 /// cost of archive creation
 fn iter_read_multifiles_random(iters: u64, size: u64, layers: Layers) -> Duration {
     let mut mla_read = build_archive_reader(iters, size, layers);
@@ -231,12 +231,12 @@ pub fn reader_multiple_layers_multiple_block_size_multifiles_random(c: &mut Crit
     let mut group = c.benchmark_group("chunk_size_decompress_mutilfiles_random");
     // Reduce the number of sample to avoid taking too much time
     group.sample_size(SAMPLE_SIZE_SMALL);
-    for size in SIZE_LIST.iter() {
+    for size in &SIZE_LIST {
         group.throughput(Throughput::Bytes(*size as u64));
 
         for layers in &LAYERS_POSSIBILITIES {
             group.bench_function(BenchmarkId::new(format!("{layers:?}"), size), move |b| {
-                b.iter_custom(|iters| iter_read_multifiles_random(iters, *size as u64, *layers))
+                b.iter_custom(|iters| iter_read_multifiles_random(iters, *size as u64, *layers));
             });
         }
     }
@@ -271,14 +271,14 @@ pub fn reader_multiple_layers_multiple_block_size_multifiles_linear(c: &mut Crit
         c.benchmark_group("reader_multiple_layers_multiple_block_size_multifiles_linear");
     // Reduce the number of sample to avoid taking too much time
     group.sample_size(SAMPLE_SIZE_SMALL);
-    for size in SIZE_LIST.iter() {
+    for size in &SIZE_LIST {
         group.throughput(Throughput::Bytes(*size as u64));
 
         for layers in &LAYERS_POSSIBILITIES {
             group.bench_function(BenchmarkId::new(format!("{layers:?}"), size), move |b| {
                 b.iter_custom(|iters| {
                     iter_decompress_multifiles_linear(iters, *size as u64, *layers)
-                })
+                });
             });
         }
     }
@@ -319,7 +319,7 @@ pub fn failsafe_multiple_layers_repair(c: &mut Criterion) {
 
     for layers in &LAYERS_POSSIBILITIES {
         group.bench_function(BenchmarkId::new(format!("{layers:?}"), size), move |b| {
-            b.iter_custom(|iters| repair_archive(iters, size, *layers))
+            b.iter_custom(|iters| repair_archive(iters, size, *layers));
         });
     }
 }

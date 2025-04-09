@@ -5,6 +5,7 @@ use bincode::Options;
 use curve25519_parser::{parse_openssl_25519_privkey, parse_openssl_25519_pubkey};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
+use std::convert::TryFrom;
 use std::io::{self, Cursor, Read, Write};
 
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
@@ -62,7 +63,10 @@ fn run(data: &[u8]) {
             if part.is_empty() {
                 0
             } else {
-                part[0] % (test_case.filenames.len() as u8)
+                match u8::try_from(test_case.filenames.len()) {
+                    Ok(len) => part[0] % len,
+                    Err(_) => return,
+                }
             }
         };
         let id = {
@@ -73,7 +77,7 @@ fn run(data: &[u8]) {
                     Err(Error::DuplicateFilename) => {
                         return;
                     }
-                    Err(err) => panic!("Start block failed {}", err),
+                    Err(err) => panic!("Start block failed {err}"),
                     Ok(id) => id,
                 };
                 num2id.insert(num, id);
@@ -99,12 +103,15 @@ fn run(data: &[u8]) {
     for (i, fname) in test_case.filenames.iter().enumerate() {
         if !filename2content.contains_key(fname) {
             num2id.insert(
-                i as u8,
+                match u8::try_from(i) {
+                    Ok(value) => value,
+                    Err(_) => return,
+                },
                 match mla.start_file(fname) {
                     Err(Error::DuplicateFilename) => {
                         return;
                     }
-                    Err(err) => panic!("Start block failed {}", err),
+                    Err(err) => panic!("Start block failed {err}"),
                     Ok(id) => id,
                 },
             );
@@ -180,7 +187,10 @@ fn run(data: &[u8]) {
     let mut changed = false;
     let mut dest_mut = Vec::from(dest.as_slice());
     for index in test_case.byteflip {
-        if index >= dest.len() as u32 {
+        if index >= match u32::try_from(dest.len()) {
+            Ok(len) => len,
+            Err(_) => return,
+        } {
             // Do not byteflip
             continue;
         }
@@ -197,14 +207,11 @@ fn run(data: &[u8]) {
     let mut config = ArchiveReaderConfig::new();
     let private_key = parse_openssl_25519_privkey(PRIV_KEY).unwrap();
     config.add_private_keys(&[private_key]);
-    let _do_steps = || -> Result<(), Error> {
+    let _ = || -> Result<(), Error> {
         let mut mla_read = ArchiveReader::from_config(buf, ArchiveReaderConfig::new())?;
         let flist = mla_read.list_files()?.cloned().collect::<Vec<String>>();
         for fname in flist {
-            let mut finfo = match mla_read.get_file(fname)? {
-                Some(finfo) => finfo,
-                None => continue,
-            };
+            let Some(mut finfo) = mla_read.get_file(fname)? else { continue };
             io::copy(&mut finfo.data, &mut io::sink())?;
         }
         Ok(())

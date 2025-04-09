@@ -1,8 +1,11 @@
-use der_parser::der::*;
+use der_parser::der::{
+    parse_der_bitstring, parse_der_container, parse_der_integer, parse_der_octetstring,
+    parse_der_oid, DerObject, Tag,
+};
 use der_parser::error::BerError;
 
 use der_parser::oid::Oid;
-use der_parser::*;
+use der_parser::{nom, oid};
 use nom::combinator::{complete, eof};
 use nom::IResult;
 
@@ -77,7 +80,11 @@ impl fmt::Display for Curve25519ParserError {
 ///     Seq(
 ///         OID(1.3.101.112), // ED25519 OR OID(1.3.101.110), // X25519
 ///     ),
-///     OctetString(TAG_OCTETSTRING + LENGTH + DATA),
+///     `OctetString`(
+///         `TAG_OCTETSTRING` +
+///         LENGTH +
+///         DATA
+///     ),
 /// )
 ///
 /// From RFC8032, to obtain the corresponding `x25519_dalek::StaticSecret` from an ed25519 key:
@@ -165,7 +172,7 @@ pub fn parse_openssl_25519_privkey_der(data: &[u8]) -> Result<StaticSecret, Curv
 /// From RFC8032 and OpenSSL format, to obtain the corresponding
 /// `x25519_dalek::PublicKey`, which internally use the Montgomery form
 /// from an Ed25519 key:
-///   to_montgomery(decompress_edwardspoint(DATA))
+///   `to_montgomery(decompress_edwardspoint(DATA))`
 
 #[derive(Debug, PartialEq)]
 struct DerEd25519PublicHeader<'a> {
