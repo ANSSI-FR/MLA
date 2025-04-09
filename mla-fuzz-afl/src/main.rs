@@ -4,8 +4,8 @@ extern crate afl;
 use bincode::Options;
 use curve25519_parser::{parse_openssl_25519_privkey, parse_openssl_25519_pubkey};
 use serde::{Deserialize, Serialize};
-use std::fs::File;
 use std::convert::TryFrom;
+use std::fs::File;
 use std::io::{self, Cursor, Read, Write};
 
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
@@ -158,8 +158,10 @@ fn run(data: &[u8]) {
     let dest_w = Vec::new();
     let mut mla_w =
         ArchiveWriter::from_config(dest_w, ArchiveWriterConfig::new()).expect("Writer init failed");
-    if matches!(mla_fsread.convert_to_archive(&mut mla_w).unwrap(), FailSafeReadError::EndOfOriginalArchiveData)
-    {
+    if matches!(
+        mla_fsread.convert_to_archive(&mut mla_w).unwrap(),
+        FailSafeReadError::EndOfOriginalArchiveData
+    ) {
         // Everything runs as expected
     } else {
         panic!();
@@ -181,10 +183,12 @@ fn run(data: &[u8]) {
     let mut changed = false;
     let mut dest_mut = Vec::from(dest.as_slice());
     for index in test_case.byteflip {
-        if index >= match u32::try_from(dest.len()) {
-            Ok(len) => len,
-            Err(_) => return,
-        } {
+        if index
+            >= match u32::try_from(dest.len()) {
+                Ok(len) => len,
+                Err(_) => return,
+            }
+        {
             // Do not byteflip
             continue;
         }
@@ -205,7 +209,9 @@ fn run(data: &[u8]) {
         let mut mla_read = ArchiveReader::from_config(buf, ArchiveReaderConfig::new())?;
         let flist = mla_read.list_files()?.cloned().collect::<Vec<String>>();
         for fname in flist {
-            let Some(mut finfo) = mla_read.get_file(fname)? else { continue };
+            let Some(mut finfo) = mla_read.get_file(fname)? else {
+                continue;
+            };
             io::copy(&mut finfo.data, &mut io::sink())?;
         }
         Ok(())

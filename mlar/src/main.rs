@@ -1,10 +1,10 @@
-use clap::{value_parser, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use curve25519_parser::{
-    generate_keypair, parse_openssl_25519_privkey, parse_openssl_25519_pubkey, StaticSecret,
+    StaticSecret, generate_keypair, parse_openssl_25519_privkey, parse_openssl_25519_pubkey,
 };
 use glob::Pattern;
 use hkdf::Hkdf;
-use humansize::{FormatSize, DECIMAL};
+use humansize::{DECIMAL, FormatSize};
 use lru::LruCache;
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
 use mla::errors::{Error, FailSafeReadError};
@@ -23,7 +23,7 @@ use sha2::{Digest, Sha512};
 use std::collections::{HashMap, HashSet};
 use std::error;
 use std::fmt;
-use std::fs::{self, read_dir, File};
+use std::fs::{self, File, read_dir};
 use std::io::{self, BufRead};
 use std::io::{Read, Seek, Write};
 use std::num::NonZeroUsize;
@@ -196,7 +196,9 @@ fn config_from_matches(matches: &ArgMatches) -> ArchiveWriterConfig {
             assert!((comp_level <= 11), "compression_level must be in [0 .. 11]");
             config.with_compression_level(comp_level).unwrap();
         } else {
-            eprintln!("[WARNING] 'compression_level' argument ignored, because 'compress' layer is not enabled");
+            eprintln!(
+                "[WARNING] 'compression_level' argument ignored, because 'compress' layer is not enabled"
+            );
         }
     }
 
@@ -350,9 +352,7 @@ impl ExtractFileNameMatcher {
     }
     fn match_file_name(&self, file_name: &str) -> bool {
         match self {
-            Self::Files(files) => {
-                files.is_empty() || files.contains(file_name)
-            }
+            Self::Files(files) => files.is_empty() || files.contains(file_name),
             Self::GlobPatterns(patterns) => {
                 patterns.is_empty() || patterns.iter().any(|pat| pat.matches(file_name))
             }
@@ -428,7 +428,8 @@ fn create_file<P1: AsRef<Path>>(
     if !containing_directory.starts_with(output_dir) {
         eprintln!(
             " [!] Skipping file \"{}\" because it would be extracted outside of the output directory, in {}",
-            fname, containing_directory.display()
+            fname,
+            containing_directory.display()
         );
         return Ok(None);
     }
@@ -640,7 +641,9 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
             }
             Ok(Some(subfile)) => subfile,
         };
-        let Some((mut extracted_file, _path)) = create_file(&output_dir, &fname)? else { continue };
+        let Some((mut extracted_file, _path)) = create_file(&output_dir, &fname)? else {
+            continue;
+        };
 
         if verbose {
             println!("{fname}");

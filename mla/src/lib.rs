@@ -377,13 +377,13 @@ impl ArchiveWriterState {
                 None => {
                     return Err(Error::WrongWriterState(
                         "[wrap_with_hash] Unable to find the ID".to_string(),
-                    ))
+                    ));
                 }
             },
             Self::Finalized => {
                 return Err(Error::WrongWriterState(
                     "[wrap_with_hash] Wrong state".to_string(),
-                ))
+                ));
             }
         };
 
@@ -563,7 +563,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
                 None => {
                     return Err(Error::WrongWriterState(
                         "[mark_continuous_block] Unable to find the ID".to_string(),
-                    ))
+                    ));
                 }
             };
             self.current_id = id;
@@ -579,7 +579,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
             None => {
                 return Err(Error::WrongWriterState(
                     "[mark_eof] Unable to find the ID".to_string(),
-                ))
+                ));
             }
         }
         Ok(())
@@ -592,7 +592,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
             None => {
                 return Err(Error::WrongWriterState(
                     "[extend_file_size] Unable to find the ID".to_string(),
-                ))
+                ));
             }
         }
         Ok(())
@@ -1757,9 +1757,10 @@ pub(crate) mod tests {
         let mut mla = ArchiveWriter::from_config(buf, config).unwrap();
         mla.add_file("Test", 4, vec![1, 2, 3, 4].as_slice())
             .unwrap();
-        assert!(mla
-            .add_file("Test", 4, vec![1, 2, 3, 4].as_slice())
-            .is_err());
+        assert!(
+            mla.add_file("Test", 4, vec![1, 2, 3, 4].as_slice())
+                .is_err()
+        );
         assert!(mla.start_file("Test").is_err());
     }
 
@@ -2030,8 +2031,10 @@ pub(crate) mod tests {
         let dest_w = Vec::new();
         let mut mla_w = ArchiveWriter::from_config(dest_w, ArchiveWriterConfig::new())
             .expect("Writer init failed");
-        if matches!(mla_fsread.convert_to_archive(&mut mla_w).unwrap(), FailSafeReadError::EndOfOriginalArchiveData)
-        {
+        if matches!(
+            mla_fsread.convert_to_archive(&mut mla_w).unwrap(),
+            FailSafeReadError::EndOfOriginalArchiveData
+        ) {
             // Everything runs as expected
         } else {
             panic!();

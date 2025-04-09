@@ -1,13 +1,13 @@
 use der_parser::der::{
-    parse_der_bitstring, parse_der_container, parse_der_integer, parse_der_octetstring,
-    parse_der_oid, DerObject, Tag,
+    DerObject, Tag, parse_der_bitstring, parse_der_container, parse_der_integer,
+    parse_der_octetstring, parse_der_oid,
 };
 use der_parser::error::BerError;
 
 use der_parser::oid::Oid;
 use der_parser::{nom, oid};
-use nom::combinator::{complete, eof};
 use nom::IResult;
+use nom::combinator::{complete, eof};
 
 use std::convert::{From, TryInto};
 
@@ -21,8 +21,8 @@ use rand_core::{CryptoRng, RngCore};
 
 use std::fmt;
 
-const ED_25519_OID: Oid<'static> = oid!(1.3.101 .112);
-const X_25519_OID: Oid<'static> = oid!(1.3.101 .110);
+const ED_25519_OID: Oid<'static> = oid!(1.3.101.112);
+const X_25519_OID: Oid<'static> = oid!(1.3.101.110);
 
 // ---- Error handling ----
 

@@ -1,18 +1,18 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 use curve25519_parser::parse_openssl_25519_privkey;
 use curve25519_parser::parse_openssl_25519_pubkeys_pem_many;
+use mla::ArchiveHeader;
+use mla::ArchiveReader;
+use mla::ArchiveWriter;
 use mla::config::ArchiveReaderConfig;
 use mla::config::ArchiveWriterConfig;
 use mla::errors::ConfigError;
 use mla::errors::Error as MLAError;
 use mla::helpers::linear_extract;
-use mla::ArchiveHeader;
-use mla::ArchiveReader;
-use mla::ArchiveWriter;
 use mla::{ArchiveFileID, Layers};
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use std::ffi::{c_void, CStr};
+use std::ffi::{CStr, c_void};
 use std::io::{Read, Seek, Write};
 use std::mem::MaybeUninit;
 use std::os::raw::c_char;
@@ -261,7 +261,7 @@ pub extern "C" fn mla_config_add_public_keys(
 
 /// Sets the compression level in an existing given configuration
 /// (referenced by the handle returned by `mla_config_default_new()`).
-/// 
+///
 /// Currently this level can only be an integer N with 0 <= N <= 11,
 /// and bigger values cause denser but slower compression.
 #[unsafe(no_mangle)]
@@ -317,19 +317,20 @@ pub extern "C" fn mla_reader_config_add_private_key(
     // Create a slice from the NULL-terminated string
     let private_key = unsafe { CStr::from_ptr(private_key) }.to_bytes();
     // Parse as OpenSSL Ed25519 private key(s)
-    let res = parse_openssl_25519_privkey(private_key).map_or(MLAStatus::Curve25519ParserError, |v| {
-        private_keys.push(v);
-        config.add_private_keys(&private_keys);
-        MLAStatus::Success
-    });
+    let res =
+        parse_openssl_25519_privkey(private_key).map_or(MLAStatus::Curve25519ParserError, |v| {
+            private_keys.push(v);
+            config.add_private_keys(&private_keys);
+            MLAStatus::Success
+        });
 
     Box::leak(config);
     res
 }
 
 /// Open a new MLA archive using the given configuration, which is consumed and freed
-/// (its handle cannot be reused to create another archive). 
-/// 
+/// (its handle cannot be reused to create another archive).
+///
 /// The archive is streamed through the `write_callback`, and flushed at least at the end when the last byte is
 /// written. The context pointer can be used to hold any information, and is passed
 /// as an argument when any of the two callbacks are called.
@@ -382,8 +383,8 @@ pub extern "C" fn mla_archive_new(
 }
 
 /// Open a new file in the archive identified by the handle returned by
-/// `mla_archive_new()`. 
-/// 
+/// `mla_archive_new()`.
+///
 /// The given name must be a unique NULL-terminated string.
 /// Returns `MLA_STATUS_SUCCESS` on success, or an error code.
 #[unsafe(no_mangle)]
@@ -460,8 +461,8 @@ pub extern "C" fn mla_archive_flush(archive: MLAArchiveHandle) -> MLAStatus {
 }
 
 /// Close the given file, which queues its End-Of-File marker and integrity
-/// checks to be written to the callback. 
-/// 
+/// checks to be written to the callback.
+///
 /// Must be called before closing the archive. The file handle must be passed as a mutable reference so it is
 /// cleared and cannot be reused after free by accident. Returns
 /// `MLA_STATUS_SUCCESS` on success, or an error code.
@@ -495,8 +496,8 @@ pub extern "C" fn mla_archive_file_close(
 }
 
 /// Close the given archive (must only be called after all files have been
-/// closed), flush the output and free any allocated resource. 
-/// 
+/// closed), flush the output and free any allocated resource.
+///
 /// The archive handle must be passed as a mutable reference so it is cleared and
 /// cannot be reused after free by accident. Returns `MLA_STATUS_SUCCESS` on success,
 /// or an error code.
@@ -543,9 +544,14 @@ impl Seek for CallbackInputRead {
     fn seek(&mut self, style: std::io::SeekFrom) -> Result<u64, std::io::Error> {
         let mut new_pos: u64 = 0;
         let (whence, offset) = match style {
-            std::io::SeekFrom::Start(n) => (0, i64::try_from(n).map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "Invalid offset"))?), // SEEK_SET
-            std::io::SeekFrom::Current(n) => (1, n),      // SEEK_CUR
-            std::io::SeekFrom::End(n) => (2, n),          // SEEK_END
+            std::io::SeekFrom::Start(n) => (
+                0,
+                i64::try_from(n).map_err(|_| {
+                    std::io::Error::new(std::io::ErrorKind::InvalidInput, "Invalid offset")
+                })?,
+            ), // SEEK_SET
+            std::io::SeekFrom::Current(n) => (1, n), // SEEK_CUR
+            std::io::SeekFrom::End(n) => (2, n),     // SEEK_END
         };
         match (self.seek_callback.unwrap())(offset, whence, self.context, &raw mut new_pos) {
             0 => Ok(new_pos),

@@ -1,11 +1,11 @@
 use assert_cmd::Command;
 use assert_fs::fixture::{FileWriteBin, NamedTempFile, TempDir};
 use permutate::Permutator;
+use rand::SeedableRng;
 use rand::distr::{Alphanumeric, Distribution, StandardUniform};
 use rand::rngs::StdRng;
-use rand::SeedableRng;
 use std::collections::{HashMap, HashSet};
-use std::fs::{self, metadata, read_dir, File};
+use std::fs::{self, File, metadata, read_dir};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use tar::Archive;

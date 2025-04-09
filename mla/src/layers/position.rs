@@ -1,8 +1,8 @@
 use std::io;
 use std::io::Write;
 
-use crate::layers::traits::{InnerWriterTrait, InnerWriterType, LayerWriter};
 use crate::Error;
+use crate::layers::traits::{InnerWriterTrait, InnerWriterType, LayerWriter};
 
 // ---------- Writer ----------
 

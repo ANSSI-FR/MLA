@@ -1,10 +1,10 @@
-use crate::crypto::aesgcm::{AesGcm256, ConstantTimeEq, Key, Nonce, Tag, TAG_LENGTH};
-use crate::crypto::ecc::{retrieve_key, store_key_for_multi_recipients, MultiRecipientPersistent};
+use crate::crypto::aesgcm::{AesGcm256, ConstantTimeEq, Key, Nonce, TAG_LENGTH, Tag};
+use crate::crypto::ecc::{MultiRecipientPersistent, retrieve_key, store_key_for_multi_recipients};
 
+use crate::Error;
 use crate::layers::traits::{
     InnerWriterTrait, InnerWriterType, LayerFailSafeReader, LayerReader, LayerWriter,
 };
-use crate::Error;
 use std::convert::TryFrom;
 use std::io;
 use std::io::{BufReader, Cursor, Read, Seek, SeekFrom, Write};
@@ -511,8 +511,9 @@ impl<R: Read + Seek + ?Sized> Seek for EncryptionLayerInternal<R> {
                     Ok(current)
                 } else {
                     self.seek(SeekFrom::Start(
-                        u64::try_from(i64::try_from(current).unwrap() + value)
-                            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "Seek overflow"))?,
+                        u64::try_from(i64::try_from(current).unwrap() + value).map_err(|_| {
+                            io::Error::new(io::ErrorKind::InvalidInput, "Seek overflow")
+                        })?,
                     ))
                 }
             }
@@ -537,9 +538,9 @@ impl<R: Read + Seek + ?Sized> Seek for EncryptionLayerInternal<R> {
                     .ok_or_else(|| {
                         io::Error::new(io::ErrorKind::InvalidInput, "Addition overflow")
                     })?;
-                self.seek(SeekFrom::Start(u64::try_from(pos_adjusted).map_err(|_| {
-                    io::Error::new(io::ErrorKind::InvalidInput, "Integer conversion failed")
-                })?))
+                self.seek(SeekFrom::Start(u64::try_from(pos_adjusted).map_err(
+                    |_| io::Error::new(io::ErrorKind::InvalidInput, "Integer conversion failed"),
+                )?))
             }
         }
     }
@@ -664,8 +665,8 @@ impl<R: Read> Read for EncryptionLayerFailSafeReader<'_, R> {
 mod tests {
     use super::*;
 
-    use rand::distr::{Alphanumeric, Distribution};
     use rand::SeedableRng;
+    use rand::distr::{Alphanumeric, Distribution};
     use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 
     use crate::crypto::aesgcm::KEY_SIZE;
