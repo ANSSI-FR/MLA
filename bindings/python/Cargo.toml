@@ -24,5 +24,20 @@ mla = { version = "1", features = ["send"], path = "../../mla"}
 x25519-dalek = "2"
 curve25519-parser = { path = "../../curve25519-parser", version = "0.4" }
 
-[lints]
-workspace = true
+[lints.clippy]
+# all lints that are on by default (correctness, suspicious, style, complexity, perf)
+all = {level = "deny", priority = -1}
+# lints which are rather strict or have occasional false positives
+pedantic = {level = "deny", priority = -1}
+# new lints that are still under development
+nursery = {level = "deny", priority = -1}
+# lints which prevent the use of language and library features
+# restriction = {level = "deny", priority = -1}
+# lints for the cargo manifest
+# cargo = {level = "deny", priority = -1}
+# specific lints
+cast_precision_loss = "allow"
+missing-errors-doc = "allow"
+missing-panics-doc = "allow"
+must_use_candidate = "allow"
+too-many-lines = "allow"
