@@ -371,7 +371,7 @@ fn get_extracted_path(output_dir: &Path, file_name: &str) -> Option<PathBuf> {
             // Leading '/' characters, root paths, and '.'
             // components are just ignored and treated as "empty
             // components"
-            Component::Prefix(..) | Component::RootDir | Component::CurDir => {},
+            Component::Prefix(..) | Component::RootDir | Component::CurDir => {}
 
             // If any part of the filename is '..', then skip over
             // unpacking the file to prevent directory traversal

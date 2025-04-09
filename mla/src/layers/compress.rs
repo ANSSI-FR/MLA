@@ -1103,16 +1103,19 @@ mod tests {
         let mut output_offset = 0;
         let mut written = 0;
 
-        if matches!(brotli::BrotliDecompressStream(
-            &mut available_in,
-            &mut input_offset,
-            src.get_ref(),
-            &mut available_out,
-            &mut output_offset,
-            &mut buf,
-            &mut written,
-            &mut brotli_state,
-        ), brotli::BrotliResult::ResultSuccess) {
+        if matches!(
+            brotli::BrotliDecompressStream(
+                &mut available_in,
+                &mut input_offset,
+                src.get_ref(),
+                &mut available_out,
+                &mut output_offset,
+                &mut buf,
+                &mut written,
+                &mut brotli_state,
+            ),
+            brotli::BrotliResult::ResultSuccess
+        ) {
         } else {
             panic!()
         }

@@ -633,23 +633,24 @@ fn mla_roarchive_extract_internal<'a, R: Read + Seek + 'a>(
             fname.as_ptr(),
             fname.len(),
             file_writer.as_mut_ptr(),
-        ) == 0 {
+        ) == 0
+        {
             let file_writer = unsafe { file_writer.assume_init() };
             export.insert(
-            fname,
-            CallbackOutput {
-                write_callback: match file_writer.write_callback {
-                // Rust FFI guarantees Option<x> as equal to x
-                Some(x) => x,
-                None => return MLAStatus::BadAPIArgument,
+                fname,
+                CallbackOutput {
+                    write_callback: match file_writer.write_callback {
+                        // Rust FFI guarantees Option<x> as equal to x
+                        Some(x) => x,
+                        None => return MLAStatus::BadAPIArgument,
+                    },
+                    flush_callback: match file_writer.flush_callback {
+                        // Rust FFI guarantees Option<x> as equal to x
+                        Some(x) => x,
+                        None => return MLAStatus::BadAPIArgument,
+                    },
+                    context: file_writer.context,
                 },
-                flush_callback: match file_writer.flush_callback {
-                // Rust FFI guarantees Option<x> as equal to x
-                Some(x) => x,
-                None => return MLAStatus::BadAPIArgument,
-                },
-                context: file_writer.context,
-            },
             );
         }
     }
