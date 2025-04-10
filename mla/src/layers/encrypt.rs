@@ -284,8 +284,8 @@ impl<W: InnerWriterTrait> Write for EncryptionLayerWriter<'_, W> {
         self.cipher.encrypt(&mut buf_tmp);
         self.inner.write_all(&buf_tmp)?;
         self.current_chunk_offset += size;
-        Ok(usize::try_from(size)
-            .map_err(|_| Error::WrongWriterState("Integer conversion failed".to_string()))?)
+        usize::try_from(size)
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "Integer conversion failed"))
     }
 
     fn flush(&mut self) -> io::Result<()> {
@@ -317,7 +317,7 @@ impl<T: ?Sized> EncryptionLayerInternal<T> {
                 key,
                 nonce,
                 chunk_cache: Cursor::new(Vec::with_capacity(usize::try_from(CHUNK_SIZE).map_err(
-                    |_| Error::WrongWriterState("Integer conversion failed".to_string()),
+                    |_| io::Error::new(io::ErrorKind::InvalidInput, "Integer conversion failed"),
                 )?)),
                 current_chunk_number: 0,
             }),
@@ -341,9 +341,9 @@ impl<T: ?Sized + Read> EncryptionLayerInternal<T> {
 
         // Load the current encrypted chunk and the corresponding tag in memory
         let mut data_and_tag = Vec::with_capacity(
-            usize::try_from(CHUNK_SIZE)
-                .map_err(|_| Error::WrongWriterState("Integer conversion failed".to_string()))?
-                + TAG_LENGTH,
+            usize::try_from(CHUNK_SIZE).map_err(|_| {
+                io::Error::new(io::ErrorKind::InvalidInput, "Integer conversion failed")
+            })? + TAG_LENGTH,
         );
         let data_and_tag_read = (&mut self.inner)
             .take(CHUNK_SIZE + TAG_LENGTH as u64)
@@ -387,10 +387,9 @@ impl<T: ?Sized + Read> EncryptionLayerInternal<T> {
         self.chunk_cache.get_mut().clear();
 
         // Load the current encrypted chunk in memory
-        let mut data = Vec::with_capacity(
-            usize::try_from(CHUNK_SIZE)
-                .map_err(|_| Error::WrongWriterState("Integer conversion failed".to_string()))?,
-        );
+        let mut data = Vec::with_capacity(usize::try_from(CHUNK_SIZE).map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidInput, "Integer conversion failed")
+        })?);
         let data_read = (&mut self.inner).take(CHUNK_SIZE).read_to_end(&mut data)?;
         // If the inner is at the end of the stream, we cannot read any
         // additional byte -> we must stop
@@ -426,8 +425,9 @@ impl<T: ?Sized + Read> EncryptionLayerInternal<T> {
         }
         // Consume at most the bytes leaving in the cache, to detect the renewal need
         let size = std::cmp::min(
-            usize::try_from(cache_to_consume)
-                .map_err(|_| Error::WrongWriterState("Integer conversion failed".to_string()))?,
+            usize::try_from(cache_to_consume).map_err(|_| {
+                io::Error::new(io::ErrorKind::InvalidInput, "Integer conversion failed")
+            })?,
             buf.len(),
         );
         self.chunk_cache
@@ -450,8 +450,9 @@ impl<T: ?Sized + Read> EncryptionLayerInternal<T> {
         }
         // Consume at most the bytes leaving in the cache, to detect the renewal need
         let size = std::cmp::min(
-            usize::try_from(cache_to_consume)
-                .map_err(|_| Error::WrongWriterState("Integer conversion failed".to_string()))?,
+            usize::try_from(cache_to_consume).map_err(|_| {
+                io::Error::new(io::ErrorKind::InvalidInput, "Integer conversion failed")
+            })?,
             buf.len(),
         );
         self.chunk_cache

@@ -113,7 +113,7 @@ impl SizesInfo {
     fn compressed_block_size_at(&self, uncompressed_pos: u64) -> Result<u32, Error> {
         let block_num = uncompressed_pos / u64::from(UNCOMPRESSED_DATA_SIZE);
         let index = usize::try_from(block_num)
-            .map_err(|_| Error::BadAPIArgument("Integer conversion failed".to_string()))?;
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Integer conversion failed"))?;
         Ok(self.compressed_sizes[index])
     }
 
@@ -242,11 +242,11 @@ impl<'a, R: 'a + Read> CompressionLayerReader<'a, R> {
 
                 // Get the uncompressed block size
                 let block_num = uncompressed_pos / u64::from(UNCOMPRESSED_DATA_SIZE);
-                Ok(sizes_info.uncompressed_block_size_at(
-                    usize::try_from(block_num).map_err(|_| {
-                        Error::BadAPIArgument("Integer conversion failed".to_string())
-                    })?,
-                ))
+                Ok(
+                    sizes_info.uncompressed_block_size_at(usize::try_from(block_num).map_err(
+                        |_| io::Error::new(io::ErrorKind::InvalidData, "Integer conversion failed"),
+                    )?),
+                )
             }
             None => Err(Error::MissingMetadata),
         }
@@ -283,7 +283,7 @@ impl<'a, R: 'a + Read> CompressionLayerReader<'a, R> {
                 let start_position = compressed_sizes
                     .iter()
                     .take(usize::try_from(block_num).map_err(|_| {
-                        Error::BadAPIArgument("Integer conversion failed".to_string())
+                        io::Error::new(io::ErrorKind::InvalidData, "Integer conversion failed")
                     })?)
                     .map(|size| u64::from(*size))
                     .sum();
