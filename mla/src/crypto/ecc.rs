@@ -42,7 +42,7 @@ impl MultiRecipientPersistent {
 }
 
 /// Perform ECIES with several recipients, to share a common `key`, and return a
-/// serializable structure (Key-wrapping made thanks to AesGcm256)
+/// serializable structure (Key-wrapping made thanks to `AesGcm256`)
 pub(crate) fn store_key_for_multi_recipients<T>(
     recipients: &[PublicKey],
     key: &[u8; KEY_SIZE],
@@ -59,7 +59,7 @@ where
 
     let public = PublicKey::from(&ephemeral);
     let mut encrypted_keys = Vec::new();
-    for recipient in recipients.iter() {
+    for recipient in recipients {
         // Perform an ECIES to obtain the common key
         let dh_key = derive_key(&ephemeral, recipient)?;
 
@@ -94,7 +94,7 @@ pub(crate) fn retrieve_key(
     let key = derive_key(private_key, &PublicKey::from(persist.public))?;
 
     // Try to find the correct key using the tag validation
-    for keytag in persist.encrypted_keys.iter() {
+    for keytag in &persist.encrypted_keys {
         let mut cipher = aesgcm::AesGcm256::new(&key, ECIES_NONCE, b"")?;
         let mut data = [0u8; KEY_SIZE];
         data.copy_from_slice(&keytag.key);
@@ -154,7 +154,7 @@ mod tests {
         assert_eq!(persist.count_keys(), 5);
 
         // Ensure each recipient can retrieve the shared key
-        for private_key in recipients_priv.iter() {
+        for private_key in &recipients_priv {
             let ret_key = retrieve_key(&persist, private_key).unwrap().unwrap();
             assert_eq!(ret_key, key);
         }

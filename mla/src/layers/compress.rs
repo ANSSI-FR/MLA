@@ -2,15 +2,16 @@ use std::fmt;
 use std::io::{self, Read, Seek, SeekFrom, Take, Write};
 
 use bincode::Options;
-use brotli::writer::StandardAlloc;
 use brotli::BrotliState;
+use brotli::writer::StandardAlloc;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use serde::{Deserialize, Serialize};
+use std::convert::TryFrom;
 
 use crate::layers::traits::{
     InnerWriterTrait, InnerWriterType, LayerFailSafeReader, LayerReader, LayerWriter,
 };
-use crate::{Error, BINCODE_MAX_DESERIALIZE};
+use crate::{BINCODE_MAX_DESERIALIZE, Error};
 
 use crate::config::{ArchiveWriterConfig, ConfigResult};
 use crate::errors::ConfigError;
@@ -42,7 +43,7 @@ pub struct CompressionConfig {
 
 impl std::default::Default for CompressionConfig {
     fn default() -> Self {
-        CompressionConfig {
+        Self {
             compression_level: DEFAULT_COMPRESSION_LEVEL,
         }
     }
@@ -51,7 +52,7 @@ impl std::default::Default for CompressionConfig {
 impl ArchiveWriterConfig {
     /// Set the compression level
     /// compression level (0-11); bigger values cause denser, but slower compression
-    pub fn with_compression_level(&mut self, compression_level: u32) -> ConfigResult {
+    pub const fn with_compression_level(&mut self, compression_level: u32) -> ConfigResult {
         if compression_level > 11 {
             Err(ConfigError::CompressionLevelOutOfRange)
         } else {
@@ -83,9 +84,9 @@ enum CompressionLayerReaderState<R: Read> {
 impl<R: Read> fmt::Debug for CompressionLayerReaderState<R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            CompressionLayerReaderState::Ready(_inner) => write!(f, "Ready"),
-            CompressionLayerReaderState::InData { .. } => write!(f, "InData"),
-            CompressionLayerReaderState::Empty => write!(f, "Empty"),
+            Self::Ready(_inner) => write!(f, "Ready"),
+            Self::InData { .. } => write!(f, "InData"),
+            Self::Empty => write!(f, "Empty"),
         }
     }
 }
@@ -109,20 +110,22 @@ impl SizesInfo {
     }
 
     /// Get the compressed block at position `uncompressed_pos`
-    fn compressed_block_size_at(&self, uncompressed_pos: u64) -> u32 {
-        let block_num = uncompressed_pos / (UNCOMPRESSED_DATA_SIZE as u64);
-        self.compressed_sizes[block_num as usize]
+    fn compressed_block_size_at(&self, uncompressed_pos: u64) -> Result<u32, Error> {
+        let block_num = uncompressed_pos / u64::from(UNCOMPRESSED_DATA_SIZE);
+        let index = usize::try_from(block_num)
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Integer conversion failed"))?;
+        Ok(self.compressed_sizes[index])
     }
 
     /// Maximum uncompressed available position
     fn max_uncompressed_pos(&self) -> u64 {
-        (self.compressed_sizes.len() as u64 - 1) * UNCOMPRESSED_DATA_SIZE as u64
-            + self.last_block_size as u64
+        (self.compressed_sizes.len() as u64 - 1) * u64::from(UNCOMPRESSED_DATA_SIZE)
+            + u64::from(self.last_block_size)
     }
 
     // Sum the compressed_sizes
     pub fn get_compressed_size(&self) -> u64 {
-        self.compressed_sizes.iter().map(|v| *v as u64).sum()
+        self.compressed_sizes.iter().map(|v| u64::from(*v)).sum()
     }
 }
 
@@ -153,14 +156,12 @@ pub struct CompressionLayerReader<'a, R: 'a + Read> {
 impl<R: Read> CompressionLayerReaderState<R> {
     fn into_inner(self) -> R {
         match self {
-            CompressionLayerReaderState::Ready(inner) => inner,
-            CompressionLayerReaderState::InData { decompressor, .. } => {
-                decompressor.into_inner().into_inner()
-            }
+            Self::Ready(inner) => inner,
+            Self::InData { decompressor, .. } => decompressor.into_inner().into_inner(),
             // `panic!` explicitly called to avoid propagating an error which
             // must never happens (ie, calling `into_inner` in an inconsistent
             // internal state)
-            _ => panic!("[Reader] Empty type to inner is impossible"),
+            Self::Empty => panic!("[Reader] Empty type to inner is impossible"),
         }
     }
 }
@@ -178,13 +179,9 @@ impl<'a, R: 'a + Read> CompressionLayerReader<'a, R> {
     /// Returns whether `uncompressed_pos` is in the data stream
     /// If no index is used, always return `true`
     fn pos_in_stream(&self, uncompressed_pos: u64) -> bool {
-        match &self.sizes_info {
-            Some(sizes_info) => {
-                let pos_max = sizes_info.max_uncompressed_pos();
-                uncompressed_pos < pos_max
-            }
-            None => true,
-        }
+        self.sizes_info
+            .as_ref()
+            .is_none_or(|sizes_info| uncompressed_pos < sizes_info.max_uncompressed_pos())
     }
 
     /// Instantiate a new decompressor at position `uncompressed_pos`
@@ -195,7 +192,7 @@ impl<'a, R: 'a + Read> CompressionLayerReader<'a, R> {
         uncompressed_pos: u64,
     ) -> Result<brotli::Decompressor<Take<S>>, Error> {
         // Ensure it's a starting position
-        if uncompressed_pos % (UNCOMPRESSED_DATA_SIZE as u64) != 0 {
+        if uncompressed_pos % u64::from(UNCOMPRESSED_DATA_SIZE) != 0 {
             return Err(Error::BadAPIArgument(
                 "[new_decompressor_at] not a starting position".to_string(),
             ));
@@ -211,7 +208,7 @@ impl<'a, R: 'a + Read> CompressionLayerReader<'a, R> {
             Some(sizes_info) => {
                 // Use index for faster decompression
                 let compressed_block_size =
-                    sizes_info.compressed_block_size_at(uncompressed_pos) as usize;
+                    sizes_info.compressed_block_size_at(uncompressed_pos)? as usize;
                 Ok(brotli::Decompressor::new(
                     // Make the Decompressor work only on the compressed block's bytes, no more
                     inner.take(compressed_block_size as u64),
@@ -227,7 +224,7 @@ impl<'a, R: 'a + Read> CompressionLayerReader<'a, R> {
     /// `uncompressed_pos` must be a compressed block's starting position
     fn uncompressed_block_size_at(&self, uncompressed_pos: u64) -> Result<u32, Error> {
         // Ensure it's a starting position
-        if uncompressed_pos % (UNCOMPRESSED_DATA_SIZE as u64) != 0 {
+        if uncompressed_pos % u64::from(UNCOMPRESSED_DATA_SIZE) != 0 {
             return Err(Error::BadAPIArgument(
                 "[uncompressed_block_size_at] not a starting position".to_string(),
             ));
@@ -244,8 +241,12 @@ impl<'a, R: 'a + Read> CompressionLayerReader<'a, R> {
                 // Use index for faster decompression
 
                 // Get the uncompressed block size
-                let block_num = uncompressed_pos / (UNCOMPRESSED_DATA_SIZE as u64);
-                Ok(sizes_info.uncompressed_block_size_at(block_num as usize))
+                let block_num = uncompressed_pos / u64::from(UNCOMPRESSED_DATA_SIZE);
+                Ok(
+                    sizes_info.uncompressed_block_size_at(usize::try_from(block_num).map_err(
+                        |_| io::Error::new(io::ErrorKind::InvalidData, "Integer conversion failed"),
+                    )?),
+                )
             }
             None => Err(Error::MissingMetadata),
         }
@@ -260,7 +261,7 @@ impl<'a, R: 'a + Read> CompressionLayerReader<'a, R> {
         uncompressed_pos: u64,
     ) -> Result<(), Error> {
         // Ensure it's a starting position
-        if uncompressed_pos % (UNCOMPRESSED_DATA_SIZE as u64) != 0 {
+        if uncompressed_pos % u64::from(UNCOMPRESSED_DATA_SIZE) != 0 {
             return Err(Error::BadAPIArgument(
                 "[sync_inner_with_uncompressed_pos] not a starting position".to_string(),
             ));
@@ -273,7 +274,7 @@ impl<'a, R: 'a + Read> CompressionLayerReader<'a, R> {
         }
 
         // Find the right block
-        let block_num = uncompressed_pos / (UNCOMPRESSED_DATA_SIZE as u64);
+        let block_num = uncompressed_pos / u64::from(UNCOMPRESSED_DATA_SIZE);
         match &self.sizes_info {
             Some(SizesInfo {
                 compressed_sizes, ..
@@ -281,8 +282,10 @@ impl<'a, R: 'a + Read> CompressionLayerReader<'a, R> {
                 // Move the underlayer at the start of the block
                 let start_position = compressed_sizes
                     .iter()
-                    .take(block_num as usize)
-                    .map(|size| *size as u64)
+                    .take(usize::try_from(block_num).map_err(|_| {
+                        io::Error::new(io::ErrorKind::InvalidData, "Integer conversion failed")
+                    })?)
+                    .map(|size| u64::from(*size))
                     .sum();
                 inner.seek(SeekFrom::Start(start_position))?;
             }
@@ -311,7 +314,7 @@ impl<'a, R: 'a + InnerReaderTrait> LayerReader<'a, R> for CompressionLayerReader
 
                 // Read the footer: [SizesInfo][SizesInfo length, on 4 bytes]
                 let pos = inner.seek(SeekFrom::End(-4))?;
-                let len = inner.read_u32::<LittleEndian>()? as u64;
+                let len = u64::from(inner.read_u32::<LittleEndian>()?);
 
                 // Read SizesInfo
                 inner.seek(SeekFrom::Start(pos - len))?;
@@ -381,7 +384,10 @@ impl<'a, R: 'a + Read + Seek> Read for CompressionLayerReader<'a, R> {
                 let read_add = decompressor.read(&mut buf[..size])?;
                 self.underlayer_pos += read_add as u64;
                 self.state = CompressionLayerReaderState::InData {
-                    read: read + read_add as u32,
+                    read: read
+                        + u32::try_from(read_add).map_err(|_| {
+                            io::Error::new(io::ErrorKind::InvalidData, "Integer conversion failed")
+                        })?,
                     uncompressed_size,
                     decompressor,
                 };
@@ -406,7 +412,7 @@ impl<R: Read + Seek> Seek for CompressionLayerReader<'_, R> {
                 match pos {
                     SeekFrom::Start(pos) => {
                         // Find the right block
-                        let inside_block = pos % (UNCOMPRESSED_DATA_SIZE as u64);
+                        let inside_block = pos % u64::from(UNCOMPRESSED_DATA_SIZE);
                         let rounded_pos = pos - inside_block;
 
                         // Move the underlayer at the start of the block
@@ -422,7 +428,12 @@ impl<R: Read + Seek> Seek for CompressionLayerReader<'_, R> {
                         // Move forward inside the block to reach the expected position
                         io::copy(&mut (&mut decompressor).take(inside_block), &mut io::sink())?;
                         self.state = CompressionLayerReaderState::InData {
-                            read: inside_block as u32,
+                            read: u32::try_from(inside_block).map_err(|_| {
+                                io::Error::new(
+                                    io::ErrorKind::InvalidData,
+                                    "Integer conversion failed",
+                                )
+                            })?,
                             uncompressed_size,
                             decompressor: Box::new(decompressor),
                         };
@@ -433,8 +444,28 @@ impl<R: Read + Seek> Seek for CompressionLayerReader<'_, R> {
                         // Get the position and do nothing
                         if pos == 0 {
                             Ok(self.underlayer_pos)
+                        } else if let Ok(pos_i64) = i64::try_from(self.underlayer_pos) {
+                            let new_pos = pos + pos_i64;
+                            if new_pos >= 0 {
+                                self.seek(SeekFrom::Start(u64::try_from(new_pos).map_err(
+                                    |_| {
+                                        io::Error::new(
+                                            io::ErrorKind::InvalidInput,
+                                            "Resulting position is negative",
+                                        )
+                                    },
+                                )?))
+                            } else {
+                                Err(io::Error::new(
+                                    io::ErrorKind::InvalidInput,
+                                    "Resulting position is negative",
+                                ))
+                            }
                         } else {
-                            self.seek(SeekFrom::Start((pos + self.underlayer_pos as i64) as u64))
+                            Err(io::Error::new(
+                                io::ErrorKind::InvalidInput,
+                                "Invalid underlayer_pos value",
+                            ))
                         }
 
                         // TODO: Possible optimization:
@@ -449,7 +480,22 @@ impl<R: Read + Seek> Seek for CompressionLayerReader<'_, R> {
 
                         let end_pos = self.sizes_info.as_ref().unwrap().max_uncompressed_pos();
                         let distance_from_end = -pos;
-                        self.seek(SeekFrom::Start(end_pos - distance_from_end as u64))
+                        if distance_from_end >= 0 {
+                            self.seek(SeekFrom::Start(
+                                end_pos
+                                    - u64::try_from(distance_from_end).map_err(|_| {
+                                        io::Error::new(
+                                            io::ErrorKind::InvalidInput,
+                                            "Invalid distance_from_end value",
+                                        )
+                                    })?,
+                            ))
+                        } else {
+                            Err(io::Error::new(
+                                io::ErrorKind::InvalidInput,
+                                "Negative seek offset",
+                            ))
+                        }
                     }
                 }
             }
@@ -467,7 +513,7 @@ struct WriterWithCount<W: Write> {
 }
 
 impl<W: Write> WriterWithCount<W> {
-    fn new(inner: W) -> Self {
+    const fn new(inner: W) -> Self {
         Self { inner, pos: 0 }
     }
 
@@ -479,7 +525,13 @@ impl<W: Write> WriterWithCount<W> {
 impl<W: Write> Write for WriterWithCount<W> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.inner.write(buf).inspect(|&i| {
-            self.pos += i as u32;
+            match u32::try_from(i) {
+                Ok(value) => self.pos += value,
+                Err(_) => {
+                    // Handle the error explicitly
+                    let _ = io::Error::new(io::ErrorKind::InvalidData, "Integer conversion failed");
+                }
+            }
         })
     }
 
@@ -499,8 +551,8 @@ enum CompressionLayerWriterState<W: Write> {
     Empty,
 }
 
-/// Compression layer is made of independent CompressedBlock, ending by an index for seekable accesses
-/// [CompressedBlock][CompressedBlock]...[CompressedBlock][Index]
+/// Compression layer is made of independent `CompressedBlock`, ending by an index for seekable accesses
+/// [`CompressedBlock`][CompressedBlock]...[`CompressedBlock`][Index]
 ///
 /// Compression is made of nested independent compressed block of a fixed
 /// uncompressed size
@@ -514,7 +566,7 @@ enum CompressionLayerWriterState<W: Write> {
 ///
 /// Cons:
 /// * if the index is lost, a slow decompression with a block size of 1 is
-///   needed to found the CompressedBlock boundaries
+///   needed to found the `CompressedBlock` boundaries
 pub struct CompressionLayerWriter<'a, W: 'a + InnerWriterTrait> {
     state: CompressionLayerWriterState<InnerWriterType<'a, W>>,
     /// Ordered list of compressed size of block of `UNCOMPRESSED_DATA_SIZE`
@@ -531,23 +583,18 @@ pub struct CompressionLayerWriter<'a, W: 'a + InnerWriterTrait> {
 impl<W: InnerWriterTrait> CompressionLayerWriterState<W> {
     fn into_inner(self) -> W {
         match self {
-            CompressionLayerWriterState::Ready(inner) => inner,
-            CompressionLayerWriterState::InData(_written, compress) => {
-                compress.into_inner().into_inner()
-            }
+            Self::Ready(inner) => inner,
+            Self::InData(_written, compress) => compress.into_inner().into_inner(),
             // `panic!` explicitly called to avoid propagating an error which
             // must never happens (ie, calling `into_inner` in an inconsistent
             // internal state)
-            _ => panic!("[Writer] Empty type to inner is impossible"),
+            Self::Empty => panic!("[Writer] Empty type to inner is impossible"),
         }
     }
 }
 
 impl<'a, W: 'a + InnerWriterTrait> CompressionLayerWriter<'a, W> {
-    pub fn new(
-        inner: InnerWriterType<'a, W>,
-        config: &CompressionConfig,
-    ) -> CompressionLayerWriter<'a, W> {
+    pub fn new(inner: InnerWriterType<'a, W>, config: &CompressionConfig) -> Self {
         Self {
             state: CompressionLayerWriterState::Ready(inner),
             compressed_sizes: Vec::new(),
@@ -603,15 +650,17 @@ impl<'a, W: 'a + InnerWriterTrait> LayerWriter<'a, W> for CompressionLayerWriter
             .is_err()
         {
             return Err(Error::SerializationError);
-        };
+        }
         match bincode::serialized_size(&sinfo) {
             Ok(size) => {
-                inner.write_u32::<LittleEndian>(size as u32)?;
+                inner.write_u32::<LittleEndian>(
+                    u32::try_from(size).map_err(|_| Error::SerializationError)?,
+                )?;
             }
             Err(_) => {
                 return Err(Error::SerializationError);
             }
-        };
+        }
         self.compressed_sizes = sinfo.compressed_sizes;
 
         // Recursive call
@@ -638,7 +687,10 @@ impl<'a, W: 'a + InnerWriterTrait> Write for CompressionLayerWriter<'a, W> {
                 );
                 let size = std::cmp::min(UNCOMPRESSED_DATA_SIZE as usize, buf.len());
                 let written = compress.write(&buf[..size])?;
-                self.state = CompressionLayerWriterState::InData(written as u32, Box::new(compress));
+                self.state = CompressionLayerWriterState::InData(
+                    u32::try_from(written).map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Integer conversion failed"))?,
+                    Box::new(compress),
+                );
                 Ok(written)
             }
             CompressionLayerWriterState::InData(written, mut compress) => {
@@ -657,7 +709,12 @@ impl<'a, W: 'a + InnerWriterTrait> Write for CompressionLayerWriter<'a, W> {
                 let size = std::cmp::min((UNCOMPRESSED_DATA_SIZE - written) as usize, buf.len());
                 let written_add = compress.write(&buf[..size])?;
                 self.state =
-                    CompressionLayerWriterState::InData(written + written_add as u32, compress);
+                    CompressionLayerWriterState::InData(
+                        written + u32::try_from(written_add).map_err(|_| {
+                            io::Error::new(io::ErrorKind::InvalidData, "Integer conversion failed")
+                        })?,
+                        compress,
+                    );
                 Ok(written_add)
             }
             CompressionLayerWriterState::Empty => {
@@ -694,8 +751,8 @@ enum CompressionLayerFailSafeReaderState<R: Read> {
         ///     - if there is still data to decompress, go to 1.
         ///     - if this is the end of the stream, continue to 3.
         /// 3. the decompressor may have read too many byte, ie. `[end of stream n-1][start of stream n]`
-        ///                                                                          ^                 ^
-        ///                                                                     input_offset    last read position
+        ///    `                                                                     ^                 ^
+        ///    `                                                                 `input_offset`    last read position
         /// 4. rewind, using the cache, to `input_offset`
         ///
         /// A cache must be used, as the source is `Read` but not `Seek`.
@@ -712,13 +769,13 @@ enum CompressionLayerFailSafeReaderState<R: Read> {
         /// ```
         /// Data read from the source, not yet used
         /// Invariant:
-        ///     - cache.len() == FAIL_SAFE_BUFFER_SIZE (cache always allocated)
+        ///     - `cache.len() == FAIL_SAFE_BUFFER_SIZE` (cache always allocated)
         cache: Vec<u8>,
         /// Bytes valid in the cache : [0..`cache_filled_offset`[ (0 -> no valid data)
         cache_filled_offset: usize,
         /// Next offset to read from the cache
         /// Invariant:
-        ///     - `read_offset` <= `cache_filled_offset`
+        ///     - `read_offset <= cache_filled_offset`
         read_offset: usize,
         /// Internal decompressor state
         state: Box<BrotliState<StandardAlloc, StandardAlloc, StandardAlloc>>,
@@ -734,12 +791,11 @@ enum CompressionLayerFailSafeReaderState<R: Read> {
 impl<R: Read> CompressionLayerFailSafeReaderState<R> {
     fn into_inner(self) -> R {
         match self {
-            CompressionLayerFailSafeReaderState::Ready(inner) => inner,
-            CompressionLayerFailSafeReaderState::InData { inner, .. } => inner,
+            Self::InData { inner, .. } | Self::Ready(inner) => inner,
             // `panic!` explicitly called to avoid propagating an error which
             // must never happens (ie, calling `into_inner` in an inconsistent
             // internal state)
-            _ => panic!("[Reader] Empty type to inner is impossible"),
+            Self::Empty => panic!("[Reader] Empty type to inner is impossible"),
         }
     }
 }
@@ -773,7 +829,7 @@ impl<'a, R: 'a + Read> Read for CompressionLayerFailSafeReader<'a, R> {
     ///
     /// Even in the best configuration, when the inner layer is not broken, the
     /// decompression will fail while reading not-compressed data such as
-    /// CompressionLayerReader footer
+    /// `CompressionLayerReader` footer
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         // Use this mem::replace trick to be able to get back the compressor
         // inner and freely move from CompressionLayerReaderState to others
@@ -832,10 +888,9 @@ impl<'a, R: 'a + Read> Read for CompressionLayerFailSafeReader<'a, R> {
                                     io::ErrorKind::UnexpectedEof,
                                     "No more data from the inner layer",
                                 ));
-                            } else {
-                                // No more data available but not in a stream
-                                return Ok(0);
                             }
+                            // No more data available but not in a stream
+                            return Ok(0);
                         }
                         cache_filled_offset += read;
                     }
@@ -895,14 +950,18 @@ impl<'a, R: 'a + Read> Read for CompressionLayerFailSafeReader<'a, R> {
                     brotli::BrotliResult::NeedsMoreInput => {
                         // Bytes may have been read and produced
                         read_offset += input_offset;
-                        uncompressed_read += output_offset as u32;
+                        uncompressed_read += u32::try_from(output_offset).map_err(|_| {
+                            io::Error::new(io::ErrorKind::InvalidData, "Integer conversion failed")
+                        })?;
 
                         Ok(output_offset)
                     }
                     brotli::BrotliResult::NeedsMoreOutput => {
                         // Bytes may have been read and produced
                         read_offset += input_offset;
-                        uncompressed_read += output_offset as u32;
+                        uncompressed_read += u32::try_from(output_offset).map_err(|_| {
+                            io::Error::new(io::ErrorKind::InvalidData, "Integer conversion failed")
+                        })?;
 
                         Ok(output_offset)
                     }
@@ -939,8 +998,8 @@ mod tests {
 
     use crate::layers::raw::{RawLayerFailSafeReader, RawLayerReader, RawLayerWriter};
     use brotli::writer::StandardAlloc;
-    use rand::distr::{Alphanumeric, Distribution, StandardUniform};
     use rand::SeedableRng;
+    use rand::distr::{Alphanumeric, Distribution, StandardUniform};
     use std::io::{Cursor, Read, Write};
     use std::time::Instant;
 
@@ -984,7 +1043,7 @@ mod tests {
         let mut reader = brotli::Decompressor::new(&mut src, 0);
         let mut buf = Vec::new();
         reader.read_to_end(&mut buf).unwrap();
-        println!("{:?}", buf);
+        println!("{buf:?}");
         fake_data.extend(fake_data2);
         assert_eq!(fake_data, buf);
     }
@@ -1044,19 +1103,22 @@ mod tests {
         let mut output_offset = 0;
         let mut written = 0;
 
-        match brotli::BrotliDecompressStream(
-            &mut available_in,
-            &mut input_offset,
-            src.get_ref(),
-            &mut available_out,
-            &mut output_offset,
-            &mut buf,
-            &mut written,
-            &mut brotli_state,
+        if matches!(
+            brotli::BrotliDecompressStream(
+                &mut available_in,
+                &mut input_offset,
+                src.get_ref(),
+                &mut available_out,
+                &mut output_offset,
+                &mut buf,
+                &mut written,
+                &mut brotli_state,
+            ),
+            brotli::BrotliResult::ResultSuccess
         ) {
-            brotli::BrotliResult::ResultSuccess => {}
-            _ => panic!(),
-        };
+        } else {
+            panic!()
+        }
 
         // Ensure the decompression is correct
         assert_eq!(written, buf.len());
@@ -1270,15 +1332,19 @@ mod tests {
             assert_eq!(pos, (UNCOMPRESSED_DATA_SIZE + 4).into());
             let mut buf = [0u8; 5];
             decomp.read_exact(&mut buf).unwrap();
-            assert_eq!(&buf, &bytes[pos as usize..(pos + 5) as usize]);
-
+            assert_eq!(
+                &buf,
+                &bytes[usize::try_from(pos).unwrap()..usize::try_from(pos + 5).unwrap()]
+            );
             // Seek relatively (same block)
             let pos = decomp.seek(SeekFrom::Current(2)).unwrap();
             assert_eq!(pos, (UNCOMPRESSED_DATA_SIZE + 4 + 5 + 2).into());
             let mut buf = [0u8; 5];
             decomp.read_exact(&mut buf).unwrap();
-            assert_eq!(&buf, &bytes[pos as usize..(pos + 5) as usize]);
-
+            assert_eq!(
+                &buf,
+                &bytes[usize::try_from(pos).unwrap()..usize::try_from(pos + 5).unwrap()]
+            );
             // Seek relatively (next block)
             let pos = decomp
                 .seek(SeekFrom::Current(UNCOMPRESSED_DATA_SIZE.into()))
@@ -1286,21 +1352,28 @@ mod tests {
             assert_eq!(pos, (UNCOMPRESSED_DATA_SIZE * 2 + 4 + 5 + 2 + 5).into());
             let mut buf = [0u8; 5];
             decomp.read_exact(&mut buf).unwrap();
-            assert_eq!(&buf, &bytes[pos as usize..(pos + 5) as usize]);
-
+            assert_eq!(
+                &buf,
+                &bytes[usize::try_from(pos).unwrap()..usize::try_from(pos + 5).unwrap()]
+            );
             // Seek relatively (backward)
             let pos = decomp.seek(SeekFrom::Current(-5)).unwrap();
             assert_eq!(pos, (UNCOMPRESSED_DATA_SIZE * 2 + 4 + 5 + 2 + 5).into());
             let mut buf = [0u8; 5];
             decomp.read_exact(&mut buf).unwrap();
-            assert_eq!(&buf, &bytes[pos as usize..(pos + 5) as usize]);
-
+            assert_eq!(
+                &buf,
+                &bytes[usize::try_from(pos).unwrap()..usize::try_from(pos + 5).unwrap()]
+            );
             // Seek from end
             let pos = decomp.seek(SeekFrom::End(-5)).unwrap();
             assert_eq!(pos, (SIZE - 5) as u64);
             let mut buf = [0u8; 5];
             decomp.read_exact(&mut buf).unwrap();
-            assert_eq!(&buf, &bytes[pos as usize..(pos + 5) as usize]);
+            assert_eq!(
+                &buf,
+                &bytes[usize::try_from(pos).unwrap()..usize::try_from(pos + 5).unwrap()]
+            );
         }
     }
 
@@ -1319,11 +1392,13 @@ mod tests {
 
         assert_eq!(
             sizes_info.max_uncompressed_pos(),
-            2 * UNCOMPRESSED_DATA_SIZE as u64 + 42
+            2 * u64::from(UNCOMPRESSED_DATA_SIZE) + 42
         );
 
         assert_eq!(
-            sizes_info.compressed_block_size_at(UNCOMPRESSED_DATA_SIZE as u64 + 1),
+            sizes_info
+                .compressed_block_size_at(u64::from(UNCOMPRESSED_DATA_SIZE) + 1)
+                .unwrap(),
             2
         );
     }
@@ -1373,11 +1448,11 @@ mod tests {
         decomp.initialize().unwrap();
         decomp.read_to_end(&mut buf_out).unwrap();
         let buf2 = Cursor::new(file2.as_slice());
-        let mut buf2_out = Vec::new();
+        let mut buf_out2 = Vec::new();
         let mut decomp =
             Box::new(CompressionLayerReader::new(Box::new(RawLayerReader::new(buf2))).unwrap());
         decomp.initialize().unwrap();
-        decomp.read_to_end(&mut buf2_out).unwrap();
-        assert_eq!(buf_out, buf2_out);
+        decomp.read_to_end(&mut buf_out2).unwrap();
+        assert_eq!(buf_out, buf_out2);
     }
 }

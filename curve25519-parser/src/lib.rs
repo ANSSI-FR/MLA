@@ -1,10 +1,13 @@
-use der_parser::der::*;
+use der_parser::der::{
+    DerObject, Tag, parse_der_bitstring, parse_der_container, parse_der_integer,
+    parse_der_octetstring, parse_der_oid,
+};
 use der_parser::error::BerError;
 
 use der_parser::oid::Oid;
-use der_parser::*;
-use nom::combinator::{complete, eof};
+use der_parser::{nom, oid};
 use nom::IResult;
+use nom::combinator::{complete, eof};
 
 use std::convert::{From, TryInto};
 
@@ -18,8 +21,8 @@ use rand_core::{CryptoRng, RngCore};
 
 use std::fmt;
 
-const ED_25519_OID: Oid<'static> = oid!(1.3.101 .112);
-const X_25519_OID: Oid<'static> = oid!(1.3.101 .110);
+const ED_25519_OID: Oid<'static> = oid!(1.3.101.112);
+const X_25519_OID: Oid<'static> = oid!(1.3.101.110);
 
 // ---- Error handling ----
 
@@ -37,19 +40,19 @@ pub enum Curve25519ParserError {
 }
 impl From<der_parser::error::BerError> for Curve25519ParserError {
     fn from(error: der_parser::error::BerError) -> Self {
-        Curve25519ParserError::BerError(error)
+        Self::BerError(error)
     }
 }
 
 impl From<pem::PemError> for Curve25519ParserError {
     fn from(error: pem::PemError) -> Self {
-        Curve25519ParserError::PemError(error)
+        Self::PemError(error)
     }
 }
 
 impl From<nom::Err<der_parser::error::BerError>> for Curve25519ParserError {
     fn from(error: nom::Err<der_parser::error::BerError>) -> Self {
-        Curve25519ParserError::NomError(error)
+        Self::NomError(error)
     }
 }
 
@@ -77,7 +80,11 @@ impl fmt::Display for Curve25519ParserError {
 ///     Seq(
 ///         OID(1.3.101.112), // ED25519 OR OID(1.3.101.110), // X25519
 ///     ),
-///     OctetString(TAG_OCTETSTRING + LENGTH + DATA),
+///     `OctetString`(
+///         `TAG_OCTETSTRING` +
+///         LENGTH +
+///         DATA
+///     ),
 /// )
 ///
 /// From RFC8032, to obtain the corresponding `x25519_dalek::StaticSecret` from an ed25519 key:
@@ -165,7 +172,7 @@ pub fn parse_openssl_25519_privkey_der(data: &[u8]) -> Result<StaticSecret, Curv
 /// From RFC8032 and OpenSSL format, to obtain the corresponding
 /// `x25519_dalek::PublicKey`, which internally use the Montgomery form
 /// from an Ed25519 key:
-///   to_montgomery(decompress_edwardspoint(DATA))
+///   `to_montgomery(decompress_edwardspoint(DATA))`
 
 #[derive(Debug, PartialEq)]
 struct DerEd25519PublicHeader<'a> {

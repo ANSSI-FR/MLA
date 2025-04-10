@@ -58,7 +58,8 @@ using MLAArchiveHandle = void*;
 
 using MLAArchiveFileHandle = void*;
 
-/// Implemented by the developper. Read between 0 and buffer_len into buffer.
+/// Implemented by the developper. Read between 0 and `buffer_len` into buffer.
+///
 /// If successful, returns 0 and sets the number of bytes actually read to its last
 /// parameter. Otherwise, returns an error code on failure.
 using MlaReadCallback = int32_t(*)(uint8_t *buffer,
@@ -97,25 +98,27 @@ extern "C" {
 MLAStatus mla_config_default_new(MLAConfigHandle *handle_out);
 
 /// Appends the given public key(s) to an existing given configuration
-/// (referenced by the handle returned by mla_config_default_new()).
+/// (referenced by the handle returned by `mla_config_default_new()`).
 MLAStatus mla_config_add_public_keys(MLAConfigHandle config, const char *public_keys);
 
 /// Sets the compression level in an existing given configuration
-/// (referenced by the handle returned by mla_config_default_new()).
+/// (referenced by the handle returned by `mla_config_default_new()`).
+///
 /// Currently this level can only be an integer N with 0 <= N <= 11,
 /// and bigger values cause denser but slower compression.
 MLAStatus mla_config_set_compression_level(MLAConfigHandle config, uint32_t level);
 
-/// Create an empty ReaderConfig
+/// Create an empty `ReaderConfig`
 MLAStatus mla_reader_config_new(MLAConfigHandle *handle_out);
 
 /// Appends the given private key to an existing given configuration
-/// (referenced by the handle returned by mla_reader_config_new()).
+/// (referenced by the handle returned by `mla_reader_config_new()`).
 MLAStatus mla_reader_config_add_private_key(MLAConfigHandle config, const char *private_key);
 
 /// Open a new MLA archive using the given configuration, which is consumed and freed
-/// (its handle cannot be reused to create another archive). The archive is streamed
-/// through the write_callback, and flushed at least at the end when the last byte is
+/// (its handle cannot be reused to create another archive).
+///
+/// The archive is streamed through the `write_callback`, and flushed at least at the end when the last byte is
 /// written. The context pointer can be used to hold any information, and is passed
 /// as an argument when any of the two callbacks are called.
 MLAStatus mla_archive_new(MLAConfigHandle *config,
@@ -125,42 +128,48 @@ MLAStatus mla_archive_new(MLAConfigHandle *config,
                           MLAArchiveHandle *handle_out);
 
 /// Open a new file in the archive identified by the handle returned by
-/// mla_archive_new(). The given name must be a unique NULL-terminated string.
-/// Returns MLA_STATUS_SUCCESS on success, or an error code.
+/// `mla_archive_new()`.
+///
+/// The given name must be a unique NULL-terminated string.
+/// Returns `MLA_STATUS_SUCCESS` on success, or an error code.
 MLAStatus mla_archive_file_new(MLAArchiveHandle archive,
                                const char *file_name,
                                MLAArchiveFileHandle *handle_out);
 
 /// Append data to the end of an already opened file identified by the
-/// handle returned by mla_archive_file_new(). Returns MLA_STATUS_SUCCESS on
+/// handle returned by `mla_archive_file_new()`. Returns `MLA_STATUS_SUCCESS` on
 /// success, or an error code.
 MLAStatus mla_archive_file_append(MLAArchiveHandle archive,
                                   MLAArchiveFileHandle file,
                                   const uint8_t *buffer,
                                   uint64_t length);
 
-/// Flush any data to be written buffered in MLA to the write_callback,
-/// then calls the flush_callback given during archive initialization.
-/// Returns MLA_STATUS_SUCCESS on success, or an error code.
+/// Flush any data to be written buffered in MLA to the `write_callback`,
+/// then calls the `flush_callback` given during archive initialization.
+/// Returns `MLA_STATUS_SUCCESS` on success, or an error code.
 MLAStatus mla_archive_flush(MLAArchiveHandle archive);
 
 /// Close the given file, which queues its End-Of-File marker and integrity
-/// checks to be written to the callback. Must be called before closing the
-/// archive. The file handle must be passed as a mutable reference so it is
+/// checks to be written to the callback.
+///
+/// Must be called before closing the archive. The file handle must be passed as a mutable reference so it is
 /// cleared and cannot be reused after free by accident. Returns
-/// MLA_STATUS_SUCCESS on success, or an error code.
-MLAStatus mla_archive_file_close(MLAArchiveHandle archive, MLAArchiveFileHandle *file);
+/// `MLA_STATUS_SUCCESS` on success, or an error code.
+MLAStatus mla_archive_file_close(MLAArchiveHandle archive,
+                                 MLAArchiveFileHandle *file);
 
 /// Close the given archive (must only be called after all files have been
-/// closed), flush the output and free any allocated resource. The archive
-/// handle must be passed as a mutable reference so it is cleared and
-/// cannot be reused after free by accident. Returns MLA_STATUS_SUCCESS on success,
+/// closed), flush the output and free any allocated resource.
+///
+/// The archive handle must be passed as a mutable reference so it is cleared and
+/// cannot be reused after free by accident. Returns `MLA_STATUS_SUCCESS` on success,
 /// or an error code.
 MLAStatus mla_archive_close(MLAArchiveHandle *archive);
 
 /// Open and extract an existing MLA archive, using the given configuration.
-/// read_callback and seek_callback are used to read the archive data
-/// file_callback is used to convert each archive file's name to pathes where extract the data
+///
+/// `read_callback` and `seek_callback` are used to read the archive data
+/// `file_callback` is used to convert each archive file's name to pathes where extract the data
 /// The caller is responsible of all security checks related to callback provided paths
 MLAStatus mla_roarchive_extract(MLAConfigHandle *config,
                                 MlaReadCallback read_callback,

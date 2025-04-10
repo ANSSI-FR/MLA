@@ -14,7 +14,7 @@ pub enum Error {
     UnsupportedVersion,
     /// Supplied ECC key is not in the expected format
     InvalidECCKeyFormat,
-    /// Wrong BlockSubFile magic has been encountered. Is the deserializion
+    /// Wrong `BlockSubFile` magic has been encountered. Is the deserializion
     /// starting at the beginning of a block?
     WrongBlockSubFileType,
     /// An error has occurred while converting into UTF8. This error could
@@ -66,19 +66,19 @@ impl fmt::Display for Error {
 
 impl From<io::Error> for Error {
     fn from(error: io::Error) -> Self {
-        Error::IOError(error)
+        Self::IOError(error)
     }
 }
 
 impl From<std::string::FromUtf8Error> for Error {
     fn from(error: std::string::FromUtf8Error) -> Self {
-        Error::UTF8ConversionError(error)
+        Self::UTF8ConversionError(error)
     }
 }
 
 impl From<bincode::ErrorKind> for Error {
     fn from(_error: bincode::ErrorKind) -> Self {
-        Error::DeserializationError
+        Self::DeserializationError
     }
 }
 
@@ -88,7 +88,7 @@ impl From<Error> for io::Error {
             // On IOError, unwrap it (MLAError(IOError(err))) -> err
             Error::IOError(err) => err,
             // Otherwise, use a generic construction
-            _ => io::Error::new(io::ErrorKind::Other, format!("{error}")),
+            _ => Self::new(io::ErrorKind::Other, format!("{error}")),
         }
     }
 }
@@ -96,24 +96,24 @@ impl From<Error> for io::Error {
 impl From<ConfigError> for Error {
     fn from(error: ConfigError) -> Self {
         match error {
-            ConfigError::PrivateKeyNotSet => Error::PrivateKeyNeeded,
-            _ => Error::ConfigError(error),
+            ConfigError::PrivateKeyNotSet => Self::PrivateKeyNeeded,
+            _ => Self::ConfigError(error),
         }
     }
 }
 
 impl From<InvalidLength> for Error {
     fn from(_error: InvalidLength) -> Self {
-        Error::HKDFInvalidKeyLength
+        Self::HKDFInvalidKeyLength
     }
 }
 
 impl error::Error for Error {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match &self {
-            Error::IOError(err) => Some(err),
-            Error::UTF8ConversionError(err) => Some(err),
-            Error::ConfigError(err) => Some(err),
+            Self::IOError(err) => Some(err),
+            Self::UTF8ConversionError(err) => Some(err),
+            Self::ConfigError(err) => Some(err),
             _ => None,
         }
     }
@@ -149,7 +149,7 @@ pub enum FailSafeReadError {
     },
     /// End of original archive reached - this is the best case
     EndOfOriginalArchiveData,
-    /// Error in the FailSafeReader internal state
+    /// Error in the `FailSafeReader` internal state
     FailSafeReadInternalError,
     /// The file's hash does not correspond to the expected one
     HashDiffers {
@@ -168,9 +168,9 @@ impl fmt::Display for FailSafeReadError {
 impl error::Error for FailSafeReadError {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match &self {
-            FailSafeReadError::IOErrorOnNextBlock(err) => Some(err),
-            FailSafeReadError::ErrorOnNextBlock(err) => Some(err),
-            FailSafeReadError::ErrorInFile(err, _path) => Some(err),
+            Self::IOErrorOnNextBlock(err) => Some(err),
+            Self::ErrorOnNextBlock(err) => Some(err),
+            Self::ErrorInFile(err, _path) => Some(err),
             _ => None,
         }
     }

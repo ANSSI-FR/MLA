@@ -43,7 +43,7 @@ const MLA_FORMAT_VERSION: u32 = 1;
 /// to be used as a filename, an absolute path, or... ?). 32KiB was chosen because it
 /// supports any path a Windows NT, Linux, FreeBSD, OpenBSD, or NetBSD kernel supports.
 const FILENAME_MAX_SIZE: u64 = 65536;
-/// Maximum allowed object size (in bytes) to deserialize in-memory, to avoid DoS on
+/// Maximum allowed object size (in bytes) to deserialize in-memory, to avoid `DoS` on
 /// malformed files
 pub(crate) const BINCODE_MAX_DESERIALIZE: u64 = 512 * 1024 * 1024;
 
@@ -55,7 +55,7 @@ bitflags! {
     /// [Encryption (ENCRYPT)]
     /// [Raw File I/O]
     /// ```
-    #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
     pub struct Layers: u8 {
         const ENCRYPT = 0b0000_0001;
         const COMPRESS = 0b0000_0010;
@@ -69,7 +69,7 @@ bitflags! {
 
 impl std::default::Default for Layers {
     fn default() -> Self {
-        Layers::DEFAULT
+        Self::DEFAULT
     }
 }
 
@@ -103,7 +103,7 @@ impl ArchiveHeader {
                 return Err(Error::DeserializationError);
             }
         };
-        Ok(ArchiveHeader {
+        Ok(Self {
             format_version,
             config,
         })
@@ -127,7 +127,7 @@ impl ArchiveHeader {
 // -------- MLA Format Footer --------
 
 pub struct ArchiveFooter {
-    /// Filename -> Corresponding FileInfo
+    /// Filename -> Corresponding `FileInfo`
     pub files_info: HashMap<String, FileInfo>,
 }
 
@@ -164,7 +164,7 @@ impl ArchiveFooter {
             .is_err()
         {
             return Err(Error::SerializationError);
-        };
+        }
         serialization_len += match bincode::serialized_size(&tmp) {
             Ok(size) => size,
             Err(_) => {
@@ -173,15 +173,17 @@ impl ArchiveFooter {
         };
 
         // footer length
-        dest.write_u32::<LittleEndian>(serialization_len as u32)?;
+        dest.write_u32::<LittleEndian>(
+            u32::try_from(serialization_len).map_err(|_| Error::SerializationError)?,
+        )?;
         Ok(())
     }
 
     /// Parses and instantiates a footer from serialized data
-    pub fn deserialize_from<R: Read + Seek>(mut src: R) -> Result<ArchiveFooter, Error> {
+    pub fn deserialize_from<R: Read + Seek>(mut src: R) -> Result<Self, Error> {
         // Read the footer length
         let pos = src.seek(SeekFrom::End(-4))?;
-        let len = src.read_u32::<LittleEndian>()? as u64;
+        let len = u64::from(src.read_u32::<LittleEndian>()?);
 
         // Prepare for deserialization
         src.seek(SeekFrom::Start(pos - len))?;
@@ -197,13 +199,13 @@ impl ArchiveFooter {
                 return Err(Error::DeserializationError);
             }
         };
-        Ok(ArchiveFooter { files_info })
+        Ok(Self { files_info })
     }
 }
 
 // -------- Writer --------
 
-/// Tags used in each ArchiveFileBlock to indicate the type of block that follows
+/// Tags used in each `ArchiveFileBlock` to indicate the type of block that follows
 #[derive(Debug)]
 #[repr(u8)]
 enum ArchiveFileBlockType {
@@ -218,14 +220,14 @@ impl TryFrom<u8> for ArchiveFileBlockType {
     type Error = Error;
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
-        if value == ArchiveFileBlockType::FileStart as u8 {
-            Ok(ArchiveFileBlockType::FileStart)
-        } else if value == ArchiveFileBlockType::FileContent as u8 {
-            Ok(ArchiveFileBlockType::FileContent)
-        } else if value == ArchiveFileBlockType::EndOfFile as u8 {
-            Ok(ArchiveFileBlockType::EndOfFile)
-        } else if value == ArchiveFileBlockType::EndOfArchiveData as u8 {
-            Ok(ArchiveFileBlockType::EndOfArchiveData)
+        if value == Self::FileStart as u8 {
+            Ok(Self::FileStart)
+        } else if value == Self::FileContent as u8 {
+            Ok(Self::FileContent)
+        } else if value == Self::EndOfFile as u8 {
+            Ok(Self::EndOfFile)
+        } else if value == Self::EndOfArchiveData as u8 {
+            Ok(Self::EndOfArchiveData)
         } else {
             Err(Error::WrongBlockSubFileType)
         }
@@ -235,7 +237,7 @@ impl TryFrom<u8> for ArchiveFileBlockType {
 #[derive(Debug)]
 pub enum ArchiveFileBlock<T: Read> {
     /// Usually, a file is made of:
-    /// [FileStart][FileContent]...[FileContent][EndOfFile]
+    /// [`FileStart`][`FileContent`]...[`FileContent`][`EndOfFile`]
     /// The `id` is used to keep track internally of which file a `ArchiveFileBlock` belongs to
     ///
     /// Start of a file
@@ -244,7 +246,7 @@ pub enum ArchiveFileBlock<T: Read> {
     /// (length, data) is used instead of a Vec to avoid having the whole data
     /// in memory. On parsing, the data can be set to None. It indicates to the
     /// caller that the data is just next to it
-    /// TODO: use the same trick than ArchiveReader to avoid the Option
+    /// TODO: use the same trick than `ArchiveReader` to avoid the Option
     FileContent {
         length: u64,
         data: Option<T>,
@@ -262,7 +264,7 @@ where
 {
     fn dump<U: Write>(&mut self, dest: &mut U) -> Result<(), Error> {
         match self {
-            ArchiveFileBlock::FileStart { filename, id } => {
+            Self::FileStart { filename, id } => {
                 dest.write_u8(ArchiveFileBlockType::FileStart as u8)?;
                 dest.write_u64::<LittleEndian>(*id)?;
                 let bytes = filename.as_bytes();
@@ -274,7 +276,7 @@ where
                 dest.write_all(bytes)?;
                 Ok(())
             }
-            ArchiveFileBlock::FileContent { length, data, id } => {
+            Self::FileContent { length, data, id } => {
                 dest.write_u8(ArchiveFileBlockType::FileContent as u8)?;
                 dest.write_u64::<LittleEndian>(*id)?;
                 dest.write_u64::<LittleEndian>(*length)?;
@@ -291,13 +293,13 @@ where
                 }
                 Ok(())
             }
-            ArchiveFileBlock::EndOfFile { id, hash } => {
+            Self::EndOfFile { id, hash } => {
                 dest.write_u8(ArchiveFileBlockType::EndOfFile as u8)?;
                 dest.write_u64::<LittleEndian>(*id)?;
                 dest.write_all(hash)?;
                 Ok(())
             }
-            ArchiveFileBlock::EndOfArchiveData => {
+            Self::EndOfArchiveData => {
                 dest.write_u8(ArchiveFileBlockType::EndOfArchiveData as u8)?;
                 Ok(())
             }
@@ -313,9 +315,17 @@ where
                 if length > FILENAME_MAX_SIZE {
                     return Err(Error::FilenameTooLong);
                 }
-                let mut filename = vec![0u8; length as usize];
+                let mut filename = vec![
+                    0u8;
+                    usize::try_from(length).map_err(|_| {
+                        std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            "Length conversion failed",
+                        )
+                    })?
+                ];
                 src.read_exact(&mut filename)?;
-                Ok(ArchiveFileBlock::FileStart {
+                Ok(Self::FileStart {
                     id,
                     filename: String::from_utf8(filename)?,
                 })
@@ -326,7 +336,7 @@ where
                 // /!\ WARNING: to avoid loading this entire subfileblock's contents
                 // in-memory, the `data` reader is None; the `src` now starts at the
                 // beginning of the data
-                Ok(ArchiveFileBlock::FileContent {
+                Ok(Self::FileContent {
                     length,
                     data: None,
                     id,
@@ -336,9 +346,9 @@ where
                 let id = src.read_u64::<LittleEndian>()?;
                 let mut hash = Sha256Hash::default();
                 src.read_exact(&mut hash)?;
-                Ok(ArchiveFileBlock::EndOfFile { id, hash })
+                Ok(Self::EndOfFile { id, hash })
             }
-            ArchiveFileBlockType::EndOfArchiveData => Ok(ArchiveFileBlock::EndOfArchiveData),
+            ArchiveFileBlockType::EndOfArchiveData => Ok(Self::EndOfArchiveData),
         }
     }
 }
@@ -362,18 +372,18 @@ impl ArchiveWriterState {
         src: R,
     ) -> Result<HashWrapperReader<R>, Error> {
         let hash = match self {
-            ArchiveWriterState::OpenedFiles { hashes, .. } => match hashes.get_mut(&id) {
+            Self::OpenedFiles { hashes, .. } => match hashes.get_mut(&id) {
                 Some(hash) => hash,
                 None => {
                     return Err(Error::WrongWriterState(
                         "[wrap_with_hash] Unable to find the ID".to_string(),
-                    ))
+                    ));
                 }
             },
-            _ => {
+            Self::Finalized => {
                 return Err(Error::WrongWriterState(
                     "[wrap_with_hash] Wrong state".to_string(),
-                ))
+                ));
             }
         };
 
@@ -392,7 +402,7 @@ macro_rules! check_state {
             _ => {
                 return Err(Error::WrongArchiveWriterState {
                     current_state: format!("{:?}", $x).to_string(),
-                    expected_state: format! {"{}", "ArchiveWriterState::$y"}.to_string(),
+                    expected_state: format!("{}", "ArchiveWriterState::$y").to_string(),
                 });
             }
         }
@@ -439,15 +449,15 @@ pub struct ArchiveWriter<'a, W: 'a + InnerWriterTrait> {
     dest: Box<PositionLayerWriter<'a, W>>,
     /// Internal state
     state: ArchiveWriterState,
-    /// Filename -> Corresponding ArchiveFileID
+    /// Filename -> Corresponding `ArchiveFileID`
     ///
     /// This is done to keep a quick check for filename existence
     files_info: HashMap<String, ArchiveFileID>,
-    /// ID -> Corresponding FileInfo
+    /// ID -> Corresponding `FileInfo`
     ///
     /// File chunks identify their relative file using the `ArchiveFileID`.
-    /// `files_info` and `ids_info` could have been merged into a single HashMap
-    /// String -> FileInfo, at the cost of an additional HashMap ArchiveFileID ->
+    /// `files_info` and `ids_info` could have been merged into a single `HashMap`
+    /// String -> `FileInfo`, at the cost of an additional `HashMap` `ArchiveFileID` ->
     /// String, thus increasing memory footprint.
     /// These hashmaps are actually merged at the last moment, on footer
     /// serialization
@@ -522,7 +532,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
                     ));
                 }
             }
-            _ => {
+            ArchiveWriterState::Finalized => {
                 // Never happens, due to `check_state!`
                 return Err(Error::WrongWriterState(
                     "[Finalize] State have changes inside finalize".to_string(),
@@ -553,15 +563,15 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
                 None => {
                     return Err(Error::WrongWriterState(
                         "[mark_continuous_block] Unable to find the ID".to_string(),
-                    ))
+                    ));
                 }
-            };
+            }
             self.current_id = id;
         }
         Ok(())
     }
 
-    /// Set the EoF offset to the current offset for the corresponding file id
+    /// Set the `EoF` offset to the current offset for the corresponding file id
     fn mark_eof(&mut self, id: ArchiveFileID) -> Result<(), Error> {
         let offset = self.dest.position();
         match self.ids_info.get_mut(&id) {
@@ -569,7 +579,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
             None => {
                 return Err(Error::WrongWriterState(
                     "[mark_eof] Unable to find the ID".to_string(),
-                ))
+                ));
             }
         }
         Ok(())
@@ -582,7 +592,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
             None => {
                 return Err(Error::WrongWriterState(
                     "[extend_file_size] Unable to find the ID".to_string(),
-                ))
+                ));
             }
         }
         Ok(())
@@ -622,7 +632,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
                 ids.push(id);
                 hashes.insert(id, Sha256::default());
             }
-            _ => {
+            ArchiveWriterState::Finalized => {
                 // Never happens, due to `check_state!`
                 return Err(Error::WrongWriterState(
                     "[StartFile] State have changes inside start_file".to_string(),
@@ -668,7 +678,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
                 vec_remove_item(ids, &id);
                 hash.finalize().into()
             }
-            _ => {
+            ArchiveWriterState::Finalized => {
                 // Never happens, due to `check_state_file_opened!`
                 return Err(Error::WrongWriterState(
                     "[EndFile] State have changes inside end_file".to_string(),
@@ -732,18 +742,15 @@ pub struct BlocksToFileReader<'a, R: Read + Seek> {
 }
 
 impl<'a, R: Read + Seek> BlocksToFileReader<'a, R> {
-    fn new(src: &'a mut R, offsets: &'a [u64]) -> Result<BlocksToFileReader<'a, R>, Error> {
+    fn new(src: &'a mut R, offsets: &'a [u64]) -> Result<Self, Error> {
         // Set the inner layer at the start of the file
         src.seek(SeekFrom::Start(offsets[0]))?;
 
         // Read file information header
-        let id = match ArchiveFileBlock::from(src)? {
-            ArchiveFileBlock::FileStart { id, .. } => id,
-            _ => {
-                return Err(Error::WrongReaderState(
-                    "[BlocksToFileReader] A file must start with a FileStart".to_string(),
-                ));
-            }
+        let ArchiveFileBlock::FileStart { id, .. } = ArchiveFileBlock::from(src)? else {
+            return Err(Error::WrongReaderState(
+                "[BlocksToFileReader] A file must start with a FileStart".to_string(),
+            ));
         };
 
         Ok(BlocksToFileReader {
@@ -781,7 +788,12 @@ impl<T: Read + Seek> Read for BlocksToFileReader<'_, T> {
                             return self.read(into);
                         }
                         let count = self.src.by_ref().take(length).read(into)?;
-                        let length_usize = length as usize;
+                        let length_usize = usize::try_from(length).map_err(|_| {
+                            std::io::Error::new(
+                                std::io::ErrorKind::InvalidData,
+                                "Length conversion failed",
+                            )
+                        })?;
                         (length_usize - count, count)
                     }
                     ArchiveFileBlock::EndOfFile { id, .. } => {
@@ -837,9 +849,9 @@ pub struct FileInfo {
     offsets: Vec<u64>,
     /// Size of the file, in bytes
     pub size: u64,
-    /// Offset of the ArchiveFileBlock::EndOfFile
+    /// Offset of the `ArchiveFileBlock::EndOfFile`
     ///
-    /// This offset is used to retrieve information from the EoF tag, such as
+    /// This offset is used to retrieve information from the `EoF` tag, such as
     /// the file hash
     eof_offset: u64,
 }
@@ -974,7 +986,7 @@ pub struct ArchiveFailSafeReader<'a, R: 'a + Read> {
 // Size of the repaired file blocks
 const CACHE_SIZE: usize = 8 * 1024 * 1024; // 8MB
 
-/// Used to update the error state only if it was NoError
+/// Used to update the error state only if it was `NoError`
 /// ```text
 /// update_error!(error_var, FailSafeReadError::...)
 /// ```
@@ -1014,7 +1026,7 @@ impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
 
     /// Fail-safe / best-effort conversion of the current archive to a correct
     /// one. On success, returns the reason conversion terminates (ideally,
-    /// EndOfOriginalArchiveData)
+    /// `EndOfOriginalArchiveData`)
     #[allow(clippy::cognitive_complexity)]
     pub fn convert_to_archive<W: InnerWriterTrait>(
         &mut self,
@@ -1035,7 +1047,7 @@ impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
         'read_block: loop {
             match ArchiveFileBlock::from(&mut self.src) {
                 Err(Error::IOError(err)) => {
-                    if let std::io::ErrorKind::UnexpectedEof = err.kind() {
+                    if err.kind() == std::io::ErrorKind::UnexpectedEof {
                         update_error!(error = FailSafeReadError::UnexpectedEOFOnNextBlock);
                         break;
                     }
@@ -1077,14 +1089,12 @@ impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
                             id_failsafe2hash.insert(id, Sha256::default());
                         }
                         ArchiveFileBlock::FileContent { length, id, .. } => {
-                            let id_output = match id_failsafe2id_output.get(&id) {
-                                Some(id_output) => *id_output,
-                                None => {
-                                    update_error!(
-                                        error = FailSafeReadError::ContentForUnknownFile(id)
-                                    );
-                                    break 'read_block;
-                                }
+                            let id_output = if let Some(id_output) = id_failsafe2id_output.get(&id)
+                            {
+                                *id_output
+                            } else {
+                                update_error!(error = FailSafeReadError::ContentForUnknownFile(id));
+                                break 'read_block;
                             };
                             if id_failsafe_done.contains(&id) {
                                 update_error!(
@@ -1163,12 +1173,12 @@ impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
                             }
                         }
                         ArchiveFileBlock::EndOfFile { id, hash } => {
-                            let id_output = match id_failsafe2id_output.get(&id) {
-                                Some(id_output) => *id_output,
-                                None => {
-                                    update_error!(error = FailSafeReadError::EOFForUnknownFile(id));
-                                    break 'read_block;
-                                }
+                            let id_output = if let Some(id_output) = id_failsafe2id_output.get(&id)
+                            {
+                                *id_output
+                            } else {
+                                update_error!(error = FailSafeReadError::EOFForUnknownFile(id));
+                                break 'read_block;
                             };
                             if id_failsafe_done.contains(&id) {
                                 update_error!(
@@ -1176,27 +1186,22 @@ impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
                                 );
                                 break 'read_block;
                             }
-                            match id_failsafe2hash.remove(&id) {
-                                Some(hash_archive) => {
-                                    let computed_hash = hash_archive.finalize();
-                                    if computed_hash.as_slice() != hash {
-                                        update_error!(
-                                            error = FailSafeReadError::HashDiffers {
-                                                expected: Vec::from(computed_hash.as_slice()),
-                                                obtained: Vec::from(&hash[..]),
-                                            }
-                                        );
-                                        break 'read_block;
-                                    }
-                                }
-                                None => {
-                                    // Synchronisation error
+                            if let Some(hash_archive) = id_failsafe2hash.remove(&id) {
+                                let computed_hash = hash_archive.finalize();
+                                if computed_hash.as_slice() != hash {
                                     update_error!(
-                                        error = FailSafeReadError::FailSafeReadInternalError
+                                        error = FailSafeReadError::HashDiffers {
+                                            expected: Vec::from(computed_hash.as_slice()),
+                                            obtained: Vec::from(&hash[..]),
+                                        }
                                     );
                                     break 'read_block;
                                 }
-                            };
+                            } else {
+                                // Synchronisation error
+                                update_error!(error = FailSafeReadError::FailSafeReadInternalError);
+                                break 'read_block;
+                            }
 
                             output.end_file(id_output)?;
                             id_failsafe_done.push(id);
@@ -1208,7 +1213,7 @@ impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
                         }
                     }
                 }
-            };
+            }
         }
 
         let mut unfinished_files = Vec::new();
@@ -1266,7 +1271,7 @@ pub(crate) mod tests {
         };
         let mut buf = Vec::new();
         header.dump(&mut buf).unwrap();
-        println!("{:?}", buf);
+        println!("{buf:?}");
 
         let header_rebuild = ArchiveHeader::from(&mut buf.as_slice()).unwrap();
         assert_eq!(header_rebuild.config.layers_enabled, Layers::default());
@@ -1299,7 +1304,7 @@ pub(crate) mod tests {
             .dump(&mut buf)
             .unwrap();
 
-        println!("{:?}", buf);
+        println!("{buf:?}");
     }
 
     #[test]
@@ -1398,7 +1403,7 @@ pub(crate) mod tests {
     }
 
     #[allow(clippy::type_complexity)]
-    pub(crate) fn build_archive(
+    pub fn build_archive(
         layers: Option<Layers>,
         interleaved: bool,
     ) -> (
@@ -1517,7 +1522,7 @@ pub(crate) mod tests {
             Layers::COMPRESS,
             Layers::default(),
         ] {
-            println!("Layering: {:?}", layering);
+            println!("Layering: {layering:?}");
 
             // Build initial file in a stream
             let file = Vec::new();
@@ -1633,9 +1638,9 @@ pub(crate) mod tests {
                 // read and we stop on the tag before the footer
             }
             status => {
-                panic!("Unexpected status: {}", status);
+                panic!("Unexpected status: {status}");
             }
-        };
+        }
 
         // New archive can now be checked
         let dest2 = mla_w.into_raw();
@@ -1672,7 +1677,9 @@ pub(crate) mod tests {
             let (mla, key, files) =
                 build_archive(Some(Layers::default() ^ Layers::COMPRESS), *interleaved);
             // Truncate the resulting file (before the footer, hopefully after the header), and prepare the failsafe reader
-            let footer_size = bincode::serialized_size(&mla.files_info).unwrap() as usize + 4;
+            let footer_size = usize::try_from(bincode::serialized_size(&mla.files_info).unwrap())
+                .expect("Serialized size exceeds usize limit")
+                + 4;
             let dest = mla.into_raw();
 
             for remove in &[1, 10, 30, 50, 70, 95, 100] {
@@ -1721,9 +1728,8 @@ pub(crate) mod tests {
                 // Get and check file per file, not in the writing order
                 for (fname, content) in files.iter().rev() {
                     // The file may be missing
-                    let mut mla_file = match mla_read.get_file(fname.clone()).unwrap() {
-                        Some(mla_file) => mla_file,
-                        None => continue,
+                    let Some(mut mla_file) = mla_read.get_file(fname.clone()).unwrap() else {
+                        continue;
                     };
                     // If the file is present, ensure there are bytes and the first
                     // bytes are the same
@@ -1752,9 +1758,10 @@ pub(crate) mod tests {
         let mut mla = ArchiveWriter::from_config(buf, config).unwrap();
         mla.add_file("Test", 4, vec![1, 2, 3, 4].as_slice())
             .unwrap();
-        assert!(mla
-            .add_file("Test", 4, vec![1, 2, 3, 4].as_slice())
-            .is_err());
+        assert!(
+            mla.add_file("Test", 4, vec![1, 2, 3, 4].as_slice())
+                .is_err()
+        );
         assert!(mla.start_file("Test").is_err());
     }
 
@@ -1826,14 +1833,14 @@ pub(crate) mod tests {
                 match *stopping_error {
                     FailSafeReadError::HashDiffers { .. } => {}
                     _ => {
-                        panic!("Unexpected stopping_error: {}", stopping_error);
+                        panic!("Unexpected stopping_error: {stopping_error}");
                     }
                 }
             }
             status => {
-                panic!("Unexpected status: {}", status);
+                panic!("Unexpected status: {status}");
             }
-        };
+        }
     }
 
     #[test]
@@ -1876,15 +1883,15 @@ pub(crate) mod tests {
             .iter()
             .cycle()
             .take(10 * 1024 * 1024)
-            .cloned()
+            .copied()
             .collect();
         files.insert("big".to_string(), big);
 
         // Some constant files
         for i in 0..=255 {
             files.insert(
-                format!("file_{}", i).to_string(),
-                std::iter::repeat(i).take(0x1000).collect::<Vec<u8>>(),
+                format!("file_{i}").to_string(),
+                std::iter::repeat_n(i, 0x1000).collect::<Vec<u8>>(),
             );
         }
 
@@ -1892,7 +1899,7 @@ pub(crate) mod tests {
         let mut sha256sum: Vec<u8> = Vec::new();
         let mut info: Vec<(&String, &Vec<_>)> = files.iter().collect();
         info.sort_by(|i1, i2| Ord::cmp(&i1.0, &i2.0));
-        for (fname, content) in info.iter() {
+        for (fname, content) in &info {
             let mut hasher = Sha256::new();
             hasher.update(content);
             sha256sum.extend_from_slice(hex::encode(hasher.finalize()).as_bytes());
@@ -1931,7 +1938,7 @@ pub(crate) mod tests {
         .unwrap();
 
         // Second, add interleaved files
-        let fnames: Vec<String> = (0..=255).map(|i| format!("file_{}", i)).collect();
+        let fnames: Vec<String> = (0..=255).map(|i| format!("file_{i}")).collect();
         let mut name2id: HashMap<_, _> = HashMap::new();
 
         // Start files in normal order
@@ -2025,9 +2032,10 @@ pub(crate) mod tests {
         let dest_w = Vec::new();
         let mut mla_w = ArchiveWriter::from_config(dest_w, ArchiveWriterConfig::new())
             .expect("Writer init failed");
-        if let FailSafeReadError::EndOfOriginalArchiveData =
-            mla_fsread.convert_to_archive(&mut mla_w).unwrap()
-        {
+        if matches!(
+            mla_fsread.convert_to_archive(&mut mla_w).unwrap(),
+            FailSafeReadError::EndOfOriginalArchiveData
+        ) {
             // Everything runs as expected
         } else {
             panic!();
@@ -2040,7 +2048,7 @@ pub(crate) mod tests {
         assert_eq!(files.len(), mla_repread.list_files().unwrap().count());
 
         // Get and check file per file
-        for (fname, content) in files.iter() {
+        for (fname, content) in &files {
             let mut mla_file = mla_read.get_file(fname.clone()).unwrap().unwrap();
             let mut mla_rep_file = mla_repread.get_file(fname.clone()).unwrap().unwrap();
             assert_eq!(mla_file.filename, fname.clone());
@@ -2093,13 +2101,13 @@ pub(crate) mod tests {
     #[test]
     #[ignore]
     fn more_than_u32_file() {
+        const MORE_THAN_U32: u64 = 0x0001_0001_0000; // U32_max + 0x10000
+        const MAX_SIZE: u64 = 5 * 1024 * 1024 * 1024; // 5 GB
+        const CHUNK_SIZE: usize = 10 * 1024 * 1024; // 10 MB
+
         // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
         let mut rng = ChaChaRng::seed_from_u64(0);
         let mut rng_data = ChaChaRng::seed_from_u64(0);
-
-        const MORE_THAN_U32: u64 = 0x100010000; // U32_max + 0x10000
-        const MAX_SIZE: u64 = 5 * 1024 * 1024 * 1024; // 5 GB
-        const CHUNK_SIZE: usize = 10 * 1024 * 1024; // 10 MB
 
         let mut bytes = [0u8; 32];
         rng.fill_bytes(&mut bytes);
@@ -2113,10 +2121,10 @@ pub(crate) mod tests {
         let id1 = mla.start_file("file_0").unwrap();
         let mut cur_size = 0;
         while cur_size < MORE_THAN_U32 {
-            let size = std::cmp::min(rng.next_u32() as u64, MORE_THAN_U32 - cur_size);
+            let size = std::cmp::min(u64::from(rng.next_u32()), MORE_THAN_U32 - cur_size);
             let data: Vec<u8> = StandardUniform
                 .sample_iter(&mut rng_data)
-                .take(size as usize)
+                .take(usize::try_from(size).expect("Failed to convert size to usize"))
                 .collect();
             mla.append_file_content(id1, size, data.as_slice()).unwrap();
             cur_size += size;
@@ -2127,13 +2135,11 @@ pub(crate) mod tests {
 
         // Complete up to MAX_SIZE
         while cur_size < MAX_SIZE {
-            let id = mla
-                .start_file(format!("file_{:}", nb_file).as_str())
-                .unwrap();
-            let size = std::cmp::min(rng.next_u32() as u64, MAX_SIZE - cur_size);
+            let id = mla.start_file(format!("file_{nb_file:}").as_str()).unwrap();
+            let size = std::cmp::min(u64::from(rng.next_u32()), MAX_SIZE - cur_size);
             let data: Vec<u8> = StandardUniform
                 .sample_iter(&mut rng_data)
-                .take(size as usize)
+                .take(usize::try_from(size).expect("Failed to convert size to usize"))
                 .collect();
             mla.append_file_content(id, size, data.as_slice()).unwrap();
             cur_size += size;
@@ -2150,7 +2156,7 @@ pub(crate) mod tests {
         config.add_private_keys(&[key]);
         let mut mla_read = ArchiveReader::from_config(buf, config).expect("archive reader");
 
-        let file_names: Vec<String> = (0..nb_file).map(|nb| format!("file_{:}", nb)).collect();
+        let file_names: Vec<String> = (0..nb_file).map(|nb| format!("file_{nb:}")).collect();
         let mut file_list = mla_read
             .list_files()
             .unwrap()
@@ -2165,7 +2171,7 @@ pub(crate) mod tests {
         let mut rng_data = ChaChaRng::seed_from_u64(0);
 
         let mut chunk = vec![0u8; CHUNK_SIZE];
-        for file_name in file_names.into_iter() {
+        for file_name in file_names {
             let mut file_stream = mla_read.get_file(file_name).unwrap().unwrap().data;
             loop {
                 let read = file_stream.read(&mut chunk).unwrap();

@@ -60,13 +60,13 @@ pub fn linear_extract<W1: InnerWriterTrait, R: InnerReaderTrait, S: BuildHasher>
                         io::copy(copy_src, writer)?;
                         extracted = true;
                     }
-                };
+                }
                 if !extracted {
                     // Exhaust the block to Sink to forward the reader
                     io::copy(copy_src, &mut io::sink())?;
                 }
             }
-            ArchiveFileBlock::EndOfArchiveData {} => {
+            ArchiveFileBlock::EndOfArchiveData => {
                 // Proper termination
                 break 'read_block;
             }
@@ -75,7 +75,7 @@ pub fn linear_extract<W1: InnerWriterTrait, R: InnerReaderTrait, S: BuildHasher>
     Ok(())
 }
 
-/// Provides a Write interface on an ArchiveWriter file
+/// Provides a Write interface on an `ArchiveWriter` file
 ///
 /// This interface is meant to be used in situations where length of the data
 /// source is unknown, such as a stream. One can then use the `io::copy`
@@ -86,7 +86,7 @@ pub struct StreamWriter<'a, 'b, W: InnerWriterTrait> {
 }
 
 impl<'a, 'b, W: InnerWriterTrait> StreamWriter<'a, 'b, W> {
-    pub fn new(archive: &'b mut ArchiveWriter<'a, W>, file_id: ArchiveFileID) -> Self {
+    pub const fn new(archive: &'b mut ArchiveWriter<'a, W>, file_id: ArchiveFileID) -> Self {
         Self { archive, file_id }
     }
 }
@@ -141,7 +141,7 @@ mod tests {
         linear_extract(&mut mla_read, &mut export).expect("Extract error");
 
         // Check file per file
-        for (fname, content) in files.iter() {
+        for (fname, content) in &files {
             assert_eq!(export.get(fname).unwrap(), content);
         }
     }

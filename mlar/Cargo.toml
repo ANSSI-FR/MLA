@@ -3,14 +3,11 @@ name = "mlar"
 description = "A wrapper around the MLA library for common usecases"
 version = "1.3.0"
 authors = ["Camille Mougey <camille.mougey@ssi.gouv.fr>"]
-edition = "2018"
+edition = "2024"
 license = "LGPL-3.0-only"
 homepage = "https://github.com/ANSSI-FR/MLA"
 repository = "https://github.com/ANSSI-FR/MLA"
 readme = "../README.md"
-
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 clap = { version = "4.5", features = ["wrap_help"] }
@@ -28,6 +25,9 @@ zeroize = { version = "1", default-features = false}
 tar = "0.4"
 rand_chacha = "0.9"
 lru = "0.13"
+
+[lints]
+workspace = true
 
 [dev-dependencies]
 assert_cmd = "2.0"

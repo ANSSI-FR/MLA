@@ -11,7 +11,7 @@ pub(crate) struct HashWrapperReader<'a, R: Read> {
 }
 
 impl<'a, R: Read> HashWrapperReader<'a, R> {
-    pub(crate) fn new(inner: R, hash: &'a mut Sha256) -> Self {
+    pub(crate) const fn new(inner: R, hash: &'a mut Sha256) -> Self {
         Self { inner, hash }
     }
 }

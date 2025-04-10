@@ -1,8 +1,8 @@
 use std::io;
 use std::io::Write;
 
-use crate::layers::traits::{InnerWriterTrait, InnerWriterType, LayerWriter};
 use crate::Error;
+use crate::layers::traits::{InnerWriterTrait, InnerWriterType, LayerWriter};
 
 // ---------- Writer ----------
 
@@ -19,11 +19,11 @@ impl<'a, W: 'a + InnerWriterTrait> PositionLayerWriter<'a, W> {
 
     /// Get the current position (ie, how many bytes written since last position
     /// reset)
-    pub fn position(&self) -> u64 {
+    pub const fn position(&self) -> u64 {
         self.pos
     }
 
-    pub fn reset_position(&mut self) -> u64 {
+    pub const fn reset_position(&mut self) -> u64 {
         let before = self.pos;
         self.pos = 0;
         before

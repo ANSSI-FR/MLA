@@ -1,10 +1,11 @@
-use crate::crypto::aesgcm::{AesGcm256, ConstantTimeEq, Key, Nonce, Tag, TAG_LENGTH};
-use crate::crypto::ecc::{retrieve_key, store_key_for_multi_recipients, MultiRecipientPersistent};
+use crate::crypto::aesgcm::{AesGcm256, ConstantTimeEq, Key, Nonce, TAG_LENGTH, Tag};
+use crate::crypto::ecc::{MultiRecipientPersistent, retrieve_key, store_key_for_multi_recipients};
 
+use crate::Error;
 use crate::layers::traits::{
     InnerWriterTrait, InnerWriterType, LayerFailSafeReader, LayerReader, LayerWriter,
 };
-use crate::Error;
+use std::convert::TryFrom;
 use std::io;
 use std::io::{BufReader, Cursor, Read, Seek, SeekFrom, Write};
 
@@ -25,7 +26,7 @@ const CHUNK_SIZE: u64 = 128 * 1024;
 
 /// Build nonce according to a given state
 ///
-/// AesGcm expect a 96 bits nonce.
+/// `AesGcm` expect a 96 bits nonce.
 /// The nonce build as:
 /// 1. 8 byte nonce, unique per archive
 /// 2. 4 byte counter, unique per chunk and incremental
@@ -49,7 +50,7 @@ pub struct EncryptionPersistentConfig {
     nonce: [u8; NONCE_SIZE],
 }
 
-/// Specific config for ArchiveWriter
+/// Specific config for `ArchiveWriter`
 pub struct EncryptionConfig {
     /// Public keys with which to encrypt the symmetric encryption key below
     ecc_keys: Vec<PublicKey>,
@@ -80,7 +81,7 @@ impl std::default::Default for EncryptionConfig {
         let mut csprng = ChaChaRng::from_os_rng();
         let key = csprng.random::<Key>();
         let nonce = csprng.random::<[u8; NONCE_SIZE]>();
-        EncryptionConfig {
+        Self {
             ecc_keys: Vec::new(),
             key,
             nonce,
@@ -100,38 +101,37 @@ impl EncryptionConfig {
 
     pub fn to_persistent(&self) -> Result<EncryptionPersistentConfig, ConfigError> {
         let mut rng = ChaChaRng::from_os_rng();
-        if let Ok(multi_recipient) =
-            store_key_for_multi_recipients(&self.ecc_keys, &self.key, &mut rng)
-        {
-            Ok(EncryptionPersistentConfig {
-                multi_recipient,
-                nonce: self.nonce,
-            })
-        } else {
-            Err(ConfigError::ECIESComputationError)
-        }
+        store_key_for_multi_recipients(&self.ecc_keys, &self.key, &mut rng).map_or(
+            Err(ConfigError::ECIESComputationError),
+            |multi_recipient| {
+                Ok(EncryptionPersistentConfig {
+                    multi_recipient,
+                    nonce: self.nonce,
+                })
+            },
+        )
     }
 }
 
 impl ArchiveWriterConfig {
     /// Set public keys to use
-    pub fn add_public_keys(&mut self, keys: &[PublicKey]) -> &mut ArchiveWriterConfig {
+    pub fn add_public_keys(&mut self, keys: &[PublicKey]) -> &mut Self {
         self.encrypt.ecc_keys.extend_from_slice(keys);
         self
     }
 
     /// Return the key used for encryption
-    pub fn encryption_key(&self) -> &Key {
+    pub const fn encryption_key(&self) -> &Key {
         &self.encrypt.key
     }
 
     /// Return the nonce used for encryption
-    pub fn encryption_nonce(&self) -> &[u8; NONCE_SIZE] {
+    pub const fn encryption_nonce(&self) -> &[u8; NONCE_SIZE] {
         &self.encrypt.nonce
     }
 }
 
-/// FailSafeReader decryption mode
+/// `FailSafeReader` decryption mode
 #[derive(Default, Clone, Copy)]
 enum FailSafeReaderDecryptionMode {
     /// Returns only the data that have been authenticated on decryption
@@ -147,28 +147,23 @@ pub struct EncryptionReaderConfig {
     private_keys: Vec<StaticSecret>,
     /// Symmetric encryption key and nonce, if decrypted successfully from header
     encrypt_parameters: Option<(Key, [u8; NONCE_SIZE])>,
-    /// FailSafeReader consideration for tag on decryption -- FailSafeReader only
+    /// `FailSafeReader` consideration for tag on decryption -- `FailSafeReader` only
     failsafe_mode: FailSafeReaderDecryptionMode,
 }
 
 impl EncryptionReaderConfig {
     pub fn load_persistent(
         &mut self,
-        config: EncryptionPersistentConfig,
+        config: &EncryptionPersistentConfig,
     ) -> Result<(), ConfigError> {
         if self.private_keys.is_empty() {
             return Err(ConfigError::PrivateKeyNotSet);
         }
         for private_key in &self.private_keys {
-            match retrieve_key(&config.multi_recipient, private_key) {
-                Ok(Some(key)) => {
-                    self.encrypt_parameters = Some((key, config.nonce));
-                    break;
-                }
-                _ => {
-                    continue;
-                }
-            };
+            if let Ok(Some(key)) = retrieve_key(&config.multi_recipient, private_key) {
+                self.encrypt_parameters = Some((key, config.nonce));
+                break;
+            }
         }
 
         if self.encrypt_parameters.is_none() {
@@ -180,24 +175,24 @@ impl EncryptionReaderConfig {
 
 impl ArchiveReaderConfig {
     /// Set private key to use
-    pub fn add_private_keys(&mut self, keys: &[StaticSecret]) -> &mut ArchiveReaderConfig {
+    pub fn add_private_keys(&mut self, keys: &[StaticSecret]) -> &mut Self {
         self.encrypt.private_keys.extend_from_slice(keys);
         self
     }
 
     /// Retrieve key and nonce used for encryption
-    pub fn get_encrypt_parameters(&self) -> Option<(Key, [u8; NONCE_SIZE])> {
+    pub const fn get_encrypt_parameters(&self) -> Option<(Key, [u8; NONCE_SIZE])> {
         self.encrypt.encrypt_parameters
     }
 
-    /// Set the FailSafeReader decryption mode to return only authenticated data (default)
-    pub fn failsafe_return_only_authenticated_data(&mut self) -> &mut ArchiveReaderConfig {
+    /// Set the `FailSafeReader` decryption mode to return only authenticated data (default)
+    pub const fn failsafe_return_only_authenticated_data(&mut self) -> &mut Self {
         self.encrypt.failsafe_mode = FailSafeReaderDecryptionMode::OnlyAuthenticatedData;
         self
     }
 
-    /// Set the FailSafeReader decryption mode to return all data, even if not authenticated
-    pub fn failsafe_return_data_even_unauthenticated(&mut self) -> &mut ArchiveReaderConfig {
+    /// Set the `FailSafeReader` decryption mode to return all data, even if not authenticated
+    pub const fn failsafe_return_data_even_unauthenticated(&mut self) -> &mut Self {
         self.encrypt.failsafe_mode = FailSafeReaderDecryptionMode::DataEvenUnauthenticated;
         self
     }
@@ -281,13 +276,16 @@ impl<W: InnerWriterTrait> Write for EncryptionLayerWriter<'_, W> {
             std::cmp::min(CIPHER_BUF_SIZE, buf.len() as u64),
             CHUNK_SIZE - self.current_chunk_offset,
         );
-        let mut buf_tmp = Vec::with_capacity(size as usize);
+        let mut buf_tmp = Vec::with_capacity(usize::try_from(size).map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidInput, "Integer conversion failed")
+        })?);
         let buf_src = BufReader::new(buf);
         io::copy(&mut buf_src.take(size), &mut buf_tmp)?;
         self.cipher.encrypt(&mut buf_tmp);
         self.inner.write_all(&buf_tmp)?;
         self.current_chunk_offset += size;
-        Ok(size as usize)
+        usize::try_from(size)
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "Integer conversion failed"))
     }
 
     fn flush(&mut self) -> io::Result<()> {
@@ -318,7 +316,9 @@ impl<T: ?Sized> EncryptionLayerInternal<T> {
                 cipher: AesGcm256::new(&key, &build_nonce(nonce, 0), b"")?,
                 key,
                 nonce,
-                chunk_cache: Cursor::new(Vec::with_capacity(CHUNK_SIZE as usize)),
+                chunk_cache: Cursor::new(Vec::with_capacity(usize::try_from(CHUNK_SIZE).map_err(
+                    |_| io::Error::new(io::ErrorKind::InvalidInput, "Integer conversion failed"),
+                )?)),
                 current_chunk_number: 0,
             }),
             None => Err(Error::PrivateKeyNeeded),
@@ -340,7 +340,11 @@ impl<T: ?Sized + Read> EncryptionLayerInternal<T> {
         self.chunk_cache.get_mut().clear();
 
         // Load the current encrypted chunk and the corresponding tag in memory
-        let mut data_and_tag = Vec::with_capacity(CHUNK_SIZE as usize + TAG_LENGTH);
+        let mut data_and_tag = Vec::with_capacity(
+            usize::try_from(CHUNK_SIZE).map_err(|_| {
+                io::Error::new(io::ErrorKind::InvalidInput, "Integer conversion failed")
+            })? + TAG_LENGTH,
+        );
         let data_and_tag_read = (&mut self.inner)
             .take(CHUNK_SIZE + TAG_LENGTH as u64)
             .read_to_end(&mut data_and_tag)?;
@@ -360,11 +364,11 @@ impl<T: ?Sized + Read> EncryptionLayerInternal<T> {
 
         // Decrypt and verify the current chunk
         let expected_tag = self.cipher.decrypt(data.as_mut_slice());
-        if expected_tag.ct_eq(&tag).unwrap_u8() != 1 {
-            Err(Error::AuthenticatedDecryptionWrongTag)
-        } else {
+        if expected_tag.ct_eq(&tag).unwrap_u8() == 1 {
             self.chunk_cache = Cursor::new(data);
             Ok(Some(()))
+        } else {
+            Err(Error::AuthenticatedDecryptionWrongTag)
         }
     }
 
@@ -383,7 +387,9 @@ impl<T: ?Sized + Read> EncryptionLayerInternal<T> {
         self.chunk_cache.get_mut().clear();
 
         // Load the current encrypted chunk in memory
-        let mut data = Vec::with_capacity(CHUNK_SIZE as usize);
+        let mut data = Vec::with_capacity(usize::try_from(CHUNK_SIZE).map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidInput, "Integer conversion failed")
+        })?);
         let data_read = (&mut self.inner).take(CHUNK_SIZE).read_to_end(&mut data)?;
         // If the inner is at the end of the stream, we cannot read any
         // additional byte -> we must stop
@@ -403,7 +409,7 @@ impl<T: ?Sized + Read> EncryptionLayerInternal<T> {
         Ok(Some(()))
     }
 
-    /// Internal `Read`::read but returning a mla `Error`
+    /// Internal `Read::read` but returning a mla `Error`
     ///
     /// This method check the tag of each decrypted block
     fn read_internal(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
@@ -418,13 +424,18 @@ impl<T: ?Sized + Read> EncryptionLayerInternal<T> {
             return self.read_internal(buf);
         }
         // Consume at most the bytes leaving in the cache, to detect the renewal need
-        let size = std::cmp::min(cache_to_consume as usize, buf.len());
+        let size = std::cmp::min(
+            usize::try_from(cache_to_consume).map_err(|_| {
+                io::Error::new(io::ErrorKind::InvalidInput, "Integer conversion failed")
+            })?,
+            buf.len(),
+        );
         self.chunk_cache
             .read(&mut buf[..size])
-            .map_err(|e| e.into())
+            .map_err(std::convert::Into::into)
     }
 
-    /// Internal `Read`::read but returning a mla `Error`
+    /// Internal `Read::read` but returning a mla `Error`
     /// /!\ This method does not check the tag of each decrypted block
     fn read_internal_unauthenticated(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
         let cache_to_consume = CHUNK_SIZE - self.chunk_cache.position();
@@ -438,16 +449,21 @@ impl<T: ?Sized + Read> EncryptionLayerInternal<T> {
             return self.read_internal_unauthenticated(buf);
         }
         // Consume at most the bytes leaving in the cache, to detect the renewal need
-        let size = std::cmp::min(cache_to_consume as usize, buf.len());
+        let size = std::cmp::min(
+            usize::try_from(cache_to_consume).map_err(|_| {
+                io::Error::new(io::ErrorKind::InvalidInput, "Integer conversion failed")
+            })?,
+            buf.len(),
+        );
         self.chunk_cache
             .read(&mut buf[..size])
-            .map_err(|e| e.into())
+            .map_err(std::convert::Into::into)
     }
 }
 
 impl<R: Read + ?Sized> Read for EncryptionLayerInternal<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.read_internal(buf).map_err(|e| e.into())
+        self.read_internal(buf).map_err(std::convert::Into::into)
     }
 }
 
@@ -465,7 +481,9 @@ impl<R: Read + Seek + ?Sized> Seek for EncryptionLayerInternal<R> {
                 self.inner.seek(SeekFrom::Start(pos_chunk_start))?;
 
                 // Load and move into the cache
-                self.current_chunk_number = chunk_number as u32;
+                self.current_chunk_number = u32::try_from(chunk_number).map_err(|_| {
+                    io::Error::new(io::ErrorKind::InvalidInput, "Chunk number out of range")
+                })?;
                 self.load_in_cache()?;
                 self.chunk_cache.seek(SeekFrom::Start(pos_in_chunk))?;
                 Ok(pos)
@@ -488,7 +506,11 @@ impl<R: Read + Seek + ?Sized> Seek for EncryptionLayerInternal<R> {
                     // Optimization
                     Ok(current)
                 } else {
-                    self.seek(SeekFrom::Start((current as i64 + value) as u64))
+                    self.seek(SeekFrom::Start(
+                        u64::try_from(i64::try_from(current).unwrap() + value).map_err(|_| {
+                            io::Error::new(io::ErrorKind::InvalidInput, "Seek overflow")
+                        })?,
+                    ))
                 }
             }
             SeekFrom::End(pos) => {
@@ -498,13 +520,23 @@ impl<R: Read + Seek + ?Sized> Seek for EncryptionLayerInternal<R> {
                 }
 
                 // The last chunk always have a TAG at its end, and might not be
-                // CHUNK_SIZE long -> we need to remove the TAG size while
+                // CHUNK_SIZE longtry_ we need to remove the TAG size while
                 // converting from tag-aware position to tag-unaware position
                 let end_inner_pos = self.inner.seek(SeekFrom::End(0))?;
                 let cur_chunk = end_inner_pos / CHUNK_TAG_SIZE;
                 let cur_chunk_pos = end_inner_pos % CHUNK_TAG_SIZE;
                 let end_pos = cur_chunk * CHUNK_SIZE + cur_chunk_pos - TAG_LENGTH as u64;
-                self.seek(SeekFrom::Start((pos + end_pos as i64) as u64))
+                let pos_adjusted = i64::try_from(end_pos)
+                    .map_err(|_| {
+                        io::Error::new(io::ErrorKind::InvalidInput, "Integer conversion failed")
+                    })?
+                    .checked_add(pos)
+                    .ok_or_else(|| {
+                        io::Error::new(io::ErrorKind::InvalidInput, "Addition overflow")
+                    })?;
+                self.seek(SeekFrom::Start(u64::try_from(pos_adjusted).map_err(
+                    |_| io::Error::new(io::ErrorKind::InvalidInput, "Integer conversion failed"),
+                )?))
             }
         }
     }
@@ -553,7 +585,7 @@ impl<'a, R: 'a + Read + Seek> Read for EncryptionLayerReader<'a, R> {
 // Returns how many chunk are present at position `position`
 const CHUNK_TAG_SIZE: u64 = CHUNK_SIZE + TAG_LENGTH as u64;
 
-fn no_tag_position_to_tag_position(position: u64) -> u64 {
+const fn no_tag_position_to_tag_position(position: u64) -> u64 {
     let cur_chunk = position / CHUNK_SIZE;
     let cur_chunk_pos = position % CHUNK_SIZE;
     cur_chunk * CHUNK_TAG_SIZE + cur_chunk_pos
@@ -606,8 +638,8 @@ impl<'a, R: 'a + Read> LayerFailSafeReader<'a, R> for EncryptionLayerFailSafeRea
 
 impl<R: Read> Read for EncryptionLayerFailSafeReader<'_, R> {
     /// Behavior changes depending on config.FailSafeReaderDecryptionMode
-    /// - OnlyAuthenticatedData: only authenticated data is returned
-    /// - DataEvenUnauthenticated: all data is returned, even if not authenticated
+    /// - `OnlyAuthenticatedData`: only authenticated data is returned
+    /// - `DataEvenUnauthenticated`: all data is returned, even if not authenticated
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self.decryption_mode {
             FailSafeReaderDecryptionMode::OnlyAuthenticatedData => {
@@ -629,8 +661,8 @@ impl<R: Read> Read for EncryptionLayerFailSafeReader<'_, R> {
 mod tests {
     use super::*;
 
-    use rand::distr::{Alphanumeric, Distribution};
     use rand::SeedableRng;
+    use rand::distr::{Alphanumeric, Distribution};
     use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 
     use crate::crypto::aesgcm::KEY_SIZE;
@@ -745,7 +777,8 @@ mod tests {
         );
 
         // Write a 2*CHUNK_SIZE + 128 bytes stream
-        let length = (2 * CHUNK_SIZE + 128) as usize;
+        let length =
+            usize::try_from(2 * CHUNK_SIZE + 128).expect("Failed to convert CHUNK_SIZE to usize");
         let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(0);
         let data: Vec<u8> = Alphanumeric.sample_iter(&mut rng).take(length).collect();
         encrypt_w.write_all(&data).unwrap();
@@ -772,7 +805,10 @@ mod tests {
         encrypt_r.read_to_end(&mut output_authent).unwrap();
 
         // We should have correctly read 2*CHUNK_SIZE inner data, the last 128 bytes being unauthenticated
-        assert_eq!(output_authent.len(), 2 * CHUNK_SIZE as usize);
+        assert_eq!(
+            output_authent.len(),
+            2 * usize::try_from(CHUNK_SIZE).unwrap()
+        );
         assert_eq!(output_authent, data[..output_authent.len()]);
 
         // Failsafe read without tag checking
@@ -823,7 +859,7 @@ mod tests {
         assert_eq!(pos, 5);
         let mut output = Vec::new();
         encrypt_r.read_to_end(&mut output).unwrap();
-        println!("{:?}", output);
+        println!("{output:?}");
         assert_eq!(output.as_slice(), &FAKE_FILE[5..]);
     }
 
@@ -844,7 +880,8 @@ mod tests {
             )
             .unwrap(),
         );
-        let length = (CHUNK_SIZE * 2) as usize;
+        let length =
+            usize::try_from(CHUNK_SIZE * 2).expect("Failed to convert CHUNK_SIZE to usize");
         let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(0);
         let data: Vec<u8> = Alphanumeric.sample_iter(&mut rng).take(length).collect();
         encrypt_w.write_all(&data).unwrap();
@@ -873,6 +910,9 @@ mod tests {
         assert_eq!(pos, CHUNK_SIZE);
         let mut output = Vec::new();
         encrypt_r.read_to_end(&mut output).unwrap();
-        assert_eq!(output.as_slice(), &data[CHUNK_SIZE as usize..]);
+        assert_eq!(
+            output.as_slice(),
+            &data[usize::try_from(CHUNK_SIZE).unwrap()..]
+        );
     }
 }

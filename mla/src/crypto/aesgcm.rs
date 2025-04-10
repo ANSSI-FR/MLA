@@ -4,8 +4,8 @@ use crate::Error;
 
 use aes::Aes256;
 
-use generic_array::{typenum::U16, GenericArray};
-use ghash::{universal_hash::UniversalHash, GHash};
+use generic_array::{GenericArray, typenum::U16};
+use ghash::{GHash, universal_hash::UniversalHash};
 pub use subtle::ConstantTimeEq;
 
 use ctr::cipher::{BlockEncrypt, KeyInit, KeyIvInit, StreamCipher, StreamCipherSeek};
@@ -28,17 +28,17 @@ pub struct AesGcm256 {
     /// Size of the authenticated data, in bits
     associated_data_bits_len: u64,
     /// Encrypted data not yet hashed.
-    /// Corresponds to the bytes unaligned with the BLOCK_SIZE, ie:
+    /// Corresponds to the bytes unaligned with the `BLOCK_SIZE`, ie:
     /// ```ascii-art
     /// [BLOCK_SIZE][BLOCK_SIZE]
     /// [ data encrypted ]
     ///             [    ] -> data remaining, going to `current_block`
     /// ```
-    /// Once `current_block` is full (with a length of BLOCK_SIZE), it is used
+    /// Once `current_block` is full (with a length of `BLOCK_SIZE`), it is used
     /// to update the `ghash`, and is cleared.
     current_block: Vec<u8>,
     /// Number of bytes encrypted - workaround for
-    /// https://github.com/RustCrypto/block-ciphers/issues/71
+    /// <https://github.com/RustCrypto/block-ciphers/issues/71>
     bytes_encrypted: u64,
 }
 
@@ -46,7 +46,7 @@ pub struct AesGcm256 {
 pub type Tag = GenericArray<u8, U16>;
 
 impl AesGcm256 {
-    pub fn new(key: &Key, nonce: &Nonce, associated_data: &[u8]) -> Result<AesGcm256, Error> {
+    pub fn new(key: &Key, nonce: &Nonce, associated_data: &[u8]) -> Result<Self, Error> {
         // Convert the nonce (96 bits) to the AES-GCM form
         let mut counter_block = [0u8; BLOCK_SIZE];
         counter_block[..12].copy_from_slice(nonce);
@@ -66,7 +66,7 @@ impl AesGcm256 {
         // First block is ignored, as it has been used for the GHash
         cipher.seek(BLOCK_SIZE as u64);
 
-        Ok(AesGcm256 {
+        Ok(Self {
             cipher,
             ghash,
             associated_data_bits_len: (associated_data.len() as u64) * 8,
@@ -85,20 +85,18 @@ impl AesGcm256 {
                 self.cipher.apply_keystream(buffer);
                 self.current_block.extend_from_slice(buffer);
                 return;
-            } else {
-                let (in_block, out_block) =
-                    buffer.split_at_mut(BLOCK_SIZE - self.current_block.len());
-                self.cipher.apply_keystream(in_block);
-                self.current_block.extend_from_slice(in_block);
-                // `current_block` length is now BLOCK_SIZE -> update GHash and
-                // clear it
-                self.ghash
-                    .update(slice::from_ref(self.current_block.as_slice().into()));
-                self.current_block.clear();
-
-                // Deals with the rest of the data, now aligned on BLOCK_SIZE
-                buffer = out_block;
             }
+            let (in_block, out_block) = buffer.split_at_mut(BLOCK_SIZE - self.current_block.len());
+            self.cipher.apply_keystream(in_block);
+            self.current_block.extend_from_slice(in_block);
+            // `current_block` length is now BLOCK_SIZE -> update GHash and
+            // clear it
+            self.ghash
+                .update(slice::from_ref(self.current_block.as_slice().into()));
+            self.current_block.clear();
+
+            // Deals with the rest of the data, now aligned on BLOCK_SIZE
+            buffer = out_block;
         }
 
         let mut chunks = buffer.chunks_exact_mut(BLOCK_SIZE);
@@ -182,7 +180,7 @@ impl AesGcm256 {
 mod tests {
     use super::*;
     use aead::Payload;
-    use aes_gcm::{aead::Aead, Aes256Gcm};
+    use aes_gcm::{Aes256Gcm, aead::Aead};
 
     fn test_against_aesgcm(key: &Key, nonce: &Nonce, associated_data: &[u8], msg: &[u8]) {
         // Full (all at once)
