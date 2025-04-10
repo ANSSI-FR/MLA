@@ -1332,15 +1332,19 @@ mod tests {
             assert_eq!(pos, (UNCOMPRESSED_DATA_SIZE + 4).into());
             let mut buf = [0u8; 5];
             decomp.read_exact(&mut buf).unwrap();
-            assert_eq!(&buf, &bytes[pos as usize..(pos + 5) as usize]);
-
+            assert_eq!(
+                &buf,
+                &bytes[usize::try_from(pos).unwrap()..usize::try_from(pos + 5).unwrap()]
+            );
             // Seek relatively (same block)
             let pos = decomp.seek(SeekFrom::Current(2)).unwrap();
             assert_eq!(pos, (UNCOMPRESSED_DATA_SIZE + 4 + 5 + 2).into());
             let mut buf = [0u8; 5];
             decomp.read_exact(&mut buf).unwrap();
-            assert_eq!(&buf, &bytes[pos as usize..(pos + 5) as usize]);
-
+            assert_eq!(
+                &buf,
+                &bytes[usize::try_from(pos).unwrap()..usize::try_from(pos + 5).unwrap()]
+            );
             // Seek relatively (next block)
             let pos = decomp
                 .seek(SeekFrom::Current(UNCOMPRESSED_DATA_SIZE.into()))
@@ -1348,21 +1352,28 @@ mod tests {
             assert_eq!(pos, (UNCOMPRESSED_DATA_SIZE * 2 + 4 + 5 + 2 + 5).into());
             let mut buf = [0u8; 5];
             decomp.read_exact(&mut buf).unwrap();
-            assert_eq!(&buf, &bytes[pos as usize..(pos + 5) as usize]);
-
+            assert_eq!(
+                &buf,
+                &bytes[usize::try_from(pos).unwrap()..usize::try_from(pos + 5).unwrap()]
+            );
             // Seek relatively (backward)
             let pos = decomp.seek(SeekFrom::Current(-5)).unwrap();
             assert_eq!(pos, (UNCOMPRESSED_DATA_SIZE * 2 + 4 + 5 + 2 + 5).into());
             let mut buf = [0u8; 5];
             decomp.read_exact(&mut buf).unwrap();
-            assert_eq!(&buf, &bytes[pos as usize..(pos + 5) as usize]);
-
+            assert_eq!(
+                &buf,
+                &bytes[usize::try_from(pos).unwrap()..usize::try_from(pos + 5).unwrap()]
+            );
             // Seek from end
             let pos = decomp.seek(SeekFrom::End(-5)).unwrap();
             assert_eq!(pos, (SIZE - 5) as u64);
             let mut buf = [0u8; 5];
             decomp.read_exact(&mut buf).unwrap();
-            assert_eq!(&buf, &bytes[pos as usize..(pos + 5) as usize]);
+            assert_eq!(
+                &buf,
+                &bytes[usize::try_from(pos).unwrap()..usize::try_from(pos + 5).unwrap()]
+            );
         }
     }
 
@@ -1437,11 +1448,11 @@ mod tests {
         decomp.initialize().unwrap();
         decomp.read_to_end(&mut buf_out).unwrap();
         let buf2 = Cursor::new(file2.as_slice());
-        let mut buf2_out = Vec::new();
+        let mut buf_out2 = Vec::new();
         let mut decomp =
             Box::new(CompressionLayerReader::new(Box::new(RawLayerReader::new(buf2))).unwrap());
         decomp.initialize().unwrap();
-        decomp.read_to_end(&mut buf2_out).unwrap();
-        assert_eq!(buf_out, buf2_out);
+        decomp.read_to_end(&mut buf_out2).unwrap();
+        assert_eq!(buf_out, buf_out2);
     }
 }

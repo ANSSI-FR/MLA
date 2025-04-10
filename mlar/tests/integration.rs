@@ -1174,6 +1174,13 @@ fn test_keyderive() {
     │   └──["Child 1"]── key_child1_child1
     └──["Child 2"]── key_child2
      */
+    struct Keys {
+        parent: Vec<u8>,
+        child1: Vec<u8>,
+        child2: Vec<u8>,
+        child1child1: Vec<u8>,
+    }
+
     let output_dir = TempDir::new().unwrap();
     let key_parent = output_dir.path().join("key_parent");
     let key_child1 = output_dir.path().join("key_child1");
@@ -1181,12 +1188,6 @@ fn test_keyderive() {
     let key_child1_child1 = output_dir.path().join("key_child1_child1");
 
     //---------------- SETUP: Create and fill `keys` --------------
-    struct Keys {
-        parent: Vec<u8>,
-        child1: Vec<u8>,
-        child2: Vec<u8>,
-        child1child1: Vec<u8>,
-    }
     let mut keys = Keys {
         parent: vec![],
         child1: vec![],
@@ -1380,11 +1381,12 @@ const TEST_MANY_FILES_NB: usize = 2000;
 
 #[test]
 fn test_extract_lot_files() {
+    const SIZE_FILE: usize = 10;
+
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
     let mut rng: StdRng = SeedableRng::from_seed([0u8; 32]);
     let mut files_archive_order = vec![];
     let mut files = vec![];
-    const SIZE_FILE: usize = 10;
 
     // Create many files, filled with a few alphanumeric characters
     for i in 1..TEST_MANY_FILES_NB {

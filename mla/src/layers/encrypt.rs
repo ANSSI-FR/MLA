@@ -776,7 +776,8 @@ mod tests {
         );
 
         // Write a 2*CHUNK_SIZE + 128 bytes stream
-        let length = (2 * CHUNK_SIZE + 128) as usize;
+        let length =
+            usize::try_from(2 * CHUNK_SIZE + 128).expect("Failed to convert CHUNK_SIZE to usize");
         let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(0);
         let data: Vec<u8> = Alphanumeric.sample_iter(&mut rng).take(length).collect();
         encrypt_w.write_all(&data).unwrap();
@@ -803,7 +804,10 @@ mod tests {
         encrypt_r.read_to_end(&mut output_authent).unwrap();
 
         // We should have correctly read 2*CHUNK_SIZE inner data, the last 128 bytes being unauthenticated
-        assert_eq!(output_authent.len(), 2 * CHUNK_SIZE as usize);
+        assert_eq!(
+            output_authent.len(),
+            2 * usize::try_from(CHUNK_SIZE).unwrap()
+        );
         assert_eq!(output_authent, data[..output_authent.len()]);
 
         // Failsafe read without tag checking
@@ -875,7 +879,8 @@ mod tests {
             )
             .unwrap(),
         );
-        let length = (CHUNK_SIZE * 2) as usize;
+        let length =
+            usize::try_from(CHUNK_SIZE * 2).expect("Failed to convert CHUNK_SIZE to usize");
         let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(0);
         let data: Vec<u8> = Alphanumeric.sample_iter(&mut rng).take(length).collect();
         encrypt_w.write_all(&data).unwrap();
@@ -904,6 +909,9 @@ mod tests {
         assert_eq!(pos, CHUNK_SIZE);
         let mut output = Vec::new();
         encrypt_r.read_to_end(&mut output).unwrap();
-        assert_eq!(output.as_slice(), &data[CHUNK_SIZE as usize..]);
+        assert_eq!(
+            output.as_slice(),
+            &data[usize::try_from(CHUNK_SIZE).unwrap()..]
+        );
     }
 }

@@ -1677,7 +1677,9 @@ pub(crate) mod tests {
             let (mla, key, files) =
                 build_archive(Some(Layers::default() ^ Layers::COMPRESS), *interleaved);
             // Truncate the resulting file (before the footer, hopefully after the header), and prepare the failsafe reader
-            let footer_size = bincode::serialized_size(&mla.files_info).unwrap() as usize + 4;
+            let footer_size = usize::try_from(bincode::serialized_size(&mla.files_info).unwrap())
+                .expect("Serialized size exceeds usize limit")
+                + 4;
             let dest = mla.into_raw();
 
             for remove in &[1, 10, 30, 50, 70, 95, 100] {
@@ -1726,9 +1728,8 @@ pub(crate) mod tests {
                 // Get and check file per file, not in the writing order
                 for (fname, content) in files.iter().rev() {
                     // The file may be missing
-                    let mut mla_file = match mla_read.get_file(fname.clone()).unwrap() {
-                        Some(mla_file) => mla_file,
-                        None => continue,
+                    let Some(mut mla_file) = mla_read.get_file(fname.clone()).unwrap() else {
+                        continue;
                     };
                     // If the file is present, ensure there are bytes and the first
                     // bytes are the same
@@ -2100,13 +2101,13 @@ pub(crate) mod tests {
     #[test]
     #[ignore]
     fn more_than_u32_file() {
+        const MORE_THAN_U32: u64 = 0x0001_0001_0000; // U32_max + 0x10000
+        const MAX_SIZE: u64 = 5 * 1024 * 1024 * 1024; // 5 GB
+        const CHUNK_SIZE: usize = 10 * 1024 * 1024; // 10 MB
+
         // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
         let mut rng = ChaChaRng::seed_from_u64(0);
         let mut rng_data = ChaChaRng::seed_from_u64(0);
-
-        const MORE_THAN_U32: u64 = 0x100010000; // U32_max + 0x10000
-        const MAX_SIZE: u64 = 5 * 1024 * 1024 * 1024; // 5 GB
-        const CHUNK_SIZE: usize = 10 * 1024 * 1024; // 10 MB
 
         let mut bytes = [0u8; 32];
         rng.fill_bytes(&mut bytes);
@@ -2123,7 +2124,7 @@ pub(crate) mod tests {
             let size = std::cmp::min(u64::from(rng.next_u32()), MORE_THAN_U32 - cur_size);
             let data: Vec<u8> = StandardUniform
                 .sample_iter(&mut rng_data)
-                .take(size as usize)
+                .take(usize::try_from(size).expect("Failed to convert size to usize"))
                 .collect();
             mla.append_file_content(id1, size, data.as_slice()).unwrap();
             cur_size += size;
@@ -2138,7 +2139,7 @@ pub(crate) mod tests {
             let size = std::cmp::min(u64::from(rng.next_u32()), MAX_SIZE - cur_size);
             let data: Vec<u8> = StandardUniform
                 .sample_iter(&mut rng_data)
-                .take(size as usize)
+                .take(usize::try_from(size).expect("Failed to convert size to usize"))
                 .collect();
             mla.append_file_content(id, size, data.as_slice()).unwrap();
             cur_size += size;

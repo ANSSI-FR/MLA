@@ -26,6 +26,7 @@ missing-errors-doc = "allow"
 missing-panics-doc = "allow"
 must_use_candidate = "allow"
 too-many-lines = "allow"
+zero_sized_map_values = "allow"
 
 [workspace.lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }

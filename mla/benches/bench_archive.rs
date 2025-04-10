@@ -49,7 +49,7 @@ fn build_archive(iters: u64, size: u64, layers: Layers) -> (Vec<u8>, ArchiveRead
     for i in 0..iters {
         let data: Vec<u8> = Alphanumeric
             .sample_iter(&mut rng)
-            .take(size as usize)
+            .take(usize::try_from(size).expect("Failed to convert size to usize"))
             .collect();
         let id = mla.start_file(&format!("file_{i}")).unwrap();
         mla.append_file_content(id, data.len() as u64, data.as_slice())
@@ -213,7 +213,9 @@ fn iter_read_multifiles_random(iters: u64, size: u64, layers: Layers) -> Duratio
     let mut rng = ChaChaRng::seed_from_u64(0);
     // Measure the time needed to get and read a file
     let start = Instant::now();
-    for i in sample(&mut rng, iters as usize, iters as usize).iter() {
+    let iters_usize =
+        usize::try_from(iters).unwrap_or_else(|_| panic!("Failed to convert iters to usize"));
+    for i in sample(&mut rng, iters_usize, iters_usize).iter() {
         let subfile = mla_read
             .get_file(format!("file_{i}").to_string())
             .unwrap()
