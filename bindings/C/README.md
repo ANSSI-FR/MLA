@@ -121,3 +121,7 @@ The bindings are [tested](tests). These tests might also provides some example o
 
 They are launched by the CI.
 One can locally launch them using the available `Makefile` and Visual Studio projects.
+
+## Caveat
+
+Current implementation uses `Box<dyn Trait>` Rust's feature to handle MLA reads and writes. Hence, Rust compiler can't know at compile time objects allocated sizes as underneath types are unknown. Thus, MLA `Send` feature is not available as Rust compiler can't ensure thread safety.
