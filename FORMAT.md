@@ -184,10 +184,10 @@ Actual archive files data
 ```rust
 struct ArchiveContent {
     // Data content, explained below
-    file_data: [u8]
+    file_data: [u8],
     // Footer
     #[bincode]
-    struct ArchiveFooter {
+    archive_footer: struct ArchiveFooter {
         // Filename -> Corresponding FileInfo
         files_info: HashMap<String, struct FileInfo {
             // Offsets of continuous chunks of `ArchiveFileBlock`
