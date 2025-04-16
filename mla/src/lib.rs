@@ -237,7 +237,7 @@ impl TryFrom<u8> for ArchiveFileBlockType {
 #[derive(Debug)]
 pub enum ArchiveFileBlock<T: Read> {
     /// Usually, a file is made of:
-    /// [`FileStart`][`FileContent`]...[`FileContent`][`EndOfFile`]
+    /// `[FileStart][FileContent]`...`[FileContent][EndOfFile]`
     /// The `id` is used to keep track internally of which file a `ArchiveFileBlock` belongs to
     ///
     /// Start of a file
@@ -246,7 +246,7 @@ pub enum ArchiveFileBlock<T: Read> {
     /// (length, data) is used instead of a Vec to avoid having the whole data
     /// in memory. On parsing, the data can be set to None. It indicates to the
     /// caller that the data is just next to it
-    /// TODO: use the same trick than `ArchiveReader` to avoid the Option
+    // TODO: use the same trick than `ArchiveReader` to avoid the Option
     FileContent {
         length: u64,
         data: Option<T>,

@@ -552,7 +552,7 @@ enum CompressionLayerWriterState<W: Write> {
 }
 
 /// Compression layer is made of independent `CompressedBlock`, ending by an index for seekable accesses
-/// [`CompressedBlock`][CompressedBlock]...[`CompressedBlock`][Index]
+/// `[CompressedBlock][CompressedBlock]`...`[CompressedBlock][Index]`
 ///
 /// Compression is made of nested independent compressed block of a fixed
 /// uncompressed size
