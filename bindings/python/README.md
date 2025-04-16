@@ -4,7 +4,7 @@ This project provides Python bindings for the MLA format.
 
 ## How-to
 
-The last version of the wheel is available in at [pypi.org/mla-archive](https://pypi.org/project/mla-archive/).
+The last version of the wheel is available at [pypi.org/mla-archive](https://pypi.org/project/mla-archive/).
 
 One can also compile them using the Rust toolchain:
 
