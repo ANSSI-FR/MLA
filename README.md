@@ -24,7 +24,9 @@ MLA is an archive file format with the following features:
   * A file can be added through chunks of data, without initially knowing the final size
   * File chunks can be interleaved (one can add the beginning of a file, start a second one, and then continue adding the first file's parts)
 * Archive files are seekable, even if compressed or encrypted. A file can be accessed in the middle of the archive without reading from the beginning
-* If truncated, archives can be repaired. Files which were still in the archive, and the beginning of the ones for which the end is missing, will be recovered
+* If truncated, archives can be repaired. Two modes are available:
+  * Authenticated repair (default): only authenticated encrypted chunks of data are retrieved
+  * Unauthenticated repair: files which were still in the archive, and the beginning of the ones for which the end is missing, will be recovered. Thus, this mode is risky as a truncation attack is possible on unauthenticated encrypted chunks of data
 * Arguably less prone to bugs, especially while parsing an untrusted archive (Rust safety)
 
 Repository
@@ -85,7 +87,7 @@ use curve25519_parser::parse_openssl_25519_pubkey;
 use mla::config::ArchiveWriterConfig;
 use mla::ArchiveWriter;
 
-const PUB_KEY: &[u8] = include_bytes!("samples/test_x25519_pub.pem");
+const PUB_KEY: &[u8] = include_bytes!("../samples/test_x25519_pub.pem");
 
 fn main() {
     // Load the needed public key
@@ -109,26 +111,47 @@ fn main() {
 ```
 * Add files part per part, in a "concurrent" fashion:
 ```rust
-...
-// A file is tracked by an id, and follows this API's call order:
-// 1. id = start_file(filename);
-// 2. append_file_content(id, content length, content (impl Read))
-// 2-bis. repeat 2.
-// 3. end_file(id)
+use curve25519_parser::parse_openssl_25519_pubkey;
+use mla::config::ArchiveWriterConfig;
+use mla::ArchiveWriter;
+const PUB_KEY: &[u8] = include_bytes!("../../samples/test_x25519_pub.pem");
+fn main() {
+    // Load the needed public key
+    let public_key = parse_openssl_25519_pubkey(PUB_KEY).unwrap();
+    // Create an MLA Archive - Output only needs the Write trait
+    let mut buf = Vec::new();
+    // Default is Compression + Encryption, to avoid mistakes
+    let mut config = ArchiveWriterConfig::default();
+    // The use of multiple public keys is supported
+    config.add_public_keys(&vec![public_key]);
+    // Create the Writer
+    let mut mla = ArchiveWriter::from_config(&mut buf, config).unwrap();
+    // A file is tracked by an id, and follows this API's call order:
+    // 1. id = start_file(filename);
+    // 2. append_file_content(id, content length, content (impl Read))
+    // 2-bis. repeat 2.
+    // 3. end_file(id)
+    // Start a file and add content
+    let id_file1 = mla.start_file("fname1").unwrap();
+    let file1_part1 = vec![11, 12, 13, 14];
+    mla.append_file_content(id_file1, file1_part1.len() as u64, file1_part1.as_slice()).unwrap();
+    // Start a second file and add content
+    let id_file2 = mla.start_file("fname2").unwrap();
+    let file2_part1 = vec![21, 22, 23, 24];
+    mla.append_file_content(id_file2, file2_part1.len() as u64, file2_part1.as_slice()).unwrap();
+    // Add a file as a whole
+    let file3 = vec![31, 32, 33, 34];
+    mla.add_file("fname3", file3.len() as u64, file3.as_slice()).unwrap();
+    // Add new content to the first file
+    let file1_part2 = vec![15, 16, 17, 18];
+    mla.append_file_content(id_file1, file1_part2.len() as u64, file1_part2.as_slice()).unwrap();
+    // Mark still opened files as finished
+    mla.end_file(id_file1).unwrap();
+    mla.end_file(id_file2).unwrap();
 
-// Start a file and add content
-let id_file1 = mla.start_file("fname1").unwrap();
-mla.append_file_content(id_file1, file1_part1.len() as u64, file1_part1.as_slice()).unwrap();
-// Start a second file and add content
-let id_file2 = mla.start_file("fname2").unwrap();
-mla.append_file_content(id_file2, file2_part1.len() as u64, file2_part1.as_slice()).unwrap();
-// Add a file as a whole
-mla.add_file("fname3", file3.len() as u64, file3.as_slice()).unwrap();
-// Add new content to the first file
-mla.append_file_content(id_file1, file1_part2.len() as u64, file1_part2.as_slice()).unwrap();
-// Mark still opened files as finished
-mla.end_file(id_file1).unwrap();
-mla.end_file(id_file2).unwrap();
+    // Complete the archive
+    mla.finalize().unwrap();
+}
 ```
 * Read files from an archive
 ```rust
@@ -137,8 +160,8 @@ use mla::config::ArchiveReaderConfig;
 use mla::ArchiveReader;
 use std::io;
 
-const PRIV_KEY: &[u8] = include_bytes!("samples/test_x25519_archive_v1.pem");
-const DATA: &[u8] = include_bytes!("samples/archive_v1.mla");
+const PRIV_KEY: &[u8] = include_bytes!("../../samples/test_x25519_archive_v1.pem");
+const DATA: &[u8] = include_bytes!("../../samples/archive_v1.mla");
 
 fn main() {
     // Get the private key
@@ -178,11 +201,12 @@ Using MLA with others languages
 Bindings are available for:
 
 * [C/CPP](bindings/C/README.md)
+* [Python](bindings/python/README.md)
 
 Design
 =
 
-As the name spoils it, an MLA archive is made of several, independent, layers. The following section introduces the design ideas behind MLA. Please refer to [FORMAT.md](FORMAT.md) for a more formal description.
+As the name spoils it, an MLA is made of several, independent, layers. The following section introduces the design ideas behind MLA. Please refer to [FORMAT.md](FORMAT.md) for a more formal description.
 
 Layers
 -

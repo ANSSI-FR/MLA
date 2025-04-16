@@ -40,7 +40,7 @@ int main()
     }
     if (archive_info.version != 1)
     {
-        fprintf(stderr, " [!] Invalid MLA archive version %x\n", archive_info.version);
+        fprintf(stderr, " [!] Invalid MLA version %x\n", archive_info.version);
         fclose(f);
         return 1;
     }

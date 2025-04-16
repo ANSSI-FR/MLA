@@ -7,7 +7,6 @@ license = "LGPL-3.0-only"
 description = "Multi Layer Archive - A pure rust encrypted and compressed archive file format"
 homepage = "https://github.com/ANSSI-FR/MLA"
 repository = "https://github.com/ANSSI-FR/MLA"
-readme = "../../README.md"
 
 # Avoid cargo feature unification, which might broke other build in the workspace
 [workspace]

@@ -1,6 +1,6 @@
 # MLA C/CPP Bindings
 
-This project provides C and CPP bindings for the MLA archive format.
+This project provides C and CPP bindings for the MLA format.
 
 ## How-to
 
@@ -33,7 +33,7 @@ Notes: when linking with `mla.lib`, `ntdll.lib` is also needed.
 
 ## Example
 
-* Creating a new MLA archive (from [this file](tests/linux-gcc-g++/create.c) - Windows example [here](tests/windows-msvc/src/main.c))
+* Creating a new MLA (from [this file](tests/linux-gcc-g++/create.c) - Windows example [here](tests/windows-msvc/src/main.c))
 
 ```C
 // Called to out Archive content to the actual output

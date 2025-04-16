@@ -85,7 +85,7 @@ impl error::Error for MlarError {
 // ----- Utils ------
 
 /// Allow for different kind of output. As `ArchiveWriter` is parametrized over
-/// a Writable type, `ArchiveWriter`<File> and `ArchiveWriter`<io::stdout>
+/// a Writable type, `ArchiveWriter`<`File`> and `ArchiveWriter`<io::stdout>
 /// can't coexist in the same code path.
 enum OutputTypes {
     Stdout,
