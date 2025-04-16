@@ -15,7 +15,7 @@
 //!   * Authenticated repair (default): only authenticated encrypted chunks of data are retrieved
 //!   * Unauthenticated repair: files which were still in the archive, and the beginning of the ones for which the end is missing, will be recovered. Thus this mode is risky as a truncation attack is possible on unauthenticated chunks of data
 //! * Arguably less prone to bugs, especially while parsing an untrusted archive (Rust safety)
-//! 
+//!
 //! Quick command-line usage
 //! =
 //!
@@ -252,7 +252,7 @@ use serde::{Deserialize, Serialize};
 /// * At the time of writing, the archive writer does not know that the current block is the last one. Therefore, it cannot use a specific IV. To circumvent it, a dummy footer block has to be added at the end, leading to additional complexity for last block detection
 /// * In STREAM, the `last_block` bit is used to prevent undetected truncation. In MLA, it is already the role of the `EndOfArchiveData` tag at the file layer level
 ///
-/// Thus, to seek-and-read at a given position, the layer decrypts the block containing this position, and verifies the tag before returning the decrypted data. 
+/// Thus, to seek-and-read at a given position, the layer decrypts the block containing this position, and verifies the tag before returning the decrypted data.
 ///
 /// The authors decided to use elliptic curve over RSA, because:
 /// * No ready-for-production Rust-based libraries have been found at the date of writing
