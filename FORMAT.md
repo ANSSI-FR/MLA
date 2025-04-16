@@ -259,7 +259,7 @@ Each time a `FileContent` is encountered, the corresponding `block_data` is appe
 
 Once the `EndOfFile` for `file_i` is reached, the file is completely read. Its content SHA-256 hash can be verified with the `EndOfFile.hash`.
 
-Between the last `EndOfFile` block and the beginning of the `ArchiveFooter`, there is the only `EndOfArchiveData` block. It is used in the repair process, to correctly separate the actual archive data from the footer.
+Between the last `EndOfFile` block and the beginning of the `ArchiveFooter`, there is the only `EndOfArchiveData` block. It is used in the repair process, to correctly separate the actual archive data from the footer. Also, this block prevents undetected truncation.
 
 As blocks from different files can be interleaved, the `files_info.offsets` corresponds to offsets in `file_data` of blocks for the same file.
 

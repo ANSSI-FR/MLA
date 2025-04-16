@@ -67,7 +67,7 @@ pub fn linear_extract<W1: InnerWriterTrait, R: InnerReaderTrait, S: BuildHasher>
                 }
             }
             ArchiveFileBlock::EndOfArchiveData => {
-                // Proper termination
+                // Proper termination: it prevents undetected truncation
                 break 'read_block;
             }
         }
