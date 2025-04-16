@@ -180,6 +180,7 @@ Using MLA with others languages
 Bindings are available for:
 
 * [C/CPP](bindings/C/README.md)
+* [Python](bindings/python/README.md)
 
 Design
 =

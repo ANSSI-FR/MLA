@@ -147,7 +147,7 @@
 //! }
 //! ```
 //!
-//! Filenames are `String`s, which may contain path separator (`/`, `\`, `..`, etc.). Please consider this while using the API, to avoid path traversal issues.
+//! :warning: Filenames are `String`s, which may contain path separator (`/`, `\`, `..`, etc.). Please consider this while using the API, to avoid path traversal issues.
 
 use std::collections::HashMap;
 use std::convert::TryFrom;
