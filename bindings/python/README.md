@@ -1,6 +1,6 @@
 # MLA Python Bindings
 
-This project provides Python bindings for the MLA archive format.
+This project provides Python bindings for the MLA format.
 
 ## How-to
 
@@ -20,7 +20,7 @@ cargo build --release --target ...
 
 ## Example
 
-* Creating a new MLA archive (from [this file](tests/test_mla.py))
+* Creating a new MLA (from [this file](tests/test_mla.py))
 
 ```python
 import mla

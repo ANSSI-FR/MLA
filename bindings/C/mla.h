@@ -97,7 +97,7 @@ typedef int32_t (*MlaFileCalback)(void *context,
                                   struct FileWriter *file_writer);
 
 /**
- * Structure for MLA archive info
+ * Structure for MLA info
  */
 typedef struct ArchiveInfo {
   uint32_t version;
@@ -136,7 +136,7 @@ MLAStatus mla_reader_config_new(MLAConfigHandle *handle_out);
 MLAStatus mla_reader_config_add_private_key(MLAConfigHandle config, const char *private_key);
 
 /**
- * Open a new MLA archive using the given configuration, which is consumed and freed
+ * Open a new MLA using the given configuration, which is consumed and freed
  * (its handle cannot be reused to create another archive).
  *
  * The archive is streamed through the `write_callback`, and flushed at least at the end when the last byte is
@@ -199,7 +199,7 @@ MLAStatus mla_archive_file_close(MLAArchiveHandle archive,
 MLAStatus mla_archive_close(MLAArchiveHandle *archive);
 
 /**
- * Open and extract an existing MLA archive, using the given configuration.
+ * Open and extract an existing MLA, using the given configuration.
  *
  * `read_callback` and `seek_callback` are used to read the archive data
  * `file_callback` is used to convert each archive file's name to pathes where extract the data
@@ -212,7 +212,7 @@ MLAStatus mla_roarchive_extract(MLAConfigHandle *config,
                                 void *context);
 
 /**
- * Get info on an existing MLA archive
+ * Get info on an existing MLA
  */
 MLAStatus mla_roarchive_info(MlaReadCallback read_callback,
                              void *context,

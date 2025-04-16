@@ -185,7 +185,7 @@ Bindings are available for:
 Design
 =
 
-As the name spoils it, an MLA archive is made of several, independent, layers. The following section introduces the design ideas behind MLA. Please refer to [FORMAT.md](FORMAT.md) for a more formal description.
+As the name spoils it, an MLA is made of several, independent, layers. The following section introduces the design ideas behind MLA. Please refer to [FORMAT.md](FORMAT.md) for a more formal description.
 
 Layers
 -

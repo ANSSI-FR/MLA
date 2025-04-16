@@ -328,7 +328,7 @@ pub extern "C" fn mla_reader_config_add_private_key(
     res
 }
 
-/// Open a new MLA archive using the given configuration, which is consumed and freed
+/// Open a new MLA using the given configuration, which is consumed and freed
 /// (its handle cannot be reused to create another archive).
 ///
 /// The archive is streamed through the `write_callback`, and flushed at least at the end when the last byte is
@@ -560,7 +560,7 @@ impl Seek for CallbackInputRead {
     }
 }
 
-/// Open and extract an existing MLA archive, using the given configuration.
+/// Open and extract an existing MLA, using the given configuration.
 ///
 /// `read_callback` and `seek_callback` are used to read the archive data
 /// `file_callback` is used to convert each archive file's name to pathes where extract the data
@@ -660,14 +660,14 @@ fn mla_roarchive_extract_internal<'a, R: Read + Seek + 'a>(
     }
 }
 
-/// Structure for MLA archive info
+/// Structure for MLA info
 #[repr(C)]
 pub struct ArchiveInfo {
     version: u32,
     layers: u8,
 }
 
-/// Get info on an existing MLA archive
+/// Get info on an existing MLA
 #[unsafe(no_mangle)]
 pub extern "C" fn mla_roarchive_info(
     read_callback: MlaReadCallback,

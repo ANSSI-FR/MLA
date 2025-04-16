@@ -159,7 +159,7 @@ use bincode::Options;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use layers::traits::InnerReaderTrait;
 use serde::{Deserialize, Serialize};
-/// As the name spoils it, an MLA archive is made of several, independent, layers. The following section introduces the design ideas behind MLA. 
+/// As the name spoils it, an MLA is made of several, independent, layers. The following section introduces the design ideas behind MLA.
 ///
 /// Please refer to [FORMAT.md](https://github.com/ANSSI-FR/MLA/blob/master/FORMAT.md) for a more formal description.
 ///
