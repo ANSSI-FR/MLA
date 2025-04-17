@@ -124,4 +124,4 @@ One can locally launch them using the available `Makefile` and Visual Studio pro
 
 ## Caveat
 
-Current implementation uses `Box<dyn Trait>` Rust's feature to handle MLA reads and writes. Hence, Rust compiler can't know at compile time objects allocated sizes as underneath types are unknown. Thus, MLA `Send` feature is not available as Rust compiler can't ensure thread safety.
+Current implementation uses `Box<dyn Trait>` Rust's feature to handle MLA reads and writes. Hence, Rust compiler can't know at compile time if underneath types implement a Trait, notably `Send`. Thus, MLA `Send` feature is not available as Rust compiler can't ensure thread safety.
