@@ -40,7 +40,7 @@ HPKE is parameterized with:
 - AEAD: AES-256-GCM
 - KEM: Hybrid KEM, a custom KEM described later in this document
 
-Thus, only one cryptography suite is available for now. If this setting ends up broken by cryptanalysis, we will move users onward to the next MLA version, using appropriate cryptography, satisfying cryptography agility which is an encouraged property regarding post-quantum cryptography by ANSSI [^frsuggest]. Moreover, HPKE improves this aspect of MLA [^hpke].
+Thus, only one cryptography suite is available for now. If this setting ends up broken by cryptanalysis, we will move users onward to the next MLA version, using appropriate cryptography. Therefore, MLA lacks cryptography agility which is an encouraged property regarding post-quantum cryptography by ANSSI [^frsuggest]. Still, HPKE improves this aspect of MLA [^hpke].
 
 Full details are available below.
 
