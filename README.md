@@ -24,9 +24,9 @@ MLA is an archive file format with the following features:
   * A file can be added through chunks of data, without initially knowing the final size
   * File chunks can be interleaved (one can add the beginning of a file, start a second one, and then continue adding the first file's parts)
 * Archive files are seekable, even if compressed or encrypted. A file can be accessed in the middle of the archive without reading from the beginning
-* If truncated, archives can be repaired. Two modes are available:
+* If truncated, archives can be repaired to some extent. Two modes are available:
   * Authenticated repair (default): only authenticated encrypted chunks of data are retrieved
-  * Unauthenticated repair: files which were still in the archive, and the beginning of the ones for which the end is missing, will be recovered. Thus, this mode is risky as a truncation attack is possible on unauthenticated encrypted chunks of data
+  * Unauthenticated repair: authenticated and unauthenticated encrypted chunks of data are retrieved. Use at your own risk
 * Arguably less prone to bugs, especially while parsing an untrusted archive (Rust safety)
 
 Repository
