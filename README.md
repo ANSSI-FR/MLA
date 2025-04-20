@@ -87,7 +87,7 @@ use curve25519_parser::parse_openssl_25519_pubkey;
 use mla::config::ArchiveWriterConfig;
 use mla::ArchiveWriter;
 
-const PUB_KEY: &[u8] = include_bytes!("../samples/test_x25519_pub.pem");
+const PUB_KEY: &[u8] = include_bytes!("../../samples/test_x25519_pub.pem");
 
 fn main() {
     // Load the needed public key
@@ -114,7 +114,9 @@ fn main() {
 use curve25519_parser::parse_openssl_25519_pubkey;
 use mla::config::ArchiveWriterConfig;
 use mla::ArchiveWriter;
+
 const PUB_KEY: &[u8] = include_bytes!("../../samples/test_x25519_pub.pem");
+
 fn main() {
     // Load the needed public key
     let public_key = parse_openssl_25519_pubkey(PUB_KEY).unwrap();
