@@ -30,6 +30,10 @@ const CIPHER_BUF_SIZE: u64 = 4096;
 const CHUNK_SIZE: u64 = 128 * 1024;
 
 const ASSOCIATED_DATA: &[u8; 0] = b"";
+const FINAL_ASSOCIATED_DATA: &[u8; 8] = b"FINALAAD";
+const FINAL_BLOCK_CONTENT: &[u8; 10] = b"FINALBLOCK";
+
+const FINAL_BLOCK_SIZE: usize = FINAL_BLOCK_CONTENT.len() + TAG_LENGTH;
 
 // ---------- Key commitment ----------
 
@@ -309,7 +313,7 @@ impl<'a, W: 'a + InnerWriterTrait> EncryptionLayerWriter<'a, W> {
         })
     }
 
-    fn renew_cipher(&mut self) -> Result<Tag, Error> {
+    fn renew_cipher_aad(&mut self, aad: &[u8]) -> Result<Tag, Error> {
         // Prepare a new cipher
         self.current_ctr = self
             .current_ctr
@@ -319,10 +323,18 @@ impl<'a, W: 'a + InnerWriterTrait> EncryptionLayerWriter<'a, W> {
         let cipher = AesGcm256::new(
             &self.key,
             &compute_nonce(&self.base_nonce, self.current_ctr),
-            ASSOCIATED_DATA,
+            aad,
         )?;
         let old_cipher = std::mem::replace(&mut self.cipher, cipher);
         Ok(old_cipher.into_tag())
+    }
+
+    fn renew_cipher(&mut self) -> Result<Tag, Error> {
+        self.renew_cipher_aad(ASSOCIATED_DATA)
+    }
+
+    fn last_renew_cipher(&mut self) -> Result<Tag, Error> {
+        self.renew_cipher_aad(FINAL_ASSOCIATED_DATA)
     }
 }
 
@@ -337,8 +349,14 @@ impl<'a, W: 'a + InnerWriterTrait> LayerWriter<'a, W> for EncryptionLayerWriter<
 
     fn finalize(&mut self) -> Result<(), Error> {
         // Write the tag of the current chunk
-        let tag = self.renew_cipher()?;
-        self.inner.write_all(&tag)?;
+        let last_content_tag = self.last_renew_cipher()?;
+        self.inner.write_all(&last_content_tag)?;
+
+        // Write encrypted final block content
+        self.write_all(FINAL_BLOCK_CONTENT)?;
+        // Write final block tag
+        let final_tag = self.renew_cipher()?;
+        self.inner.write_all(&final_tag)?;
 
         // Recursive call
         self.inner.finalize()
@@ -389,9 +407,11 @@ pub struct EncryptionLayerReader<'a, R: Read + Seek> {
     key: Key,
     nonce: Nonce,
     chunk_cache: Cursor<Vec<u8>>,
-    /// Current chunk number in the data.
-    /// Note: the actual chunk number used in the cipher is offseted by FIRST_DATA_CHUNK_NUMBER
-    current_chunk_number: u64,
+    /// Store in state the size of all plaintext computed from inner layer size
+    /// to be able to tell if we are in last data chunk or in final block
+    all_plaintext_size: u64,
+    /// Store in state the current reading position
+    current_position: u64,
 }
 
 impl<'a, R: 'a + Read + Seek> EncryptionLayerReader<'a, R> {
@@ -410,20 +430,89 @@ impl<'a, R: 'a + Read + Seek> EncryptionLayerReader<'a, R> {
                 key,
                 nonce,
                 chunk_cache: Cursor::new(Vec::with_capacity(CHUNK_SIZE as usize)),
-                current_chunk_number: 0,
+                all_plaintext_size: 0,
+                current_position: 0,
             }),
             None => Err(Error::PrivateKeyNeeded),
         }
     }
 
-    /// Load the `self.current_chunk_number` chunk in cache
-    /// Assume the inner layer is in the correct position
-    fn load_in_cache(&mut self) -> Result<Option<()>, Error> {
+    fn is_at_least_in_last_data_chunk(&self) -> bool {
+        self.current_position >= (self.last_data_chunk_number() * CHUNK_SIZE)
+    }
+
+    fn current_data_chunk_number(&self) -> u64 {
+        self.current_position / CHUNK_SIZE
+    }
+
+    fn current_data_chunk_starting_position(&self) -> u64 {
+        self.current_data_chunk_number() * CHUNK_SIZE
+    }
+
+    fn last_data_chunk_number(&self) -> u64 {
+        if self.all_plaintext_size % CHUNK_SIZE == 0 {
+            (self.all_plaintext_size / CHUNK_SIZE).saturating_sub(1)
+        } else {
+            self.all_plaintext_size / CHUNK_SIZE
+        }
+    }
+
+    fn check_last_block(&mut self) -> Result<(), Error> {
+        self.inner.seek(SeekFrom::End(-(FINAL_BLOCK_SIZE as i64)))?;
+
         self.cipher = AesGcm256::new(
             &self.key,
             &compute_nonce(
                 &self.nonce,
-                self.current_chunk_number + FIRST_DATA_CHUNK_NUMBER,
+                self.last_data_chunk_number() + 1 + FIRST_DATA_CHUNK_NUMBER,
+            ),
+            FINAL_ASSOCIATED_DATA,
+        )?;
+
+        let mut data_and_tag = Vec::with_capacity(FINAL_BLOCK_SIZE);
+        let data_and_tag_read = self.inner.read_to_end(&mut data_and_tag)?;
+        if data_and_tag_read < FINAL_BLOCK_SIZE {
+            return Err(Error::InvalidLastTag);
+        }
+
+        let mut tag = [0u8; TAG_LENGTH];
+        tag.copy_from_slice(&data_and_tag[data_and_tag_read - TAG_LENGTH..]);
+        data_and_tag.resize(data_and_tag_read - TAG_LENGTH, 0);
+        let mut data = data_and_tag;
+
+        // Decrypt and verify the current chunk
+        let expected_tag = self.cipher.decrypt(data.as_mut_slice());
+        if expected_tag.ct_eq(&tag).unwrap_u8() != 1 || data != FINAL_BLOCK_CONTENT {
+            Err(Error::InvalidLastTag)
+        } else {
+            Ok(())
+        }
+    }
+
+    fn set_all_plaintext_size(&mut self) -> Result<(), Error> {
+        let input_size = self.inner.seek(SeekFrom::End(0))?;
+        let input_size_without_final = input_size - (FINAL_BLOCK_SIZE as u64);
+        let chunk_number_at_end_of_data = input_size_without_final / CHUNK_TAG_SIZE;
+        let last_chunk_size = input_size_without_final % CHUNK_TAG_SIZE;
+        self.all_plaintext_size = chunk_number_at_end_of_data * CHUNK_SIZE + last_chunk_size - TAG_LENGTH as u64;
+        Ok(())
+    }
+
+    /// Load the `self.current_chunk_number` chunk in cache
+    /// Assume the inner layer is in the correct position
+    fn load_in_cache(&mut self) -> Result<Option<()>, Error> {
+
+        let size_to_read = if self.is_at_least_in_last_data_chunk() {
+            self.all_plaintext_size.saturating_sub(self.current_data_chunk_starting_position()) + TAG_LENGTH as u64
+        } else {
+            CHUNK_SIZE + TAG_LENGTH as u64
+        };
+
+        self.cipher = AesGcm256::new(
+            &self.key,
+            &compute_nonce(
+                &self.nonce,
+                self.current_data_chunk_number() + FIRST_DATA_CHUNK_NUMBER,
             ),
             ASSOCIATED_DATA,
         )?;
@@ -434,11 +523,11 @@ impl<'a, R: 'a + Read + Seek> EncryptionLayerReader<'a, R> {
         // Load the current encrypted chunk and the corresponding tag in memory
         let mut data_and_tag = Vec::with_capacity(CHUNK_SIZE as usize + TAG_LENGTH);
         let data_and_tag_read = (&mut self.inner)
-            .take(CHUNK_SIZE + TAG_LENGTH as u64)
+            .take(size_to_read)
             .read_to_end(&mut data_and_tag)?;
         // If the inner is at the end of the stream, we cannot read any
         // additional byte -> we must stop
-        if data_and_tag_read == 0 {
+        if data_and_tag_read < TAG_LENGTH {
             return Ok(None);
         }
 
@@ -474,6 +563,10 @@ impl<'a, R: 'a + InnerReaderTrait> LayerReader<'a, R> for EncryptionLayerReader<
         // Recursive call
         self.inner.initialize()?;
 
+        // Check last block to prevent truncation attacks
+        self.set_all_plaintext_size()?;
+        self.check_last_block()?;
+
         // Load the current buffer in cache
         self.rewind()?;
         Ok(())
@@ -485,7 +578,6 @@ impl<'a, R: 'a + Read + Seek> Read for EncryptionLayerReader<'a, R> {
         let cache_to_consume = CHUNK_SIZE - self.chunk_cache.position();
         if cache_to_consume == 0 {
             // Cache totally consumed, renew it
-            self.current_chunk_number += 1;
             if self.load_in_cache()?.is_none() {
                 // No more byte in the inner layer
                 return Ok(0);
@@ -494,7 +586,9 @@ impl<'a, R: 'a + Read + Seek> Read for EncryptionLayerReader<'a, R> {
         }
         // Consume at most the bytes leaving in the cache, to detect the renewal need
         let size = std::cmp::min(cache_to_consume as usize, buf.len());
-        self.chunk_cache.read(&mut buf[..size])
+        let chunk_cache_read_size = self.chunk_cache.read(&mut buf[..size])?;
+        self.current_position += chunk_cache_read_size as u64;
+        Ok(chunk_cache_read_size)
     }
 }
 
@@ -507,7 +601,7 @@ fn no_tag_position_to_tag_position(position: u64) -> u64 {
     cur_chunk * CHUNK_TAG_SIZE + cur_chunk_pos
 }
 
-fn tag_position_to_no_tag_position(position: u64) -> u64 {
+fn _tag_position_to_no_tag_position(position: u64) -> u64 {
     // Assume the position is not inside a tag. If so, round to the end of the
     // current chunk
     let cur_chunk = position / CHUNK_TAG_SIZE;
@@ -529,30 +623,17 @@ impl<'a, R: 'a + Read + Seek> Seek for EncryptionLayerReader<'a, R> {
                 self.inner.seek(SeekFrom::Start(pos_chunk_start))?;
 
                 // Load and move into the cache
-                self.current_chunk_number = chunk_number;
+                self.current_position = chunk_number * CHUNK_SIZE + pos_in_chunk;
                 self.load_in_cache()?;
                 self.chunk_cache.seek(SeekFrom::Start(pos_in_chunk))?;
                 Ok(pos)
             }
             SeekFrom::Current(value) => {
-                // Inner layer is at the start of the next chunk. The last chunk
-                // may not be CHUNK_SIZE long.
-                let current_inner = tag_position_to_no_tag_position(self.inner.seek(pos)?);
-                let current_inner_chunk = {
-                    let chunk_nb = current_inner / CHUNK_SIZE;
-                    if chunk_nb == 0 {
-                        // Only one chunk, witch is not CHUNK_SIZE long
-                        0
-                    } else {
-                        chunk_nb - 1
-                    }
-                };
-                let current = current_inner_chunk * CHUNK_SIZE + self.chunk_cache.position();
                 if value == 0 {
                     // Optimization
-                    Ok(current)
+                    Ok(self.current_position)
                 } else {
-                    self.seek(SeekFrom::Start((current as i64 + value) as u64))
+                    self.seek(SeekFrom::Start((self.current_position as i64 + value) as u64))
                 }
             }
             SeekFrom::End(pos) => {
@@ -560,15 +641,7 @@ impl<'a, R: 'a + Read + Seek> Seek for EncryptionLayerReader<'a, R> {
                     // Seeking past the end is unsupported
                     return Err(Error::EndOfStream.into());
                 }
-
-                // The last chunk always have a TAG at its end, and might not be
-                // CHUNK_SIZE long -> we need to remove the TAG size while
-                // converting from tag-aware position to tag-unaware position
-                let end_inner_pos = self.inner.seek(SeekFrom::End(0))?;
-                let cur_chunk = end_inner_pos / CHUNK_TAG_SIZE;
-                let cur_chunk_pos = end_inner_pos % CHUNK_TAG_SIZE;
-                let end_pos = cur_chunk * CHUNK_SIZE + cur_chunk_pos - TAG_LENGTH as u64;
-                self.seek(SeekFrom::Start((pos + end_pos as i64) as u64))
+                self.seek(SeekFrom::Start((pos + self.all_plaintext_size as i64) as u64))
             }
         }
     }
@@ -775,7 +848,7 @@ mod tests {
         // Seek and decrypt twice the same thing
         let pos = encrypt_r.stream_position().unwrap();
         // test the current position retrievial
-        assert_eq!(pos, tag_position_to_no_tag_position(FAKE_FILE.len() as u64));
+        assert_eq!(pos, _tag_position_to_no_tag_position(FAKE_FILE.len() as u64));
         // decrypt twice the same thing, with an offset
         let pos = encrypt_r.seek(SeekFrom::Start(5)).unwrap();
         assert_eq!(pos, 5);
