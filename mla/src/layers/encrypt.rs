@@ -349,12 +349,14 @@ impl<'a, W: 'a + InnerWriterTrait> LayerWriter<'a, W> for EncryptionLayerWriter<
 
     fn finalize(&mut self) -> Result<(), Error> {
         // Write the tag of the current chunk
+        // Get previous chunk tag and initialize final block content cipher context with specific AAD
         let last_content_tag = self.last_renew_cipher()?;
         self.inner.write_all(&last_content_tag)?;
 
         // Write encrypted final block content
         self.write_all(FINAL_BLOCK_CONTENT)?;
         // Write final block tag
+        // Only previous chunk tag is used there, further context is not
         let final_tag = self.renew_cipher()?;
         self.inner.write_all(&final_tag)?;
 
@@ -760,7 +762,7 @@ mod tests {
         encrypt_w.finalize().unwrap();
 
         let out = encrypt_w.into_raw();
-        assert_eq!(out.len(), FAKE_FILE.len() + TAG_LENGTH);
+        assert_eq!(out.len(), FAKE_FILE.len() + TAG_LENGTH + FINAL_BLOCK_SIZE);
         assert_ne!(out[..FAKE_FILE.len()], FAKE_FILE);
         out
     }
@@ -800,6 +802,7 @@ mod tests {
         let mut output = Vec::new();
         encrypt_r.read_to_end(&mut output).unwrap();
         // Extra output expected, due to the ignored tag in the last chunk
+        assert!(output.len() > FAKE_FILE.len());
         assert_eq!(output[..FAKE_FILE.len()], FAKE_FILE);
     }
 
@@ -807,9 +810,10 @@ mod tests {
     fn encrypt_failsafe_truncated() {
         let file = Vec::new();
         let out = encrypt_write(file);
-
-        // Truncate at the middle
-        let stop = out.len() / 2;
+        
+        // Truncate at the middle of a data chunk + tag
+        // Thus, removing final block size which is not expected
+        let stop = (out.len() - FINAL_BLOCK_SIZE) / 2;
 
         let config = EncryptionReaderConfig {
             private_keys: Vec::new(),
@@ -881,7 +885,7 @@ mod tests {
         encrypt_w.finalize().unwrap();
 
         let out = encrypt_w.into_raw();
-        assert_eq!(out.len(), length + 2 * TAG_LENGTH);
+        assert_eq!(out.len(), length + 2 * TAG_LENGTH + FINAL_BLOCK_SIZE);
         assert_ne!(&out[..length], data.as_slice());
 
         // Normal decryption
