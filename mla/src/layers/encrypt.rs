@@ -496,11 +496,15 @@ impl<'a, R: 'a + Read + Seek> EncryptionLayerReader<'a, R> {
         let input_size_without_final = input_size - (FINAL_BLOCK_SIZE as u64);
         let chunk_number_at_end_of_data = input_size_without_final / CHUNK_TAG_SIZE;
         let last_chunk_size = input_size_without_final % CHUNK_TAG_SIZE;
-        self.all_plaintext_size = chunk_number_at_end_of_data * CHUNK_SIZE + last_chunk_size - TAG_LENGTH as u64;
+        if last_chunk_size == 0 {
+            self.all_plaintext_size = chunk_number_at_end_of_data * CHUNK_SIZE;
+        } else {
+            self.all_plaintext_size = chunk_number_at_end_of_data * CHUNK_SIZE + last_chunk_size - TAG_LENGTH as u64;
+        }
         Ok(())
     }
 
-    /// Load the `self.current_chunk_number` chunk in cache
+    /// Load the current chunk number chunk in cache
     /// Assume the inner layer is in the correct position
     fn load_in_cache(&mut self) -> Result<Option<()>, Error> {
 
@@ -529,7 +533,7 @@ impl<'a, R: 'a + Read + Seek> EncryptionLayerReader<'a, R> {
             .read_to_end(&mut data_and_tag)?;
         // If the inner is at the end of the stream, we cannot read any
         // additional byte -> we must stop
-        if data_and_tag_read < TAG_LENGTH {
+        if data_and_tag_read <= TAG_LENGTH {
             return Ok(None);
         }
 
@@ -739,6 +743,7 @@ mod tests {
     use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 
     use crate::crypto::aesgcm::{KEY_SIZE, NONCE_AES_SIZE};
+    use crate::layers::encrypt::{EncryptionLayerReader, EncryptionLayerWriter};
     use crate::layers::raw::{RawLayerFailSafeReader, RawLayerReader, RawLayerWriter};
 
     static FAKE_FILE: [u8; 26] = *b"abcdefghijklmnopqrstuvwxyz";
