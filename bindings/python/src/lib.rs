@@ -139,6 +139,12 @@ create_exception!(
     MLAError,
     "Error during HPKE computation"
 );
+create_exception!(
+    mla,
+    InvalidLastTag,
+    MLAError,
+    "Wrong last block tag"
+);
 
 // Convert potentials errors to the wrapped type
 
@@ -195,6 +201,7 @@ impl From<WrappedError> for PyErr {
                     mla::errors::Error::AuthenticatedDecryptionWrongTag => PyErr::new::<AuthenticatedDecryptionWrongTag, _>("Wrong tag while decrypting authenticated data"),
                     mla::errors::Error::HKDFInvalidKeyLength => PyErr::new::<HKDFInvalidKeyLength, _>("Unable to expand while using the HKDF"),
                     mla::errors::Error::HPKEError(msg) => PyErr::new::<HPKEError, _>(format!("{:}", msg)),
+                    mla::errors::Error::InvalidLastTag(msg) => PyErr::new::<InvalidLastTag, _>(format!("{:}", msg)),
                 }
             },
             WrappedError::WrappedPy(inner_err) => inner_err
@@ -1025,6 +1032,10 @@ fn pymla(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add(
         "HPKEError",
         py.get_type_bound::<HPKEError>(),
+    )?;
+    m.add(
+        "InvalidLastTag",
+        py.get_type_bound::<InvalidLastTag>(),
     )?;
 
     // Add constants

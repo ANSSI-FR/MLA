@@ -32,6 +32,8 @@ As a result, some optimization have not been performed -- which help keeping an 
 The data is encrypted using AES-256-GCM, an AEAD algorithm.
 To offer a *seekable* layer, data is encrypted using chunks of 128KB each, except for the last one. These encrypted chunks are all present with their associated tag. Tags are checked during decryption before returning data to the upper layer.
 
+To prevent truncation attacks, another chunk is added at the end corresponding to the encryption of the ASCII string "FINALBLOCK" with "FINALAAD" as additional authenticated data. Any usage of the archive must check correct decryption (including tag verification) of this last block.
+
 The key, the base nonce and the nonce derivation for each data chunk are computed following HPKE (RFC 9180) [^hpke].
 HPKE is parameterized with:
 

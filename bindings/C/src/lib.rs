@@ -58,6 +58,7 @@ pub enum MLAStatus {
     AuthenticatedDecryptionWrongTag = 0x160000,
     HKDFInvalidKeyLength = 0x170000,
     HPKEError = 0x18000,
+    InvalidLastTag = 0x19000,
     Curve25519ParserError = 0xF10000,
 }
 /// Implemented by the developper. Takes a buffer of a certain number of bytes of MLA
@@ -195,6 +196,7 @@ impl From<MLAError> for MLAStatus {
             MLAError::AuthenticatedDecryptionWrongTag => MLAStatus::AuthenticatedDecryptionWrongTag,
             MLAError::HKDFInvalidKeyLength => MLAStatus::HKDFInvalidKeyLength,
             MLAError::HPKEError(_) => MLAStatus::HPKEError,
+            MLAError::InvalidLastTag => MLAStatus::InvalidLastTag,
         }
     }
 }

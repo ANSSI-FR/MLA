@@ -60,6 +60,8 @@ pub enum Error {
     HKDFInvalidKeyLength,
     /// Error during HPKE computation
     HPKEError(HpkeError),
+    /// Invalid last tag
+    InvalidLastTag,
 }
 
 impl fmt::Display for Error {

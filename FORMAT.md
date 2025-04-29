@@ -98,13 +98,24 @@ struct DataBlock {
     tag: [u8; 16],
 }
 ```
-The last block is an exception: `encrypted_content` might be smaller. Its size is then `(data.len() % sizeof(DataBlock)) - 16`.
+
+followed by one:
+```rust
+struct FinalBlock {
+    encrypted_content: [u8; 10],
+    tag: [u8; 16],
+}
+```
+
+The last `DataBlock` is an exception: `encrypted_content` might be smaller. Its size is then `((data.len() - sizeof(FinalBlock)) % sizeof(DataBlock)) - 16`.
 
 Each content `content_i` (and associated `db_tag_i`) of `DataBlock` number `i` is decrypted through `msg_i, tag_i = AES-GCM-256(kd, nonce=(nonce . u32.as_big_endian(i)), associated_data="")`.
 
 The block is then verified by comparing `tag_i` with `db_tag_i`.
 
 The concatenation of `msg_i` forms the inner `data`.
+
+`FinalBlock` is decrypted through `msg_final, tag_final = AES-GCM-256(kd, nonce=(nonce . u32.as_big_endian(i)), associated_data="FINALAAD")`. To protect from a truncation attack, before using an archive, it must be checked that `tag_final` equals to `FinalBlock.tag` value and that `msg_final` is `FINALBLOCK`.
 
 ### Example
 
