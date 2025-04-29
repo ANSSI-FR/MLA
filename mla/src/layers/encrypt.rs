@@ -496,11 +496,11 @@ impl<'a, R: 'a + Read + Seek> EncryptionLayerReader<'a, R> {
         let input_size_without_final = input_size - (FINAL_BLOCK_SIZE as u64);
         let chunk_number_at_end_of_data = input_size_without_final / CHUNK_TAG_SIZE;
         let last_chunk_size = input_size_without_final % CHUNK_TAG_SIZE;
-        if last_chunk_size == 0 {
-            self.all_plaintext_size = chunk_number_at_end_of_data * CHUNK_SIZE;
+        self.all_plaintext_size = if last_chunk_size == 0 {
+            chunk_number_at_end_of_data * CHUNK_SIZE
         } else {
-            self.all_plaintext_size = chunk_number_at_end_of_data * CHUNK_SIZE + last_chunk_size - TAG_LENGTH as u64;
-        }
+            chunk_number_at_end_of_data * CHUNK_SIZE + last_chunk_size - TAG_LENGTH as u64
+        };
         Ok(())
     }
 
