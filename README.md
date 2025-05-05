@@ -573,3 +573,7 @@ The algorithm used for the generation is as follow:
     1. Use the first 32-bytes as a seed for a ChaCha-20 rounds PRNG
     1. The first 32-bytes output of ChaCha, after being clamped as specified by the Curve-25519 reference, is used as the new private key
 1. Use the last computed private key as the resulting key
+
+# Contributing
+
+We appreciate your help! To contribute, please read our [contributing instructions](.github/CONTRIBUTING.md).
