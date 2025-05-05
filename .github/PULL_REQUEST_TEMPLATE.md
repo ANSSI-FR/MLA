@@ -10,12 +10,6 @@ Provide a concise summary of the changes made in this pull request. Mention the 
 Link to any related issues or tasks:
 - Fixes # (issue)
 
-## Changes made
-
-Describe the key changes made in this pull request:
-- Bullet point 1
-- Bullet point 2
-
 ## Type of change
 
 - [ ] Bug fix (non-breaking change that fixes an issue)
