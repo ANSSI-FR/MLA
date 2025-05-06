@@ -20,11 +20,11 @@ humansize = {version = "2.1", features = ["impl_style"]}
 hex = "0.4"
 sha2 = { version = "0.10", default-features = false}
 hkdf = { version = "0.12", default-features = false}
-zeroize = { version = "1", default-features = false}
+zeroize = { version = "1.8", default-features = false}
 # Could be made optional / feature to enable (for binary size)
 tar = "0.4"
 rand_chacha = "0.9"
-lru = "0.13"
+lru = "0.14"
 
 [lints]
 workspace = true
