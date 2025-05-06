@@ -1014,7 +1014,7 @@ impl MLAFile {
                 io::copy(&mut archive_file.unwrap().data, &mut output)?;
             } else if dest.is_instance(&py.get_type::<MLAFile>().getattr("_buffered_type")?)? {
                 let src = &mut archive_file.unwrap().data;
-                let mut buf = Vec::from_iter(std::iter::repeat(0).take(chunk_size));
+                let mut buf = Vec::from_iter(std::iter::repeat_n(0, chunk_size));
                 while let Ok(n) = src.read(&mut buf) {
                     if n == 0 {
                         break;
