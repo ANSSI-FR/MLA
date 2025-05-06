@@ -21,7 +21,6 @@ use kem::{Decapsulate, Encapsulate};
 use rand::SeedableRng;
 use rand_chacha::{ChaChaRng, rand_core::CryptoRngCore};
 
-use serde::{Deserialize, Deserializer, Serialize};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use super::traits::InnerReaderTrait;
@@ -94,31 +93,63 @@ struct KeyCommitmentAndTag {
 // A Vec<u8> could also be used, but using array avoid having creating arbitrary sized vectors
 // that early in the process
 // TODO: use serde-big-array
-impl Serialize for KeyCommitmentAndTag {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::ser::Serializer,
-    {
-        let mut part1: [u8; KEY_COMMITMENT_SIZE / 2] = [0; KEY_COMMITMENT_SIZE / 2];
-        let mut part2: [u8; KEY_COMMITMENT_SIZE / 2] = [0; KEY_COMMITMENT_SIZE / 2];
-        part1.copy_from_slice(&self.key_commitment[..KEY_COMMITMENT_SIZE / 2]);
-        part2.copy_from_slice(&self.key_commitment[KEY_COMMITMENT_SIZE / 2..]);
-        (part1, part2, self.tag).serialize(serializer)
+impl bincode::Encode for KeyCommitmentAndTag {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        let part1: &[u8] = &self.key_commitment[..KEY_COMMITMENT_SIZE / 2];
+        let part2: &[u8] = &self.key_commitment[KEY_COMMITMENT_SIZE / 2..];
+        part1.encode(encoder)?;
+        part2.encode(encoder)?;
+        self.tag.encode(encoder)?;
+        Ok(())
     }
 }
-impl<'de> Deserialize<'de> for KeyCommitmentAndTag {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let (part1, part2, tag) = <(
-            [u8; KEY_COMMITMENT_SIZE / 2],
-            [u8; KEY_COMMITMENT_SIZE / 2],
-            [u8; TAG_LENGTH],
-        )>::deserialize(deserializer)?;
+
+impl<'de, Context> bincode::BorrowDecode<'de, Context> for KeyCommitmentAndTag {
+    fn borrow_decode<D: bincode::de::BorrowDecoder<'de>>(
+        decoder: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
+        let part1: &[u8] = bincode::BorrowDecode::borrow_decode(decoder)?;
+        let part2: &[u8] = bincode::BorrowDecode::borrow_decode(decoder)?;
+        let tag: [u8; TAG_LENGTH] = bincode::BorrowDecode::borrow_decode(decoder)?;
+
+        if part1.len() + part2.len() != KEY_COMMITMENT_SIZE {
+            return Err(bincode::error::DecodeError::OtherString(
+                "Invalid key commitment size".to_string(),
+            ));
+        }
+
+        let mut key_commitment = [0u8; KEY_COMMITMENT_SIZE];
+        key_commitment[..KEY_COMMITMENT_SIZE / 2].copy_from_slice(part1);
+        key_commitment[KEY_COMMITMENT_SIZE / 2..].copy_from_slice(part2);
+
+        Ok(KeyCommitmentAndTag {
+            key_commitment,
+            tag,
+        })
+    }
+}
+
+impl<Context> bincode::Decode<Context> for KeyCommitmentAndTag {
+    fn decode<D: bincode::de::Decoder<Context = Context>>(
+        decoder: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
+        let part1: Vec<u8> = Vec::decode(decoder)?;
+        let part2: Vec<u8> = Vec::decode(decoder)?;
+        let tag: [u8; TAG_LENGTH] = bincode::Decode::decode(decoder)?;
+
+        if part1.len() + part2.len() != KEY_COMMITMENT_SIZE {
+            return Err(bincode::error::DecodeError::OtherString(
+                "Invalid key commitment size".to_string(),
+            ));
+        }
+
         let mut key_commitment = [0u8; KEY_COMMITMENT_SIZE];
         key_commitment[..KEY_COMMITMENT_SIZE / 2].copy_from_slice(&part1);
         key_commitment[KEY_COMMITMENT_SIZE / 2..].copy_from_slice(&part2);
+
         Ok(KeyCommitmentAndTag {
             key_commitment,
             tag,
@@ -165,12 +196,38 @@ impl InternalEncryptionConfig {
 }
 
 /// Configuration stored in the header, to be reloaded
-#[derive(Serialize, Deserialize)]
+#[derive(bincode::Encode)]
 pub struct EncryptionPersistentConfig {
     /// Key-wrapping for each recipients
     pub hybrid_multi_recipient_encapsulate_key: HybridMultiRecipientEncapsulatedKey,
     /// Encrypted version of the hardcoded `KEY_COMMITMENT_CHAIN`
     key_commitment: KeyCommitmentAndTag,
+}
+
+impl<Context> bincode::Decode<Context> for EncryptionPersistentConfig {
+    fn decode<D: bincode::de::Decoder<Context = Context>>(
+        decoder: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
+        Ok(Self {
+            hybrid_multi_recipient_encapsulate_key: HybridMultiRecipientEncapsulatedKey::decode(
+                decoder,
+            )?,
+            key_commitment: KeyCommitmentAndTag::decode(decoder)?,
+        })
+    }
+}
+
+impl<'de, Context> bincode::BorrowDecode<'de, Context> for EncryptionPersistentConfig {
+    fn borrow_decode<D: bincode::de::BorrowDecoder<'de>>(
+        decoder: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
+        Ok(Self {
+            hybrid_multi_recipient_encapsulate_key: HybridMultiRecipientEncapsulatedKey::borrow_decode(
+                decoder,
+            )?,
+            key_commitment: KeyCommitmentAndTag::borrow_decode(decoder)?,
+        })
+    }
 }
 
 #[derive(Default)]
@@ -507,9 +564,10 @@ impl<'a, R: 'a + Read + Seek> EncryptionLayerReader<'a, R> {
     /// Load the current chunk number chunk in cache
     /// Assume the inner layer is in the correct position
     fn load_in_cache(&mut self) -> Result<Option<()>, Error> {
-
         let size_to_read = if self.is_at_least_in_last_data_chunk() {
-            self.all_plaintext_size.saturating_sub(self.current_data_chunk_starting_position()) + TAG_LENGTH as u64
+            self.all_plaintext_size
+                .saturating_sub(self.current_data_chunk_starting_position())
+                + TAG_LENGTH as u64
         } else {
             CHUNK_SIZE + TAG_LENGTH as u64
         };
@@ -639,7 +697,9 @@ impl<'a, R: 'a + Read + Seek> Seek for EncryptionLayerReader<'a, R> {
                     // Optimization
                     Ok(self.current_position)
                 } else {
-                    self.seek(SeekFrom::Start((self.current_position as i64 + value) as u64))
+                    self.seek(SeekFrom::Start(
+                        (self.current_position as i64 + value) as u64,
+                    ))
                 }
             }
             SeekFrom::End(pos) => {
@@ -647,7 +707,9 @@ impl<'a, R: 'a + Read + Seek> Seek for EncryptionLayerReader<'a, R> {
                     // Seeking past the end is unsupported
                     return Err(Error::EndOfStream.into());
                 }
-                self.seek(SeekFrom::Start((pos + self.all_plaintext_size as i64) as u64))
+                self.seek(SeekFrom::Start(
+                    (pos + self.all_plaintext_size as i64) as u64,
+                ))
             }
         }
     }
@@ -815,7 +877,7 @@ mod tests {
     fn encrypt_failsafe_truncated() {
         let file = Vec::new();
         let out = encrypt_write(file);
-        
+
         // Truncate at the middle of a data chunk + tag
         // Thus, removing final block size which is not expected
         let stop = (out.len() - FINAL_BLOCK_SIZE) / 2;
@@ -857,7 +919,10 @@ mod tests {
         // Seek and decrypt twice the same thing
         let pos = encrypt_r.stream_position().unwrap();
         // test the current position retrievial
-        assert_eq!(pos, _tag_position_to_no_tag_position(FAKE_FILE.len() as u64));
+        assert_eq!(
+            pos,
+            _tag_position_to_no_tag_position(FAKE_FILE.len() as u64)
+        );
         // decrypt twice the same thing, with an offset
         let pos = encrypt_r.seek(SeekFrom::Start(5)).unwrap();
         assert_eq!(pos, 5);
