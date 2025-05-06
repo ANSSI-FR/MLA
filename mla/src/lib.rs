@@ -4,7 +4,7 @@ use std::io;
 use std::io::{Read, Seek, SeekFrom, Write};
 #[macro_use]
 extern crate bitflags;
-use bincode::Options;
+use bincode::{Decode, Encode, Options};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use config::InternalConfig;
 use crypto::hybrid::HybridPublicKey;
@@ -49,6 +49,9 @@ const FILENAME_MAX_SIZE: u64 = 65536;
 /// malformed files
 pub(crate) const BINCODE_MAX_DESERIALIZE: u64 = 512 * 1024 * 1024;
 
+#[derive(Debug, Clone, Copy, PartialEq, Encode, Decode)]
+pub struct Layers(u8);
+
 bitflags! {
     /// Available layers. Order is relevant:
     /// ```ascii-art
@@ -57,8 +60,7 @@ bitflags! {
     /// [Encryption (ENCRYPT)]
     /// [Raw File I/O]
     /// ```
-    #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-    pub struct Layers: u8 {
+    impl Layers: u8 {
         const ENCRYPT = 0b0000_0001;
         const COMPRESS = 0b0000_0010;
         /// Recommended layering

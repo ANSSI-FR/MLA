@@ -4,13 +4,12 @@ use crate::crypto::hpke::{
 };
 use crate::errors::ConfigError;
 use crate::layers::encrypt::get_crypto_rng;
+use bincode::{Encode, Decode};
 use hkdf::Hkdf;
 use kem::{Decapsulate, Encapsulate};
 use ml_kem::{KemCore, MlKem1024};
 use rand::Rng;
 use rand_chacha::rand_core::CryptoRngCore;
-use serde::{Deserialize, Serialize};
-use serde_big_array::BigArray;
 use sha2::Sha512;
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
 use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -114,10 +113,8 @@ fn combine(
 // to avoid confusion / prone-to-error code
 
 /// Per-recipient hybrid encapsulated shared secret
-#[derive(Serialize, Deserialize)]
+#[derive(Encode, Decode)]
 struct HybridRecipientEncapsulatedKey {
-    /// Ciphertext for ML-KEM
-    #[serde(with = "BigArray")]
     ct_ml: MLKEMCiphertext,
     /// Ciphertext for DH-KEM (actually an ECC ephemeral public key)
     ct_ecc: DHKEMCiphertext,
@@ -132,7 +129,7 @@ struct HybridRecipientEncapsulatedKey {
 
 /// Key encapsulated for multiple recipient with hybrid cryptography
 /// Will be store in and load from the header
-#[derive(Serialize, Deserialize)]
+#[derive(Encode, Decode)]
 pub struct HybridMultiRecipientEncapsulatedKey {
     /// Key wrapping for each recipient
     recipients: Vec<HybridRecipientEncapsulatedKey>,
