@@ -1,4 +1,3 @@
-```markdown
 # Pull request template
 
 ## Overview
@@ -34,4 +33,3 @@ Include screenshots to illustrate changes, if necessary.
 ## Additional context
 
 Provide any additional context or information that reviewers should be aware of.
-```
