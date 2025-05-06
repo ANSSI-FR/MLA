@@ -10,5 +10,4 @@ crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
 mla = { path = "../../mla", version = "1" }
-mlakey-parser = { path = "../../mlakey-parser", version = "0", default-features = false }
 

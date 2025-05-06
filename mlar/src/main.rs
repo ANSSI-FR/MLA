@@ -16,7 +16,7 @@ use mla::{
     ArchiveFailSafeReader, ArchiveFile, ArchiveFooter, ArchiveHeader, ArchiveReader, ArchiveWriter,
     Layers,
 };
-use mlakey_parser::{generate_keypair, parse_mlakey_privkey, parse_mlakey_pubkey};
+use mla::crypto::mlakey_parser::{generate_keypair, parse_mlakey_privkey, parse_mlakey_pubkey};
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use sha2::{Digest, Sha512};

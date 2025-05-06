@@ -943,6 +943,8 @@ dependencies = [
  "byteorder",
  "criterion",
  "ctr",
+ "curve25519-dalek",
+ "der-parser",
  "digest",
  "generic-array",
  "ghash",
@@ -952,7 +954,7 @@ dependencies = [
  "hpke",
  "kem",
  "ml-kem",
- "mlakey-parser",
+ "pem",
  "rand",
  "rand_chacha",
  "serde",
@@ -969,7 +971,6 @@ name = "mla-bindings-c"
 version = "1.0.0"
 dependencies = [
  "mla",
- "mlakey-parser",
 ]
 
 [[package]]
@@ -979,25 +980,7 @@ dependencies = [
  "afl",
  "bincode",
  "mla",
- "mlakey-parser",
  "serde",
-]
-
-[[package]]
-name = "mlakey-parser"
-version = "0.1.0"
-dependencies = [
- "curve25519-dalek",
- "der-parser",
- "kem",
- "ml-kem",
- "mla",
- "pem",
- "rand",
- "rand_chacha",
- "rand_core",
- "sha2",
- "x25519-dalek",
 ]
 
 [[package]]
@@ -1014,7 +997,6 @@ dependencies = [
  "lru",
  "ml-kem",
  "mla",
- "mlakey-parser",
  "permutate",
  "rand",
  "rand_chacha",

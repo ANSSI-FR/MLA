@@ -40,14 +40,15 @@ ml-kem = { version = "0.3.0-pre", default-features = false, features = ["zeroize
 kem = {version = "0.3.0-pre.0", default-features = false }
 # Wait that all MLA dependencies upgrade below crate to do it too as there is a trait modification (CryptoRngCore -> CryptoRng + RngCore)
 hpke = { version = "0.12", default-features = false, features = ["alloc", "x25519"] }
+der-parser = { version = "10.0", default-features = false}
+curve25519-dalek = { version = "4.1", default-features = false}
+pem = { version = "3.0", default-features = false}
 
 [dev-dependencies]
 hex-literal = { version = "1.0", default-features = false}
 aes-gcm = { version = "0.10", default-features = false, features = ["aes"]}
 aead = { version = "0.5", default-features = false, features = ["alloc"]}
 criterion = { version = "0.5", default-features = false}
-# mlakey-parser = { version = "0.4", default-features = false }
-mlakey-parser = { path = "../mlakey-parser", version = "0.1", default-features = false }
 hex = { version = "0.4", default-features = false, features = ["alloc"]}
 static_assertions = { version = "1.1", default-features = false }
 
