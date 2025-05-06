@@ -1,4 +1,4 @@
-use bincode::error::DecodeError;
+use bincode::{Decode, Encode, de::Decoder, enc::Encoder, error::{DecodeError, EncodeError}};
 /// Implements RFC 9180 for MLA needs
 use hpke::aead::{Aead as HPKEAeadTrait, AesGcm256 as HPKEAesGcm256};
 use hpke::kdf::{HkdfSha512, Kdf as HpkeKdfTrait, LabeledExpand, labeled_extract};
@@ -33,20 +33,20 @@ impl DHKEMCiphertext {
     }
 }
 
-impl bincode::Encode for DHKEMCiphertext {
-    fn encode<E: bincode::enc::Encoder>(
+impl Encode for DHKEMCiphertext {
+    fn encode<E: Encoder>(
         &self,
         encoder: &mut E,
-    ) -> core::result::Result<(), bincode::error::EncodeError> {
-        bincode::Encode::encode(&self.to_bytes(), encoder)
+    ) -> core::result::Result<(), EncodeError> {
+        Encode::encode(&self.to_bytes(), encoder)
     }
 }
 
-impl<Context> bincode::Decode<Context> for DHKEMCiphertext {
-    fn decode<D: bincode::de::Decoder<Context = Context>>(
+impl<Context> Decode<Context> for DHKEMCiphertext {
+    fn decode<D: Decoder<Context = Context>>(
         decoder: &mut D,
-    ) -> core::result::Result<Self, bincode::error::DecodeError> {
-        let bytes: [u8; 32] = bincode::Decode::decode(decoder)?;
+    ) -> core::result::Result<Self, DecodeError> {
+        let bytes: [u8; 32] = Decode::decode(decoder)?;
         let dhkemct = DHKEMCiphertext::from_bytes(&bytes)
         .or(Err(DecodeError::Other("Invalid DHKEMCiphertext")))?;
         Ok(dhkemct)
