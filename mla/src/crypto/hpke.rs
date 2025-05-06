@@ -23,7 +23,7 @@ type DHKEMSharedSecret = hpke::kem::SharedSecret<Kem>;
 pub(crate) struct DHKEMCiphertext(<Kem as KemTrait>::EncappedKey);
 
 impl DHKEMCiphertext {
-    fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
         Ok(DHKEMCiphertext(<Kem as KemTrait>::EncappedKey::from_bytes(
             bytes,
         )?))

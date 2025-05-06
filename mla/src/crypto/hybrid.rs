@@ -113,7 +113,6 @@ fn combine(
 // to avoid confusion / prone-to-error code
 
 /// Per-recipient hybrid encapsulated shared secret
-#[derive(Encode, Decode)]
 struct HybridRecipientEncapsulatedKey {
     ct_ml: MLKEMCiphertext,
     /// Ciphertext for DH-KEM (actually an ECC ephemeral public key)
@@ -127,12 +126,78 @@ struct HybridRecipientEncapsulatedKey {
     tag: [u8; TAG_LENGTH],
 }
 
+impl Encode for HybridRecipientEncapsulatedKey {
+    fn encode<E: bincode::enc::Encoder>(&self, encoder: &mut E) -> Result<(), bincode::error::EncodeError> {
+        self.ct_ml.encode(encoder)?;
+        self.ct_ecc.to_bytes().encode(encoder)?;
+        self.wrapped_ss.encode(encoder)?;
+        self.tag.encode(encoder)?;
+        Ok(())
+    }
+}
+
+impl<Context> Decode<Context> for HybridRecipientEncapsulatedKey {
+    fn decode<D: bincode::de::Decoder>(decoder: &mut D) -> Result<Self, bincode::error::DecodeError> {
+        let ct_ml = MLKEMCiphertext::decode(decoder)?;
+        let ct_ecc_bytes = <[u8; 32]>::decode(decoder)?;
+        let ct_ecc = DHKEMCiphertext::from_bytes(&ct_ecc_bytes).map_err(|_| bincode::error::DecodeError::OtherString("Invalid DHKEMCiphertext".to_string()))?;
+        let wrapped_ss = EncryptedSharedSecret::decode(decoder)?;
+        let tag = <[u8; TAG_LENGTH]>::decode(decoder)?;
+        Ok(Self {
+            ct_ml,
+            ct_ecc,
+            wrapped_ss,
+            tag,
+        })
+    }
+}
+
+impl<'de, Context> bincode::BorrowDecode<'de, Context> for HybridRecipientEncapsulatedKey {
+    fn borrow_decode<D: bincode::de::BorrowDecoder<'de>>(
+        decoder: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
+        let ct_ml = MLKEMCiphertext::borrow_decode(decoder)?;
+        let ct_ecc_bytes = <[u8; 32]>::borrow_decode(decoder)?;
+        let ct_ecc = DHKEMCiphertext::from_bytes(&ct_ecc_bytes).map_err(|_| bincode::error::DecodeError::OtherString("Invalid DHKEMCiphertext".to_string()))?;
+        let wrapped_ss = EncryptedSharedSecret::borrow_decode(decoder)?;
+        let tag = <[u8; TAG_LENGTH]>::borrow_decode(decoder)?;
+        Ok(Self {
+            ct_ml,
+            ct_ecc,
+            wrapped_ss,
+            tag,
+        })
+    }
+}
+
 /// Key encapsulated for multiple recipient with hybrid cryptography
 /// Will be store in and load from the header
-#[derive(Encode, Decode)]
 pub struct HybridMultiRecipientEncapsulatedKey {
     /// Key wrapping for each recipient
     recipients: Vec<HybridRecipientEncapsulatedKey>,
+}
+
+impl Encode for HybridMultiRecipientEncapsulatedKey {
+    fn encode<E: bincode::enc::Encoder>(&self, encoder: &mut E) -> Result<(), bincode::error::EncodeError> {
+        self.recipients.encode(encoder)?;
+        Ok(())
+    }
+}
+
+impl<Context> Decode<Context> for HybridMultiRecipientEncapsulatedKey {
+    fn decode<D: bincode::de::Decoder>(decoder: &mut D) -> Result<Self, bincode::error::DecodeError> {
+        let recipients = Vec::<HybridRecipientEncapsulatedKey>::decode(decoder)?;
+        Ok(Self { recipients })
+    }
+}
+
+impl<'de, Context> bincode::BorrowDecode<'de, Context> for HybridMultiRecipientEncapsulatedKey {
+    fn borrow_decode<D: bincode::de::BorrowDecoder<'de>>(
+        decoder: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
+        let recipients = Vec::<HybridRecipientEncapsulatedKey>::borrow_decode(decoder)?;
+        Ok(Self { recipients })
+    }
 }
 
 impl HybridMultiRecipientEncapsulatedKey {
