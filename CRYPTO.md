@@ -32,6 +32,8 @@ As a result, some optimization have not been performed -- which help keeping an 
 The data is encrypted using AES-256-GCM, an AEAD algorithm.
 To offer a *seekable* layer, data is encrypted using chunks of 128KB each, except for the last one. These encrypted chunks are all present with their associated tag. Tags are checked during decryption before returning data to the upper layer.
 
+To prevent truncation attacks, another chunk is added at the end corresponding to the encryption of the ASCII string "FINALBLOCK" with "FINALAAD" as additional authenticated data. Any usage of the archive must check correct decryption (including tag verification) of this last block.
+
 The key, the base nonce and the nonce derivation for each data chunk are computed following HPKE (RFC 9180) [^hpke].
 HPKE is parameterized with:
 
@@ -39,6 +41,8 @@ HPKE is parameterized with:
 - KDF: HKDF-SHA512
 - AEAD: AES-256-GCM
 - KEM: Hybrid KEM, a custom KEM described later in this document
+
+Thus, only one cryptography suite is available for now. If this setting ends up broken by cryptanalysis, we will move users onward to the next MLA version, using appropriate cryptography. Therefore, MLA lacks cryptography agility which is an encouraged property regarding post-quantum cryptography by ANSSI [^frsuggest]. Still, HPKE improves this aspect of MLA [^hpke].
 
 Full details are available below.
 
@@ -173,7 +177,6 @@ If the decryption is a success, returns $ss_{recipients}$. Otherwise, returns an
     - An existing formal analysis [^hpkeanalysis]
     - Easier code and security auditing, thanks to the use of known bricks
     - Availability of test vectors in the RFC, making the implementation more reliable
-    - The pre-shared key mode could be considered in the future of MLA to provide additional properties, such as forward secrecy (RFC 9180 section 9.1) in some situation
     - If signature is added to MLA in a future version, it could also be integrated using HPKE
 - To the knowledge of the author, no HPKE algorithm has been standardized for quantum hybridation, hence the custom algorithm
 - FIPS 203 is used as, at the time of writing:
@@ -239,7 +242,7 @@ $\hspace{1cm}\mathtt{throw\ KeyNotFoundError}$
 #### Arguments
 
 - The shared secret is cryptographically generated, so it can later be used as a shared secret in HPKE encryption
-- This secret is unique per archive, as it is generated on archive creation. Even "converting" or "repairing" an archive in `mlar` CLI will force a newly fresh secret
+- This secret is unique per archive, as it is generated on archive creation. Even "converting" or "repairing" an archive in `mlar` CLI will force a newly fresh secret. It is a new secret as there is no edit feature implemented, even if it is doable. Hence, a new random symetric key is used to encrypt its content while "converting" or "repairing" an archive. 
 - Even if the AEAD decryption worked for an non legitimate recipient, for instance following an intentional manipulation, the shared secret obtained will later be checked using Key commitment before decrypting actual data (see below)
 - Optimization would have been possible here, such as sharing a common ephemeral key for the DHKEM. But the size gain is not worth enough regarding the ciphertext size of MLKEM and would move the implementation away from the DHKEM in RFC 9180
 
@@ -446,11 +449,11 @@ It still use some bricks from `rust-hpke`, as the KDF, $\mathrm{LabeledExtract}$
 
 ### MLKEM implementation without a review
 
-Thanks to the hybrid approach, a flawed implementation of MLKEM would have limited consequences.
+Thanks to the hybrid approach, a flawed implementation of MLKEM would have limited consequences. It satisfies ANSSI guidelines for the transition first phase to PQC hybridization [^frsuggest]. For this reason, MLA is eligible for a security visa evaluation.
 
-It is therefore accepted by the author (as a trade-off) to use a MLKEM implementation without existing review to bring as soon as possible a reasonable protection against "Harvest now, decrypt later" attacks.
+For now, it is therefore accepted by the author (as a trade-off) to use a MLKEM implementation without existing review to bring as soon as possible a reasonable protection against "Harvest now, decrypt later" attacks.
 
-If a reviewed implementation with acceptable dependency emerges in the future, it can be easily swapped in MLA.
+If a reviewed implementation with acceptable dependency emerges in the future, it can be easily swapped in MLA. Thus, MLA would also satisfy the requirements to get a security visa evaluation in the second and third phases of these guidelines by including its PQC implementation.
 
 ## Security consideration
 
@@ -489,20 +492,11 @@ The `Encrypt` layer does not hide the plaintext length.
 
 Usually, this layer is used with the `Compress` layer. If an attacker knows the original file size, he might learn information about the original data entropy.
 
-- Forward secrecy
-
-The algorithm used does not provide forward secrecy [^hpke], i.e. someone knowing a recipient private key will always be able to read an archive sent to this recipient.
-
-Fundamentally, additional information are missing to provide this property (sender public key, pre-sharedkey, etc.).
-
-Still, if this property is expected in future MLA usage, it could be added through HPKE Key Scheduling [^hpke], without questioning the claims already made in this document.
-
 - Hidden recipient list
 
-Only the owner of a recipient private key can learn that it is an archive's recipient. 
+Only the owner of a recipient's private key can determine that they are a recipient of the archive. In other words, while the recipient list remains private, the total number of recipients is still visible. 
 
-In other words, the list of recipient is not public. Still, the number of recipient is.
-
+This is an intentional privacy feature.
 
 [^keycommit]: ["How to Abuse and Fix Authenticated Encryption Without Key Commitment", Usenix'22](https://www.usenix.org/conference/usenixsecurity22/presentation/albertini)
 [^issuekeycommit]: https://github.com/ANSSI-FR/MLA/issues/206

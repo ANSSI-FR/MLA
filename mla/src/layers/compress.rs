@@ -694,8 +694,8 @@ enum CompressionLayerFailSafeReaderState<R: Read> {
         ///     - if there is still data to decompress, go to 1.
         ///     - if this is the end of the stream, continue to 3.
         /// 3. the decompressor may have read too many byte, ie. `[end of stream n-1][start of stream n]`
-        ///                                                                          ^                 ^
-        ///                                                                     input_offset    last read position
+        ///    `                                                                    `^                 ^
+        ///    `                                                               `input_offset    last read position
         /// 4. rewind, using the cache, to `input_offset`
         ///
         /// A cache must be used, as the source is `Read` but not `Seek`.
