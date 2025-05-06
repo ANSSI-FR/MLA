@@ -40,7 +40,7 @@ HPKE is parameterized with:
 - Mode: "Base" (no PSK, no sender authentication)
 - KDF: HKDF-SHA512
 - AEAD: AES-256-GCM
-- KEM: Hybrid KEM, a custom KEM described later in this document
+- KEM: multi-recipient Hybrid KEM, a custom KEM described later in this document
 
 Thus, only one cryptography suite is available for now. If this setting ends up broken by cryptanalysis, we will move users onward to the next MLA version, using appropriate cryptography. Therefore, MLA lacks cryptography agility which is an encouraged property regarding post-quantum cryptography by ANSSI [^frsuggest]. Still, HPKE improves this aspect of MLA [^hpke].
 
@@ -190,7 +190,7 @@ If the decryption is a success, returns $ss_{recipients}$. Otherwise, returns an
     - HKDF can be considered as a Dual-PRF if both inputs are uniformly random [^combinearg7]. In MLA, the `combine` method is called with a shared secret from ML-KEM, and the resulting ECC key derivation -- both are uniformly random
     - To avoid potential mistake in the future, or a mis-reuse of this method, the "Nested Dual-PRF Combiner" is used instead of the "Dual-PRF Combiner" (also from [^dualnest]). Indeed, this combiner force the "salt" part of HKDF to be uniformly random using an additional PRF use, ensuring the following HKDF is indeed a Dual-PRF
 
-### Asymmetric encryption - Multi-recipient Hybrid KEM
+### Asymmetric encryption - Multi-Recipient Hybrid KEM
 
 #### Intuition
 
@@ -251,8 +251,8 @@ $\hspace{1cm}\mathtt{throw\ KeyNotFoundError}$
 #### Notation
 
 The "Multi-recipient Hybrid KEM" process described above is noted:
-- $\mathrm{HybridKEM.Encapsulate}$, taking a list of public keys $[(pk_{ecc}^0, pk_{mlkem}^0), ..., (pk_{ecc}^{n-1}, pk_{mlkem}^{n-1})]$ and returing a shared secret $ss_{recipients}$ and a ciphertext $ct_{recipients}$
-- $\mathrm{HybridKEM.Decapsulate}$, taking a couple of private keys ($sk_{ecc}^i$ and $sk_{mlkem}^i$), a ciphertext $ct_{recipients}$ and returning either a shared secret $ss_{recipients}$ if the recipient $i$ is a legitimate recipient (if the AEAD decryption works), or an error otherwise
+- $\mathrm{MultiRecipientHybridKEM.Encapsulate}$, taking a list of public keys $[(pk_{ecc}^0, pk_{mlkem}^0), ..., (pk_{ecc}^{n-1}, pk_{mlkem}^{n-1})]$ and returing a shared secret $ss_{recipients}$ and a ciphertext $ct_{recipients}$
+- $\mathrm{MultiRecipientHybridKEM.Decapsulate}$, taking a couple of private keys ($sk_{ecc}^i$ and $sk_{mlkem}^i$), a ciphertext $ct_{recipients}$ and returning either a shared secret $ss_{recipients}$ if the recipient $i$ is a legitimate recipient (if the AEAD decryption works), or an error otherwise
 
 `KeyCommitmentChain` is defined as the array of 64-bytes: `-KEY COMMITMENT--KEY COMMITMENT--KEY COMMITMENT--KEY COMMITMENT-`.
 
@@ -272,7 +272,7 @@ To encrypt n-bytes `data` to a list of public keys $[(pk_{ecc}^0, pk_{mlkem}^0),
 1. Compute a shared secret and the corresponding ciphertext:
 
 ```math
-ss_{recipients},\ ct_{recipients} = \mathrm{HybridKEM.Encapsulate}([(pk_{ecc}^0, pk_{mlkem}^0), ..., (pk_{ecc}^{n-1}, pk_{mlkem}^{n-1})])
+ss_{recipients},\ ct_{recipients} = \mathrm{MultiRecipientHybridKEM.Encapsulate}([(pk_{ecc}^0, pk_{mlkem}^0), ..., (pk_{ecc}^{n-1}, pk_{mlkem}^{n-1})])
 ```
 
 2. Derive the key and base nonce using HPKE
@@ -308,14 +308,32 @@ enc_j& = \textrm{Encrypt}_{AES\ 256\ GCM}(\\
 \end{align*}
 ```
 
-Note: $j+1$ is used because the sequence numbered 0 has already been used by the Key commitment.
+Note: $j$ starts at 0. $j+1$ is used because the sequence numbered 0 has already been used by the Key commitment.
 
-5. When the layer is finalized, the last chunk $chunk_n$ of data (with a length lower than or equals to 128KB) is encrypted the same way
+5. When the layer is finalized, the last chunk of data (with a length lower than or equals to 128KB) is encrypted the same way
+
+6. Finally, a final chunk with sequence number $n+1$ (where n is the number of data chunks) and special content and additional authenticated data is appended:
+
+```math
+\begin{align*}
+final\_chunk& = \textrm{Encrypt}_{AES\ 256\ GCM}(\\
+    &\textrm{key}=key,\\
+    &\textrm{nonce}=\mathrm{ComputeNonce}(base\_nonce, n + 1),\\
+    &\textrm{data}="FINALBLOCK"\\
+    &\textrm{aad}="FINALAAD"\\
+)&
+\end{align*}
+```
 
 The resulting layer is composed of:
 
 - header: $ct_{recipients}$
-- data: $keycommit \ .\ enc_0\ . \dots\ enc_n$
+- data: $keycommit \ .\ enc_0\ . \dots\ enc_n \ .$ $`final\_chunk`$
+
+Special care must be taken not to reuse a sequence number in implementations as this would be catastrophic given GCM properties. For n chunks of data:
+* sequence 0: key commitment
+* sequence 1 to $n$: data
+* sequence $n+1$: $`final\_chunk`$ with only the 10 bytes "FINALBLOCK" as content
 
 ----
 
@@ -325,7 +343,7 @@ To decrypt the data at position $pos$:
 
 ```math
 \begin{align}
-ss_{recipients} &= \mathrm{HybridKEM.Decapsulate}((sk_{ecc}^i, sk_{mlkem}^i), ct_{recipients})\\
+ss_{recipients} &= \mathrm{MultiRecipientHybridKEM.Decapsulate}((sk_{ecc}^i, sk_{mlkem}^i), ct_{recipients})\\
 (key, base\_nonce) &= \textrm{KeySchedule}_{hybrid}(
         \textrm{shared\ secret}=ss_{recipients},
     \textrm{info}=\mathtt{"MLA\ Encrypt\ Layer"}
@@ -419,7 +437,7 @@ If a `seed` is provided, the `ChaChaRng` is seeded with the first 32-bytes of $\
 
 The CSRNG is then provided to MLA deterministic APIs.
 
-## Implementation specifications
+## Implementation specificities
 
 ### External dependencies
 

@@ -5,15 +5,16 @@ Relation between the MLA version and the file format version:
 
 | MLA Version | Supported file format |
 |-------------|-----------------------|
-| 1.0         | 1                     |
+| 2.0         | 2                     |
 
-MLA file format v1
+MLA file format v2
 =
 
-This document introduces the MLA file format in its current version, v1.
+This document introduces the MLA file format in its current version, v2.
 For a more comprehensive introduction of the ideas behind it, please refer to [README.md](README.md).
 
 Please refer to the code for the detail of structures.
+Structures marked with #[bincode] below are encoded with bincode in version 2 with fixed int encoding in little endian.
 
 MLA Header
 -
@@ -24,7 +25,7 @@ struct MLA {
     magic: [u8; 3] = b"MLA",
     // Current file format version
     #[little_endian]
-    format_version: u32 = 1,
+    format_version: u32 = 2,
     #[bincode]
     struct ArchivePersistentConfig {
         // bitfield indicating which Layer is enabled
@@ -32,23 +33,26 @@ struct MLA {
         // - COMPRESS = 0b0000_0010;
         layers_enabled: Layers,
         // Optional field, if "encrypt" layer is enabled
-        encrypt: Option<
-            struct EncryptionPersistentConfig {
-                // ECIES with multi recipient
-                multi_recipient: struct MultiRecipientPersistent {
-                    /// Ephemeral public key
-                    public: [u8; 32],
-                    encrypted_keys: Vec<struct KeyAndTag {
-                        // Encrypted Key, for each one recipient
-                        key: [u8; 32],
-                        // Associated tag
-                        tag: [u8; 16],
-                    }>,
-                },
-                // nonce generated per-archive and used in the encryption process
-                nonce: [u8; 8],
+        encrypt: Option<struct EncryptionPersistentConfig {
+            // HPKE with multi recipient
+            recipients: Vec<struct HybridRecipientEncapsulatedKey {
+                /// "Ciphertext" for ML-KEM 1024
+                ct_ml: [u8; 1568],
+                /// "Ciphertext" for DH-KEM (actually an ECC ephemeral public key)
+                ct_ecc: [u8; 32],
+                /// Wrapped (encrypted) version of the main shared secret
+                /// - Algorithm: AES-256-GCM
+                /// - Key: per-recipient hybrid shared secret
+                /// - Nonce: per-recipient
+                wrapped_ss: [u8; 32],
+                /// Associated tag
+                tag: [u8; 16],
+            }>,
+            key_commitment: struct KeyCommitmentAndTag {
+                key_commitment: [u8; 64],
+                tag: [u8; 16],
             }
-        >,
+        }>,
     },
     data: [u8],
 }
@@ -61,35 +65,24 @@ The content of the `data` field then depend on what layers are enabled, in the f
 
 ### Example
 
-For example, on `samples/archive_v1.mla`:
+For example, on [samples/archive_v2.mla](samples/archive_v2.mla):
 * `4d 4c 41`: `magic`
-* `01 00 00 00`: `format_version`, set to 1 for archive format v1
+* `02 00 00 00`: `format_version`, set to 2 for archive format v2
 * `03`: `layers`, with `ENCRYPT | COMPRESS = 0b11`, ie Encryption and Compression layers are enabled
 * `01`: `EncryptionPersistentConfig` is present, as expected because the corresponding layer ("encrypt") is enabled
-* `97 (.. 32-bytes length ..) 5a`: `multi_recipient.public`
-* `01 00 00 00 00 00 00 00`: one `KeyAndTag` in `multi_recipient.encrypted_keys`
-* `99 (.. 32-bytes long ..) 59`: `encrypted_keys[0].key`
-* `34 (.. 16-bytes long ..) 7d`: `encrypted_keys[0].tag`
-* `0e (.. 8-bytes long ..) f4`: `nonce`
-* `56 until EOF`: `data`
+* `01 00 00 00 00 00 00 00` : there is one recipient
+* `a6 (.. 1568-bytes length ..) b8`: `recipient[0].mlkem_encapsulated_key`
+* `37 (.. 32-bytes length ..) 00`: `recipient[0].ecc_encapsulated_key`
+* `41 (.. 32-bytes length ..) b3`: `recipient[0].encrypted_shared_secret`
+* `83 (.. 16-bytes length ..) 51`: `recipient[0].encrypted_shared_secret_tag`
+* `08 (.. 64-bytes length ..) df`: `encrypted_key_commitment`
+* `f3 (.. 16-bytes length ..) 26`: `encrypted_key_commitment_tag`
+* `a3 until EOF`: `data`
 
 Encryption layer
 -
 
-From the information in the header, the `nonce` is recovered.
-
-To recover the decryption key `kd`, using:
-* a candidate Ed25519 key-pair `cpub`, `cpriv`
-* the ephemeral public key in the archive `apub = multi_recipient.public`
-* registered recipient number `i` (from `multi_recipient.encrypted_keys`): `key_i` and associated `tag_i`
-
-The following operations are made:
-1. Derives the Diffie-Hellman key `dhkey = HKDF(SHA-256, D-H(cpriv, apub), "KEY DERIVATION")`
-2. For each possible recipient:
-    1. Decrypt and compute tag: `possible_key, tag = AES-GCM-256(dhkey, nonce="ECIES NONCE0", associated_data="").decrypt(key_i)`
-    2. Compare the resulting tag `tag` with `tag_i`. If they are the same, `kd = possible_key`
-
-Once the decryption key `kd` and `nonce` have been retrieved, `data` can be decrypted.
+From the information in the header, the cryptographic material is recovered as described in `CRYPTO.md`. This enables decrypting following content.
 
 `data` is a contiguous list of:
 ```rust
@@ -109,28 +102,30 @@ struct FinalBlock {
 
 The last `DataBlock` is an exception: `encrypted_content` might be smaller. Its size is then `((data.len() - sizeof(FinalBlock)) % sizeof(DataBlock)) - 16`.
 
-Each content `content_i` (and associated `db_tag_i`) of `DataBlock` number `i` is decrypted through `msg_i, tag_i = AES-GCM-256(kd, nonce=(nonce . u32.as_big_endian(i)), associated_data="")`.
+To protect from a truncation attack, before using an archive, it must be checked that `FinalBlock.tag` is correct and that `msg_final` is `FINALBLOCK`.
 
-The block is then verified by comparing `tag_i` with `db_tag_i`.
-
-The concatenation of `msg_i` forms the inner `data`.
-
-`FinalBlock` is decrypted through `msg_final, tag_final = AES-GCM-256(kd, nonce=(nonce . u32.as_big_endian(i)), associated_data="FINALAAD")`. To protect from a truncation attack, before using an archive, it must be checked that `tag_final` equals to `FinalBlock.tag` value and that `msg_final` is `FINALBLOCK`.
+On disk format of PEM or DER keys is documented in comments of functions `parse_mlakey_privkey_der` and `parse_mlakey_pubkey_der`.
 
 ### Example
 
-For example, on `samples/archive_v1.mla` with the private key `samples/testpub25519.pem`:
-* The ASN1 data contained in `testpub25519.pem` is a 32-bytes long key `asn1_key = 34 .. CE`
-* This corresponds to a private Ed25519 key `cpriv = clamping(SHA-256(asn1_key))`, with `clamping` being the operation of twiddling a few bits (`scalar[0] &= 0xf8`, `scalar[31] &= 0x7f`, `scalar[31] |= 0x40`).
+For example, with the private key [samples/test_mlakey_archive_v2.der](samples/test_mlakey_archive_v2.der):
+* The MLA private key ASN.1 DER encoded data is a X25519 private key followed by a ML-KEM 1024 private key
+* MLA private key X25519 part: `5d 58 a8 7c 9c 69 ba 67 4a f9 d3 89 23 76 c9 5e d8 eb 08 cf 09 cd 61 5c 07 28 99 c3 79 45 96 a9`
+* MLA private key `mlkem_dk` (`dk_pke||ek||h||z`) part: `21 f0 (.. 3168-bytes length ..) de 3e`
 
-`cpriv = f0 6d f7 24 61 4b 61 3a 4b 88 f6 04 dd 6e 30 a1 4d e5 89 63 69 69 c6 51 67 a8 3d ea 9c cb c6 4b`
+This gives with [samples/archive_v2.mla](samples/archive_v2.mla): 
+* `ecc_shared_secret`: `40 1c 7f b9 ba 4a d3 7c 5a 8f a9 7a 6f b4 02 57 22 d6 e9 b2 66 2c 02 cd eb d0 f4 81 0c 14 16 00`
+* `mlkem_shared_secret`: `6a 92 fa 89 e2 30 57 19 eb 39 52 46 24 06 de 65 30 61 b8 f6 bb 6e 61 63 3c b3 99 d5 f6 a3 95 d0`
+* `combined_shared_secret`: `ec f2 64 11 18 2e 19 0a 3e da bf 55 51 5f 51 0e 85 ed 3c 66 78 59 f5 7d 78 44 b9 96 41 a1 57 1f`
+* `Per-Recipient Hybrid KEM HPKE base_nonce`: `cb 7e 1d 35 29 c1 92 a2 71 03 6c 71`
+* `Per-Recipient Hybrid KEM HPKE key`: `8c 22 67 a9 65 4b d4 c1 45 42 6b e9 4e f1 94 93 d5 e8 ae 83 c2 dd 65 62 a3 82 fa d0 b9 95 d1 79`
+* `Per-Recipient Hybrid KEM decapsulated key`: `41 14 54 34 3b 09 a9 cd df d7 f0 83 46 63 35 dc f4 89 4b 12 46 06 81 68 6d 1f d0 0e 11 63 3a b3` 
+* `Multi-Recipient Hybrid KEM HPKE base_nonce`: `df d3 f3 74 d1 0e b9 1f 31 ba 6c 09`
+* `Multi-Recipient Hybrid KEM HPKE key`: `8a a1 b7 a7 ad 5d 8d 07 ae 97 27 93 d5 5b 45 d9 ed dc b3 30 91 93 88 ce f1 19 63 78 0d 32 b0 0b`
 
-* Computing `dhkey` results in `dhkey = d3 11 3e 86 98 6f 84 9e ed 8f 42 7a 7b dd f8 e0 5f 43 f0 47 f1 3c 6d 19 11 b5 5e d8 e9 36 09 47`
-* Decrypting the corresponding key leads to the correct tag (`34 .. 7d`), the obtained `kd = msg` is then valid.
+These last two elements are those with which HPKE is setup to do AES-256-GCM decryption of the rest of the archive.
 
-`kd = b7 fc 48 ec c3 90 12 3a a7 1b c6 9d 10 74 36 de bf 27 aa 68 0e 6c c8 10 cb 9c a1 ce 6e ba d2 22`
-
-* Now, the decryption process can be started. `data` length (28509) being smaller than `sizeof(DataBlock)`, the `encrypted_content` is 28493-bytes long. The corresponding tag is `83 .. dd` (which corresponds to the last 16-bytes of `data`, also corresponding here to the last 16-byte of the archive).
+* Now, the decryption process can be started. `data` length (`27273=29044-(sizeof(header)=1745)-(sizeof(FinalBlock)=26)`) being smaller than `sizeof(DataBlock)`, the `encrypted_content` is 27257-bytes long. The corresponding tag is `2e .. 16` (which corresponds to the last 16-bytes of `data` before the `FinalBlock` ).
 
 The first decrypted bytes are `9b ff ff 3f 67 54 af 01 03 e7 35 a9 87 88 82 3e ...`.
 
@@ -167,7 +162,7 @@ The resulting data is the concatenation of all decompressed `compressed_block_i`
 
 ### Example
 
-For example, on [samples/archive_v1.mla](samples/archive_v1.mla), after decryption:
+For example, on [samples/archive_v2.mla](samples/archive_v2.mla), after decryption:
 * Reading from the end of `data` leads to `sizes_info_length = 24`
 * The corresponding `SizesInfo` is:
 ```rust
@@ -175,13 +170,13 @@ SizesInfo {
     compressed_sizes: [
         13333,
         259,
-        14873,
+        13637,
     ],
-    last_block_size: 3209399,
+    last_block_size: 3209403,
 }
 ```
 
-It indeed corresponds to the size of `data`: `data.len() = 28493 = 13333 + 259 + 14873 + 24 + 4`. The decompressed size is then `decompressed.len() = 2 * (4 * 1024 * 1024) + 3209399`.
+It indeed corresponds to the size of `data`: `data.len() = 27257 = 13333 + 259 + 13637 + 24 + 4`. The decompressed size is then `decompressed.len() = 2 * (4 * 1024 * 1024) + 3209403`.
 
 * Each block can now be decompressed
 
@@ -200,22 +195,22 @@ struct ArchiveContent {
     #[bincode]
     struct ArchiveFooter {
         // Filename -> Corresponding FileInfo
-        files_info: HashMap<String, struct FileInfo {
+        files_info: Vec<(String, struct FileInfo {
             // Offsets of continuous chunks of `ArchiveFileBlock`
             offsets: Vec<u64>,
             // Size of the file, in bytes
             size: u64,
             // Offset of the ArchiveFileBlock::EndOfFile
             eof_offset: u64,
-        }>,
+        })>,
     },
     // Size of the serialized `ArchiveFooter`
     #[little_endian]
-    archive_footer_length: u32
+    archive_footer_length: u64
 }
 ```
 
-The archive footer information is retrieved by first reading the value of `archive_footer_length` at the end of `data`, then reading `archive_footer_length`-bytes at the end of `data` minus 4 bytes.
+The archive footer information is retrieved by first reading the value of `archive_footer_length` at the end of `data`, then reading `archive_footer_length`-bytes at the end of `data` minus 8 bytes.
 
 `file_data` is the concatenation of all `ArchiveFileBlock`s. Each block starts with a `u8` corresponding to the block type:
 ```rust
@@ -231,7 +226,7 @@ enum ArchiveFileBlockType {
 Then, depending on the block type:
 ```rust
 struct FileStart {
-    // File uniq ID in the archive
+    // File unique ID in the archive
     #[little_endian]
     id: u64,
     // Length of the filename
@@ -242,7 +237,7 @@ struct FileStart {
 }
 
 struct FileContent {
-    // File uniq ID in the archive
+    // File unique ID in the archive
     #[little_endian]
     id: u64,
     // Length of the block_data
@@ -253,7 +248,7 @@ struct FileContent {
 }
 
 struct EndOfFile {
-    // File uniq ID in the archive
+    // File unique ID in the archive
     #[little_endian]
     id: u64,
     // SHA-256 of the file content
@@ -263,7 +258,7 @@ struct EndOfFile {
 struct EndOfArchiveData {}
 ```
 
-A file `file_i` in the archive always starts with a `FileStart`, giving its filename and uniq ID.
+A file `file_i` in the archive always starts with a `FileStart`, giving its filename and unique ID.
 Let `content_i` be the content of `file_i`. It starts empty.
 
 Each time a `FileContent` is encountered, the corresponding `block_data` is appended to `content_i`.
@@ -272,7 +267,7 @@ Once the `EndOfFile` for `file_i` is reached, the file is completely read. Its c
 
 Between the last `EndOfFile` block and the beginning of the `ArchiveFooter`, there is the only `EndOfArchiveData` block. It is used in the repair process, to correctly separate the actual archive data from the footer.
 
-As blocks from different files can be interleaved, the `files_info.offsets` corresponds to offsets in `file_data` of blocks for the same file.
+As blocks from different files can be interleaved, the `files_info.offsets` are the offsets in `file_data` of blocks for the same file.
 
 For instance, if the blocks are:
 ```
@@ -290,33 +285,31 @@ Additionally, for faster `hash` retrieval, `files_info.eof_offset` is the offset
 
 Finally, the `files_info.size` is the size in bytes of the corresponding file content.
 
+For reproducibility, the `files_info` `Vec` is sorted by filename (lexicographically by unicode code points) before being serialized.
+
 ### Example
 
-For example, on [samples/archive_v1.mla](samples/archive_v1.mla), after decryption and decompression:
+For example, on [samples/archive_v2.mla](samples/archive_v2.mla), after decryption and decompression:
 * Reading from the end of `data` leads to `archive_footer_length = 18444`
-* The corresponding `ArchiveFooter` is:
+* The corresponding `ArchiveFooter` is (observed order may be different if deserialized into a HashMap):
 ```rust
 ArchiveFooter {
     files_info: {
-        "file_190": FileInfo {
+        "big": FileInfo {
             offsets: [
-                4977,
-                9812,
-                794561,
-                1066572,
+                1074403,
             ],
-            size: 4096,
-            eof_offset: 1066572,
+            size: 10485760,
+            eof_offset: 11560200,
         },
-        "file_38": FileInfo {
+        "file_0": FileInfo {
             offsets: [
-                1239,
-                17260,
-                174249,
-                1072804,
+                337,
+                19122,
+                1074362,
             ],
             size: 4096,
-            eof_offset: 1072804,
+            eof_offset: 1074362,
         },
         ...
         "simple": FileInfo {
@@ -326,7 +319,6 @@ ArchiveFooter {
                         size: 256,
                         eof_offset: 296,
                     },
-        ...
     }
 }
 ```
