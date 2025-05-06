@@ -144,7 +144,18 @@ create_exception!(
     MLAError,
     "Unable to expand while using the HKDF"
 );
-create_exception!(mla, HPKEError, MLAError, "Error during HPKE computation");
+create_exception!(
+    mla,
+    HPKEError,
+    MLAError,
+    "Error during HPKE computation"
+);
+create_exception!(
+    mla,
+    InvalidLastTag,
+    MLAError,
+    "Wrong last block tag"
+);
 
 // Convert potentials errors to the wrapped type
 
@@ -247,6 +258,9 @@ impl From<WrappedError> for PyErr {
                 }
                 mla::errors::Error::HPKEError(msg) => {
                     PyErr::new::<HPKEError, _>(format!("{:}", msg))
+                }
+                mla::errors::Error::InvalidLastTag => {
+                    PyErr::new::<InvalidLastTag, _>("Wrong last block tag")
                 }
             },
             WrappedError::WrappedPy(inner_err) => inner_err,
@@ -1134,6 +1148,10 @@ fn pymla(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
         py.get_type::<HKDFInvalidKeyLength>(),
     )?;
     m.add("HPKEError", py.get_type::<HPKEError>())?;
+    m.add(
+        "InvalidLastTag",
+        py.get_type::<InvalidLastTag>(),
+    )?;
 
     // Add constants
     m.add("LAYER_COMPRESS", Layers::COMPRESS.bits())?;
