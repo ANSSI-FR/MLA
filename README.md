@@ -3,10 +3,6 @@
 https://crates.io/crates/mla)
 [![Documentation MLA](https://img.shields.io/badge/docs.rs-mla-blue)](
 https://docs.rs/mla)
-[![Cargo Curve25519-Parser](https://img.shields.io/badge/crates.io-curve25519_parser-red)](
-https://crates.io/crates/curve25519-parser)
-[![Documentation Curve25519-Parser](https://img.shields.io/badge/docs.rs-curve25519_parser-blue)](
-https://docs.rs/curve25519-parser)
 [![Cargo MLAR](https://img.shields.io/badge/crates.io-mlar-red)](
 https://crates.io/crates/mlar)
 
