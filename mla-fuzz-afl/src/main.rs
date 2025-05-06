@@ -2,7 +2,7 @@
 use afl::fuzz;
 extern crate afl;
 use bincode::Options;
-use mlakey_parser::{parse_mlakey_privkey, parse_mlakey_pubkey};
+use mla::crypto::mlakey_parser::{parse_mlakey_privkey, parse_mlakey_pubkey};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{self, Cursor, Read, Write};

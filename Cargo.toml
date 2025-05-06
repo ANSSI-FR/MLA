@@ -1,7 +1,6 @@
 [workspace]
 members = [
     "mla",
-    "mlakey-parser",
     "mlar",
     "mla-fuzz-afl",
     "bindings/C",
