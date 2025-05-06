@@ -1,11 +1,10 @@
 use std::fmt;
 use std::io::{self, Read, Seek, SeekFrom, Take, Write};
 
-use bincode::Options;
+use bincode::{Decode, Encode};
 use brotli::BrotliState;
 use brotli::writer::StandardAlloc;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
-use serde::{Deserialize, Serialize};
 
 use crate::layers::traits::{
     InnerWriterTrait, InnerWriterType, LayerFailSafeReader, LayerReader, LayerWriter,
@@ -90,7 +89,7 @@ impl<R: Read> fmt::Debug for CompressionLayerReaderState<R> {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Encode, Decode, Debug)]
 pub struct SizesInfo {
     /// Ordered list of chunk compressed size; only set at init
     pub compressed_sizes: Vec<u32>,
@@ -315,10 +314,10 @@ impl<'a, R: 'a + InnerReaderTrait> LayerReader<'a, R> for CompressionLayerReader
 
                 // Read SizesInfo
                 inner.seek(SeekFrom::Start(pos - len))?;
-                self.sizes_info = match bincode::options()
-                    .with_limit(BINCODE_MAX_DESERIALIZE)
-                    .with_fixint_encoding()
-                    .deserialize_from(inner.take(len))
+                let bincode_config = bincode::config::standard()
+                    .with_limit::<BINCODE_MAX_DESERIALIZE>()
+                    .with_fixed_int_encoding();
+                self.sizes_info = match bincode::decode_from_std_read(&mut inner.take(len), bincode_config)
                 {
                     Ok(sinfo) => Some(sinfo),
                     _ => {
@@ -596,22 +595,11 @@ impl<'a, W: 'a + InnerWriterTrait> LayerWriter<'a, W> for CompressionLayerWriter
             compressed_sizes,
             last_block_size,
         };
-        if bincode::options()
-            .with_limit(BINCODE_MAX_DESERIALIZE)
-            .with_fixint_encoding()
-            .serialize_into(&mut inner, &sinfo)
-            .is_err()
-        {
-            return Err(Error::SerializationError);
-        };
-        match bincode::serialized_size(&sinfo) {
-            Ok(size) => {
-                inner.write_u32::<LittleEndian>(size as u32)?;
-            }
-            Err(_) => {
-                return Err(Error::SerializationError);
-            }
-        };
+        let bincode_config = bincode::config::standard()
+                    .with_limit::<BINCODE_MAX_DESERIALIZE>()
+                    .with_fixed_int_encoding();
+        let written_bytes = bincode::encode_into_std_write(&sinfo, &mut inner, bincode_config).or(Err(Error::SerializationError))?;
+        inner.write_u32::<LittleEndian>(written_bytes as u32)?;
         self.compressed_sizes = sinfo.compressed_sizes;
 
         // Recursive call

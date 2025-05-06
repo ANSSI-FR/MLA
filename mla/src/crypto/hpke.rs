@@ -1,10 +1,10 @@
+use bincode::error::DecodeError;
 /// Implements RFC 9180 for MLA needs
 use hpke::aead::{Aead as HPKEAeadTrait, AesGcm256 as HPKEAesGcm256};
 use hpke::kdf::{HkdfSha512, Kdf as HpkeKdfTrait, LabeledExpand, labeled_extract};
 use hpke::{Deserializable, Serializable};
 use hpke::{Kem as KemTrait, kem::X25519HkdfSha256};
 use rand::{CryptoRng, RngCore};
-use serde::{Deserialize, Serialize};
 use x25519_dalek::PublicKey as X25519PublicKey;
 
 use crate::crypto::aesgcm::{Key, Nonce};
@@ -33,20 +33,23 @@ impl DHKEMCiphertext {
     }
 }
 
-impl Serialize for DHKEMCiphertext {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        self.to_bytes().serialize(serializer)
+impl bincode::Encode for DHKEMCiphertext {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> core::result::Result<(), bincode::error::EncodeError> {
+        bincode::Encode::encode(&self.to_bytes(), encoder)
     }
 }
 
-impl<'de> Deserialize<'de> for DHKEMCiphertext {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let bytes = <[u8; 32]>::deserialize(deserializer)?;
-        DHKEMCiphertext::from_bytes(&bytes)
-            .or(Err(serde::de::Error::custom("Invalid DHKEMCiphertext")))
+impl<Context> bincode::Decode<Context> for DHKEMCiphertext {
+    fn decode<D: bincode::de::Decoder<Context = Context>>(
+        decoder: &mut D,
+    ) -> core::result::Result<Self, bincode::error::DecodeError> {
+        let bytes: [u8; 32] = bincode::Decode::decode(decoder)?;
+        let dhkemct = DHKEMCiphertext::from_bytes(&bytes)
+        .or(Err(DecodeError::Other("Invalid DHKEMCiphertext")))?;
+        Ok(dhkemct)
     }
 }
 
