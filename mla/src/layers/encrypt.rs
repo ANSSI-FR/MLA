@@ -16,6 +16,7 @@ use std::io::{BufReader, Cursor, Read, Seek, SeekFrom, Write};
 
 use crate::config::{ArchiveReaderConfig, ArchiveWriterConfig};
 use crate::errors::ConfigError;
+use bincode::{BorrowDecode, Decode, Encode, de::{BorrowDecoder, Decoder}, enc::Encoder, error::{DecodeError, EncodeError}};
 use hpke::HpkeError;
 use kem::{Decapsulate, Encapsulate};
 use rand::SeedableRng;
@@ -93,11 +94,11 @@ struct KeyCommitmentAndTag {
 // A Vec<u8> could also be used, but using array avoid having creating arbitrary sized vectors
 // that early in the process
 // TODO: use serde-big-array
-impl bincode::Encode for KeyCommitmentAndTag {
-    fn encode<E: bincode::enc::Encoder>(
+impl Encode for KeyCommitmentAndTag {
+    fn encode<E: Encoder>(
         &self,
         encoder: &mut E,
-    ) -> Result<(), bincode::error::EncodeError> {
+    ) -> Result<(), EncodeError> {
         let part1: &[u8] = &self.key_commitment[..KEY_COMMITMENT_SIZE / 2];
         let part2: &[u8] = &self.key_commitment[KEY_COMMITMENT_SIZE / 2..];
         part1.encode(encoder)?;
@@ -107,16 +108,16 @@ impl bincode::Encode for KeyCommitmentAndTag {
     }
 }
 
-impl<'de, Context> bincode::BorrowDecode<'de, Context> for KeyCommitmentAndTag {
-    fn borrow_decode<D: bincode::de::BorrowDecoder<'de>>(
+impl<'de, Context> BorrowDecode<'de, Context> for KeyCommitmentAndTag {
+    fn borrow_decode<D: BorrowDecoder<'de>>(
         decoder: &mut D,
-    ) -> Result<Self, bincode::error::DecodeError> {
-        let part1: &[u8] = bincode::BorrowDecode::borrow_decode(decoder)?;
-        let part2: &[u8] = bincode::BorrowDecode::borrow_decode(decoder)?;
-        let tag: [u8; TAG_LENGTH] = bincode::BorrowDecode::borrow_decode(decoder)?;
+    ) -> Result<Self, DecodeError> {
+        let part1: &[u8] = BorrowDecode::borrow_decode(decoder)?;
+        let part2: &[u8] = BorrowDecode::borrow_decode(decoder)?;
+        let tag: [u8; TAG_LENGTH] = BorrowDecode::borrow_decode(decoder)?;
 
         if part1.len() + part2.len() != KEY_COMMITMENT_SIZE {
-            return Err(bincode::error::DecodeError::OtherString(
+            return Err(DecodeError::OtherString(
                 "Invalid key commitment size".to_string(),
             ));
         }
@@ -132,16 +133,16 @@ impl<'de, Context> bincode::BorrowDecode<'de, Context> for KeyCommitmentAndTag {
     }
 }
 
-impl<Context> bincode::Decode<Context> for KeyCommitmentAndTag {
-    fn decode<D: bincode::de::Decoder<Context = Context>>(
+impl<Context> Decode<Context> for KeyCommitmentAndTag {
+    fn decode<D: Decoder<Context = Context>>(
         decoder: &mut D,
-    ) -> Result<Self, bincode::error::DecodeError> {
+    ) -> Result<Self, DecodeError> {
         let part1: Vec<u8> = Vec::decode(decoder)?;
         let part2: Vec<u8> = Vec::decode(decoder)?;
-        let tag: [u8; TAG_LENGTH] = bincode::Decode::decode(decoder)?;
+        let tag: [u8; TAG_LENGTH] = Decode::decode(decoder)?;
 
         if part1.len() + part2.len() != KEY_COMMITMENT_SIZE {
-            return Err(bincode::error::DecodeError::OtherString(
+            return Err(DecodeError::OtherString(
                 "Invalid key commitment size".to_string(),
             ));
         }
@@ -196,7 +197,7 @@ impl InternalEncryptionConfig {
 }
 
 /// Configuration stored in the header, to be reloaded
-#[derive(bincode::Encode)]
+#[derive(Encode)]
 pub struct EncryptionPersistentConfig {
     /// Key-wrapping for each recipients
     pub hybrid_multi_recipient_encapsulate_key: HybridMultiRecipientEncapsulatedKey,
@@ -204,10 +205,10 @@ pub struct EncryptionPersistentConfig {
     key_commitment: KeyCommitmentAndTag,
 }
 
-impl<Context> bincode::Decode<Context> for EncryptionPersistentConfig {
-    fn decode<D: bincode::de::Decoder<Context = Context>>(
+impl<Context> Decode<Context> for EncryptionPersistentConfig {
+    fn decode<D: Decoder<Context = Context>>(
         decoder: &mut D,
-    ) -> Result<Self, bincode::error::DecodeError> {
+    ) -> Result<Self, DecodeError> {
         Ok(Self {
             hybrid_multi_recipient_encapsulate_key: HybridMultiRecipientEncapsulatedKey::decode(
                 decoder,
@@ -217,10 +218,10 @@ impl<Context> bincode::Decode<Context> for EncryptionPersistentConfig {
     }
 }
 
-impl<'de, Context> bincode::BorrowDecode<'de, Context> for EncryptionPersistentConfig {
-    fn borrow_decode<D: bincode::de::BorrowDecoder<'de>>(
+impl<'de, Context> BorrowDecode<'de, Context> for EncryptionPersistentConfig {
+    fn borrow_decode<D: BorrowDecoder<'de>>(
         decoder: &mut D,
-    ) -> Result<Self, bincode::error::DecodeError> {
+    ) -> Result<Self, DecodeError> {
         Ok(Self {
             hybrid_multi_recipient_encapsulate_key: HybridMultiRecipientEncapsulatedKey::borrow_decode(
                 decoder,
