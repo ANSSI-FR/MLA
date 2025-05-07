@@ -1,9 +1,8 @@
 #[cfg(fuzzing)]
 use afl::fuzz;
 extern crate afl;
-use bincode::Options;
+use bincode::{Encode, Decode};
 use mlakey_parser::{parse_mlakey_privkey, parse_mlakey_pubkey};
-use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{self, Cursor, Read, Write};
 
@@ -16,7 +15,7 @@ use std::collections::HashMap;
 static PUB_KEY: &[u8] = include_bytes!("../../samples/test_mlakey_pub.pem");
 static PRIV_KEY: &[u8] = include_bytes!("../../samples/test_mlakey.pem");
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Encode, Decode, Debug)]
 struct TestInput {
     filenames: Vec<String>,
     // part[0] % filenames.len() -> corresponding file (made for interleaving)
@@ -29,16 +28,18 @@ struct TestInput {
 fn run(data: &[u8]) {
     // Retrieve the input as a configuration
     // => Lot of failed here, but eventually AFL will be able to bypass it
-    let test_case: TestInput = bincode::options()
-        .with_limit(10 * 1024 * 1024)
-        .with_fixint_encoding()
-        .deserialize_from(data)
-        .unwrap_or(TestInput {
+    // let test_case: TestInput = bincode::decode_from_slice::<TestInput, _>(
+    let (test_case, _) = bincode::decode_from_slice::<TestInput, _>(
+        data,
+        bincode::config::standard()
+            .with_limit::< {10 * 1024 * 1024 } >()
+            .with_fixed_int_encoding())
+        .unwrap_or((TestInput {
             filenames: Vec::new(),
             parts: Vec::new(),
             layers: Layers::EMPTY,
             byteflip: vec![],
-        });
+        }, 0));
     if test_case.filenames.is_empty() || test_case.filenames.len() >= 256 {
         // Early ret
         return;
