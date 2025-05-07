@@ -205,6 +205,7 @@ mod tests {
     use std::io::{BufReader, Cursor};
 
     use crate::crypto::aesgcm::AesGcm256;
+    use crate::BINCODE_MAX_DESERIALIZE;
 
     use super::*;
     use hex_literal::hex;
@@ -280,9 +281,13 @@ mod tests {
         let ciphertext = DHKEMCiphertext::from_bytes(&RFC_PKRM).unwrap();
         assert_eq!(ciphertext.to_bytes(), RFC_PKRM);
         // serialize / deserialize
-        let serialized = bincode::serialize(&ciphertext).unwrap();
-        let deserialized: DHKEMCiphertext = bincode::deserialize(&serialized).unwrap();
-        assert_eq!(ciphertext.to_bytes(), deserialized.to_bytes());
+        let bincode_config = bincode::config::standard()
+            .with_limit::<{ BINCODE_MAX_DESERIALIZE as usize }>()
+            .with_fixed_int_encoding();
+        let decoded = bincode::decode_from_slice::<u8, _>(&RFC_PKRM, bincode_config).unwrap();
+        let deserialized: &mut [u8] = &mut [0u8; 32];
+        bincode::encode_into_slice(decoded, deserialized, bincode_config).unwrap();
+        assert_eq!(&RFC_PKRM, deserialized);
     }
 
     /// RFC 9180 §A.1.1

@@ -1693,7 +1693,12 @@ pub(crate) mod tests {
             let (mla, key, pubkey, files) =
                 build_archive(Some(Layers::default() ^ Layers::COMPRESS), *interleaved);
             // Truncate the resulting file (before the footer, hopefully after the header), and prepare the failsafe reader
-            let footer_size = bincode::serialized_size(&mla.files_info).unwrap() as usize + 4;
+            let bincode_config = bincode::config::standard()
+                .with_limit::< { BINCODE_MAX_DESERIALIZE as usize }>()
+                .with_fixed_int_encoding();
+            let mut buffer: &mut [u8] = &mut vec![0; BINCODE_MAX_DESERIALIZE as usize];
+            let footer_size = bincode::encode_into_std_write::<_, _, &mut [u8]>(&mla.files_info, &mut buffer, bincode_config)
+                .or(Err(Error::SerializationError)).unwrap() + 4;
             let dest = mla.into_raw();
 
             for remove in &[1, 10, 30, 50, 70, 95, 100] {

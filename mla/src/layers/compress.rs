@@ -1255,14 +1255,14 @@ mod tests {
             let pos = decomp
                 .seek(SeekFrom::Start((UNCOMPRESSED_DATA_SIZE + 4).into()))
                 .unwrap();
-            assert_eq!(pos, (UNCOMPRESSED_DATA_SIZE + 4).into());
+            assert_eq!(pos, (UNCOMPRESSED_DATA_SIZE + 4) as u64);
             let mut buf = [0u8; 5];
             decomp.read_exact(&mut buf).unwrap();
             assert_eq!(&buf, &bytes[pos as usize..(pos + 5) as usize]);
 
             // Seek relatively (same block)
             let pos = decomp.seek(SeekFrom::Current(2)).unwrap();
-            assert_eq!(pos, (UNCOMPRESSED_DATA_SIZE + 4 + 5 + 2).into());
+            assert_eq!(pos, (UNCOMPRESSED_DATA_SIZE + 4 + 5 + 2) as u64);
             let mut buf = [0u8; 5];
             decomp.read_exact(&mut buf).unwrap();
             assert_eq!(&buf, &bytes[pos as usize..(pos + 5) as usize]);
@@ -1271,14 +1271,14 @@ mod tests {
             let pos = decomp
                 .seek(SeekFrom::Current(UNCOMPRESSED_DATA_SIZE.into()))
                 .unwrap();
-            assert_eq!(pos, (UNCOMPRESSED_DATA_SIZE * 2 + 4 + 5 + 2 + 5).into());
+            assert_eq!(pos, (UNCOMPRESSED_DATA_SIZE * 2 + 4 + 5 + 2 + 5) as u64);
             let mut buf = [0u8; 5];
             decomp.read_exact(&mut buf).unwrap();
             assert_eq!(&buf, &bytes[pos as usize..(pos + 5) as usize]);
 
             // Seek relatively (backward)
             let pos = decomp.seek(SeekFrom::Current(-5)).unwrap();
-            assert_eq!(pos, (UNCOMPRESSED_DATA_SIZE * 2 + 4 + 5 + 2 + 5).into());
+            assert_eq!(pos, (UNCOMPRESSED_DATA_SIZE * 2 + 4 + 5 + 2 + 5) as u64);
             let mut buf = [0u8; 5];
             decomp.read_exact(&mut buf).unwrap();
             assert_eq!(&buf, &bytes[pos as usize..(pos + 5) as usize]);
