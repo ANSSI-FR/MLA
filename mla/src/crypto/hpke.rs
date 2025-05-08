@@ -276,18 +276,18 @@ mod tests {
 
     /// Test Serialization and Deserialization of DHKEMCiphertext
     #[test]
-    fn dhkem_ciphertext_serde() {
+    fn dhkem_ciphertext_bincode() {
         // from_bytes / to_bytes
         let ciphertext = DHKEMCiphertext::from_bytes(&RFC_PKRM).unwrap();
         assert_eq!(ciphertext.to_bytes(), RFC_PKRM);
-        // serialize / deserialize
+        // encode / decode
         let bincode_config = bincode::config::standard()
             .with_limit::<{ BINCODE_MAX_DESERIALIZE as usize }>()
             .with_fixed_int_encoding();
-        let decoded = bincode::decode_from_slice::<u8, _>(&RFC_PKRM, bincode_config).unwrap();
-        let deserialized: &mut [u8] = &mut [0u8; 32];
-        bincode::encode_into_slice(decoded, deserialized, bincode_config).unwrap();
-        assert_eq!(&RFC_PKRM, deserialized);
+        let encoded: &mut [u8] = &mut [0u8; 32];
+        bincode::encode_into_slice(&RFC_PKRM, encoded, bincode_config).unwrap();
+        let (data, _) = bincode::decode_from_slice::<[u8; 32], _>(&encoded, bincode_config).unwrap();
+        assert_eq!(RFC_PKRM, data);
     }
 
     /// RFC 9180 §A.1.1
