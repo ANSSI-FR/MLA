@@ -1,4 +1,9 @@
-use bincode::{Decode, Encode, de::Decoder, enc::Encoder, error::{DecodeError, EncodeError}};
+use bincode::{
+    Decode, Encode,
+    de::Decoder,
+    enc::Encoder,
+    error::{DecodeError, EncodeError},
+};
 /// Implements RFC 9180 for MLA needs
 use hpke::aead::{Aead as HPKEAeadTrait, AesGcm256 as HPKEAesGcm256};
 use hpke::kdf::{HkdfSha512, Kdf as HpkeKdfTrait, LabeledExpand, labeled_extract};
@@ -34,10 +39,7 @@ impl DHKEMCiphertext {
 }
 
 impl Encode for DHKEMCiphertext {
-    fn encode<E: Encoder>(
-        &self,
-        encoder: &mut E,
-    ) -> core::result::Result<(), EncodeError> {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> core::result::Result<(), EncodeError> {
         Encode::encode(&self.to_bytes(), encoder)
     }
 }
@@ -48,7 +50,7 @@ impl<Context> Decode<Context> for DHKEMCiphertext {
     ) -> core::result::Result<Self, DecodeError> {
         let bytes: [u8; 32] = Decode::decode(decoder)?;
         let dhkemct = DHKEMCiphertext::from_bytes(&bytes)
-        .or(Err(DecodeError::Other("Invalid DHKEMCiphertext")))?;
+            .or(Err(DecodeError::Other("Invalid DHKEMCiphertext")))?;
         Ok(dhkemct)
     }
 }
@@ -204,8 +206,8 @@ mod tests {
     use std::io;
     use std::io::{BufReader, Cursor};
 
-    use crate::crypto::aesgcm::AesGcm256;
     use crate::BINCODE_MAX_DESERIALIZE;
+    use crate::crypto::aesgcm::AesGcm256;
 
     use super::*;
     use hex_literal::hex;
@@ -286,7 +288,8 @@ mod tests {
             .with_fixed_int_encoding();
         let encoded: &mut [u8] = &mut [0u8; 32];
         bincode::encode_into_slice(&RFC_PKRM, encoded, bincode_config).unwrap();
-        let (data, _) = bincode::decode_from_slice::<[u8; 32], _>(&encoded, bincode_config).unwrap();
+        let (data, _) =
+            bincode::decode_from_slice::<[u8; 32], _>(&encoded, bincode_config).unwrap();
         assert_eq!(RFC_PKRM, data);
     }
 

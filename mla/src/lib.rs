@@ -167,8 +167,8 @@ impl ArchiveFooter {
             &tmp,
             &mut dest,
             bincode::config::standard()
-            .with_limit::<{ BINCODE_MAX_DESERIALIZE as usize}>()
-            .with_fixed_int_encoding(),
+                .with_limit::<{ BINCODE_MAX_DESERIALIZE as usize }>()
+                .with_fixed_int_encoding(),
         )
         .is_err()
         {
@@ -204,10 +204,9 @@ impl ArchiveFooter {
         let files_info: HashMap<String, FileInfo> = match bincode::decode_from_std_read(
             &mut src.take(len),
             bincode::config::standard()
-            .with_limit::<{ BINCODE_MAX_DESERIALIZE as usize }>()
-            .with_fixed_int_encoding(),
-        )
-        {
+                .with_limit::<{ BINCODE_MAX_DESERIALIZE as usize }>()
+                .with_fixed_int_encoding(),
+        ) {
             Ok(finfo) => finfo,
             _ => {
                 return Err(Error::DeserializationError);
@@ -1694,11 +1693,17 @@ pub(crate) mod tests {
                 build_archive(Some(Layers::default() ^ Layers::COMPRESS), *interleaved);
             // Truncate the resulting file (before the footer, hopefully after the header), and prepare the failsafe reader
             let bincode_config = bincode::config::standard()
-                .with_limit::< { BINCODE_MAX_DESERIALIZE as usize }>()
+                .with_limit::<{ BINCODE_MAX_DESERIALIZE as usize }>()
                 .with_fixed_int_encoding();
             let mut buffer: &mut [u8] = &mut vec![0; BINCODE_MAX_DESERIALIZE as usize];
-            let footer_size = bincode::encode_into_std_write::<_, _, &mut [u8]>(&mla.files_info, &mut buffer, bincode_config)
-                .or(Err(Error::SerializationError)).unwrap() + 4;
+            let footer_size = bincode::encode_into_std_write::<_, _, &mut [u8]>(
+                &mla.files_info,
+                &mut buffer,
+                bincode_config,
+            )
+            .or(Err(Error::SerializationError))
+            .unwrap()
+                + 4;
             let dest = mla.into_raw();
 
             for remove in &[1, 10, 30, 50, 70, 95, 100] {

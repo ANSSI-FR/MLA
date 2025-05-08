@@ -1,7 +1,7 @@
 #[cfg(fuzzing)]
 use afl::fuzz;
 extern crate afl;
-use bincode::{Encode, Decode};
+use bincode::{Decode, Encode};
 use mlakey_parser::{parse_mlakey_privkey, parse_mlakey_pubkey};
 use std::fs::File;
 use std::io::{self, Cursor, Read, Write};
@@ -31,14 +31,18 @@ fn run(data: &[u8]) {
     let (test_case, _) = bincode::decode_from_slice::<TestInput, _>(
         data,
         bincode::config::standard()
-            .with_limit::< {10 * 1024 * 1024 } >()
-            .with_fixed_int_encoding())
-        .unwrap_or((TestInput {
+            .with_limit::<{ 10 * 1024 * 1024 }>()
+            .with_fixed_int_encoding(),
+    )
+    .unwrap_or((
+        TestInput {
             filenames: Vec::new(),
             parts: Vec::new(),
             layers: Layers::EMPTY,
             byteflip: vec![],
-        }, 0));
+        },
+        0,
+    ));
     if test_case.filenames.is_empty() || test_case.filenames.len() >= 256 {
         // Early ret
         return;
@@ -262,81 +266,106 @@ fn main() {
 #[allow(dead_code)]
 fn produce_samples() {
     let &mut mut buffer1 = &mut [0; 1024 * 1024];
-    let len = bincode::encode_into_slice(&TestInput {
-        filenames: vec![String::from("test1")],
-        parts: vec![],
-        layers: Layers::EMPTY,
-        byteflip: vec![],
-    }, &mut buffer1, bincode::config::standard()).unwrap();
-    
+    let len = bincode::encode_into_slice(
+        &TestInput {
+            filenames: vec![String::from("test1")],
+            parts: vec![],
+            layers: Layers::EMPTY,
+            byteflip: vec![],
+        },
+        &mut buffer1,
+        bincode::config::standard(),
+    )
+    .unwrap();
+
     let mut f1 = File::create("in/empty_file").unwrap();
     f1.write_all(&buffer1[..len]).unwrap();
 
     let &mut mut buffer2 = &mut [0; 1024 * 1024];
-    let len = bincode::encode_into_slice(&TestInput {
-        filenames: vec![String::from("test1"), String::from("test2éèà")],
-        parts: vec![
-            vec![0, 2, 3, 4],
-            vec![0, 5, 6],
-            vec![1],
-            vec![1],
-            vec![1, 87, 3, 4, 5, 6],
-        ],
-        layers: Layers::DEFAULT,
-        byteflip: vec![],
-    }, &mut buffer2, bincode::config::standard()).unwrap();
-    
+    let len = bincode::encode_into_slice(
+        &TestInput {
+            filenames: vec![String::from("test1"), String::from("test2éèà")],
+            parts: vec![
+                vec![0, 2, 3, 4],
+                vec![0, 5, 6],
+                vec![1],
+                vec![1],
+                vec![1, 87, 3, 4, 5, 6],
+            ],
+            layers: Layers::DEFAULT,
+            byteflip: vec![],
+        },
+        &mut buffer2,
+        bincode::config::standard(),
+    )
+    .unwrap();
+
     let mut f2 = File::create("in/few_files").unwrap();
     f2.write_all(&buffer2[..len]).unwrap();
 
     let &mut mut buffer3 = &mut [0; 1024 * 1024];
-    let len = bincode::encode_into_slice(&TestInput {
-        filenames: vec![String::from("test1"), String::from("test2")],
-        parts: vec![
-            vec![0, 2, 3, 4],
-            vec![1, 5, 6],
-            vec![1],
-            vec![0],
-            vec![1, 87, 3, 4, 5, 6],
-        ],
-        layers: Layers::DEFAULT,
-        byteflip: vec![],
-    }, &mut buffer3, bincode::config::standard()).unwrap();
-    
+    let len = bincode::encode_into_slice(
+        &TestInput {
+            filenames: vec![String::from("test1"), String::from("test2")],
+            parts: vec![
+                vec![0, 2, 3, 4],
+                vec![1, 5, 6],
+                vec![1],
+                vec![0],
+                vec![1, 87, 3, 4, 5, 6],
+            ],
+            layers: Layers::DEFAULT,
+            byteflip: vec![],
+        },
+        &mut buffer3,
+        bincode::config::standard(),
+    )
+    .unwrap();
+
     let mut f3 = File::create("in/interleaved").unwrap();
     f3.write_all(&buffer3[..len]).unwrap();
 
     let &mut mut buffer4 = &mut [0; 1024 * 1024];
-    let len = bincode::encode_into_slice(&TestInput {
-        filenames: vec![String::from("test1"), String::from("test2")],
-        parts: vec![
-            vec![0, 2, 3, 4],
-            vec![1, 5, 6],
-            vec![1],
-            vec![0],
-            vec![1, 87, 3, 4, 5, 6],
-        ],
-        layers: Layers::COMPRESS,
-        byteflip: vec![],
-    }, &mut buffer4, bincode::config::standard()).unwrap();
-    
+    let len = bincode::encode_into_slice(
+        &TestInput {
+            filenames: vec![String::from("test1"), String::from("test2")],
+            parts: vec![
+                vec![0, 2, 3, 4],
+                vec![1, 5, 6],
+                vec![1],
+                vec![0],
+                vec![1, 87, 3, 4, 5, 6],
+            ],
+            layers: Layers::COMPRESS,
+            byteflip: vec![],
+        },
+        &mut buffer4,
+        bincode::config::standard(),
+    )
+    .unwrap();
+
     let mut f4 = File::create("in/compress_only").unwrap();
     f4.write_all(&buffer4[..len]).unwrap();
 
     let &mut mut buffer5 = &mut [0; 1024 * 1024];
-    let len = bincode::encode_into_slice(&TestInput {
-        filenames: vec![String::from("test1"), String::from("test2")],
-        parts: vec![
-            vec![0, 2, 3, 4],
-            vec![1, 5, 6],
-            vec![1],
-            vec![0],
-            vec![1, 87, 3, 4, 5, 6],
-        ],
-        layers: Layers::DEFAULT,
-        byteflip: vec![20, 30],
-    }, &mut buffer5, bincode::config::standard()).unwrap();
-    
+    let len = bincode::encode_into_slice(
+        &TestInput {
+            filenames: vec![String::from("test1"), String::from("test2")],
+            parts: vec![
+                vec![0, 2, 3, 4],
+                vec![1, 5, 6],
+                vec![1],
+                vec![0],
+                vec![1, 87, 3, 4, 5, 6],
+            ],
+            layers: Layers::DEFAULT,
+            byteflip: vec![20, 30],
+        },
+        &mut buffer5,
+        bincode::config::standard(),
+    )
+    .unwrap();
+
     let mut f5 = File::create("in/byteflip").unwrap();
     f5.write_all(&buffer5[..len]).unwrap();
 }
