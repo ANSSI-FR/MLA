@@ -1,9 +1,8 @@
 #[cfg(fuzzing)]
 use afl::fuzz;
 extern crate afl;
-use bincode::Options;
+use bincode::{Decode, Encode};
 use mlakey_parser::{parse_mlakey_privkey, parse_mlakey_pubkey};
-use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{self, Cursor, Read, Write};
 
@@ -16,7 +15,7 @@ use std::collections::HashMap;
 static PUB_KEY: &[u8] = include_bytes!("../../samples/test_mlakey_pub.pem");
 static PRIV_KEY: &[u8] = include_bytes!("../../samples/test_mlakey.pem");
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Encode, Decode, Debug)]
 struct TestInput {
     filenames: Vec<String>,
     // part[0] % filenames.len() -> corresponding file (made for interleaving)
@@ -29,16 +28,21 @@ struct TestInput {
 fn run(data: &[u8]) {
     // Retrieve the input as a configuration
     // => Lot of failed here, but eventually AFL will be able to bypass it
-    let test_case: TestInput = bincode::options()
-        .with_limit(10 * 1024 * 1024)
-        .with_fixint_encoding()
-        .deserialize_from(data)
-        .unwrap_or(TestInput {
+    let (test_case, _) = bincode::decode_from_slice::<TestInput, _>(
+        data,
+        bincode::config::standard()
+            .with_limit::<{ 10 * 1024 * 1024 }>()
+            .with_fixed_int_encoding(),
+    )
+    .unwrap_or((
+        TestInput {
             filenames: Vec::new(),
             parts: Vec::new(),
             layers: Layers::EMPTY,
             byteflip: vec![],
-        });
+        },
+        0,
+    ));
     if test_case.filenames.is_empty() || test_case.filenames.len() >= 256 {
         // Early ret
         return;
@@ -261,21 +265,25 @@ fn main() {
 
 #[allow(dead_code)]
 fn produce_samples() {
-    let mut f1 = File::create("in/empty_file").unwrap();
-    f1.write_all(
-        &bincode::serialize(&TestInput {
+    let &mut mut buffer1 = &mut [0; 1024 * 1024];
+    let len = bincode::encode_into_slice(
+        &TestInput {
             filenames: vec![String::from("test1")],
             parts: vec![],
             layers: Layers::EMPTY,
             byteflip: vec![],
-        })
-        .unwrap(),
+        },
+        &mut buffer1,
+        bincode::config::standard(),
     )
     .unwrap();
 
-    let mut f2 = File::create("in/few_files").unwrap();
-    f2.write_all(
-        &bincode::serialize(&TestInput {
+    let mut f1 = File::create("in/empty_file").unwrap();
+    f1.write_all(&buffer1[..len]).unwrap();
+
+    let &mut mut buffer2 = &mut [0; 1024 * 1024];
+    let len = bincode::encode_into_slice(
+        &TestInput {
             filenames: vec![String::from("test1"), String::from("test2éèà")],
             parts: vec![
                 vec![0, 2, 3, 4],
@@ -286,14 +294,18 @@ fn produce_samples() {
             ],
             layers: Layers::DEFAULT,
             byteflip: vec![],
-        })
-        .unwrap(),
+        },
+        &mut buffer2,
+        bincode::config::standard(),
     )
     .unwrap();
 
-    let mut f3 = File::create("in/interleaved").unwrap();
-    f3.write_all(
-        &bincode::serialize(&TestInput {
+    let mut f2 = File::create("in/few_files").unwrap();
+    f2.write_all(&buffer2[..len]).unwrap();
+
+    let &mut mut buffer3 = &mut [0; 1024 * 1024];
+    let len = bincode::encode_into_slice(
+        &TestInput {
             filenames: vec![String::from("test1"), String::from("test2")],
             parts: vec![
                 vec![0, 2, 3, 4],
@@ -304,14 +316,18 @@ fn produce_samples() {
             ],
             layers: Layers::DEFAULT,
             byteflip: vec![],
-        })
-        .unwrap(),
+        },
+        &mut buffer3,
+        bincode::config::standard(),
     )
     .unwrap();
 
-    let mut f4 = File::create("in/compress_only").unwrap();
-    f4.write_all(
-        &bincode::serialize(&TestInput {
+    let mut f3 = File::create("in/interleaved").unwrap();
+    f3.write_all(&buffer3[..len]).unwrap();
+
+    let &mut mut buffer4 = &mut [0; 1024 * 1024];
+    let len = bincode::encode_into_slice(
+        &TestInput {
             filenames: vec![String::from("test1"), String::from("test2")],
             parts: vec![
                 vec![0, 2, 3, 4],
@@ -322,14 +338,18 @@ fn produce_samples() {
             ],
             layers: Layers::COMPRESS,
             byteflip: vec![],
-        })
-        .unwrap(),
+        },
+        &mut buffer4,
+        bincode::config::standard(),
     )
     .unwrap();
 
-    let mut f5 = File::create("in/byteflip").unwrap();
-    f5.write_all(
-        &bincode::serialize(&TestInput {
+    let mut f4 = File::create("in/compress_only").unwrap();
+    f4.write_all(&buffer4[..len]).unwrap();
+
+    let &mut mut buffer5 = &mut [0; 1024 * 1024];
+    let len = bincode::encode_into_slice(
+        &TestInput {
             filenames: vec![String::from("test1"), String::from("test2")],
             parts: vec![
                 vec![0, 2, 3, 4],
@@ -340,8 +360,12 @@ fn produce_samples() {
             ],
             layers: Layers::DEFAULT,
             byteflip: vec![20, 30],
-        })
-        .unwrap(),
+        },
+        &mut buffer5,
+        bincode::config::standard(),
     )
     .unwrap();
+
+    let mut f5 = File::create("in/byteflip").unwrap();
+    f5.write_all(&buffer5[..len]).unwrap();
 }
