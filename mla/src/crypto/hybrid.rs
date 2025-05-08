@@ -4,7 +4,12 @@ use crate::crypto::hpke::{
 };
 use crate::errors::ConfigError;
 use crate::layers::encrypt::get_crypto_rng;
-use bincode::{BorrowDecode, Decode, Encode, de::{BorrowDecoder, Decoder}, enc::Encoder, error::{DecodeError, EncodeError}};
+use bincode::{
+    BorrowDecode, Decode, Encode,
+    de::{BorrowDecoder, Decoder},
+    enc::Encoder,
+    error::{DecodeError, EncodeError},
+};
 use hkdf::Hkdf;
 use kem::{Decapsulate, Encapsulate};
 use ml_kem::{KemCore, MlKem1024};
@@ -140,7 +145,8 @@ impl<Context> Decode<Context> for HybridRecipientEncapsulatedKey {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let ct_ml = MLKEMCiphertext::decode(decoder)?;
         let ct_ecc_bytes = <[u8; 32]>::decode(decoder)?;
-        let ct_ecc = DHKEMCiphertext::from_bytes(&ct_ecc_bytes).map_err(|_| DecodeError::OtherString("Invalid DHKEMCiphertext".to_string()))?;
+        let ct_ecc = DHKEMCiphertext::from_bytes(&ct_ecc_bytes)
+            .map_err(|_| DecodeError::OtherString("Invalid DHKEMCiphertext".to_string()))?;
         let wrapped_ss = EncryptedSharedSecret::decode(decoder)?;
         let tag = <[u8; TAG_LENGTH]>::decode(decoder)?;
         Ok(Self {
@@ -153,12 +159,11 @@ impl<Context> Decode<Context> for HybridRecipientEncapsulatedKey {
 }
 
 impl<'de, Context> BorrowDecode<'de, Context> for HybridRecipientEncapsulatedKey {
-    fn borrow_decode<D: BorrowDecoder<'de>>(
-        decoder: &mut D,
-    ) -> Result<Self, DecodeError> {
+    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let ct_ml = MLKEMCiphertext::borrow_decode(decoder)?;
         let ct_ecc_bytes = <[u8; 32]>::borrow_decode(decoder)?;
-        let ct_ecc = DHKEMCiphertext::from_bytes(&ct_ecc_bytes).map_err(|_| DecodeError::OtherString("Invalid DHKEMCiphertext".to_string()))?;
+        let ct_ecc = DHKEMCiphertext::from_bytes(&ct_ecc_bytes)
+            .map_err(|_| DecodeError::OtherString("Invalid DHKEMCiphertext".to_string()))?;
         let wrapped_ss = EncryptedSharedSecret::borrow_decode(decoder)?;
         let tag = <[u8; TAG_LENGTH]>::borrow_decode(decoder)?;
         Ok(Self {
@@ -192,9 +197,7 @@ impl<Context> Decode<Context> for HybridMultiRecipientEncapsulatedKey {
 }
 
 impl<'de, Context> BorrowDecode<'de, Context> for HybridMultiRecipientEncapsulatedKey {
-    fn borrow_decode<D: BorrowDecoder<'de>>(
-        decoder: &mut D,
-    ) -> Result<Self, DecodeError> {
+    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let recipients = Vec::<HybridRecipientEncapsulatedKey>::borrow_decode(decoder)?;
         Ok(Self { recipients })
     }

@@ -317,13 +317,13 @@ impl<'a, R: 'a + InnerReaderTrait> LayerReader<'a, R> for CompressionLayerReader
                 let bincode_config = bincode::config::standard()
                     .with_limit::<{ BINCODE_MAX_DESERIALIZE as usize }>()
                     .with_fixed_int_encoding();
-                self.sizes_info = match bincode::decode_from_std_read(&mut inner.take(len), bincode_config)
-                {
-                    Ok(sinfo) => Some(sinfo),
-                    _ => {
-                        return Err(Error::DeserializationError);
-                    }
-                };
+                self.sizes_info =
+                    match bincode::decode_from_std_read(&mut inner.take(len), bincode_config) {
+                        Ok(sinfo) => Some(sinfo),
+                        _ => {
+                            return Err(Error::DeserializationError);
+                        }
+                    };
 
                 Ok(())
             }
@@ -596,9 +596,10 @@ impl<'a, W: 'a + InnerWriterTrait> LayerWriter<'a, W> for CompressionLayerWriter
             last_block_size,
         };
         let bincode_config = bincode::config::standard()
-                    .with_limit::<{ BINCODE_MAX_DESERIALIZE as usize } >()
-                    .with_fixed_int_encoding();
-        let written_bytes = bincode::encode_into_std_write(&sinfo, &mut inner, bincode_config).or(Err(Error::SerializationError))?;
+            .with_limit::<{ BINCODE_MAX_DESERIALIZE as usize }>()
+            .with_fixed_int_encoding();
+        let written_bytes = bincode::encode_into_std_write(&sinfo, &mut inner, bincode_config)
+            .or(Err(Error::SerializationError))?;
         inner.write_u32::<LittleEndian>(written_bytes as u32)?;
         self.compressed_sizes = sinfo.compressed_sizes;
 

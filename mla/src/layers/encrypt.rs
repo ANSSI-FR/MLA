@@ -16,7 +16,12 @@ use std::io::{BufReader, Cursor, Read, Seek, SeekFrom, Write};
 
 use crate::config::{ArchiveReaderConfig, ArchiveWriterConfig};
 use crate::errors::ConfigError;
-use bincode::{BorrowDecode, Decode, Encode, de::{BorrowDecoder, Decoder}, enc::Encoder, error::{DecodeError, EncodeError}};
+use bincode::{
+    BorrowDecode, Decode, Encode,
+    de::{BorrowDecoder, Decoder},
+    enc::Encoder,
+    error::{DecodeError, EncodeError},
+};
 use hpke::HpkeError;
 use kem::{Decapsulate, Encapsulate};
 use rand::SeedableRng;
@@ -93,10 +98,7 @@ struct KeyCommitmentAndTag {
 // A Vec<u8> could also be used, but using array avoid having creating arbitrary sized vectors
 // that early in the process
 impl Encode for KeyCommitmentAndTag {
-    fn encode<E: Encoder>(
-        &self,
-        encoder: &mut E,
-    ) -> Result<(), EncodeError> {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
         let part1: &[u8] = &self.key_commitment[..KEY_COMMITMENT_SIZE / 2];
         let part2: &[u8] = &self.key_commitment[KEY_COMMITMENT_SIZE / 2..];
         part1.encode(encoder)?;
@@ -107,9 +109,7 @@ impl Encode for KeyCommitmentAndTag {
 }
 
 impl<'de, Context> BorrowDecode<'de, Context> for KeyCommitmentAndTag {
-    fn borrow_decode<D: BorrowDecoder<'de>>(
-        decoder: &mut D,
-    ) -> Result<Self, DecodeError> {
+    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let part1: &[u8] = BorrowDecode::borrow_decode(decoder)?;
         let part2: &[u8] = BorrowDecode::borrow_decode(decoder)?;
         let tag: [u8; TAG_LENGTH] = BorrowDecode::borrow_decode(decoder)?;
@@ -132,9 +132,7 @@ impl<'de, Context> BorrowDecode<'de, Context> for KeyCommitmentAndTag {
 }
 
 impl<Context> Decode<Context> for KeyCommitmentAndTag {
-    fn decode<D: Decoder<Context = Context>>(
-        decoder: &mut D,
-    ) -> Result<Self, DecodeError> {
+    fn decode<D: Decoder<Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let part1: Vec<u8> = Vec::decode(decoder)?;
         let part2: Vec<u8> = Vec::decode(decoder)?;
         let tag: [u8; TAG_LENGTH] = Decode::decode(decoder)?;
@@ -204,9 +202,7 @@ pub struct EncryptionPersistentConfig {
 }
 
 impl<Context> Decode<Context> for EncryptionPersistentConfig {
-    fn decode<D: Decoder<Context = Context>>(
-        decoder: &mut D,
-    ) -> Result<Self, DecodeError> {
+    fn decode<D: Decoder<Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
         Ok(Self {
             hybrid_multi_recipient_encapsulate_key: HybridMultiRecipientEncapsulatedKey::decode(
                 decoder,
@@ -217,13 +213,10 @@ impl<Context> Decode<Context> for EncryptionPersistentConfig {
 }
 
 impl<'de, Context> BorrowDecode<'de, Context> for EncryptionPersistentConfig {
-    fn borrow_decode<D: BorrowDecoder<'de>>(
-        decoder: &mut D,
-    ) -> Result<Self, DecodeError> {
+    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         Ok(Self {
-            hybrid_multi_recipient_encapsulate_key: HybridMultiRecipientEncapsulatedKey::borrow_decode(
-                decoder,
-            )?,
+            hybrid_multi_recipient_encapsulate_key:
+                HybridMultiRecipientEncapsulatedKey::borrow_decode(decoder)?,
             key_commitment: KeyCommitmentAndTag::borrow_decode(decoder)?,
         })
     }
