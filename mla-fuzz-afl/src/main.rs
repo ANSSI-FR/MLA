@@ -28,7 +28,6 @@ struct TestInput {
 fn run(data: &[u8]) {
     // Retrieve the input as a configuration
     // => Lot of failed here, but eventually AFL will be able to bypass it
-    // let test_case: TestInput = bincode::decode_from_slice::<TestInput, _>(
     let (test_case, _) = bincode::decode_from_slice::<TestInput, _>(
         data,
         bincode::config::standard()

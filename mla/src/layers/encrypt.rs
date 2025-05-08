@@ -89,11 +89,9 @@ struct KeyCommitmentAndTag {
     tag: [u8; TAG_LENGTH],
 }
 
-// For now, `serde` does not support generic const array, so [u8; 64] is not supported
-// -> Serialize as [u8; 32][u8; 32]
+// -> Encode as [u8; 32][u8; 32]
 // A Vec<u8> could also be used, but using array avoid having creating arbitrary sized vectors
 // that early in the process
-// TODO: use serde-big-array
 impl Encode for KeyCommitmentAndTag {
     fn encode<E: Encoder>(
         &self,
