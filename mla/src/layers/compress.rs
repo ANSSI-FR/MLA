@@ -9,7 +9,7 @@ use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use crate::layers::traits::{
     InnerWriterTrait, InnerWriterType, LayerFailSafeReader, LayerReader, LayerWriter,
 };
-use crate::{BINCODE_MAX_DESERIALIZE, Error};
+use crate::{BINCODE_CONFIG, Error};
 
 use crate::config::{ArchiveWriterConfig, ConfigResult};
 use crate::errors::ConfigError;
@@ -314,11 +314,8 @@ impl<'a, R: 'a + InnerReaderTrait> LayerReader<'a, R> for CompressionLayerReader
 
                 // Read SizesInfo
                 inner.seek(SeekFrom::Start(pos - len))?;
-                let bincode_config = bincode::config::standard()
-                    .with_limit::<{ BINCODE_MAX_DESERIALIZE as usize }>()
-                    .with_fixed_int_encoding();
                 self.sizes_info =
-                    match bincode::decode_from_std_read(&mut inner.take(len), bincode_config) {
+                    match bincode::decode_from_std_read(&mut inner.take(len), BINCODE_CONFIG) {
                         Ok(sinfo) => Some(sinfo),
                         _ => {
                             return Err(Error::DeserializationError);
@@ -595,10 +592,7 @@ impl<'a, W: 'a + InnerWriterTrait> LayerWriter<'a, W> for CompressionLayerWriter
             compressed_sizes,
             last_block_size,
         };
-        let bincode_config = bincode::config::standard()
-            .with_limit::<{ BINCODE_MAX_DESERIALIZE as usize }>()
-            .with_fixed_int_encoding();
-        let written_bytes = bincode::encode_into_std_write(&sinfo, &mut inner, bincode_config)
+        let written_bytes = bincode::encode_into_std_write(&sinfo, &mut inner, BINCODE_CONFIG)
             .or(Err(Error::SerializationError))?;
         inner.write_u32::<LittleEndian>(written_bytes as u32)?;
         self.compressed_sizes = sinfo.compressed_sizes;

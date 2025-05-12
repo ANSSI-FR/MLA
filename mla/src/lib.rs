@@ -4,6 +4,7 @@ use std::io;
 use std::io::{Read, Seek, SeekFrom, Write};
 #[macro_use]
 extern crate bitflags;
+use bincode::config::{Fixint, Limit};
 use bincode::{Decode, Encode};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use config::InternalConfig;
@@ -44,9 +45,16 @@ const MLA_FORMAT_VERSION: u32 = 1;
 /// to be used as a filename, an absolute path, or... ?). 32KiB was chosen because it
 /// supports any path a Windows NT, Linux, FreeBSD, OpenBSD, or NetBSD kernel supports.
 const FILENAME_MAX_SIZE: u64 = 65536;
-/// Maximum allowed object size (in bytes) to deserialize in-memory, to avoid DoS on
+/// Maximum allowed object size (in bytes) to decode in-memory, to avoid DoS on
 /// malformed files
-pub(crate) const BINCODE_MAX_DESERIALIZE: u64 = 512 * 1024 * 1024;
+const BINCODE_MAX_DECODE: usize = 512 * 1024 * 1024;
+pub(crate) const BINCODE_CONFIG: bincode::config::Configuration<
+    bincode::config::LittleEndian,
+    Fixint,
+    Limit<{ BINCODE_MAX_DECODE }>,
+> = bincode::config::standard()
+    .with_limit::< { BINCODE_MAX_DECODE }>()
+    .with_fixed_int_encoding();
 
 #[derive(Debug, Clone, Copy, PartialEq, Encode, Decode)]
 pub struct Layers(u8);
@@ -96,17 +104,13 @@ impl ArchiveHeader {
         if format_version != MLA_FORMAT_VERSION {
             return Err(Error::UnsupportedVersion);
         }
-        let config: ArchivePersistentConfig = match bincode::decode_from_std_read(
-            src,
-            bincode::config::standard()
-                .with_limit::<{ BINCODE_MAX_DESERIALIZE as usize }>()
-                .with_fixed_int_encoding(),
-        ) {
-            Ok(config) => config,
-            _ => {
-                return Err(Error::DeserializationError);
-            }
-        };
+        let config: ArchivePersistentConfig =
+            match bincode::decode_from_std_read(src, BINCODE_CONFIG) {
+                Ok(config) => config,
+                _ => {
+                    return Err(Error::DeserializationError);
+                }
+            };
         Ok(ArchiveHeader {
             format_version,
             config,
@@ -119,9 +123,7 @@ impl ArchiveHeader {
         if bincode::encode_into_std_write(
             &self.config,
             dest,
-            bincode::config::standard()
-                .with_limit::<{ BINCODE_MAX_DESERIALIZE as usize }>()
-                .with_fixed_int_encoding(),
+            BINCODE_CONFIG,
         )
         .is_err()
         {
@@ -166,9 +168,7 @@ impl ArchiveFooter {
         if bincode::encode_into_std_write(
             &tmp,
             &mut dest,
-            bincode::config::standard()
-                .with_limit::<{ BINCODE_MAX_DESERIALIZE as usize }>()
-                .with_fixed_int_encoding(),
+            BINCODE_CONFIG,
         )
         .is_err()
         {
@@ -176,9 +176,7 @@ impl ArchiveFooter {
         };
         serialization_len += match bincode::encode_to_vec(
             &tmp,
-            bincode::config::standard()
-                .with_limit::<{ BINCODE_MAX_DESERIALIZE as usize }>()
-                .with_fixed_int_encoding(),
+            BINCODE_CONFIG,
         ) {
             Ok(encoded) => encoded.len() as u64,
             Err(_) => {
@@ -203,9 +201,7 @@ impl ArchiveFooter {
         // Read files_info
         let files_info: HashMap<String, FileInfo> = match bincode::decode_from_std_read(
             &mut src.take(len),
-            bincode::config::standard()
-                .with_limit::<{ BINCODE_MAX_DESERIALIZE as usize }>()
-                .with_fixed_int_encoding(),
+            BINCODE_CONFIG,
         ) {
             Ok(finfo) => finfo,
             _ => {
@@ -1692,14 +1688,11 @@ pub(crate) mod tests {
             let (mla, key, pubkey, files) =
                 build_archive(Some(Layers::default() ^ Layers::COMPRESS), *interleaved);
             // Truncate the resulting file (before the footer, hopefully after the header), and prepare the failsafe reader
-            let bincode_config = bincode::config::standard()
-                .with_limit::<{ BINCODE_MAX_DESERIALIZE as usize }>()
-                .with_fixed_int_encoding();
-            let mut buffer: &mut [u8] = &mut vec![0; BINCODE_MAX_DESERIALIZE as usize];
+            let mut buffer: &mut [u8] = &mut vec![0; BINCODE_MAX_DECODE];
             let footer_size = bincode::encode_into_std_write::<_, _, &mut [u8]>(
                 &mla.files_info,
                 &mut buffer,
-                bincode_config,
+                BINCODE_CONFIG,
             )
             .or(Err(Error::SerializationError))
             .unwrap()
