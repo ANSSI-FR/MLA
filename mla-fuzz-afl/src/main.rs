@@ -1,6 +1,7 @@
 #[cfg(fuzzing)]
 use afl::fuzz;
 extern crate afl;
+use bincode::config::{Fixint, Limit};
 use bincode::{Decode, Encode};
 use mlakey_parser::{parse_mlakey_privkey, parse_mlakey_pubkey};
 use std::fs::File;
@@ -14,6 +15,17 @@ use std::collections::HashMap;
 
 static PUB_KEY: &[u8] = include_bytes!("../../samples/test_mlakey_pub.pem");
 static PRIV_KEY: &[u8] = include_bytes!("../../samples/test_mlakey.pem");
+
+/// Maximum allowed object size (in bytes) to decode in-memory, to avoid DoS on
+/// malformed files
+const BINCODE_MAX_DECODE: usize = 512 * 1024 * 1024;
+pub(crate) const BINCODE_CONFIG: bincode::config::Configuration<
+    bincode::config::LittleEndian,
+    Fixint,
+    Limit<{ BINCODE_MAX_DECODE }>,
+> = bincode::config::standard()
+    .with_limit::< { BINCODE_MAX_DECODE }>()
+    .with_fixed_int_encoding();
 
 #[derive(Encode, Decode, Debug)]
 struct TestInput {
@@ -30,9 +42,7 @@ fn run(data: &[u8]) {
     // => Lot of failed here, but eventually AFL will be able to bypass it
     let (test_case, _) = bincode::decode_from_slice::<TestInput, _>(
         data,
-        bincode::config::standard()
-            .with_limit::<{ 10 * 1024 * 1024 }>()
-            .with_fixed_int_encoding(),
+        BINCODE_CONFIG,
     )
     .unwrap_or((
         TestInput {
@@ -274,7 +284,7 @@ fn produce_samples() {
             byteflip: vec![],
         },
         &mut buffer1,
-        bincode::config::standard(),
+        BINCODE_CONFIG,
     )
     .unwrap();
 
@@ -296,7 +306,7 @@ fn produce_samples() {
             byteflip: vec![],
         },
         &mut buffer2,
-        bincode::config::standard(),
+        BINCODE_CONFIG,
     )
     .unwrap();
 
@@ -318,7 +328,7 @@ fn produce_samples() {
             byteflip: vec![],
         },
         &mut buffer3,
-        bincode::config::standard(),
+        BINCODE_CONFIG,
     )
     .unwrap();
 
@@ -340,7 +350,7 @@ fn produce_samples() {
             byteflip: vec![],
         },
         &mut buffer4,
-        bincode::config::standard(),
+        BINCODE_CONFIG,
     )
     .unwrap();
 
@@ -362,7 +372,7 @@ fn produce_samples() {
             byteflip: vec![20, 30],
         },
         &mut buffer5,
-        bincode::config::standard(),
+        BINCODE_CONFIG,
     )
     .unwrap();
 
