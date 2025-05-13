@@ -53,7 +53,7 @@ pub(crate) const BINCODE_CONFIG: bincode::config::Configuration<
     Fixint,
     Limit<{ BINCODE_MAX_DECODE }>,
 > = bincode::config::standard()
-    .with_limit::< { BINCODE_MAX_DECODE }>()
+    .with_limit::<{ BINCODE_MAX_DECODE }>()
     .with_fixed_int_encoding();
 
 #[derive(Debug, Clone, Copy, PartialEq, Encode, Decode)]
@@ -120,13 +120,7 @@ impl ArchiveHeader {
     fn dump<T: Write>(&self, dest: &mut T) -> Result<(), Error> {
         dest.write_all(MLA_MAGIC)?;
         dest.write_u32::<LittleEndian>(self.format_version)?;
-        if bincode::encode_into_std_write(
-            &self.config,
-            dest,
-            BINCODE_CONFIG,
-        )
-        .is_err()
-        {
+        if bincode::encode_into_std_write(&self.config, dest, BINCODE_CONFIG).is_err() {
             return Err(Error::SerializationError);
         }
         Ok(())
@@ -165,19 +159,10 @@ impl ArchiveFooter {
             tmp.insert(k, v);
         }
 
-        if bincode::encode_into_std_write(
-            &tmp,
-            &mut dest,
-            BINCODE_CONFIG,
-        )
-        .is_err()
-        {
+        if bincode::encode_into_std_write(&tmp, &mut dest, BINCODE_CONFIG).is_err() {
             return Err(Error::SerializationError);
         };
-        serialization_len += match bincode::encode_to_vec(
-            &tmp,
-            BINCODE_CONFIG,
-        ) {
+        serialization_len += match bincode::encode_to_vec(&tmp, BINCODE_CONFIG) {
             Ok(encoded) => encoded.len() as u64,
             Err(_) => {
                 return Err(Error::SerializationError);
@@ -199,15 +184,13 @@ impl ArchiveFooter {
         src.seek(SeekFrom::Start(pos - len))?;
 
         // Read files_info
-        let files_info: HashMap<String, FileInfo> = match bincode::decode_from_std_read(
-            &mut src.take(len),
-            BINCODE_CONFIG,
-        ) {
-            Ok(finfo) => finfo,
-            _ => {
-                return Err(Error::DeserializationError);
-            }
-        };
+        let files_info: HashMap<String, FileInfo> =
+            match bincode::decode_from_std_read(&mut src.take(len), BINCODE_CONFIG) {
+                Ok(finfo) => finfo,
+                _ => {
+                    return Err(Error::DeserializationError);
+                }
+            };
         Ok(ArchiveFooter { files_info })
     }
 }
