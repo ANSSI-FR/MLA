@@ -1,10 +1,11 @@
+use bincode::{Decode, Encode};
+
 use crate::Layers;
 use crate::errors::ConfigError;
 use crate::layers::compress::CompressionConfig;
 use crate::layers::encrypt::{
     EncryptionConfig, EncryptionPersistentConfig, EncryptionReaderConfig, InternalEncryptionConfig,
 };
-use serde::{Deserialize, Serialize};
 
 /// This module implements the configuration capabilities of MLA Archive
 ///
@@ -30,7 +31,7 @@ pub struct ArchiveWriterConfig {
 }
 
 /// Configuration stored in the header, to be reloaded
-#[derive(Serialize, Deserialize)]
+#[derive(Encode, Decode)]
 pub struct ArchivePersistentConfig {
     pub layers_enabled: Layers,
 

@@ -8,8 +8,8 @@ edition = "2024"
 
 [dependencies]
 afl = "0.15"
-bincode = "1.3"
-serde = { version = "1.0", features = ["derive"] }
+bincode = "2.0"
+mlakey-parser = { path = "../mlakey-parser", version = "0", default-features = false }
 mla = { path = "../mla" }
 
 [lints.rust]

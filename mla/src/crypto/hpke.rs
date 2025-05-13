@@ -1,10 +1,15 @@
+use bincode::{
+    Decode, Encode,
+    de::Decoder,
+    enc::Encoder,
+    error::{DecodeError, EncodeError},
+};
 /// Implements RFC 9180 for MLA needs
 use hpke::aead::{Aead as HPKEAeadTrait, AesGcm256 as HPKEAesGcm256};
 use hpke::kdf::{HkdfSha512, Kdf as HpkeKdfTrait, LabeledExpand, labeled_extract};
 use hpke::{Deserializable, Serializable};
 use hpke::{Kem as KemTrait, kem::X25519HkdfSha256};
 use rand::{CryptoRng, RngCore};
-use serde::{Deserialize, Serialize};
 use x25519_dalek::PublicKey as X25519PublicKey;
 
 use crate::crypto::aesgcm::{Key, Nonce};
@@ -23,7 +28,7 @@ type DHKEMSharedSecret = hpke::kem::SharedSecret<Kem>;
 pub(crate) struct DHKEMCiphertext(<Kem as KemTrait>::EncappedKey);
 
 impl DHKEMCiphertext {
-    fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
         Ok(DHKEMCiphertext(<Kem as KemTrait>::EncappedKey::from_bytes(
             bytes,
         )?))
@@ -33,20 +38,20 @@ impl DHKEMCiphertext {
     }
 }
 
-impl Serialize for DHKEMCiphertext {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        self.to_bytes().serialize(serializer)
+impl Encode for DHKEMCiphertext {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> core::result::Result<(), EncodeError> {
+        Encode::encode(&self.to_bytes(), encoder)
     }
 }
 
-impl<'de> Deserialize<'de> for DHKEMCiphertext {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let bytes = <[u8; 32]>::deserialize(deserializer)?;
-        DHKEMCiphertext::from_bytes(&bytes)
-            .or(Err(serde::de::Error::custom("Invalid DHKEMCiphertext")))
+impl<Context> Decode<Context> for DHKEMCiphertext {
+    fn decode<D: Decoder<Context = Context>>(
+        decoder: &mut D,
+    ) -> core::result::Result<Self, DecodeError> {
+        let bytes: [u8; 32] = Decode::decode(decoder)?;
+        let dhkemct = DHKEMCiphertext::from_bytes(&bytes)
+            .or(Err(DecodeError::Other("Invalid DHKEMCiphertext")))?;
+        Ok(dhkemct)
     }
 }
 
@@ -201,6 +206,7 @@ mod tests {
     use std::io;
     use std::io::{BufReader, Cursor};
 
+    use crate::BINCODE_CONFIG;
     use crate::crypto::aesgcm::AesGcm256;
 
     use super::*;
@@ -272,14 +278,15 @@ mod tests {
 
     /// Test Serialization and Deserialization of DHKEMCiphertext
     #[test]
-    fn dhkem_ciphertext_serde() {
+    fn dhkem_ciphertext_bincode() {
         // from_bytes / to_bytes
         let ciphertext = DHKEMCiphertext::from_bytes(&RFC_PKRM).unwrap();
         assert_eq!(ciphertext.to_bytes(), RFC_PKRM);
-        // serialize / deserialize
-        let serialized = bincode::serialize(&ciphertext).unwrap();
-        let deserialized: DHKEMCiphertext = bincode::deserialize(&serialized).unwrap();
-        assert_eq!(ciphertext.to_bytes(), deserialized.to_bytes());
+        // encode / decode
+        let encoded: &mut [u8] = &mut [0u8; 32];
+        bincode::encode_into_slice(RFC_PKRM, encoded, BINCODE_CONFIG).unwrap();
+        let (data, _) = bincode::decode_from_slice::<[u8; 32], _>(encoded, BINCODE_CONFIG).unwrap();
+        assert_eq!(RFC_PKRM, data);
     }
 
     /// RFC 9180 §A.1.1
