@@ -1,16 +1,15 @@
 use std::fmt;
 use std::io::{self, Read, Seek, SeekFrom, Take, Write};
 
-use bincode::Options;
+use bincode::{Decode, Encode};
 use brotli::BrotliState;
 use brotli::writer::StandardAlloc;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
-use serde::{Deserialize, Serialize};
 
 use crate::layers::traits::{
     InnerWriterTrait, InnerWriterType, LayerFailSafeReader, LayerReader, LayerWriter,
 };
-use crate::{BINCODE_MAX_DESERIALIZE, Error};
+use crate::{BINCODE_CONFIG, Error};
 
 use crate::config::{ArchiveWriterConfig, ConfigResult};
 use crate::errors::ConfigError;
@@ -90,7 +89,7 @@ impl<R: Read> fmt::Debug for CompressionLayerReaderState<R> {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Encode, Decode, Debug)]
 pub struct SizesInfo {
     /// Ordered list of chunk compressed size; only set at init
     pub compressed_sizes: Vec<u32>,
@@ -315,16 +314,13 @@ impl<'a, R: 'a + InnerReaderTrait> LayerReader<'a, R> for CompressionLayerReader
 
                 // Read SizesInfo
                 inner.seek(SeekFrom::Start(pos - len))?;
-                self.sizes_info = match bincode::options()
-                    .with_limit(BINCODE_MAX_DESERIALIZE)
-                    .with_fixint_encoding()
-                    .deserialize_from(inner.take(len))
-                {
-                    Ok(sinfo) => Some(sinfo),
-                    _ => {
-                        return Err(Error::DeserializationError);
-                    }
-                };
+                self.sizes_info =
+                    match bincode::decode_from_std_read(&mut inner.take(len), BINCODE_CONFIG) {
+                        Ok(sinfo) => Some(sinfo),
+                        _ => {
+                            return Err(Error::DeserializationError);
+                        }
+                    };
 
                 Ok(())
             }
@@ -596,22 +592,9 @@ impl<'a, W: 'a + InnerWriterTrait> LayerWriter<'a, W> for CompressionLayerWriter
             compressed_sizes,
             last_block_size,
         };
-        if bincode::options()
-            .with_limit(BINCODE_MAX_DESERIALIZE)
-            .with_fixint_encoding()
-            .serialize_into(&mut inner, &sinfo)
-            .is_err()
-        {
-            return Err(Error::SerializationError);
-        };
-        match bincode::serialized_size(&sinfo) {
-            Ok(size) => {
-                inner.write_u32::<LittleEndian>(size as u32)?;
-            }
-            Err(_) => {
-                return Err(Error::SerializationError);
-            }
-        };
+        let written_bytes = bincode::encode_into_std_write(&sinfo, &mut inner, BINCODE_CONFIG)
+            .or(Err(Error::SerializationError))?;
+        inner.write_u32::<LittleEndian>(written_bytes as u32)?;
         self.compressed_sizes = sinfo.compressed_sizes;
 
         // Recursive call
@@ -1267,14 +1250,14 @@ mod tests {
             let pos = decomp
                 .seek(SeekFrom::Start((UNCOMPRESSED_DATA_SIZE + 4).into()))
                 .unwrap();
-            assert_eq!(pos, (UNCOMPRESSED_DATA_SIZE + 4).into());
+            assert_eq!(pos, (UNCOMPRESSED_DATA_SIZE + 4) as u64);
             let mut buf = [0u8; 5];
             decomp.read_exact(&mut buf).unwrap();
             assert_eq!(&buf, &bytes[pos as usize..(pos + 5) as usize]);
 
             // Seek relatively (same block)
             let pos = decomp.seek(SeekFrom::Current(2)).unwrap();
-            assert_eq!(pos, (UNCOMPRESSED_DATA_SIZE + 4 + 5 + 2).into());
+            assert_eq!(pos, (UNCOMPRESSED_DATA_SIZE + 4 + 5 + 2) as u64);
             let mut buf = [0u8; 5];
             decomp.read_exact(&mut buf).unwrap();
             assert_eq!(&buf, &bytes[pos as usize..(pos + 5) as usize]);
@@ -1283,14 +1266,14 @@ mod tests {
             let pos = decomp
                 .seek(SeekFrom::Current(UNCOMPRESSED_DATA_SIZE.into()))
                 .unwrap();
-            assert_eq!(pos, (UNCOMPRESSED_DATA_SIZE * 2 + 4 + 5 + 2 + 5).into());
+            assert_eq!(pos, (UNCOMPRESSED_DATA_SIZE * 2 + 4 + 5 + 2 + 5) as u64);
             let mut buf = [0u8; 5];
             decomp.read_exact(&mut buf).unwrap();
             assert_eq!(&buf, &bytes[pos as usize..(pos + 5) as usize]);
 
             // Seek relatively (backward)
             let pos = decomp.seek(SeekFrom::Current(-5)).unwrap();
-            assert_eq!(pos, (UNCOMPRESSED_DATA_SIZE * 2 + 4 + 5 + 2 + 5).into());
+            assert_eq!(pos, (UNCOMPRESSED_DATA_SIZE * 2 + 4 + 5 + 2 + 5) as u64);
             let mut buf = [0u8; 5];
             decomp.read_exact(&mut buf).unwrap();
             assert_eq!(&buf, &bytes[pos as usize..(pos + 5) as usize]);

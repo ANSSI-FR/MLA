@@ -4,13 +4,13 @@ use std::io;
 use std::io::{Read, Seek, SeekFrom, Write};
 #[macro_use]
 extern crate bitflags;
-use bincode::Options;
+use bincode::config::{Fixint, Limit};
+use bincode::{Decode, Encode};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use config::InternalConfig;
 use crypto::hybrid::HybridPublicKey;
 use errors::ConfigError;
 use layers::traits::InnerReaderTrait;
-use serde::{Deserialize, Serialize};
 
 pub mod layers;
 use crate::layers::compress::{
@@ -45,9 +45,19 @@ const MLA_FORMAT_VERSION: u32 = 1;
 /// to be used as a filename, an absolute path, or... ?). 32KiB was chosen because it
 /// supports any path a Windows NT, Linux, FreeBSD, OpenBSD, or NetBSD kernel supports.
 const FILENAME_MAX_SIZE: u64 = 65536;
-/// Maximum allowed object size (in bytes) to deserialize in-memory, to avoid DoS on
+/// Maximum allowed object size (in bytes) to decode in-memory, to avoid DoS on
 /// malformed files
-pub(crate) const BINCODE_MAX_DESERIALIZE: u64 = 512 * 1024 * 1024;
+const BINCODE_MAX_DECODE: usize = 512 * 1024 * 1024;
+pub(crate) const BINCODE_CONFIG: bincode::config::Configuration<
+    bincode::config::LittleEndian,
+    Fixint,
+    Limit<{ BINCODE_MAX_DECODE }>,
+> = bincode::config::standard()
+    .with_limit::<{ BINCODE_MAX_DECODE }>()
+    .with_fixed_int_encoding();
+
+#[derive(Debug, Clone, Copy, PartialEq, Encode, Decode)]
+pub struct Layers(u8);
 
 bitflags! {
     /// Available layers. Order is relevant:
@@ -57,8 +67,7 @@ bitflags! {
     /// [Encryption (ENCRYPT)]
     /// [Raw File I/O]
     /// ```
-    #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-    pub struct Layers: u8 {
+    impl Layers: u8 {
         const ENCRYPT = 0b0000_0001;
         const COMPRESS = 0b0000_0010;
         /// Recommended layering
@@ -95,16 +104,13 @@ impl ArchiveHeader {
         if format_version != MLA_FORMAT_VERSION {
             return Err(Error::UnsupportedVersion);
         }
-        let config: ArchivePersistentConfig = match bincode::options()
-            .with_limit(BINCODE_MAX_DESERIALIZE)
-            .with_fixint_encoding()
-            .deserialize_from(src)
-        {
-            Ok(config) => config,
-            _ => {
-                return Err(Error::DeserializationError);
-            }
-        };
+        let config: ArchivePersistentConfig =
+            match bincode::decode_from_std_read(src, BINCODE_CONFIG) {
+                Ok(config) => config,
+                _ => {
+                    return Err(Error::DeserializationError);
+                }
+            };
         Ok(ArchiveHeader {
             format_version,
             config,
@@ -114,12 +120,7 @@ impl ArchiveHeader {
     fn dump<T: Write>(&self, dest: &mut T) -> Result<(), Error> {
         dest.write_all(MLA_MAGIC)?;
         dest.write_u32::<LittleEndian>(self.format_version)?;
-        if bincode::options()
-            .with_limit(BINCODE_MAX_DESERIALIZE)
-            .with_fixint_encoding()
-            .serialize_into(dest, &self.config)
-            .is_err()
-        {
+        if bincode::encode_into_std_write(&self.config, dest, BINCODE_CONFIG).is_err() {
             return Err(Error::SerializationError);
         }
         Ok(())
@@ -158,16 +159,11 @@ impl ArchiveFooter {
             tmp.insert(k, v);
         }
 
-        if bincode::options()
-            .with_limit(BINCODE_MAX_DESERIALIZE)
-            .with_fixint_encoding()
-            .serialize_into(&mut dest, &tmp)
-            .is_err()
-        {
+        if bincode::encode_into_std_write(&tmp, &mut dest, BINCODE_CONFIG).is_err() {
             return Err(Error::SerializationError);
         };
-        serialization_len += match bincode::serialized_size(&tmp) {
-            Ok(size) => size,
+        serialization_len += match bincode::encode_to_vec(&tmp, BINCODE_CONFIG) {
+            Ok(encoded) => encoded.len() as u64,
             Err(_) => {
                 return Err(Error::SerializationError);
             }
@@ -188,16 +184,13 @@ impl ArchiveFooter {
         src.seek(SeekFrom::Start(pos - len))?;
 
         // Read files_info
-        let files_info: HashMap<String, FileInfo> = match bincode::options()
-            .with_limit(BINCODE_MAX_DESERIALIZE)
-            .with_fixint_encoding()
-            .deserialize_from(&mut src.take(len))
-        {
-            Ok(finfo) => finfo,
-            _ => {
-                return Err(Error::DeserializationError);
-            }
-        };
+        let files_info: HashMap<String, FileInfo> =
+            match bincode::decode_from_std_read(&mut src.take(len), BINCODE_CONFIG) {
+                Ok(finfo) => finfo,
+                _ => {
+                    return Err(Error::DeserializationError);
+                }
+            };
         Ok(ArchiveFooter { files_info })
     }
 }
@@ -838,7 +831,7 @@ impl<T: Read + Seek> Read for BlocksToFileReader<'_, T> {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Encode, Decode)]
 #[cfg_attr(test, derive(PartialEq, Eq, Debug))]
 pub struct FileInfo {
     /// File information to save in the footer
@@ -1678,7 +1671,15 @@ pub(crate) mod tests {
             let (mla, key, pubkey, files) =
                 build_archive(Some(Layers::default() ^ Layers::COMPRESS), *interleaved);
             // Truncate the resulting file (before the footer, hopefully after the header), and prepare the failsafe reader
-            let footer_size = bincode::serialized_size(&mla.files_info).unwrap() as usize + 4;
+            let mut buffer: &mut [u8] = &mut vec![0; BINCODE_MAX_DECODE];
+            let footer_size = bincode::encode_into_std_write::<_, _, &mut [u8]>(
+                &mla.files_info,
+                &mut buffer,
+                BINCODE_CONFIG,
+            )
+            .or(Err(Error::SerializationError))
+            .unwrap()
+                + 4;
             let dest = mla.into_raw();
 
             for remove in &[1, 10, 30, 50, 70, 95, 100] {

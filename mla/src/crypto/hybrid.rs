@@ -4,13 +4,17 @@ use crate::crypto::hpke::{
 };
 use crate::errors::ConfigError;
 use crate::layers::encrypt::get_crypto_rng;
+use bincode::{
+    BorrowDecode, Decode, Encode,
+    de::{BorrowDecoder, Decoder},
+    enc::Encoder,
+    error::{DecodeError, EncodeError},
+};
 use hkdf::Hkdf;
 use kem::{Decapsulate, Encapsulate};
 use ml_kem::{KemCore, MlKem1024};
 use rand::Rng;
 use rand_chacha::rand_core::CryptoRngCore;
-use serde::{Deserialize, Serialize};
-use serde_big_array::BigArray;
 use sha2::Sha512;
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
 use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -114,10 +118,7 @@ fn combine(
 // to avoid confusion / prone-to-error code
 
 /// Per-recipient hybrid encapsulated shared secret
-#[derive(Serialize, Deserialize)]
 struct HybridRecipientEncapsulatedKey {
-    /// Ciphertext for ML-KEM
-    #[serde(with = "BigArray")]
     ct_ml: MLKEMCiphertext,
     /// Ciphertext for DH-KEM (actually an ECC ephemeral public key)
     ct_ecc: DHKEMCiphertext,
@@ -130,12 +131,76 @@ struct HybridRecipientEncapsulatedKey {
     tag: [u8; TAG_LENGTH],
 }
 
+impl Encode for HybridRecipientEncapsulatedKey {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        self.ct_ml.encode(encoder)?;
+        self.ct_ecc.to_bytes().encode(encoder)?;
+        self.wrapped_ss.encode(encoder)?;
+        self.tag.encode(encoder)?;
+        Ok(())
+    }
+}
+
+impl<Context> Decode<Context> for HybridRecipientEncapsulatedKey {
+    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let ct_ml = MLKEMCiphertext::decode(decoder)?;
+        let ct_ecc_bytes = <[u8; 32]>::decode(decoder)?;
+        let ct_ecc = DHKEMCiphertext::from_bytes(&ct_ecc_bytes)
+            .map_err(|_| DecodeError::OtherString("Invalid DHKEMCiphertext".to_string()))?;
+        let wrapped_ss = EncryptedSharedSecret::decode(decoder)?;
+        let tag = <[u8; TAG_LENGTH]>::decode(decoder)?;
+        Ok(Self {
+            ct_ml,
+            ct_ecc,
+            wrapped_ss,
+            tag,
+        })
+    }
+}
+
+impl<'de, Context> BorrowDecode<'de, Context> for HybridRecipientEncapsulatedKey {
+    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let ct_ml = MLKEMCiphertext::borrow_decode(decoder)?;
+        let ct_ecc_bytes = <[u8; 32]>::borrow_decode(decoder)?;
+        let ct_ecc = DHKEMCiphertext::from_bytes(&ct_ecc_bytes)
+            .map_err(|_| DecodeError::OtherString("Invalid DHKEMCiphertext".to_string()))?;
+        let wrapped_ss = EncryptedSharedSecret::borrow_decode(decoder)?;
+        let tag = <[u8; TAG_LENGTH]>::borrow_decode(decoder)?;
+        Ok(Self {
+            ct_ml,
+            ct_ecc,
+            wrapped_ss,
+            tag,
+        })
+    }
+}
+
 /// Key encapsulated for multiple recipient with hybrid cryptography
 /// Will be store in and load from the header
-#[derive(Serialize, Deserialize)]
 pub struct HybridMultiRecipientEncapsulatedKey {
     /// Key wrapping for each recipient
     recipients: Vec<HybridRecipientEncapsulatedKey>,
+}
+
+impl Encode for HybridMultiRecipientEncapsulatedKey {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        self.recipients.encode(encoder)?;
+        Ok(())
+    }
+}
+
+impl<Context> Decode<Context> for HybridMultiRecipientEncapsulatedKey {
+    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let recipients = Vec::<HybridRecipientEncapsulatedKey>::decode(decoder)?;
+        Ok(Self { recipients })
+    }
+}
+
+impl<'de, Context> BorrowDecode<'de, Context> for HybridMultiRecipientEncapsulatedKey {
+    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let recipients = Vec::<HybridRecipientEncapsulatedKey>::borrow_decode(decoder)?;
+        Ok(Self { recipients })
+    }
 }
 
 impl HybridMultiRecipientEncapsulatedKey {

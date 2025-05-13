@@ -89,12 +89,6 @@ impl From<rand::Error> for Error {
     }
 }
 
-impl From<bincode::ErrorKind> for Error {
-    fn from(_error: bincode::ErrorKind) -> Self {
-        Error::DeserializationError
-    }
-}
-
 impl From<Error> for io::Error {
     fn from(error: Error) -> Self {
         io::Error::new(io::ErrorKind::Other, format!("{error}"))
