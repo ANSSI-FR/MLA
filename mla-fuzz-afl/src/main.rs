@@ -24,7 +24,7 @@ pub(crate) const BINCODE_CONFIG: bincode::config::Configuration<
     Fixint,
     Limit<{ BINCODE_MAX_DECODE }>,
 > = bincode::config::standard()
-    .with_limit::< { BINCODE_MAX_DECODE }>()
+    .with_limit::<{ BINCODE_MAX_DECODE }>()
     .with_fixed_int_encoding();
 
 #[derive(Encode, Decode, Debug)]
@@ -40,19 +40,16 @@ struct TestInput {
 fn run(data: &[u8]) {
     // Retrieve the input as a configuration
     // => Lot of failed here, but eventually AFL will be able to bypass it
-    let (test_case, _) = bincode::decode_from_slice::<TestInput, _>(
-        data,
-        BINCODE_CONFIG,
-    )
-    .unwrap_or((
-        TestInput {
-            filenames: Vec::new(),
-            parts: Vec::new(),
-            layers: Layers::EMPTY,
-            byteflip: vec![],
-        },
-        0,
-    ));
+    let (test_case, _) = bincode::decode_from_slice::<TestInput, _>(data, BINCODE_CONFIG)
+        .unwrap_or((
+            TestInput {
+                filenames: Vec::new(),
+                parts: Vec::new(),
+                layers: Layers::EMPTY,
+                byteflip: vec![],
+            },
+            0,
+        ));
     if test_case.filenames.is_empty() || test_case.filenames.len() >= 256 {
         // Early ret
         return;
