@@ -284,9 +284,9 @@ mod tests {
         assert_eq!(ciphertext.to_bytes(), RFC_PKRM);
         // encode / decode
         let encoded: &mut [u8] = &mut [0u8; 32];
-        bincode::encode_into_slice(&RFC_PKRM, encoded, BINCODE_CONFIG).unwrap();
+        bincode::encode_into_slice(RFC_PKRM, encoded, BINCODE_CONFIG).unwrap();
         let (data, _) =
-            bincode::decode_from_slice::<[u8; 32], _>(&encoded, BINCODE_CONFIG).unwrap();
+            bincode::decode_from_slice::<[u8; 32], _>(encoded, BINCODE_CONFIG).unwrap();
         assert_eq!(RFC_PKRM, data);
     }
 
