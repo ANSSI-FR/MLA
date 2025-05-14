@@ -9,7 +9,7 @@ we use to work with the security research community to address runtime security.
 
 ## Reporting a vulnerability
 
-Please open a new [Security advisory](https://github.com/ANSSI-FR/MLA/security/advisories/new) with your findings. Alternatively, if you wish to report anonymously, you can send an email to `club@ssi.gouv.fr`. We strive to resolve all problems as quickly as possible. If appropriate, we may assist in the publication of writeups after the problem is resolved.
+Please open a new [Security advisory](https://github.com/ANSSI-FR/MLA/security/advisories/new) with your findings. Alternatively, if you wish to report anonymously, you can send an email to `opensource@ssi.gouv.fr`. We strive to resolve all problems as quickly as possible. If appropriate, we may assist in the publication of writeups after the problem is resolved.
 
 Try to include as much information as possible in the initial report, so we can
 quickly address the issue.
