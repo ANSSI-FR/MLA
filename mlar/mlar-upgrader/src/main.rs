@@ -1,6 +1,5 @@
 use std::{
-    fs::{self, File},
-    path::PathBuf,
+    fs::{self, File}, io::Error, path::PathBuf
 };
 
 use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
@@ -37,7 +36,7 @@ fn app() -> Command {
         )
         .arg(
             Arg::new("public_keys")
-                .help("ED25519 Public key paths (DER or PEM format)")
+                .help("MLA 2 public key paths (DER or PEM format)")
                 .long("pubkey")
                 .short('p')
                 .num_args(1)
@@ -85,17 +84,15 @@ fn reader_from_matches(matches: &ArgMatches) -> mla_v1::ArchiveReader<'static, F
     mla_v1::ArchiveReader::from_config(in_file, config_v1).unwrap()
 }
 
-fn main() {
-    let matches = app().get_matches();
-
-    let mut mla_in = reader_from_matches(&matches);
+fn upgrade(matches: &ArgMatches) -> Result<(), Error> {
+    let mut mla_in = reader_from_matches(matches);
     
     // Read the file list using metadata
     let fnames: Vec<String> = mla_in.list_files().map_or_else(|_| {
         panic!("Files is malformed. Please consider repairing the file");
     }, |iter| iter.cloned().collect());
 
-    let mut mla_out = writer_from_matches(&matches);
+    let mut mla_out = writer_from_matches(matches);
 
     for fname in fnames {
         eprintln!("{fname}");
@@ -115,4 +112,69 @@ fn main() {
             .unwrap();
     }
     mla_out.finalize().expect("Finalization error");
+    
+    Ok(())
+}
+
+fn main() {
+    let matches = app().get_matches();
+    upgrade(&matches).expect("Failed to upgrade");
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use super::*;
+    use std::env;
+
+   #[test]
+    fn test_upgrade() {
+        // temporary directory for output as we don't know if we can write in current one
+        let temp_dir = env::temp_dir();
+
+        // mlar-upgrade args
+        let input = "archive_v1.mla";
+        let output = temp_dir.join("archive_v2.mla");
+        let private_keys = "test_x25519_archive_v1.pem";
+        let public_keys = "test_mlakey_archive_v2_pub.pem";
+
+        // temporary locations
+        let temp_input = temp_dir.join(input);
+        let temp_private_keys = temp_dir.join(private_keys);
+        let temp_public_keys = temp_dir.join(public_keys);
+
+        // copy input, private_keys, public_keys to temp_dir
+        fs::copy(
+            format!("../../samples/{input}"),
+            &temp_input,
+        ).unwrap();
+        fs::copy(
+            format!("../../samples/{private_keys}"),
+            &temp_private_keys,
+        ).unwrap();
+        fs::copy(
+            format!("../../samples/{public_keys}"),
+            &temp_public_keys,
+        ).unwrap();
+
+        env::set_current_dir(&temp_dir).unwrap();
+
+        let matches = app().get_matches_from([
+            "mlar-upgrader",
+            "-k",
+            private_keys,
+            "-i",
+            input,
+            "-o",
+            output.to_str().unwrap(),
+            "-p",
+            public_keys,
+        ]);
+
+        assert!(upgrade(&matches).is_ok());
+
+        // Clean up
+        fs::remove_file(temp_input).unwrap();
+        fs::remove_file(temp_private_keys).unwrap();
+        fs::remove_file(temp_public_keys).unwrap();
+    }
 }
