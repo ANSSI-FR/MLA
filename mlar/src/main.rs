@@ -792,7 +792,7 @@ fn convert(matches: &ArgMatches) -> Result<(), MlarError> {
                 continue;
             }
             Ok(None) => {
-                eprintln!("Unable to found {fname}");
+                eprintln!("Unable to find {fname}");
                 continue;
             }
             Ok(Some(mla)) => mla,
