@@ -23,4 +23,3 @@ pyo3 = "0.24"
 mla = { version = "1", features = ["send"], path = "../../mla"}
 ml-kem = "0.3.0-pre"
 x25519-dalek = "2.0"
-mlakey-parser = { path = "../../mlakey-parser", version = "0.1" }

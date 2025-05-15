@@ -11,7 +11,7 @@ use mla::{
     config::{ArchiveReaderConfig, ArchiveWriterConfig},
     crypto::hybrid::{HybridPrivateKey, HybridPublicKey},
 };
-use mlakey_parser::{parse_mlakey_privkey, parse_mlakey_pubkey};
+use mla::crypto::mlakey_parser::{parse_mlakey_privkey, parse_mlakey_pubkey};
 use pyo3::{
     create_exception,
     exceptions::{PyKeyError, PyRuntimeError, PyTypeError},

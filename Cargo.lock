@@ -986,7 +986,6 @@ dependencies = [
  "afl",
  "bincode",
  "mla",
- "mlakey-parser",
 ]
 
 [[package]]
