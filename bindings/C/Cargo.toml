@@ -9,5 +9,5 @@ name = "mla"
 crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
-mla = { path = "../../mla", version = "1" }
+mla = { path = "../../mla", version = "2" }
 

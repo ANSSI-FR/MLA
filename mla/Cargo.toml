@@ -1,7 +1,7 @@
 [package]
 name = "mla"
-version = "1.4.0"
-authors = ["Camille Mougey <camille.mougey@ssi.gouv.fr>"]
+version = "2.0.0"
+authors = ["ANSSI <opensource@ssi.gouv.fr>"]
 edition = "2024"
 license = "LGPL-3.0-only"
 description = "Multi Layer Archive - A pure rust encrypted and compressed archive file format"

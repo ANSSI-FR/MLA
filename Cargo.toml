@@ -3,6 +3,7 @@ members = [
     "mla",
     "mlar",
     "mla-fuzz-afl",
+    "mlar/mlar-upgrader",
     "bindings/C",
 ]
 resolver = "3"

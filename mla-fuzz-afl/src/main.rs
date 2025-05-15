@@ -3,7 +3,7 @@ use afl::fuzz;
 extern crate afl;
 use bincode::config::{Fixint, Limit};
 use bincode::{Decode, Encode};
-use mlakey_parser::{parse_mlakey_privkey, parse_mlakey_pubkey};
+use mla::crypto::mlakey_parser::{parse_mlakey_privkey, parse_mlakey_pubkey};
 use std::fs::File;
 use std::io::{self, Cursor, Read, Write};
 
