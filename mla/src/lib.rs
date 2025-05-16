@@ -40,7 +40,7 @@ pub mod helpers;
 // -------- Constants --------
 
 const MLA_MAGIC: &[u8; 3] = b"MLA";
-const MLA_FORMAT_VERSION: u32 = 1;
+const MLA_FORMAT_VERSION: u32 = 2;
 /// Maximum number of UTF-8 characters supported in each file's "name" (which is free
 /// to be used as a filename, an absolute path, or... ?). 32KiB was chosen because it
 /// supports any path a Windows NT, Linux, FreeBSD, OpenBSD, or NetBSD kernel supports.
@@ -149,15 +149,16 @@ impl ArchiveFooter {
 
         // Combine `files_info` and `ids_info` to ArchiveFooter.files_info,
         // avoiding copies (only references)
-        let mut tmp: HashMap<&String, &FileInfo> = HashMap::new();
+        let mut tmp = Vec::new();
         for (k, i) in files_info {
             let v = ids_info.get(i).ok_or_else(|| {
                 Error::WrongWriterState(
                     "[ArchiveFooter seriliaze] Unable to find the ID".to_string(),
                 )
             })?;
-            tmp.insert(k, v);
+            tmp.push((k, v));
         }
+        tmp.sort_by_key(|(k, _)| *k);
 
         if bincode::encode_into_std_write(&tmp, &mut dest, BINCODE_CONFIG).is_err() {
             return Err(Error::SerializationError);
@@ -184,6 +185,7 @@ impl ArchiveFooter {
         src.seek(SeekFrom::Start(pos - len))?;
 
         // Read files_info
+        // A Vec can be deserialized into a HashMap in bincode 2
         let files_info: HashMap<String, FileInfo> =
             match bincode::decode_from_std_read(&mut src.take(len), BINCODE_CONFIG) {
                 Ok(finfo) => finfo,
