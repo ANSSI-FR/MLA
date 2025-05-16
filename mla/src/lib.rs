@@ -161,17 +161,17 @@ impl ArchiveFooter {
         let serialization_len = bincode::encode_into_std_write(&tmp, &mut dest, BINCODE_CONFIG)
             .or(Err(Error::SerializationError))?;
 
-        let footer_len = u32::try_from(serialization_len).or(Err(Error::SerializationError))?;
+        let footer_len = u64::try_from(serialization_len).or(Err(Error::SerializationError))?;
 
-        dest.write_u32::<LittleEndian>(footer_len)?;
+        dest.write_u64::<LittleEndian>(footer_len)?;
         Ok(())
     }
 
     /// Parses and instantiates a footer from serialized data
     pub fn deserialize_from<R: Read + Seek>(mut src: R) -> Result<ArchiveFooter, Error> {
         // Read the footer length
-        let pos = src.seek(SeekFrom::End(-4))?;
-        let len = src.read_u32::<LittleEndian>()? as u64;
+        let pos = src.seek(SeekFrom::End(-8))?;
+        let len = src.read_u64::<LittleEndian>()?;
 
         // Prepare for deserialization
         src.seek(SeekFrom::Start(pos - len))?;
@@ -2005,8 +2005,8 @@ pub(crate) mod tests {
         assert_eq!(
             Sha256::digest(&raw_mla).as_slice(),
             [
-                26, 127, 45, 72, 28, 37, 92, 121, 51, 14, 21, 2, 94, 86, 147, 76, 137, 11, 209, 65,
-                240, 201, 183, 195, 83, 50, 190, 242, 53, 127, 118, 99
+                120, 15, 253, 164, 159, 72, 73, 237, 90, 40, 179, 184, 137, 167, 176, 50, 141, 167,
+                44, 111, 112, 103, 42, 180, 13, 118, 141, 174, 71, 189, 64, 109
             ]
         )
     }
