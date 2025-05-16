@@ -437,8 +437,8 @@ fn test_multiple_keys() {
         Path::new("../samples/test_mlakey_3_pub.pem"),
     ];
     let private_keys = [
-        Path::new("../samples/test_mlakey.pem"),
-        Path::new("../samples/test_mlakey_2.pem"),
+        Path::new("../samples/test_mlakey.der"),
+        Path::new("../samples/test_mlakey_2.der"),
     ];
 
     // Create files
@@ -489,7 +489,7 @@ fn test_multiple_keys() {
         .arg("-i")
         .arg(mlar_file.path())
         .arg("-k")
-        .arg(Path::new("../samples/test_mlakey_3.pem"));
+        .arg(Path::new("../samples/test_mlakey_3.der"));
 
     println!("{cmd:?}");
     let assert = cmd.assert();
@@ -571,9 +571,9 @@ fn test_convert() {
     let mlar_file_converted = NamedTempFile::new("convert.mla").unwrap();
     let tar_file = NamedTempFile::new("output.tar").unwrap();
     let public_key1 = Path::new("../samples/test_mlakey_pub.pem");
-    let private_key1 = Path::new("../samples/test_mlakey.pem");
+    let private_key1 = Path::new("../samples/test_mlakey.der");
     let public_key2 = Path::new("../samples/test_mlakey_2_pub.pem");
-    let private_key2 = Path::new("../samples/test_mlakey_2.pem");
+    let private_key2 = Path::new("../samples/test_mlakey_2.der");
 
     // Create files
     let testfs = setup();
@@ -695,7 +695,7 @@ fn test_multi_fileorders() {
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
     let tar_file = NamedTempFile::new("output.tar").unwrap();
     let public_key = Path::new("../samples/test_mlakey_pub.pem");
-    let private_key = Path::new("../samples/test_mlakey.pem");
+    let private_key = Path::new("../samples/test_mlakey.der");
 
     // Create files
     let testfs = setup();
