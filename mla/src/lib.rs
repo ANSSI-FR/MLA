@@ -145,7 +145,6 @@ impl ArchiveFooter {
         files_info: &HashMap<String, ArchiveFileID>,
         ids_info: &HashMap<ArchiveFileID, FileInfo>,
     ) -> Result<(), Error> {
-        let mut serialization_len = 0;
 
         // Combine `files_info` and `ids_info` to ArchiveFooter.files_info,
         // avoiding copies (only references)
@@ -160,15 +159,8 @@ impl ArchiveFooter {
         }
         tmp.sort_by_key(|(k, _)| *k);
 
-        if bincode::encode_into_std_write(&tmp, &mut dest, BINCODE_CONFIG).is_err() {
-            return Err(Error::SerializationError);
-        };
-        serialization_len += match bincode::encode_to_vec(&tmp, BINCODE_CONFIG) {
-            Ok(encoded) => encoded.len() as u64,
-            Err(_) => {
-                return Err(Error::SerializationError);
-            }
-        };
+        let serialization_len = bincode::encode_into_std_write(&tmp, &mut dest, BINCODE_CONFIG)
+            .or(Err(Error::SerializationError))?;
 
         // footer length
         dest.write_u32::<LittleEndian>(serialization_len as u32)?;
