@@ -162,8 +162,9 @@ impl ArchiveFooter {
         let serialization_len = bincode::encode_into_std_write(&tmp, &mut dest, BINCODE_CONFIG)
             .or(Err(Error::SerializationError))?;
 
-        // footer length
-        dest.write_u32::<LittleEndian>(serialization_len as u32)?;
+        let footer_len = u32::try_from(serialization_len).or(Err(Error::SerializationError))?;
+
+        dest.write_u32::<LittleEndian>(footer_len)?;
         Ok(())
     }
 
