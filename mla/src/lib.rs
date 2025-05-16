@@ -145,7 +145,6 @@ impl ArchiveFooter {
         files_info: &HashMap<String, ArchiveFileID>,
         ids_info: &HashMap<ArchiveFileID, FileInfo>,
     ) -> Result<(), Error> {
-
         // Combine `files_info` and `ids_info` to ArchiveFooter.files_info,
         // avoiding copies (only references)
         let mut tmp = Vec::new();
