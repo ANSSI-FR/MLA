@@ -1192,7 +1192,7 @@ fn test_verbose_info() {
     println!("{cmd:?}");
     let assert = cmd.assert();
     assert.success().stdout(
-        "Format version: 1
+        "Format version: 2
 Encryption: true
 Compression: true
 ",
