@@ -1903,9 +1903,8 @@ pub(crate) mod tests {
         let mut info: Vec<(&String, &Vec<_>)> = files.iter().collect();
         info.sort_by(|i1, i2| Ord::cmp(&i1.0, &i2.0));
         for (fname, content) in info.iter() {
-            let mut hasher = Sha256::new();
-            hasher.update(content);
-            sha256sum.extend_from_slice(hex::encode(hasher.finalize()).as_bytes());
+            let h = Sha256::digest(content);
+            sha256sum.extend_from_slice(hex::encode(h).as_bytes());
             sha256sum.push(0x20);
             sha256sum.push(0x20);
             sha256sum.extend(fname.as_bytes());
@@ -1921,10 +1920,11 @@ pub(crate) mod tests {
         let file = Vec::new();
 
         // Use committed keys
-        let pem_pub: &'static [u8] = include_bytes!("../../samples/test_x25519_archive_v1_pub.pem");
-        let pub_key = parse_openssl_25519_pubkey(pem_pub).unwrap();
+        let pem_pub: &'static [u8] = include_bytes!("../../samples/test_mlakey_archive_v2_pub.pem");
+        let pub_key = crypto::mlakey_parser::parse_mlakey_pubkey(pem_pub).unwrap();
 
         let mut config = ArchiveWriterConfig::new();
+        config.encrypt.rng = crate::layers::encrypt::EncapsulationRNG::Seed([0; 32]);
         config
             .set_layers(Layers::default())
             .add_public_keys(&[pub_key]);
@@ -2000,36 +2000,45 @@ pub(crate) mod tests {
         .unwrap();
         mla.finalize().unwrap();
 
-        // UNCOMMENT THESE LINES TO UPDATE THE FILE
-        // UPDATE THE VERSION NUMBER
-        /*
+        let raw_mla = mla.into_raw();
         std::fs::File::create(std::path::Path::new(&format!(
             "../samples/archive_v{}.mla",
             MLA_FORMAT_VERSION
         )))
         .unwrap()
-        .write(&mla.into_raw())
+        .write_all(&raw_mla)
         .unwrap();
-         */
+
+        // check archive_v2 hash
+        assert_eq!(
+            Sha256::digest(&raw_mla).as_slice(),
+            [
+                26, 127, 45, 72, 28, 37, 92, 121, 51, 14, 21, 2, 94, 86, 147, 76, 137, 11, 209, 65,
+                240, 201, 183, 195, 83, 50, 190, 242, 53, 127, 118, 99
+            ]
+        )
     }
 
-    #[ignore]
     #[test]
-    fn check_archive_format_v1() {
-        let pem_priv: &'static [u8] = include_bytes!("../../samples/test_x25519_archive_v1.pem");
+    fn check_archive_format_v2_content() {
+        let der_priv: &'static [u8] = include_bytes!("../../samples/test_mlakey_archive_v2.der");
 
-        let mla_data: &'static [u8] = include_bytes!("../../samples/archive_v1.mla");
+        let mla_data: &'static [u8] = include_bytes!("../../samples/archive_v2.mla");
         let files = make_format_regression_files();
 
         // Build Reader
         let buf = Cursor::new(mla_data);
         let mut config = ArchiveReaderConfig::new();
-        config.add_private_keys(&[parse_openssl_25519_privkey(pem_priv).unwrap()]);
+        config.add_private_keys(&[
+            crypto::mlakey_parser::parse_mlakey_privkey_der(der_priv).unwrap()
+        ]);
         let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
 
         // Build FailSafeReader
         let mut config = ArchiveReaderConfig::new();
-        config.add_private_keys(&[parse_openssl_25519_privkey(pem_priv).unwrap()]);
+        config.add_private_keys(&[
+            crypto::mlakey_parser::parse_mlakey_privkey_der(der_priv).unwrap()
+        ]);
         let mut mla_fsread = ArchiveFailSafeReader::from_config(mla_data, config).unwrap();
 
         // Repair the archive (without any damage, but trigger the corresponding code)
