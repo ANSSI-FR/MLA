@@ -1886,7 +1886,7 @@ pub(crate) mod tests {
         for i in 0..=255 {
             files.insert(
                 format!("file_{}", i).to_string(),
-                std::iter::repeat(i).take(0x1000).collect::<Vec<u8>>(),
+                std::iter::repeat_n(i, 0x1000).collect::<Vec<u8>>(),
             );
         }
 
