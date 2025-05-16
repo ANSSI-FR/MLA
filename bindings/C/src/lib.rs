@@ -1,6 +1,8 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 use mla::config::ArchiveReaderConfig;
 use mla::config::ArchiveWriterConfig;
+use mla::crypto::mlakey_parser::parse_mlakey_privkey;
+use mla::crypto::mlakey_parser::parse_mlakey_pubkeys_pem_many;
 use mla::errors::ConfigError;
 use mla::errors::Error as MLAError;
 use mla::helpers::linear_extract;
@@ -8,8 +10,6 @@ use mla::ArchiveHeader;
 use mla::ArchiveReader;
 use mla::ArchiveWriter;
 use mla::{ArchiveFileID, Layers};
-use mla::crypto::mlakey_parser::parse_mlakey_privkey;
-use mla::crypto::mlakey_parser::parse_mlakey_pubkeys_pem_many;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::ffi::{c_void, CStr};

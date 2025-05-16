@@ -6,6 +6,7 @@ use lru::LruCache;
 use ml_kem::EncodedSizeUser;
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
 use mla::crypto::hybrid::{HybridPrivateKey, HybridPublicKey};
+use mla::crypto::mlakey_parser::{generate_keypair, parse_mlakey_privkey, parse_mlakey_pubkey};
 use mla::errors::{Error, FailSafeReadError};
 use mla::helpers::linear_extract;
 use mla::layers::compress::CompressionLayerReader;
@@ -16,7 +17,6 @@ use mla::{
     ArchiveFailSafeReader, ArchiveFile, ArchiveFooter, ArchiveHeader, ArchiveReader, ArchiveWriter,
     Layers,
 };
-use mla::crypto::mlakey_parser::{generate_keypair, parse_mlakey_privkey, parse_mlakey_pubkey};
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use sha2::{Digest, Sha512};
