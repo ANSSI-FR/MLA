@@ -43,7 +43,7 @@ enum MLAStatus {
   MLA_STATUS_HKDF_INVALID_KEY_LENGTH = 1507328,
   MLA_STATUS_HPKE_ERROR = 98304,
   MLA_STATUS_INVALID_LAST_TAG = 102400,
-  MLA_STATUS_CURVE25519_PARSER_ERROR = 15794176,
+  MLA_STATUS_MLA_KEY_PARSER_ERROR = 15859712,
 };
 typedef uint64_t MLAStatus;
 
@@ -139,7 +139,9 @@ MLAStatus mla_reader_config_new(MLAConfigHandle *handle_out);
  * Appends the given private key to an existing given configuration
  * (referenced by the handle returned by mla_reader_config_new()).
  */
-MLAStatus mla_reader_config_add_private_key(MLAConfigHandle config, const char *private_key);
+MLAStatus mla_reader_config_add_private_key(MLAConfigHandle config,
+                                            const uint8_t *private_key_data,
+                                            uintptr_t private_key_len);
 
 /**
  * Open a new MLA archive using the given configuration, which is consumed and freed

@@ -104,7 +104,7 @@ int test_reader_info()
         CloseHandle(hFile);
         return (int)status;
     }
-    if (archive_info.version != 1)
+    if (archive_info.version != 2)
     {
         fprintf(stderr, " [!] Invalid MLA archive version %x\n", archive_info.version);
         CloseHandle(hFile);
@@ -127,7 +127,7 @@ int test_reader_extract()
 {
     FILE *kf;
 
-    if (fopen_s(&kf, "../../../../samples/test_mlakey_archive_v2.pem", "r") != 0)
+    if (fopen_s(&kf, "../../../../samples/test_mlakey_archive_v2.der", "r") != 0)
     {
         fprintf(stderr, " [!] Could not open private key file\n");
         return errno;
@@ -135,33 +135,51 @@ int test_reader_extract()
     if (fseek(kf, 0, SEEK_END))
     {
         fprintf(stderr, " [!] Could not open private key file\n");
+        fclose(kf);
         return errno;
     }
 
     CreateDirectory(TEXT("extracted"), NULL);
 
     long keySize = ftell(kf);
-    char *szPrivateKey = (char *)malloc((size_t)keySize);
+    if (keySize <= 0) {
+        fprintf(stderr, " [!] Invalid key file size\n");
+        fclose(kf);
+        return 1;
+    }
+
     rewind(kf);
-    if (keySize != (long)fread(szPrivateKey, sizeof *szPrivateKey, keySize, kf))
+
+    uint8_t *keyData = (char *)malloc((size_t)keySize);
+    if (!keyData) {
+        fprintf(stderr, " [!] Memory allocation failed\n");
+        fclose(kf);
+        return ENOMEM;
+    }
+
+    if (keySize != (long)fread(keyData, sizeof *keyData, keySize, kf))
     {
         fprintf(stderr, " [!] Could not read private key file\n");
+        free(keyData);
         return ferror(kf);
     }
 
-    MLAStatus status;
+    fclose(kf);
+
     MLAConfigHandle hConfig = NULL;
-    status = mla_reader_config_new(&hConfig);
+    MLAStatus status = mla_reader_config_new(&hConfig);
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
     {
         fprintf(stderr, " [!] Config creation failed with code %" PRIX64 "\n", (uint64_t)status);
+        free(keyData);
         return (int)status;
     }
 
-    status = mla_reader_config_add_private_key(hConfig, szPrivateKey);
+    status = mla_reader_config_add_private_key(hConfig, keyData, (size_t)keySize);
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
     {
         fprintf(stderr, " [!] Private key set failed with code %" PRIX64 "\n", (uint64_t)status);
+        free(keyData);
         return (int)status;
     }
 
@@ -169,6 +187,7 @@ int test_reader_extract()
     if (fopen_s(&f, "../../../../samples/archive_v2.mla", "r"))
     {
         fprintf(stderr, " [!] Cannot open file: %d\n", errno);
+        free(keyData);
         return 1;
     }
 
@@ -177,11 +196,11 @@ int test_reader_extract()
     {
         fprintf(stderr, " [!] Archive read failed with code %" PRIX64 "\n", (uint64_t)status);
         fclose(f);
+        free(keyData);
         return (int)status;
     }
 
-    fclose(kf);
-    free(szPrivateKey);
+    free(keyData);
     fclose(f);
 
     printf("SUCCESS\n");
