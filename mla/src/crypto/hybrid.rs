@@ -1,7 +1,5 @@
 use crate::crypto::aesgcm::{ConstantTimeEq, KEY_SIZE, Key, TAG_LENGTH};
-use crate::crypto::hpke::{
-    DHKEMCiphertext, dhkem_decap, dhkem_encap, key_schedule_base_hybrid_kem_recipient,
-};
+use crate::crypto::hpke::{DHKEMCiphertext, dhkem_decap, key_schedule_base_hybrid_kem_recipient};
 use crate::errors::ConfigError;
 use crate::layers::encrypt::get_crypto_rng;
 use bincode::{
@@ -18,6 +16,8 @@ use rand_chacha::rand_core::CryptoRngCore;
 use sha2::Sha512;
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
 use zeroize::{Zeroize, ZeroizeOnDrop};
+
+use super::hpke::dhkem_encap_from_rng;
 
 /// `info` to bound the HPKE usage to the MLA Recipient derivation
 const HPKE_INFO_RECIPIENT: &[u8] = b"MLA Recipient";
@@ -307,7 +307,7 @@ impl Encapsulate<HybridMultiRecipientEncapsulatedKey, HybridKemSharedSecret>
         let mut recipients = Vec::new();
         for recipient in &self.keys {
             // Compute the ECC shared secret
-            let (ss_ecc, ct_ecc) = dhkem_encap(&recipient.public_key_ecc)
+            let (ss_ecc, ct_ecc) = dhkem_encap_from_rng(&recipient.public_key_ecc, csprng)
                 .or(Err(ConfigError::DHKEMComputationError))?;
 
             // Compute the ML-KEM shared secret

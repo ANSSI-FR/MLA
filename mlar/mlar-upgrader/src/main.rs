@@ -1,5 +1,7 @@
 use std::{
-    fs::{self, File}, io::Error, path::PathBuf
+    fs::{self, File},
+    io::Error,
+    path::PathBuf,
 };
 
 use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
@@ -86,11 +88,14 @@ fn reader_from_matches(matches: &ArgMatches) -> mla_v1::ArchiveReader<'static, F
 
 fn upgrade(matches: &ArgMatches) -> Result<(), Error> {
     let mut mla_in = reader_from_matches(matches);
-    
+
     // Read the file list using metadata
-    let fnames: Vec<String> = mla_in.list_files().map_or_else(|_| {
-        panic!("Files is malformed. Please consider repairing the file");
-    }, |iter| iter.cloned().collect());
+    let fnames: Vec<String> = mla_in.list_files().map_or_else(
+        |_| {
+            panic!("Files is malformed. Please consider repairing the file");
+        },
+        |iter| iter.cloned().collect(),
+    );
 
     let mut mla_out = writer_from_matches(matches);
 
@@ -112,7 +117,7 @@ fn upgrade(matches: &ArgMatches) -> Result<(), Error> {
             .unwrap();
     }
     mla_out.finalize().expect("Finalization error");
-    
+
     Ok(())
 }
 
@@ -126,7 +131,7 @@ pub(crate) mod tests {
     use super::*;
     use std::env;
 
-   #[test]
+    #[test]
     fn test_upgrade() {
         // temporary directory for output as we don't know if we can write in current one
         let temp_dir = env::temp_dir();
@@ -143,18 +148,9 @@ pub(crate) mod tests {
         let temp_public_keys = temp_dir.join(public_keys);
 
         // copy input, private_keys, public_keys to temp_dir
-        fs::copy(
-            format!("../../samples/{input}"),
-            &temp_input,
-        ).unwrap();
-        fs::copy(
-            format!("../../samples/{private_keys}"),
-            &temp_private_keys,
-        ).unwrap();
-        fs::copy(
-            format!("../../samples/{public_keys}"),
-            &temp_public_keys,
-        ).unwrap();
+        fs::copy(format!("../../samples/{input}"), &temp_input).unwrap();
+        fs::copy(format!("../../samples/{private_keys}"), &temp_private_keys).unwrap();
+        fs::copy(format!("../../samples/{public_keys}"), &temp_public_keys).unwrap();
 
         env::set_current_dir(&temp_dir).unwrap();
 
