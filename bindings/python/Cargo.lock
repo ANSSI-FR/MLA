@@ -104,11 +104,22 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
 name = "bincode"
-version = "1.3.3"
+version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1f45e9417d87227c7a56d22e471c6206462cba514c7590c09aff4cf6d1ddcad"
+checksum = "36eaf5d7b090263e8150820482d5d93cd964a81e4019913c972f4edcc6edb740"
 dependencies = [
+ "bincode_derive",
  "serde",
+ "unty",
+]
+
+[[package]]
+name = "bincode_derive"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf95709a440f45e986983918d0e8a1f30a9b1df04918fc828670606804ac3c09"
+dependencies = [
+ "virtue",
 ]
 
 [[package]]
@@ -116,9 +127,6 @@ name = "bitflags"
 version = "2.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5c8214115b7bf84099f1309324e63141d4c5d7cc26862f97a0a857dbefe165bd"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "block-buffer"
@@ -453,7 +461,7 @@ dependencies = [
 
 [[package]]
 name = "mla"
-version = "1.4.0"
+version = "2.0.0"
 dependencies = [
  "aes",
  "bincode",
@@ -461,6 +469,8 @@ dependencies = [
  "brotli",
  "byteorder",
  "ctr",
+ "curve25519-dalek",
+ "der-parser",
  "digest",
  "generic-array",
  "ghash",
@@ -468,28 +478,13 @@ dependencies = [
  "hpke",
  "kem",
  "ml-kem",
+ "pem",
  "rand",
  "rand_chacha",
- "serde",
- "serde-big-array",
  "sha2",
  "subtle",
  "x25519-dalek",
  "zeroize",
-]
-
-[[package]]
-name = "mlakey-parser"
-version = "0.1.0"
-dependencies = [
- "curve25519-dalek",
- "der-parser",
- "ml-kem",
- "mla",
- "pem",
- "rand_core",
- "sha2",
- "x25519-dalek",
 ]
 
 [[package]]
@@ -585,9 +580,7 @@ version = "0.3.0"
 dependencies = [
  "ml-kem",
  "mla",
- "mlakey-parser",
  "pyo3",
- "x25519-dalek",
 ]
 
 [[package]]
@@ -726,15 +719,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde-big-array"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11fc7cc2c76d73e0f27ee52abbd64eec84d46f370c88371120433196934e4b7f"
-dependencies = [
- "serde",
-]
-
-[[package]]
 name = "serde_derive"
 version = "1.0.219"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -849,10 +833,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "unty"
+version = "0.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6d49784317cd0d1ee7ec5c716dd598ec5b4483ea832a2dced265471cc0f690ae"
+
+[[package]]
 name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
+
+[[package]]
+name = "virtue"
+version = "0.0.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "051eb1abcf10076295e815102942cc58f9d5e3b4560e46e53c21e8ff6f3af7b1"
 
 [[package]]
 name = "wasi"
@@ -868,7 +864,6 @@ checksum = "c7e468321c81fb07fa7f4c636c3972b9100f0346e5b6a9f2bd0603a52f7ed277"
 dependencies = [
  "curve25519-dalek",
  "rand_core",
- "serde",
  "zeroize",
 ]
 
