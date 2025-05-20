@@ -40,7 +40,7 @@ pub mod helpers;
 // -------- Constants --------
 
 const MLA_MAGIC: &[u8; 3] = b"MLA";
-const MLA_FORMAT_VERSION: u32 = 1;
+const MLA_FORMAT_VERSION: u32 = 2;
 /// Maximum number of UTF-8 characters supported in each file's "name" (which is free
 /// to be used as a filename, an absolute path, or... ?). 32KiB was chosen because it
 /// supports any path a Windows NT, Linux, FreeBSD, OpenBSD, or NetBSD kernel supports.
@@ -145,45 +145,39 @@ impl ArchiveFooter {
         files_info: &HashMap<String, ArchiveFileID>,
         ids_info: &HashMap<ArchiveFileID, FileInfo>,
     ) -> Result<(), Error> {
-        let mut serialization_len = 0;
-
         // Combine `files_info` and `ids_info` to ArchiveFooter.files_info,
         // avoiding copies (only references)
-        let mut tmp: HashMap<&String, &FileInfo> = HashMap::new();
+        let mut tmp = Vec::new();
         for (k, i) in files_info {
             let v = ids_info.get(i).ok_or_else(|| {
                 Error::WrongWriterState(
                     "[ArchiveFooter seriliaze] Unable to find the ID".to_string(),
                 )
             })?;
-            tmp.insert(k, v);
+            tmp.push((k, v));
         }
+        tmp.sort_by_key(|(k, _)| *k);
 
-        if bincode::encode_into_std_write(&tmp, &mut dest, BINCODE_CONFIG).is_err() {
-            return Err(Error::SerializationError);
-        };
-        serialization_len += match bincode::encode_to_vec(&tmp, BINCODE_CONFIG) {
-            Ok(encoded) => encoded.len() as u64,
-            Err(_) => {
-                return Err(Error::SerializationError);
-            }
-        };
+        let serialization_len = bincode::encode_into_std_write(&tmp, &mut dest, BINCODE_CONFIG)
+            .or(Err(Error::SerializationError))?;
 
-        // footer length
-        dest.write_u32::<LittleEndian>(serialization_len as u32)?;
+        let footer_len = u64::try_from(serialization_len).or(Err(Error::SerializationError))?;
+
+        dest.write_u64::<LittleEndian>(footer_len)?;
         Ok(())
     }
 
     /// Parses and instantiates a footer from serialized data
     pub fn deserialize_from<R: Read + Seek>(mut src: R) -> Result<ArchiveFooter, Error> {
         // Read the footer length
-        let pos = src.seek(SeekFrom::End(-4))?;
-        let len = src.read_u32::<LittleEndian>()? as u64;
+        let pos = src.seek(SeekFrom::End(-8))?;
+        let len = src.read_u64::<LittleEndian>()?;
 
         // Prepare for deserialization
         src.seek(SeekFrom::Start(pos - len))?;
 
         // Read files_info
+        // A Vec can be deserialized into a HashMap in bincode 2
         let files_info: HashMap<String, FileInfo> =
             match bincode::decode_from_std_read(&mut src.take(len), BINCODE_CONFIG) {
                 Ok(finfo) => finfo,
@@ -1867,201 +1861,210 @@ pub(crate) mod tests {
         }
     }
 
-    // fn make_format_regression_files() -> HashMap<String, Vec<u8>> {
-    //     // Build files easily scriptables and checkable
-    //     let mut files: HashMap<String, Vec<u8>> = HashMap::new();
+    fn make_format_regression_files() -> HashMap<String, Vec<u8>> {
+        // Build files easily scriptables and checkable
+        let mut files: HashMap<String, Vec<u8>> = HashMap::new();
 
-    //     // One simple file
-    //     let mut simple: Vec<u8> = Vec::new();
-    //     for i in 0..=255 {
-    //         simple.push(i);
-    //     }
-    //     let pattern = simple.clone();
-    //     files.insert("simple".to_string(), simple);
+        // One simple file
+        let mut simple: Vec<u8> = Vec::new();
+        for i in 0..=255 {
+            simple.push(i);
+        }
+        let pattern = simple.clone();
+        files.insert("simple".to_string(), simple);
 
-    //     // One big file (10 MB)
-    //     let big: Vec<u8> = pattern
-    //         .iter()
-    //         .cycle()
-    //         .take(10 * 1024 * 1024)
-    //         .cloned()
-    //         .collect();
-    //     files.insert("big".to_string(), big);
+        // One big file (10 MB)
+        let big: Vec<u8> = pattern
+            .iter()
+            .cycle()
+            .take(10 * 1024 * 1024)
+            .cloned()
+            .collect();
+        files.insert("big".to_string(), big);
 
-    //     // Some constant files
-    //     for i in 0..=255 {
-    //         files.insert(
-    //             format!("file_{}", i).to_string(),
-    //             std::iter::repeat(i).take(0x1000).collect::<Vec<u8>>(),
-    //         );
-    //     }
+        // Some constant files
+        for i in 0..=255 {
+            files.insert(
+                format!("file_{}", i).to_string(),
+                std::iter::repeat_n(i, 0x1000).collect::<Vec<u8>>(),
+            );
+        }
 
-    //     // sha256 sum of them
-    //     let mut sha256sum: Vec<u8> = Vec::new();
-    //     let mut info: Vec<(&String, &Vec<_>)> = files.iter().collect();
-    //     info.sort_by(|i1, i2| Ord::cmp(&i1.0, &i2.0));
-    //     for (fname, content) in info.iter() {
-    //         let mut hasher = Sha256::new();
-    //         hasher.update(content);
-    //         sha256sum.extend_from_slice(hex::encode(hasher.finalize()).as_bytes());
-    //         sha256sum.push(0x20);
-    //         sha256sum.push(0x20);
-    //         sha256sum.extend(fname.as_bytes());
-    //         sha256sum.push(0x0a);
-    //     }
-    //     files.insert("sha256sum".to_string(), sha256sum);
-    //     files
-    // }
+        // sha256 sum of them
+        let mut sha256sum: Vec<u8> = Vec::new();
+        let mut info: Vec<(&String, &Vec<_>)> = files.iter().collect();
+        info.sort_by(|i1, i2| Ord::cmp(&i1.0, &i2.0));
+        for (fname, content) in info.iter() {
+            let h = Sha256::digest(content);
+            sha256sum.extend_from_slice(hex::encode(h).as_bytes());
+            sha256sum.push(0x20);
+            sha256sum.push(0x20);
+            sha256sum.extend(fname.as_bytes());
+            sha256sum.push(0x0a);
+        }
+        files.insert("sha256sum".to_string(), sha256sum);
+        files
+    }
 
-    // #[test]
-    // fn create_archive_format_version() {
-    //     // Build an archive to be committed, for format regression
-    //     let file = Vec::new();
+    #[test]
+    fn create_archive_format_version() {
+        // Build an archive to be committed, for format regression
+        let file = Vec::new();
 
-    //     // Use committed keys
-    //     let pem_pub: &'static [u8] = include_bytes!("../../samples/test_x25519_archive_v1_pub.pem");
-    //     let pub_key = parse_openssl_25519_pubkey(pem_pub).unwrap();
+        // Use committed keys
+        let pem_pub: &'static [u8] = include_bytes!("../../samples/test_mlakey_archive_v2_pub.pem");
+        let pub_key = crypto::mlakey_parser::parse_mlakey_pubkey(pem_pub).unwrap();
 
-    //     let mut config = ArchiveWriterConfig::new();
-    //     config
-    //         .set_layers(Layers::default())
-    //         .add_public_keys(&[pub_key]);
-    //     let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
+        let mut config = ArchiveWriterConfig::new();
+        config.encrypt.rng = crate::layers::encrypt::EncapsulationRNG::Seed([0; 32]);
+        config
+            .set_layers(Layers::default())
+            .add_public_keys(&[pub_key]);
+        let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
 
-    //     let files = make_format_regression_files();
-    //     // First, add a simple file
-    //     let fname_simple = "simple".to_string();
-    //     mla.add_file(
-    //         &fname_simple,
-    //         files.get(&fname_simple).unwrap().len() as u64,
-    //         files.get(&fname_simple).unwrap().as_slice(),
-    //     )
-    //     .unwrap();
+        let files = make_format_regression_files();
+        // First, add a simple file
+        let fname_simple = "simple".to_string();
+        mla.add_file(
+            &fname_simple,
+            files.get(&fname_simple).unwrap().len() as u64,
+            files.get(&fname_simple).unwrap().as_slice(),
+        )
+        .unwrap();
 
-    //     // Second, add interleaved files
-    //     let fnames: Vec<String> = (0..=255).map(|i| format!("file_{}", i)).collect();
-    //     let mut name2id: HashMap<_, _> = HashMap::new();
+        // Second, add interleaved files
+        let fnames: Vec<String> = (0..=255).map(|i| format!("file_{}", i)).collect();
+        let mut name2id: HashMap<_, _> = HashMap::new();
 
-    //     // Start files in normal order
-    //     (0..=255)
-    //         .map(|i| {
-    //             let id = mla.start_file(&fnames[i]).unwrap();
-    //             name2id.insert(&fnames[i], id);
-    //         })
-    //         .for_each(drop);
+        // Start files in normal order
+        (0..=255)
+            .map(|i| {
+                let id = mla.start_file(&fnames[i]).unwrap();
+                name2id.insert(&fnames[i], id);
+            })
+            .for_each(drop);
 
-    //     // Add some parts in reverse order
-    //     (0..=255)
-    //         .rev()
-    //         .map(|i| {
-    //             let id = name2id.get(&fnames[i]).unwrap();
-    //             mla.append_file_content(*id, 32, &files.get(&fnames[i]).unwrap()[..32])
-    //                 .unwrap();
-    //         })
-    //         .for_each(drop);
+        // Add some parts in reverse order
+        (0..=255)
+            .rev()
+            .map(|i| {
+                let id = name2id.get(&fnames[i]).unwrap();
+                mla.append_file_content(*id, 32, &files.get(&fnames[i]).unwrap()[..32])
+                    .unwrap();
+            })
+            .for_each(drop);
 
-    //     // Add the rest of files in normal order
-    //     (0..=255)
-    //         .map(|i| {
-    //             let id = name2id.get(&fnames[i]).unwrap();
-    //             let data = &files.get(&fnames[i]).unwrap()[32..];
-    //             mla.append_file_content(*id, data.len() as u64, data)
-    //                 .unwrap();
-    //         })
-    //         .for_each(drop);
+        // Add the rest of files in normal order
+        (0..=255)
+            .map(|i| {
+                let id = name2id.get(&fnames[i]).unwrap();
+                let data = &files.get(&fnames[i]).unwrap()[32..];
+                mla.append_file_content(*id, data.len() as u64, data)
+                    .unwrap();
+            })
+            .for_each(drop);
 
-    //     // Finish files in reverse order
-    //     (0..=255)
-    //         .rev()
-    //         .map(|i| {
-    //             let id = name2id.get(&fnames[i]).unwrap();
-    //             mla.end_file(*id).unwrap();
-    //         })
-    //         .for_each(drop);
+        // Finish files in reverse order
+        (0..=255)
+            .rev()
+            .map(|i| {
+                let id = name2id.get(&fnames[i]).unwrap();
+                mla.end_file(*id).unwrap();
+            })
+            .for_each(drop);
 
-    //     // Add a big file
-    //     let fname_big = "big".to_string();
-    //     mla.add_file(
-    //         &fname_big,
-    //         files.get(&fname_big).unwrap().len() as u64,
-    //         files.get(&fname_big).unwrap().as_slice(),
-    //     )
-    //     .unwrap();
+        // Add a big file
+        let fname_big = "big".to_string();
+        mla.add_file(
+            &fname_big,
+            files.get(&fname_big).unwrap().len() as u64,
+            files.get(&fname_big).unwrap().as_slice(),
+        )
+        .unwrap();
 
-    //     // Add sha256sum file
-    //     let fname_sha256sum = "sha256sum".to_string();
-    //     mla.add_file(
-    //         &fname_sha256sum,
-    //         files.get(&fname_sha256sum).unwrap().len() as u64,
-    //         files.get(&fname_sha256sum).unwrap().as_slice(),
-    //     )
-    //     .unwrap();
-    //     mla.finalize().unwrap();
+        // Add sha256sum file
+        let fname_sha256sum = "sha256sum".to_string();
+        mla.add_file(
+            &fname_sha256sum,
+            files.get(&fname_sha256sum).unwrap().len() as u64,
+            files.get(&fname_sha256sum).unwrap().as_slice(),
+        )
+        .unwrap();
+        mla.finalize().unwrap();
 
-    //     // UNCOMMENT THESE LINES TO UPDATE THE FILE
-    //     // UPDATE THE VERSION NUMBER
-    //     /*
-    //     std::fs::File::create(std::path::Path::new(&format!(
-    //         "../samples/archive_v{}.mla",
-    //         MLA_FORMAT_VERSION
-    //     )))
-    //     .unwrap()
-    //     .write(&mla.into_raw())
-    //     .unwrap();
-    //      */
-    // }
+        let raw_mla = mla.into_raw();
+        std::fs::File::create(std::path::Path::new(&format!(
+            "../samples/archive_v{}.mla",
+            MLA_FORMAT_VERSION
+        )))
+        .unwrap()
+        .write_all(&raw_mla)
+        .unwrap();
 
-    // #[ignore]
-    // #[test]
-    // fn check_archive_format_v1() {
-    //     let pem_priv: &'static [u8] = include_bytes!("../../samples/test_x25519_archive_v1.pem");
+        // check archive_v2 hash
+        assert_eq!(
+            Sha256::digest(&raw_mla).as_slice(),
+            [
+                120, 15, 253, 164, 159, 72, 73, 237, 90, 40, 179, 184, 137, 167, 176, 50, 141, 167,
+                44, 111, 112, 103, 42, 180, 13, 118, 141, 174, 71, 189, 64, 109
+            ]
+        )
+    }
 
-    //     let mla_data: &'static [u8] = include_bytes!("../../samples/archive_v1.mla");
-    //     let files = make_format_regression_files();
+    #[test]
+    fn check_archive_format_v2_content() {
+        let der_priv: &'static [u8] = include_bytes!("../../samples/test_mlakey_archive_v2.der");
 
-    //     // Build Reader
-    //     let buf = Cursor::new(mla_data);
-    //     let mut config = ArchiveReaderConfig::new();
-    //     config.add_private_keys(&[parse_openssl_25519_privkey(pem_priv).unwrap()]);
-    //     let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
+        let mla_data: &'static [u8] = include_bytes!("../../samples/archive_v2.mla");
+        let files = make_format_regression_files();
 
-    //     // Build FailSafeReader
-    //     let mut config = ArchiveReaderConfig::new();
-    //     config.add_private_keys(&[parse_openssl_25519_privkey(pem_priv).unwrap()]);
-    //     let mut mla_fsread = ArchiveFailSafeReader::from_config(mla_data, config).unwrap();
+        // Build Reader
+        let buf = Cursor::new(mla_data);
+        let mut config = ArchiveReaderConfig::new();
+        config.add_private_keys(&[
+            crypto::mlakey_parser::parse_mlakey_privkey_der(der_priv).unwrap()
+        ]);
+        let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
 
-    //     // Repair the archive (without any damage, but trigger the corresponding code)
-    //     let dest_w = Vec::new();
-    //     let mut mla_w = ArchiveWriter::from_config(dest_w, ArchiveWriterConfig::new())
-    //         .expect("Writer init failed");
-    //     if let FailSafeReadError::EndOfOriginalArchiveData =
-    //         mla_fsread.convert_to_archive(&mut mla_w).unwrap()
-    //     {
-    //         // Everything runs as expected
-    //     } else {
-    //         panic!();
-    //     }
-    //     // Get a reader on the repaired archive
-    //     let buf2 = Cursor::new(mla_w.into_raw());
-    //     let mut mla_repread = ArchiveReader::from_config(buf2, ArchiveReaderConfig::new()).unwrap();
+        // Build FailSafeReader
+        let mut config = ArchiveReaderConfig::new();
+        config.add_private_keys(&[
+            crypto::mlakey_parser::parse_mlakey_privkey_der(der_priv).unwrap()
+        ]);
+        let mut mla_fsread = ArchiveFailSafeReader::from_config(mla_data, config).unwrap();
 
-    //     assert_eq!(files.len(), mla_read.list_files().unwrap().count());
-    //     assert_eq!(files.len(), mla_repread.list_files().unwrap().count());
+        // Repair the archive (without any damage, but trigger the corresponding code)
+        let dest_w = Vec::new();
+        let mut mla_w = ArchiveWriter::from_config(dest_w, ArchiveWriterConfig::new())
+            .expect("Writer init failed");
+        if let FailSafeReadError::EndOfOriginalArchiveData =
+            mla_fsread.convert_to_archive(&mut mla_w).unwrap()
+        {
+            // Everything runs as expected
+        } else {
+            panic!();
+        }
+        // Get a reader on the repaired archive
+        let buf2 = Cursor::new(mla_w.into_raw());
+        let mut mla_repread = ArchiveReader::from_config(buf2, ArchiveReaderConfig::new()).unwrap();
 
-    //     // Get and check file per file
-    //     for (fname, content) in files.iter() {
-    //         let mut mla_file = mla_read.get_file(fname.clone()).unwrap().unwrap();
-    //         let mut mla_rep_file = mla_repread.get_file(fname.clone()).unwrap().unwrap();
-    //         assert_eq!(mla_file.filename, fname.clone());
-    //         assert_eq!(mla_rep_file.filename, fname.clone());
-    //         let mut buf = Vec::new();
-    //         mla_file.data.read_to_end(&mut buf).unwrap();
-    //         assert_eq!(buf.as_slice(), content.as_slice());
-    //         let mut buf = Vec::new();
-    //         mla_rep_file.data.read_to_end(&mut buf).unwrap();
-    //         assert_eq!(buf.as_slice(), content.as_slice());
-    //     }
-    // }
+        assert_eq!(files.len(), mla_read.list_files().unwrap().count());
+        assert_eq!(files.len(), mla_repread.list_files().unwrap().count());
+
+        // Get and check file per file
+        for (fname, content) in files.iter() {
+            let mut mla_file = mla_read.get_file(fname.clone()).unwrap().unwrap();
+            let mut mla_rep_file = mla_repread.get_file(fname.clone()).unwrap().unwrap();
+            assert_eq!(mla_file.filename, fname.clone());
+            assert_eq!(mla_rep_file.filename, fname.clone());
+            let mut buf = Vec::new();
+            mla_file.data.read_to_end(&mut buf).unwrap();
+            assert_eq!(buf.as_slice(), content.as_slice());
+            let mut buf = Vec::new();
+            mla_rep_file.data.read_to_end(&mut buf).unwrap();
+            assert_eq!(buf.as_slice(), content.as_slice());
+        }
+    }
 
     #[test]
     fn empty_blocks() {

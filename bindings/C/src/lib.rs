@@ -1,6 +1,8 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 use mla::config::ArchiveReaderConfig;
 use mla::config::ArchiveWriterConfig;
+use mla::crypto::mlakey_parser::parse_mlakey_privkey;
+use mla::crypto::mlakey_parser::parse_mlakey_pubkeys_pem_many;
 use mla::errors::ConfigError;
 use mla::errors::Error as MLAError;
 use mla::helpers::linear_extract;
@@ -8,8 +10,6 @@ use mla::ArchiveHeader;
 use mla::ArchiveReader;
 use mla::ArchiveWriter;
 use mla::{ArchiveFileID, Layers};
-use mla::crypto::mlakey_parser::parse_mlakey_privkey;
-use mla::crypto::mlakey_parser::parse_mlakey_pubkeys_pem_many;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::ffi::{c_void, CStr};
@@ -34,7 +34,7 @@ pub enum MLAStatus {
     AssertionError = 0x090000,
     WrongReaderState = 0x0A0000,
     WrongWriterState = 0x0B0000,
-    // Keep 0x0C0000 slot, for backward compatibility
+    // Keep 0x0C0000 slot for backward compatibility
     //  InvalidCipherInit = 0x0C0000,
     RandError = 0x0D0000,
     PrivateKeyNeeded = 0x0E0000,
@@ -59,7 +59,9 @@ pub enum MLAStatus {
     HKDFInvalidKeyLength = 0x170000,
     HPKEError = 0x18000,
     InvalidLastTag = 0x19000,
-    Curve25519ParserError = 0xF10000,
+    // Keep 0xF10000 slot for backward compatibility
+    // Curve25519ParserError = 0xF10000,
+    MlaKeyParserError = 0xF20000,
 }
 /// Implemented by the developper. Takes a buffer of a certain number of bytes of MLA
 /// file, and does whatever it wants with it (e.g. write it to a file, to a HTTP stream, etc.)
@@ -282,7 +284,7 @@ pub extern "C" fn mla_config_add_public_keys(
             config.add_public_keys(&v);
             MLAStatus::Success
         }
-        _ => MLAStatus::Curve25519ParserError,
+        _ => MLAStatus::MlaKeyParserError,
     };
 
     Box::leak(config);
@@ -334,17 +336,21 @@ pub extern "C" fn mla_reader_config_new(handle_out: *mut MLAConfigHandle) -> MLA
 #[no_mangle]
 pub extern "C" fn mla_reader_config_add_private_key(
     config: MLAConfigHandle,
-    private_key: *const c_char,
+    // private_key: *const c_char,
+    private_key_data: *const u8,
+    private_key_len: usize,
 ) -> MLAStatus {
-    if config.is_null() || private_key.is_null() {
+    if config.is_null() || private_key_data.is_null() || private_key_len == 0 {
         return MLAStatus::BadAPIArgument;
     }
 
     let mut config = unsafe { Box::from_raw(config as *mut ArchiveReaderConfig) };
     let mut private_keys = Vec::new();
 
-    // Create a slice from the NULL-terminated string
-    let private_key = unsafe { CStr::from_ptr(private_key) }.to_bytes();
+    // Create a slice without Cstr as DER files might contain null bytes
+    let private_key: &[u8] =
+        unsafe { std::slice::from_raw_parts(private_key_data, private_key_len) };
+
     // Parse as MLA private key(s)
     let res = match parse_mlakey_privkey(private_key) {
         Ok(v) => {
@@ -352,7 +358,7 @@ pub extern "C" fn mla_reader_config_add_private_key(
             config.add_private_keys(&private_keys);
             MLAStatus::Success
         }
-        _ => MLAStatus::Curve25519ParserError,
+        _ => MLAStatus::MlaKeyParserError,
     };
 
     Box::leak(config);

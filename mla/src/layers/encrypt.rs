@@ -25,7 +25,7 @@ use bincode::{
 use hpke::HpkeError;
 use kem::{Decapsulate, Encapsulate};
 use rand::SeedableRng;
-use rand_chacha::{ChaChaRng, rand_core::CryptoRngCore};
+use rand_chacha::ChaChaRng;
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -155,7 +155,7 @@ impl<Context> Decode<Context> for KeyCommitmentAndTag {
 }
 
 /// Return a Cryptographic random number generator
-pub(crate) fn get_crypto_rng() -> impl CryptoRngCore {
+pub(crate) fn get_crypto_rng() -> ChaChaRng {
     // Use OsRng from crate rand, that uses getrandom() from crate getrandom.
     // getrandom provides implementations for many systems, listed on
     // https://docs.rs/getrandom/0.1.14/getrandom/
@@ -227,6 +227,29 @@ impl<'de, Context> BorrowDecode<'de, Context> for EncryptionPersistentConfig {
 pub struct EncryptionConfig {
     /// Public keys of recipients
     public_keys: HybridMultiRecipientsPublicKeys,
+    pub(crate) rng: EncapsulationRNG,
+}
+
+pub(crate) enum EncapsulationRNG {
+    System,
+    #[allow(dead_code)]
+    Seed([u8; 32]),
+}
+
+impl EncapsulationRNG {
+    fn get_rng(&self) -> ChaChaRng {
+        match self {
+            EncapsulationRNG::System => get_crypto_rng(),
+            EncapsulationRNG::Seed(s) => ChaChaRng::from_seed(*s),
+        }
+    }
+}
+
+#[allow(clippy::derivable_impls)]
+impl Default for EncapsulationRNG {
+    fn default() -> Self {
+        EncapsulationRNG::System
+    }
 }
 
 impl EncryptionConfig {
@@ -249,7 +272,7 @@ impl EncryptionConfig {
     ) -> Result<(EncryptionPersistentConfig, InternalEncryptionConfig), ConfigError> {
         // Generate then encapsulate the main key for each recipients
         let (hybrid_multi_recipient_encapsulate_key, ss_hybrid) =
-            self.public_keys.encapsulate(&mut get_crypto_rng())?;
+            self.public_keys.encapsulate(&mut self.rng.get_rng())?;
 
         // Generate the main encrypt layer nonce and keep the main key for internal use
         let cryptographic_material = InternalEncryptionConfig::from(ss_hybrid)
