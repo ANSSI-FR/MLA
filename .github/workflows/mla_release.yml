@@ -1,7 +1,6 @@
 name: mla release
 
-permissions:
-  contents: write
+permissions: {}
 
 on:
   push:
@@ -13,6 +12,8 @@ env:
 
 jobs:
   build:
+    permissions: 
+      contents: write
     strategy:
       matrix:
         build: [linux-x86_64, windows-i686, windows-x86_64, windows-i686-debug, windows-x86_64-debug]
@@ -86,6 +87,8 @@ jobs:
         path: ${{ matrix.path }}
 
   release:
+    permissions: 
+      contents: write
     # From https://github.com/cloudflare/wrangler/blob/master/.github/workflows/release.yml
     name: GitHub Release
     needs: build
