@@ -839,7 +839,7 @@ fn keygen(matches: &ArgMatches) -> Result<(), MlarError> {
 
     // Output the private key in PEM format, to ease integration in text based
     output_priv
-        .write_all(&key_pair.private_as_pem().as_bytes())
+        .write_all(key_pair.private_as_pem().as_bytes())
         .expect("Error writing the private key");
     Ok(())
 }
