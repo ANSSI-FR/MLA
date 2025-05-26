@@ -12,8 +12,6 @@ env:
 
 jobs:
   build:
-    permissions: 
-      contents: write
     strategy:
       matrix:
         build: [linux-x86_64, windows-i686, windows-x86_64, windows-i686-debug, windows-x86_64-debug]
