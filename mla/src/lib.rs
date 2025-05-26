@@ -364,7 +364,6 @@ use layers::traits::InnerReaderTrait;
 ///
 /// If this footer is unavailable, the archive is read from the beginning to recover
 /// file information.
-
 pub mod layers;
 use crate::layers::compress::{
     CompressionLayerFailSafeReader, CompressionLayerReader, CompressionLayerWriter,
