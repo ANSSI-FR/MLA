@@ -79,12 +79,12 @@ const HYBRIDKEM_ASSOCIATED_DATA: &[u8; 0] = b"";
 /// with ss1 and ss2 the shared secrets and ct1 and ct2 the ciphertexts
 ///
 /// [1] "F. Giacon, F. Heuer, and B. Poettering. Kem combiners, Cham, 2018"
-/// [2] https://datatracker.ietf.org/doc/draft-ietf-tls-hybrid-design/
-/// [3] https://datatracker.ietf.org/doc/html/rfc9370
-/// [4] https://eprint.iacr.org/2024/039
-/// [5] https://cyber.gouv.fr/en/publications/follow-position-paper-post-quantum-cryptography
-/// [6] https://eprint.iacr.org/2018/903.pdf
-/// [7] https://eprint.iacr.org/2023/861
+/// [2] <https://datatracker.ietf.org/doc/draft-ietf-tls-hybrid-design/>
+/// [3] <https://datatracker.ietf.org/doc/html/rfc9370>
+/// [4] <https://eprint.iacr.org/2024/039>
+/// [5] <https://cyber.gouv.fr/en/publications/follow-position-paper-post-quantum-cryptography>
+/// [6] <https://eprint.iacr.org/2018/903.pdf>
+/// [7] <https://eprint.iacr.org/2023/861>
 fn combine(
     shared_secret1: &[u8],
     shared_secret2: &[u8],

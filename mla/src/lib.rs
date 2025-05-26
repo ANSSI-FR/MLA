@@ -576,7 +576,7 @@ impl TryFrom<u8> for ArchiveFileBlockType {
 #[derive(Debug)]
 pub enum ArchiveFileBlock<T: Read> {
     /// Usually, a file is made of:
-    /// [FileStart][FileContent]...[FileContent][EndOfFile]
+    /// `[FileStart][FileContent]`...`[FileContent][EndOfFile]`
     /// The `id` is used to keep track internally of which file a `ArchiveFileBlock` belongs to
     ///
     /// Start of a file
