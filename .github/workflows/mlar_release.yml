@@ -12,8 +12,6 @@ env:
 
 jobs:
   build:
-    permissions: 
-      contents: write
     strategy:
       matrix:
         build: [linux, macos, windows]
