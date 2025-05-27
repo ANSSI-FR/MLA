@@ -265,34 +265,6 @@ pub extern "C" fn mla_config_default_new(handle_out: *mut MLAConfigHandle) -> ML
     MLAStatus::Success
 }
 
-/// Appends the given public key(s) to an existing given configuration
-/// (referenced by the handle returned by mla_config_default_new()).
-#[no_mangle]
-pub extern "C" fn mla_config_add_public_keys(
-    config: MLAConfigHandle,
-    public_keys: *const c_char,
-) -> MLAStatus {
-    if config.is_null() || public_keys.is_null() {
-        return MLAStatus::BadAPIArgument;
-    }
-
-    let mut config = unsafe { Box::from_raw(config as *mut ArchiveWriterConfig) };
-
-    // Create a slice from the NULL-terminated string
-    let public_keys = unsafe { CStr::from_ptr(public_keys) }.to_bytes();
-    // Parse as MLA public key(s)
-    let res = match parse_mlakey_pubkeys_pem_many(public_keys) {
-        Ok(v) => {
-            config.add_public_keys(&v);
-            MLAStatus::Success
-        }
-        _ => MLAStatus::MlaKeyParserError,
-    };
-
-    Box::leak(config);
-    res
-}
-
 /// Appends the given public key(s) in DER format to an existing given configuration
 /// (referenced by the handle returned by mla_config_default_new()).
 #[no_mangle]
@@ -313,6 +285,34 @@ pub extern "C" fn mla_config_add_public_keys_der(
     let res = match parse_mlakey_pubkey_der(public_keys) {
         Ok(v) => {
             config.add_public_keys(&[v]);
+            MLAStatus::Success
+        }
+        _ => MLAStatus::MlaKeyParserError,
+    };
+
+    Box::leak(config);
+    res
+}
+
+/// Appends the given public key(s) in PEM format to an existing given configuration
+/// (referenced by the handle returned by mla_config_default_new()).
+#[no_mangle]
+pub extern "C" fn mla_config_add_public_keys_pem(
+    config: MLAConfigHandle,
+    public_keys: *const c_char,
+) -> MLAStatus {
+    if config.is_null() || public_keys.is_null() {
+        return MLAStatus::BadAPIArgument;
+    }
+
+    let mut config = unsafe { Box::from_raw(config as *mut ArchiveWriterConfig) };
+
+    // Create a slice from the NULL-terminated string
+    let public_keys = unsafe { CStr::from_ptr(public_keys) }.to_bytes();
+    // Parse as MLA public key(s)
+    let res = match parse_mlakey_pubkeys_pem_many(public_keys) {
+        Ok(v) => {
+            config.add_public_keys(&v);
             MLAStatus::Success
         }
         _ => MLAStatus::MlaKeyParserError,
