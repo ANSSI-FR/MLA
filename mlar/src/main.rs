@@ -6,7 +6,10 @@ use lru::LruCache;
 use ml_kem::EncodedSizeUser;
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
 use mla::crypto::hybrid::{HybridPrivateKey, HybridPublicKey};
-use mla::crypto::mlakey_parser::{generate_keypair, parse_mlakey_privkey, parse_mlakey_pubkey};
+use mla::crypto::mlakey_parser::{
+    generate_keypair, parse_mlakey_privkey_der, parse_mlakey_privkey_pem, parse_mlakey_pubkey_der,
+    parse_mlakey_pubkey_pem,
+};
 use mla::errors::{Error, FailSafeReadError};
 use mla::helpers::linear_extract;
 use mla::layers::compress::CompressionLayerReader;
@@ -117,10 +120,11 @@ fn open_private_keys(matches: &ArgMatches) -> Result<Vec<HybridPrivateKey>, Erro
             // Load the the key in-memory and parse it
             let mut buf = Vec::new();
             file.read_to_end(&mut buf)?;
-            match parse_mlakey_privkey(&buf) {
-                Err(_) => return Err(Error::InvalidKeyFormat),
-                Ok(private_key) => private_keys.push(private_key),
-            };
+            let private_key = parse_mlakey_privkey_pem(&buf)
+                .or_else(|_| parse_mlakey_privkey_der(&buf))
+                .map_err(|_| Error::InvalidKeyFormat)?;
+
+            private_keys.push(private_key);
         }
     };
     Ok(private_keys)
@@ -136,10 +140,12 @@ fn open_public_keys(matches: &ArgMatches) -> Result<Vec<HybridPublicKey>, Error>
             // Load the the key in-memory and parse it
             let mut buf = Vec::new();
             file.read_to_end(&mut buf)?;
-            match parse_mlakey_pubkey(&buf) {
-                Err(_) => return Err(Error::InvalidKeyFormat),
-                Ok(public_key) => public_keys.push(public_key),
-            };
+
+            let public_key = parse_mlakey_pubkey_pem(&buf)
+                .or_else(|_| parse_mlakey_pubkey_der(&buf))
+                .map_err(|_| Error::InvalidKeyFormat)?;
+
+            public_keys.push(public_key);
         }
     }
     Ok(public_keys)
@@ -893,7 +899,9 @@ fn keyderive(matches: &ArgMatches) -> Result<(), MlarError> {
     // Load the the key in-memory and parse it
     let mut buf = Vec::new();
     file.read_to_end(&mut buf)?;
-    let mut secret = parse_mlakey_privkey(&buf).expect("[ERROR] Unable to read the private key");
+    let mut secret = parse_mlakey_privkey_pem(&buf)
+        .or_else(|_| parse_mlakey_privkey_der(&buf))
+        .map_err(|_| MlarError::MlaError(Error::InvalidKeyFormat))?;
 
     // Derive the key along the path
     let mut key_pair = None;
@@ -906,7 +914,7 @@ fn keyderive(matches: &ArgMatches) -> Result<(), MlarError> {
         // Use the high-level API to avoid duplicating code from curve25519-parser in case of futur changes
         key_pair =
             Some(generate_keypair(&mut csprng).expect("Error while generating the key-pair"));
-        secret = parse_mlakey_privkey(&key_pair.as_ref().unwrap().private_der).unwrap();
+        secret = parse_mlakey_privkey_der(&key_pair.as_ref().unwrap().private_der).unwrap();
     }
 
     // Safe to unwrap, there is at least one derivation path
