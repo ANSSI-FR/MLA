@@ -1,8 +1,10 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 use mla::config::ArchiveReaderConfig;
 use mla::config::ArchiveWriterConfig;
-use mla::crypto::mlakey_parser::parse_mlakey_privkey;
-use mla::crypto::mlakey_parser::parse_mlakey_pubkeys_pem_many;
+use mla::crypto::mlakey_parser::{
+    parse_mlakey_privkey, parse_mlakey_privkey_der, parse_mlakey_pubkey_der,
+    parse_mlakey_pubkeys_pem_many,
+};
 use mla::errors::ConfigError;
 use mla::errors::Error as MLAError;
 use mla::helpers::linear_extract;
@@ -263,10 +265,39 @@ pub extern "C" fn mla_config_default_new(handle_out: *mut MLAConfigHandle) -> ML
     MLAStatus::Success
 }
 
-/// Appends the given public key(s) to an existing given configuration
+/// Appends the given public key(s) in DER format to an existing given configuration
 /// (referenced by the handle returned by mla_config_default_new()).
 #[no_mangle]
-pub extern "C" fn mla_config_add_public_keys(
+pub extern "C" fn mla_config_add_public_keys_der(
+    config: MLAConfigHandle,
+    public_keys_data: *const u8,
+    public_keys_len: usize,
+) -> MLAStatus {
+    if config.is_null() || public_keys_data.is_null() || public_keys_len == 0 {
+        return MLAStatus::BadAPIArgument;
+    }
+
+    let mut config = unsafe { Box::from_raw(config as *mut ArchiveWriterConfig) };
+
+    // DER can contain null bytes, so use from_raw_parts
+    let public_keys = unsafe { std::slice::from_raw_parts(public_keys_data, public_keys_len) };
+
+    let res = match parse_mlakey_pubkey_der(public_keys) {
+        Ok(v) => {
+            config.add_public_keys(&[v]);
+            MLAStatus::Success
+        }
+        _ => MLAStatus::MlaKeyParserError,
+    };
+
+    Box::leak(config);
+    res
+}
+
+/// Appends the given public key(s) in PEM format to an existing given configuration
+/// (referenced by the handle returned by mla_config_default_new()).
+#[no_mangle]
+pub extern "C" fn mla_config_add_public_keys_pem(
     config: MLAConfigHandle,
     public_keys: *const c_char,
 ) -> MLAStatus {
@@ -278,9 +309,9 @@ pub extern "C" fn mla_config_add_public_keys(
 
     // Create a slice from the NULL-terminated string
     let public_keys = unsafe { CStr::from_ptr(public_keys) }.to_bytes();
-    // Parse as OpenSSL Ed25519 public key(s)
+    // Parse as MLA public key(s)
     let res = match parse_mlakey_pubkeys_pem_many(public_keys) {
-        Ok(v) if !v.is_empty() => {
+        Ok(v) => {
             config.add_public_keys(&v);
             MLAStatus::Success
         }
@@ -331,12 +362,11 @@ pub extern "C" fn mla_reader_config_new(handle_out: *mut MLAConfigHandle) -> MLA
     MLAStatus::Success
 }
 
-/// Appends the given private key to an existing given configuration
+/// Appends the given private key in DER format to an existing given configuration
 /// (referenced by the handle returned by mla_reader_config_new()).
 #[no_mangle]
-pub extern "C" fn mla_reader_config_add_private_key(
+pub extern "C" fn mla_reader_config_add_private_key_der(
     config: MLAConfigHandle,
-    // private_key: *const c_char,
     private_key_data: *const u8,
     private_key_len: usize,
 ) -> MLAStatus {
@@ -345,17 +375,42 @@ pub extern "C" fn mla_reader_config_add_private_key(
     }
 
     let mut config = unsafe { Box::from_raw(config as *mut ArchiveReaderConfig) };
-    let mut private_keys = Vec::new();
 
-    // Create a slice without Cstr as DER files might contain null bytes
+    // DER can contain null bytes, so use from_raw_parts
     let private_key: &[u8] =
         unsafe { std::slice::from_raw_parts(private_key_data, private_key_len) };
 
-    // Parse as MLA private key(s)
+    let res = match parse_mlakey_privkey_der(private_key) {
+        Ok(v) => {
+            config.add_private_keys(&[v]);
+            MLAStatus::Success
+        }
+        _ => MLAStatus::MlaKeyParserError,
+    };
+
+    Box::leak(config);
+    res
+}
+
+/// Appends the given private key in PEM format to an existing given configuration
+/// (referenced by the handle returned by mla_reader_config_new()).
+#[no_mangle]
+pub extern "C" fn mla_reader_config_add_private_key_pem(
+    config: MLAConfigHandle,
+    private_key_pem: *const c_char,
+) -> MLAStatus {
+    if config.is_null() || private_key_pem.is_null() {
+        return MLAStatus::BadAPIArgument;
+    }
+
+    let mut config = unsafe { Box::from_raw(config as *mut ArchiveReaderConfig) };
+
+    // PEM is a null-terminated string
+    let private_key = unsafe { CStr::from_ptr(private_key_pem) }.to_bytes();
+
     let res = match parse_mlakey_privkey(private_key) {
         Ok(v) => {
-            private_keys.push(v);
-            config.add_private_keys(&private_keys);
+            config.add_private_keys(&[v]);
             MLAStatus::Success
         }
         _ => MLAStatus::MlaKeyParserError,
