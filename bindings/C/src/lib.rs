@@ -375,7 +375,6 @@ pub extern "C" fn mla_reader_config_add_private_key_der(
     }
 
     let mut config = unsafe { Box::from_raw(config as *mut ArchiveReaderConfig) };
-    let mut private_keys = Vec::new();
 
     // DER can contain null bytes, so use from_raw_parts
     let private_key: &[u8] =
@@ -383,8 +382,7 @@ pub extern "C" fn mla_reader_config_add_private_key_der(
 
     let res = match parse_mlakey_privkey_der(private_key) {
         Ok(v) => {
-            private_keys.push(v);
-            config.add_private_keys(&private_keys);
+            config.add_private_keys(&[v]);
             MLAStatus::Success
         }
         _ => MLAStatus::MlaKeyParserError,
@@ -406,15 +404,13 @@ pub extern "C" fn mla_reader_config_add_private_key_pem(
     }
 
     let mut config = unsafe { Box::from_raw(config as *mut ArchiveReaderConfig) };
-    let mut private_keys = Vec::new();
 
     // PEM is a null-terminated string
     let private_key = unsafe { CStr::from_ptr(private_key_pem) }.to_bytes();
 
     let res = match parse_mlakey_privkey(private_key) {
         Ok(v) => {
-            private_keys.push(v);
-            config.add_private_keys(&private_keys);
+            config.add_private_keys(&[v]);
             MLAStatus::Success
         }
         _ => MLAStatus::MlaKeyParserError,
