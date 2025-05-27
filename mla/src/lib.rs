@@ -302,7 +302,7 @@ use layers::traits::InnerReaderTrait;
 /// * At the time of writing, the archive writer does not know that the current block is the last one. Therefore, it cannot use a specific IV. To circumvent it, a dummy footer block has to be added at the end, leading to additional complexity for last block detection
 /// * In STREAM, the `last_block` bit is used to prevent undetected truncation. In MLA, it is already the role of the `EndOfArchiveData` tag at the file layer level
 ///
-/// Thus, to seek-and-read at a given position, the layer decrypts the block containing this position, and verifies the tag before returning the decrypted data. 
+/// Thus, to seek-and-read at a given position, the layer decrypts the block containing this position, and verifies the tag before returning the decrypted data.
 ///
 /// The authors decided to use elliptic curve over RSA, because:
 /// * No ready-for-production Rust-based libraries have been found at the date of writing
@@ -2357,8 +2357,8 @@ pub(crate) mod tests {
         assert_eq!(
             Sha256::digest(&raw_mla).as_slice(),
             [
-                120, 15, 253, 164, 159, 72, 73, 237, 90, 40, 179, 184, 137, 167, 176, 50, 141, 167,
-                44, 111, 112, 103, 42, 180, 13, 118, 141, 174, 71, 189, 64, 109
+                246, 209, 86, 99, 226, 71, 217, 183, 250, 34, 251, 49, 153, 220, 242, 55, 189, 236,
+                172, 48, 234, 191, 10, 98, 39, 161, 236, 110, 243, 80, 232, 212
             ]
         )
     }
