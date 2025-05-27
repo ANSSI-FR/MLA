@@ -104,15 +104,15 @@ extern "C" {
 /// Create a new configuration with default options, and return a handle to it.
 MLAStatus mla_config_default_new(MLAConfigHandle *handle_out);
 
-/// Appends the given public key(s) to an existing given configuration
-/// (referenced by the handle returned by mla_config_default_new()).
-MLAStatus mla_config_add_public_keys(MLAConfigHandle config, const char *public_keys);
-
 /// Appends the given public key(s) in DER format to an existing given configuration
 /// (referenced by the handle returned by mla_config_default_new()).
 MLAStatus mla_config_add_public_keys_der(MLAConfigHandle config,
                                          const uint8_t *public_keys_data,
                                          uintptr_t public_keys_len);
+
+/// Appends the given public key(s) in PEM format to an existing given configuration
+/// (referenced by the handle returned by mla_config_default_new()).
+MLAStatus mla_config_add_public_keys_pem(MLAConfigHandle config, const char *public_keys);
 
 /// Sets the compression level in an existing given configuration
 /// (referenced by the handle returned by mla_config_default_new()).
