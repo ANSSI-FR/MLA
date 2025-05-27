@@ -437,8 +437,8 @@ fn test_multiple_keys() {
         Path::new("../samples/test_mlakey_3_pub.pem"),
     ];
     let private_keys = [
-        Path::new("../samples/test_mlakey.pem"),
-        Path::new("../samples/test_mlakey_2.pem"),
+        Path::new("../samples/test_mlakey.der"),
+        Path::new("../samples/test_mlakey_2.der"),
     ];
 
     // Create files
@@ -489,7 +489,7 @@ fn test_multiple_keys() {
         .arg("-i")
         .arg(mlar_file.path())
         .arg("-k")
-        .arg(Path::new("../samples/test_mlakey_3.pem"));
+        .arg(Path::new("../samples/test_mlakey_3.der"));
 
     println!("{cmd:?}");
     let assert = cmd.assert();
@@ -571,9 +571,9 @@ fn test_convert() {
     let mlar_file_converted = NamedTempFile::new("convert.mla").unwrap();
     let tar_file = NamedTempFile::new("output.tar").unwrap();
     let public_key1 = Path::new("../samples/test_mlakey_pub.pem");
-    let private_key1 = Path::new("../samples/test_mlakey.pem");
+    let private_key1 = Path::new("../samples/test_mlakey.der");
     let public_key2 = Path::new("../samples/test_mlakey_2_pub.pem");
-    let private_key2 = Path::new("../samples/test_mlakey_2.pem");
+    let private_key2 = Path::new("../samples/test_mlakey_2.der");
 
     // Create files
     let testfs = setup();
@@ -695,7 +695,7 @@ fn test_multi_fileorders() {
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
     let tar_file = NamedTempFile::new("output.tar").unwrap();
     let public_key = Path::new("../samples/test_mlakey_pub.pem");
-    let private_key = Path::new("../samples/test_mlakey.pem");
+    let private_key = Path::new("../samples/test_mlakey.der");
 
     // Create files
     let testfs = setup();
@@ -999,13 +999,13 @@ fn test_keygen() {
 }
 
 const PRIVATE_KEY_TESTSEED_SHA256: [u8; 32] = [
-    80, 201, 118, 246, 241, 104, 158, 97, 217, 191, 79, 125, 41, 188, 240, 85, 139, 146, 81, 45,
-    168, 157, 13, 116, 136, 199, 142, 73, 153, 58, 219, 52,
+    158, 50, 216, 157, 41, 62, 242, 214, 132, 119, 240, 48, 68, 96, 179, 166, 182, 147, 96, 161,
+    231, 199, 6, 25, 37, 147, 182, 13, 16, 125, 11, 77,
 ];
 
 const PRIVATE_KEY_TESTSEED2_SHA256: [u8; 32] = [
-    107, 226, 84, 141, 92, 112, 140, 195, 136, 48, 184, 57, 145, 66, 180, 10, 188, 41, 111, 108,
-    106, 125, 23, 45, 7, 237, 249, 187, 27, 37, 156, 235,
+    186, 74, 147, 165, 173, 98, 138, 74, 77, 9, 149, 36, 41, 252, 120, 19, 138, 255, 57, 31, 231,
+    10, 0, 42, 207, 208, 248, 209, 18, 8, 3, 209,
 ];
 
 #[test]
@@ -1192,7 +1192,7 @@ fn test_verbose_info() {
     println!("{cmd:?}");
     let assert = cmd.assert();
     assert.success().stdout(
-        "Format version: 1
+        "Format version: 2
 Encryption: true
 Compression: true
 ",

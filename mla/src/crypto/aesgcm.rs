@@ -41,7 +41,7 @@ pub struct AesGcm256 {
     /// to update the `ghash`, and is cleared.
     current_block: Vec<u8>,
     /// Number of bytes encrypted - workaround for
-    /// https://github.com/RustCrypto/block-ciphers/issues/71
+    /// <https://github.com/RustCrypto/block-ciphers/issues/71>
     bytes_encrypted: u64,
 }
 
