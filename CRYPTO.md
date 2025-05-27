@@ -40,7 +40,7 @@ HPKE is parameterized with:
 - Mode: "Base" (no PSK, no sender authentication)
 - KDF: HKDF-SHA512
 - AEAD: AES-256-GCM
-- KEM: multi-recipient Hybrid KEM, a custom KEM described later in this document
+- KEM: Multi-Recipient Hybrid KEM, a custom KEM described later in this document
 
 Thus, only one cryptography suite is available for now. If this setting ends up broken by cryptanalysis, we will move users onward to the next MLA version, using appropriate cryptography. Therefore, MLA lacks cryptography agility which is an encouraged property regarding post-quantum cryptography by ANSSI [^frsuggest]. Still, HPKE improves this aspect of MLA [^hpke].
 
@@ -250,7 +250,7 @@ $\hspace{1cm}\mathtt{throw\ KeyNotFoundError}$
 
 #### Notation
 
-The "Multi-recipient Hybrid KEM" process described above is noted:
+The "Multi-Recipient Hybrid KEM" process described above is noted:
 - $\mathrm{MultiRecipientHybridKEM.Encapsulate}$, taking a list of public keys $[(pk_{ecc}^0, pk_{mlkem}^0), ..., (pk_{ecc}^{n-1}, pk_{mlkem}^{n-1})]$ and returing a shared secret $ss_{recipients}$ and a ciphertext $ct_{recipients}$
 - $\mathrm{MultiRecipientHybridKEM.Decapsulate}$, taking a couple of private keys ($sk_{ecc}^i$ and $sk_{mlkem}^i$), a ciphertext $ct_{recipients}$ and returning either a shared secret $ss_{recipients}$ if the recipient $i$ is a legitimate recipient (if the AEAD decryption works), or an error otherwise
 
@@ -330,7 +330,7 @@ The resulting layer is composed of:
 - header: $ct_{recipients}$
 - data: $keycommit \ .\ enc_0\ . \dots\ enc_n \ .$ $`final\_chunk`$
 
-Special care must be taken not to reuse a sequence number in implementations as this would be catastrophic given GCM properties. For n chunks of data:
+Special care must be taken not to reuse a sequence number in implementations as this would be catastrophic given GCM properties. For $n$ chunks of data:
 * sequence 0: key commitment
 * sequence 1 to $n$: data
 * sequence $n+1$: $`final\_chunk`$ with only the 10 bytes "FINALBLOCK" as content
