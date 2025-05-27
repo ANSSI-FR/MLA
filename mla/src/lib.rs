@@ -69,7 +69,7 @@
 //!
 //! * Create an archive, with compression and encryption:
 //! ```rust
-//! use mla::crypto::mlakey_parser::parse_mlakey_pubkey;
+//! use mla::crypto::mlakey_parser::parse_mlakey_pubkey_pem;
 //! use mla::config::ArchiveWriterConfig;
 //! use mla::ArchiveWriter;
 //!
@@ -77,7 +77,7 @@
 //!
 //! fn main() {
 //!     // Load the needed public key
-//!     let public_key = parse_mlakey_pubkey(PUB_KEY).unwrap();
+//!     let public_key = parse_mlakey_pubkey_pem(PUB_KEY).unwrap();
 //!
 //!     // Create an MLA Archive - Output only needs the Write trait
 //!     let mut buf = Vec::new();
@@ -97,7 +97,7 @@
 //! ```
 //! * Add files part per part, in a "concurrent" fashion:
 //! ```rust
-//! use mla::crypto::mlakey_parser::parse_mlakey_pubkey;
+//! use mla::crypto::mlakey_parser::parse_mlakey_pubkey_pem;
 //! use mla::config::ArchiveWriterConfig;
 //! use mla::ArchiveWriter;
 //!
@@ -105,7 +105,7 @@
 //!
 //! fn main() {
 //!     // Load the needed public key
-//!     let public_key = parse_mlakey_pubkey(PUB_KEY).unwrap();
+//!     let public_key = parse_mlakey_pubkey_pem(PUB_KEY).unwrap();
 //!
 //!     // Create an MLA Archive - Output only needs the Write trait
 //!     let mut buf = Vec::new();
@@ -153,7 +153,7 @@
 //! ```
 //! * Read files from an archive
 //! ```rust
-//! use mla::crypto::mlakey_parser::parse_mlakey_privkey;
+//! use mla::crypto::mlakey_parser::parse_mlakey_privkey_der;
 //! use mla::config::ArchiveReaderConfig;
 //! use mla::ArchiveReader;
 //! use std::io;
@@ -163,7 +163,7 @@
 //!
 //! fn main() {
 //!     // Get the private key
-//!     let private_key = parse_mlakey_privkey(PRIV_KEY).unwrap();
+//!     let private_key = parse_mlakey_privkey_der(PRIV_KEY).unwrap();
 //!
 //!     // Specify the key for the Reader
 //!     let mut config = ArchiveReaderConfig::new();
@@ -2265,7 +2265,7 @@ pub(crate) mod tests {
 
         // Use committed keys
         let pem_pub: &'static [u8] = include_bytes!("../../samples/test_mlakey_archive_v2_pub.pem");
-        let pub_key = crypto::mlakey_parser::parse_mlakey_pubkey(pem_pub).unwrap();
+        let pub_key = crypto::mlakey_parser::parse_mlakey_pubkey_pem(pem_pub).unwrap();
 
         let mut config = ArchiveWriterConfig::new();
         config.encrypt.rng = crate::layers::encrypt::EncapsulationRNG::Seed([0; 32]);

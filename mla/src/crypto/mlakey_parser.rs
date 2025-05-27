@@ -528,8 +528,8 @@ pub fn parse_openssl_25519_pubkeys_pem_many(
     Ok(output)
 }
 
-/// Parse an MLA private key, either in PEM or DER format
-pub fn parse_mlakey_privkey(data: &[u8]) -> Result<HybridPrivateKey, MLAKeyParserError> {
+/// Parse an MLA private key in PEM format
+pub fn parse_mlakey_privkey_pem(data: &[u8]) -> Result<HybridPrivateKey, MLAKeyParserError> {
     if let Ok(pem_data) = pem::parse(data) {
         // First, try as a PEM
         if pem_data.tag().as_bytes() != PRIVATE_TAG {
@@ -537,13 +537,12 @@ pub fn parse_mlakey_privkey(data: &[u8]) -> Result<HybridPrivateKey, MLAKeyParse
         }
         parse_mlakey_privkey_der(pem_data.contents())
     } else {
-        // Fallback to DER format
-        parse_mlakey_privkey_der(data)
+        Err(MLAKeyParserError::InvalidData)
     }
 }
 
 /// Parse an MLA public key, either in PEM or DER format
-pub fn parse_mlakey_pubkey(data: &[u8]) -> Result<HybridPublicKey, MLAKeyParserError> {
+pub fn parse_mlakey_pubkey_pem(data: &[u8]) -> Result<HybridPublicKey, MLAKeyParserError> {
     if let Ok(pem_data) = pem::parse(data) {
         // First, try as a PEM
         if pem_data.tag().as_bytes() != PUBLIC_TAG {
@@ -551,8 +550,7 @@ pub fn parse_mlakey_pubkey(data: &[u8]) -> Result<HybridPublicKey, MLAKeyParserE
         }
         parse_mlakey_pubkey_der(pem_data.contents())
     } else {
-        // Fallback to DER format
-        parse_mlakey_pubkey_der(data)
+        Err(MLAKeyParserError::InvalidData)
     }
 }
 
@@ -814,8 +812,8 @@ mod tests {
         assert_ne!(&keypair.private_der, priv_pem.as_bytes());
         assert_ne!(&keypair.public_der, pub_pem.as_bytes());
 
-        let priv_key_pem = parse_mlakey_privkey(priv_pem.as_bytes()).unwrap();
-        let pub_key_pem = parse_mlakey_pubkey(pub_pem.as_bytes()).unwrap();
+        let priv_key_pem = parse_mlakey_privkey_pem(priv_pem.as_bytes()).unwrap();
+        let pub_key_pem = parse_mlakey_pubkey_pem(pub_pem.as_bytes()).unwrap();
 
         // Resulting key must be the same
         assert_eq!(
@@ -848,8 +846,8 @@ mod tests {
     /// Parse the same public key in DER and PEM format
     #[test]
     fn parse_pub_der_pem() {
-        let pub_key_der = parse_mlakey_pubkey(MLA_DER_PUB).unwrap();
-        let pub_key_pem = parse_mlakey_pubkey(MLA_PEM_PUB).unwrap();
+        let pub_key_der = parse_mlakey_pubkey_der(MLA_DER_PUB).unwrap();
+        let pub_key_pem = parse_mlakey_pubkey_pem(MLA_PEM_PUB).unwrap();
         assert_eq!(pub_key_der.public_key_ecc.as_bytes().len(), ECC_PUBKEY_SIZE);
         assert_eq!(
             pub_key_der.public_key_ml.as_bytes().len(),
@@ -868,8 +866,8 @@ mod tests {
     /// Parse the same private key in DER and PEM format
     #[test]
     fn parse_priv_der_pem() {
-        let priv_key_der = parse_mlakey_privkey(MLA_DER_PRIV).unwrap();
-        let priv_key_pem = parse_mlakey_privkey(MLA_PEM_PRIV).unwrap();
+        let priv_key_der = parse_mlakey_privkey_der(MLA_DER_PRIV).unwrap();
+        let priv_key_pem = parse_mlakey_privkey_pem(MLA_PEM_PRIV).unwrap();
         assert_eq!(
             priv_key_der.private_key_ecc.as_bytes().len(),
             ECC_PRIVKEY_SIZE
@@ -902,7 +900,7 @@ mod tests {
         // Parse only one with `many` API
         let pub_keys_pem = parse_mlakey_pubkeys_pem_many(MLA_PEM_PUB).unwrap();
         assert_eq!(pub_keys_pem.len(), 1);
-        let pub_key = parse_mlakey_pubkey(MLA_DER_PUB).unwrap();
+        let pub_key = parse_mlakey_pubkey_der(MLA_DER_PUB).unwrap();
         assert_eq!(pub_key.public_key_ecc.as_bytes().len(), ECC_PUBKEY_SIZE);
         assert_eq!(
             pub_key.public_key_ml.as_bytes().len(),

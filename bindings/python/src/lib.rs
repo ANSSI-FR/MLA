@@ -11,7 +11,7 @@ use mla::{
     config::{ArchiveReaderConfig, ArchiveWriterConfig},
     crypto::hybrid::{HybridPrivateKey, HybridPublicKey},
 };
-use mla::crypto::mlakey_parser::{parse_mlakey_privkey, parse_mlakey_pubkey};
+use mla::crypto::mlakey_parser::{parse_mlakey_privkey_der, parse_mlakey_privkey_pem, parse_mlakey_pubkey_der, parse_mlakey_pubkey_pem};
 use pyo3::{
     create_exception,
     exceptions::{PyKeyError, PyRuntimeError, PyTypeError},
@@ -341,12 +341,15 @@ impl PublicKeys {
                 let mut buf = Vec::new();
                 file.read_to_end(&mut buf)?;
                 keys.push(
-                    parse_mlakey_pubkey(&buf).map_err(|_| mla::errors::Error::InvalidKeyFormat)?,
+                    parse_mlakey_pubkey_pem(&buf)
+                        .or_else(|_| parse_mlakey_pubkey_der(&buf))
+                        .map_err(|_| mla::errors::Error::InvalidKeyFormat)?
                 );
             } else if let Ok(data) = element.downcast::<PyBytes>() {
                 keys.push(
-                    parse_mlakey_pubkey(&data[..])
-                        .map_err(|_| mla::errors::Error::InvalidKeyFormat)?,
+                    parse_mlakey_pubkey_pem(&data[..])
+                        .or_else(|_| parse_mlakey_pubkey_der(&data[..]))
+                        .map_err(|_| mla::errors::Error::InvalidKeyFormat)?
                 );
             } else {
                 return Err(
@@ -428,12 +431,15 @@ impl PrivateKeys {
                 file.read_to_end(&mut buf)?;
 
                 keys.push(
-                    parse_mlakey_privkey(&buf).map_err(|_| mla::errors::Error::InvalidKeyFormat)?,
+                    parse_mlakey_privkey_pem(&buf)
+                        .or_else(|_| parse_mlakey_privkey_der(&buf))
+                        .map_err(|_| mla::errors::Error::InvalidKeyFormat)?
                 );
             } else if let Ok(data) = element.downcast::<PyBytes>() {
                 keys.push(
-                    parse_mlakey_privkey(&data[..])
-                        .map_err(|_| mla::errors::Error::InvalidKeyFormat)?,
+                    parse_mlakey_privkey_pem(&data[..])
+                        .or_else(|_| parse_mlakey_privkey_der(&data[..]))
+                        .map_err(|_| mla::errors::Error::InvalidKeyFormat)?
                 );
             } else {
                 return Err(
