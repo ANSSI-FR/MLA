@@ -14,7 +14,7 @@ This document introduces the MLA file format in its current version, v2.
 For a more comprehensive introduction of the ideas behind it, please refer to [README.md](README.md).
 
 Please refer to the code for the detail of structures.
-Structures marked with #[bincode] below are encoded with bincode in version 2 with fixed int encoding in little endian.
+Structures marked with #[bincode] below are encoded with [bincode](https://docs.rs/bincode/2.0.0/bincode/index.html) in version 2 with fixed-size integer encoding in little endian.
 
 MLA Header
 -
@@ -68,13 +68,13 @@ The content of the `data` field then depend on what layers are enabled, in the f
 For example, on [samples/archive_v2.mla](samples/archive_v2.mla):
 * `4d 4c 41`: `magic`
 * `02 00 00 00`: `format_version`, set to 2 for archive format v2
-* `03`: `layers`, with `ENCRYPT | COMPRESS = 0b11`, ie Encryption and Compression layers are enabled
+* `03`: `layers`, with `ENCRYPT | COMPRESS = 0b11`, i.e. Encryption and Compression layers are enabled
 * `01`: `EncryptionPersistentConfig` is present, as expected because the corresponding layer ("encrypt") is enabled
 * `01 00 00 00 00 00 00 00` : there is one recipient
-* `a6 (.. 1568-bytes length ..) b8`: `recipient[0].mlkem_encapsulated_key`
-* `37 (.. 32-bytes length ..) 00`: `recipient[0].ecc_encapsulated_key`
-* `41 (.. 32-bytes length ..) b3`: `recipient[0].encrypted_shared_secret`
-* `83 (.. 16-bytes length ..) 51`: `recipient[0].encrypted_shared_secret_tag`
+* `a6 (.. 1568-bytes length ..) b8`: `recipients[0].mlkem_encapsulated_key`
+* `37 (.. 32-bytes length ..) 00`: `recipients[0].ecc_encapsulated_key`
+* `41 (.. 32-bytes length ..) b3`: `recipients[0].encrypted_shared_secret`
+* `83 (.. 16-bytes length ..) 51`: `recipients[0].encrypted_shared_secret_tag`
 * `08 (.. 64-bytes length ..) df`: `encrypted_key_commitment`
 * `f3 (.. 16-bytes length ..) 26`: `encrypted_key_commitment_tag`
 * `a3 until EOF`: `data`
