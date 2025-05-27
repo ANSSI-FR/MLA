@@ -541,7 +541,7 @@ pub fn parse_mlakey_privkey_pem(data: &[u8]) -> Result<HybridPrivateKey, MLAKeyP
     }
 }
 
-/// Parse an MLA public key, either in PEM or DER format
+/// Parse an MLA public key in PEM format
 pub fn parse_mlakey_pubkey_pem(data: &[u8]) -> Result<HybridPublicKey, MLAKeyParserError> {
     if let Ok(pem_data) = pem::parse(data) {
         // First, try as a PEM
