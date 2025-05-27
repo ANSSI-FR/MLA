@@ -19,13 +19,12 @@ use crate::errors::ConfigError;
 use bincode::{
     BorrowDecode, Decode, Encode,
     de::{BorrowDecoder, Decoder},
-    enc::Encoder,
-    error::{DecodeError, EncodeError},
+    error::DecodeError,
 };
 use hpke::HpkeError;
 use kem::{Decapsulate, Encapsulate};
 use rand::SeedableRng;
-use rand_chacha::{ChaChaRng, rand_core::CryptoRngCore};
+use rand_chacha::ChaChaRng;
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -89,73 +88,14 @@ const FIRST_DATA_CHUNK_NUMBER: u64 = 1;
 const HPKE_INFO_LAYER: &[u8] = b"MLA Encrypt Layer";
 
 /// Encrypted Key commitment and associated tag
+#[derive(Decode, Encode)]
 struct KeyCommitmentAndTag {
     key_commitment: [u8; KEY_COMMITMENT_SIZE],
     tag: [u8; TAG_LENGTH],
 }
 
-// -> Encode as [u8; 32][u8; 32]
-// A Vec<u8> could also be used, but using array avoid having creating arbitrary sized vectors
-// that early in the process
-impl Encode for KeyCommitmentAndTag {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        let part1: &[u8] = &self.key_commitment[..KEY_COMMITMENT_SIZE / 2];
-        let part2: &[u8] = &self.key_commitment[KEY_COMMITMENT_SIZE / 2..];
-        part1.encode(encoder)?;
-        part2.encode(encoder)?;
-        self.tag.encode(encoder)?;
-        Ok(())
-    }
-}
-
-impl<'de, Context> BorrowDecode<'de, Context> for KeyCommitmentAndTag {
-    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let part1: &[u8] = BorrowDecode::borrow_decode(decoder)?;
-        let part2: &[u8] = BorrowDecode::borrow_decode(decoder)?;
-        let tag: [u8; TAG_LENGTH] = BorrowDecode::borrow_decode(decoder)?;
-
-        if part1.len() + part2.len() != KEY_COMMITMENT_SIZE {
-            return Err(DecodeError::OtherString(
-                "Invalid key commitment size".to_string(),
-            ));
-        }
-
-        let mut key_commitment = [0u8; KEY_COMMITMENT_SIZE];
-        key_commitment[..KEY_COMMITMENT_SIZE / 2].copy_from_slice(part1);
-        key_commitment[KEY_COMMITMENT_SIZE / 2..].copy_from_slice(part2);
-
-        Ok(KeyCommitmentAndTag {
-            key_commitment,
-            tag,
-        })
-    }
-}
-
-impl<Context> Decode<Context> for KeyCommitmentAndTag {
-    fn decode<D: Decoder<Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let part1: Vec<u8> = Vec::decode(decoder)?;
-        let part2: Vec<u8> = Vec::decode(decoder)?;
-        let tag: [u8; TAG_LENGTH] = Decode::decode(decoder)?;
-
-        if part1.len() + part2.len() != KEY_COMMITMENT_SIZE {
-            return Err(DecodeError::OtherString(
-                "Invalid key commitment size".to_string(),
-            ));
-        }
-
-        let mut key_commitment = [0u8; KEY_COMMITMENT_SIZE];
-        key_commitment[..KEY_COMMITMENT_SIZE / 2].copy_from_slice(&part1);
-        key_commitment[KEY_COMMITMENT_SIZE / 2..].copy_from_slice(&part2);
-
-        Ok(KeyCommitmentAndTag {
-            key_commitment,
-            tag,
-        })
-    }
-}
-
 /// Return a Cryptographic random number generator
-pub(crate) fn get_crypto_rng() -> impl CryptoRngCore {
+pub(crate) fn get_crypto_rng() -> ChaChaRng {
     // Use OsRng from crate rand, that uses getrandom() from crate getrandom.
     // getrandom provides implementations for many systems, listed on
     // https://docs.rs/getrandom/0.1.14/getrandom/
@@ -227,6 +167,29 @@ impl<'de, Context> BorrowDecode<'de, Context> for EncryptionPersistentConfig {
 pub struct EncryptionConfig {
     /// Public keys of recipients
     public_keys: HybridMultiRecipientsPublicKeys,
+    pub(crate) rng: EncapsulationRNG,
+}
+
+pub(crate) enum EncapsulationRNG {
+    System,
+    #[allow(dead_code)]
+    Seed([u8; 32]),
+}
+
+impl EncapsulationRNG {
+    fn get_rng(&self) -> ChaChaRng {
+        match self {
+            EncapsulationRNG::System => get_crypto_rng(),
+            EncapsulationRNG::Seed(s) => ChaChaRng::from_seed(*s),
+        }
+    }
+}
+
+#[allow(clippy::derivable_impls)]
+impl Default for EncapsulationRNG {
+    fn default() -> Self {
+        EncapsulationRNG::System
+    }
 }
 
 impl EncryptionConfig {
@@ -249,7 +212,7 @@ impl EncryptionConfig {
     ) -> Result<(EncryptionPersistentConfig, InternalEncryptionConfig), ConfigError> {
         // Generate then encapsulate the main key for each recipients
         let (hybrid_multi_recipient_encapsulate_key, ss_hybrid) =
-            self.public_keys.encapsulate(&mut get_crypto_rng())?;
+            self.public_keys.encapsulate(&mut self.rng.get_rng())?;
 
         // Generate the main encrypt layer nonce and keep the main key for internal use
         let cryptographic_material = InternalEncryptionConfig::from(ss_hybrid)

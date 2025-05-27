@@ -6,6 +6,7 @@ use lru::LruCache;
 use ml_kem::EncodedSizeUser;
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
 use mla::crypto::hybrid::{HybridPrivateKey, HybridPublicKey};
+use mla::crypto::mlakey_parser::{generate_keypair, parse_mlakey_privkey, parse_mlakey_pubkey};
 use mla::errors::{Error, FailSafeReadError};
 use mla::helpers::linear_extract;
 use mla::layers::compress::CompressionLayerReader;
@@ -16,7 +17,6 @@ use mla::{
     ArchiveFailSafeReader, ArchiveFile, ArchiveFooter, ArchiveHeader, ArchiveReader, ArchiveWriter,
     Layers,
 };
-use mla::crypto::mlakey_parser::{generate_keypair, parse_mlakey_privkey, parse_mlakey_pubkey};
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use sha2::{Digest, Sha512};
@@ -85,7 +85,7 @@ impl error::Error for MlarError {
 // ----- Utils ------
 
 /// Allow for different kind of output. As ArchiveWriter is parametrized over
-/// a Writable type, ArchiveWriter<File> and ArchiveWriter<io::stdout>
+/// a Writable type, `ArchiveWriter<File>` and `ArchiveWriter<io::stdout>`
 /// can't coexist in the same code path.
 enum OutputTypes {
     Stdout,
@@ -362,7 +362,7 @@ impl ExtractFileNameMatcher {
 
 /// Compute the full path of the final file, using defensive measures
 /// similar as what tar-rs does for `Entry::unpack_in`:
-/// https://github.com/alexcrichton/tar-rs/blob/0.4.26/src/entry.rs#L344
+/// <https://github.com/alexcrichton/tar-rs/blob/0.4.26/src/entry.rs#L344>
 fn get_extracted_path(output_dir: &Path, file_name: &str) -> Option<PathBuf> {
     let mut file_dst = output_dir.to_path_buf();
     for part in Path::new(&file_name).components() {
@@ -837,9 +837,9 @@ fn keygen(matches: &ArgMatches) -> Result<(), MlarError> {
         .write_all(key_pair.public_as_pem().as_bytes())
         .expect("Error writing the public key");
 
-    // Output the private key in DER format, to avoid common mistakes
+    // Output the private key in PEM format, to ease integration in text based
     output_priv
-        .write_all(&key_pair.private_der)
+        .write_all(key_pair.private_as_pem().as_bytes())
         .expect("Error writing the private key");
     Ok(())
 }
@@ -849,7 +849,7 @@ const DERIVE_PATH_SALT: &[u8; 15] = b"PATH DERIVATION";
 /// Return a seed based on a path and an hybrid private key
 ///
 /// The derivation scheme is based on the same ideas than `mla::crypto::hybrid::combine`, ie.
-/// 1. a dual-PRF (HKDF-Extract with a uniform random salt [1]) to extract entropy from the private key
+/// 1. a dual-PRF (HKDF-Extract with a uniform random salt \[1\]) to extract entropy from the private key
 /// 2. HKDF-Expand to derive along the given path
 ///
 /// seed = HKDF-SHA512(
@@ -859,7 +859,8 @@ const DERIVE_PATH_SALT: &[u8; 15] = b"PATH DERIVATION";
 /// )
 ///
 /// Note: the secret is consumed on call
-/// [1] https://eprint.iacr.org/2023/861
+///
+/// \[1\] <https://eprint.iacr.org/2023/861>
 fn apply_derive(path: &str, mut src: HybridPrivateKey) -> [u8; 32] {
     // Force uniform-randomness on ECC-key, used as the future HKDF "salt" argument
     let (dprf_salt, _hkdf) = Hkdf::<Sha512>::extract(None, src.private_key_ecc.as_bytes());

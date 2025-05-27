@@ -339,7 +339,7 @@ def test_private_keys():
     # Open several keys, using both path and data
     pkeys =  mla.PrivateKeys(
         os.path.join(SAMPLE_PATH, "test_mlakey.pem"),
-        open(os.path.join(SAMPLE_PATH, "test_mlakey_2.pem"), "rb").read()
+        open(os.path.join(SAMPLE_PATH, "test_mlakey_2.der"), "rb").read()
     )
     assert len(pkeys.keys) == 2
 
@@ -437,7 +437,7 @@ def test_read_encrypted_archive_bad_key():
     # Try to read with an incorrect key (mla.ConfigError: PrivateKeyNotFound)
     with pytest.raises(mla.ConfigError):
         with MLAFile(path, config=mla.ReaderConfig(
-            private_keys=mla.PrivateKeys(os.path.join(SAMPLE_PATH, "test_mlakey_2.pem"))
+            private_keys=mla.PrivateKeys(os.path.join(SAMPLE_PATH, "test_mlakey_2.der"))
         )) as archive:
             pass
 

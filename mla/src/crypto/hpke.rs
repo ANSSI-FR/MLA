@@ -14,7 +14,6 @@ use x25519_dalek::PublicKey as X25519PublicKey;
 
 use crate::crypto::aesgcm::{Key, Nonce};
 use crate::errors::Error;
-use crate::layers::encrypt::get_crypto_rng;
 
 type Kem = X25519HkdfSha256;
 type WrappedPublicKey = <Kem as KemTrait>::PublicKey;
@@ -65,15 +64,6 @@ pub(crate) fn dhkem_encap_from_rng(
     let wrapped = WrappedPublicKey::from_bytes(&pubkey.to_bytes())?;
     let (shared_secret, ciphertext) = X25519HkdfSha256::encap(&wrapped, None, csprng)?;
     Ok((shared_secret, DHKEMCiphertext(ciphertext)))
-}
-
-/// Provides DHKEM encapsulation over X25519 curve (RFC 9180 §4.1)
-///
-/// Return a shared secret and the corresponding ciphertext
-pub(crate) fn dhkem_encap(
-    pubkey: &X25519PublicKey,
-) -> Result<(DHKEMSharedSecret, DHKEMCiphertext), Error> {
-    dhkem_encap_from_rng(pubkey, &mut get_crypto_rng())
 }
 
 /// Provides DHKEM decapsulation over X25519 curve (RFC 9180 §4.1)

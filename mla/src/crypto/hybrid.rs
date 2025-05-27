@@ -1,7 +1,5 @@
 use crate::crypto::aesgcm::{ConstantTimeEq, KEY_SIZE, Key, TAG_LENGTH};
-use crate::crypto::hpke::{
-    DHKEMCiphertext, dhkem_decap, dhkem_encap, key_schedule_base_hybrid_kem_recipient,
-};
+use crate::crypto::hpke::{DHKEMCiphertext, dhkem_decap, key_schedule_base_hybrid_kem_recipient};
 use crate::errors::ConfigError;
 use crate::layers::encrypt::get_crypto_rng;
 use bincode::{
@@ -18,6 +16,8 @@ use rand_chacha::rand_core::CryptoRngCore;
 use sha2::Sha512;
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
 use zeroize::{Zeroize, ZeroizeOnDrop};
+
+use super::hpke::dhkem_encap_from_rng;
 
 /// `info` to bound the HPKE usage to the MLA Recipient derivation
 const HPKE_INFO_RECIPIENT: &[u8] = b"MLA Recipient";
@@ -79,12 +79,12 @@ const HYBRIDKEM_ASSOCIATED_DATA: &[u8; 0] = b"";
 /// with ss1 and ss2 the shared secrets and ct1 and ct2 the ciphertexts
 ///
 /// [1] "F. Giacon, F. Heuer, and B. Poettering. Kem combiners, Cham, 2018"
-/// [2] https://datatracker.ietf.org/doc/draft-ietf-tls-hybrid-design/
-/// [3] https://datatracker.ietf.org/doc/html/rfc9370
-/// [4] https://eprint.iacr.org/2024/039
-/// [5] https://cyber.gouv.fr/en/publications/follow-position-paper-post-quantum-cryptography
-/// [6] https://eprint.iacr.org/2018/903.pdf
-/// [7] https://eprint.iacr.org/2023/861
+/// [2] <https://datatracker.ietf.org/doc/draft-ietf-tls-hybrid-design/>
+/// [3] <https://datatracker.ietf.org/doc/html/rfc9370>
+/// [4] <https://eprint.iacr.org/2024/039>
+/// [5] <https://cyber.gouv.fr/en/publications/follow-position-paper-post-quantum-cryptography>
+/// [6] <https://eprint.iacr.org/2018/903.pdf>
+/// [7] <https://eprint.iacr.org/2023/861>
 fn combine(
     shared_secret1: &[u8],
     shared_secret2: &[u8],
@@ -307,7 +307,7 @@ impl Encapsulate<HybridMultiRecipientEncapsulatedKey, HybridKemSharedSecret>
         let mut recipients = Vec::new();
         for recipient in &self.keys {
             // Compute the ECC shared secret
-            let (ss_ecc, ct_ecc) = dhkem_encap(&recipient.public_key_ecc)
+            let (ss_ecc, ct_ecc) = dhkem_encap_from_rng(&recipient.public_key_ecc, csprng)
                 .or(Err(ConfigError::DHKEMComputationError))?;
 
             // Compute the ML-KEM shared secret

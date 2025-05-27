@@ -91,7 +91,7 @@ impl From<rand::Error> for Error {
 
 impl From<Error> for io::Error {
     fn from(error: Error) -> Self {
-        io::Error::new(io::ErrorKind::Other, format!("{error}"))
+        io::Error::other(format!("{error}"))
     }
 }
 
