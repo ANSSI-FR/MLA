@@ -175,7 +175,7 @@ int test_reader_extract()
         return (int)status;
     }
 
-    status = mla_reader_config_add_private_key(hConfig, keyData, (size_t)keySize);
+    status = mla_reader_config_add_private_key_der(hConfig, keyData, (size_t)keySize);
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
     {
         fprintf(stderr, " [!] Private key set failed with code %" PRIX64 "\n", (uint64_t)status);
