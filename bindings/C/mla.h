@@ -123,6 +123,14 @@ MLAStatus mla_config_default_new(MLAConfigHandle *handle_out);
 MLAStatus mla_config_add_public_keys(MLAConfigHandle config, const char *public_keys);
 
 /**
+ * Appends the given public key(s) in DER format to an existing given configuration
+ * (referenced by the handle returned by mla_config_default_new()).
+ */
+MLAStatus mla_config_add_public_keys_der(MLAConfigHandle config,
+                                         const uint8_t *public_keys_data,
+                                         uintptr_t public_keys_len);
+
+/**
  * Sets the compression level in an existing given configuration
  * (referenced by the handle returned by mla_config_default_new()).
  * Currently this level can only be an integer N with 0 <= N <= 11,
@@ -136,12 +144,19 @@ MLAStatus mla_config_set_compression_level(MLAConfigHandle config, uint32_t leve
 MLAStatus mla_reader_config_new(MLAConfigHandle *handle_out);
 
 /**
- * Appends the given private key to an existing given configuration
+ * Appends the given private key in DER format to an existing given configuration
  * (referenced by the handle returned by mla_reader_config_new()).
  */
-MLAStatus mla_reader_config_add_private_key(MLAConfigHandle config,
-                                            const uint8_t *private_key_data,
-                                            uintptr_t private_key_len);
+MLAStatus mla_reader_config_add_private_key_der(MLAConfigHandle config,
+                                                const uint8_t *private_key_data,
+                                                uintptr_t private_key_len);
+
+/**
+ * Appends the given private key in PEM format to an existing given configuration
+ * (referenced by the handle returned by mla_reader_config_new()).
+ */
+MLAStatus mla_reader_config_add_private_key_pem(MLAConfigHandle config,
+                                                const char *private_key_pem);
 
 /**
  * Open a new MLA archive using the given configuration, which is consumed and freed
