@@ -54,12 +54,9 @@ fn writer_from_matches(matches: &ArgMatches) -> mla::ArchiveWriter<'static, File
         let mut public_keys = Vec::new();
         for public_key_arg in public_key_args {
             let key_bytes = fs::read(public_key_arg).expect("Failed to read public key");
-            let public_key = match mla::crypto::mlakey_parser::parse_mlakey_pubkey_pem(&key_bytes)
-                .or_else(|_| mla::crypto::mlakey_parser::parse_mlakey_pubkey_der(&key_bytes))
-            {
-                Ok(key) => key,
-                Err(err) => panic!("Failed to parse public key: {err}"),
-            };
+            let public_key = mla::crypto::mlakey_parser::parse_mlakey_pubkey_pem(&key_bytes)
+                .map_err(|err| format!("Failed to parse public key as PEM: {err}"))
+                .unwrap();
 
             public_keys.push(public_key);
         }

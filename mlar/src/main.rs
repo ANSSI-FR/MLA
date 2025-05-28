@@ -7,8 +7,7 @@ use ml_kem::EncodedSizeUser;
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
 use mla::crypto::hybrid::{HybridPrivateKey, HybridPublicKey};
 use mla::crypto::mlakey_parser::{
-    generate_keypair, parse_mlakey_privkey_der, parse_mlakey_privkey_pem, parse_mlakey_pubkey_der,
-    parse_mlakey_pubkey_pem,
+    generate_keypair, parse_mlakey_privkey_der, parse_mlakey_privkey_pem, parse_mlakey_pubkey_pem,
 };
 use mla::errors::{Error, FailSafeReadError};
 use mla::helpers::linear_extract;
@@ -120,9 +119,8 @@ fn open_private_keys(matches: &ArgMatches) -> Result<Vec<HybridPrivateKey>, Erro
             // Load the the key in-memory and parse it
             let mut buf = Vec::new();
             file.read_to_end(&mut buf)?;
-            let private_key = parse_mlakey_privkey_pem(&buf)
-                .or_else(|_| parse_mlakey_privkey_der(&buf))
-                .map_err(|_| Error::InvalidKeyFormat)?;
+            let private_key =
+                parse_mlakey_privkey_pem(&buf).map_err(|_| Error::InvalidKeyFormat)?;
 
             private_keys.push(private_key);
         }
@@ -141,9 +139,7 @@ fn open_public_keys(matches: &ArgMatches) -> Result<Vec<HybridPublicKey>, Error>
             let mut buf = Vec::new();
             file.read_to_end(&mut buf)?;
 
-            let public_key = parse_mlakey_pubkey_pem(&buf)
-                .or_else(|_| parse_mlakey_pubkey_der(&buf))
-                .map_err(|_| Error::InvalidKeyFormat)?;
+            let public_key = parse_mlakey_pubkey_pem(&buf).map_err(|_| Error::InvalidKeyFormat)?;
 
             public_keys.push(public_key);
         }
@@ -899,9 +895,8 @@ fn keyderive(matches: &ArgMatches) -> Result<(), MlarError> {
     // Load the the key in-memory and parse it
     let mut buf = Vec::new();
     file.read_to_end(&mut buf)?;
-    let mut secret = parse_mlakey_privkey_pem(&buf)
-        .or_else(|_| parse_mlakey_privkey_der(&buf))
-        .map_err(|_| MlarError::MlaError(Error::InvalidKeyFormat))?;
+    let mut secret =
+        parse_mlakey_privkey_pem(&buf).map_err(|_| MlarError::MlaError(Error::InvalidKeyFormat))?;
 
     // Derive the key along the path
     let mut key_pair = None;
@@ -926,9 +921,9 @@ fn keyderive(matches: &ArgMatches) -> Result<(), MlarError> {
         .write_all(key_pair.public_as_pem().as_bytes())
         .expect("Error writing the public key");
 
-    // Output the private key in DER format, to avoid common mistakes
+    // Output the private key in PEM format, to ease integration in text based
     output_priv
-        .write_all(&key_pair.private_der)
+        .write_all(key_pair.private_as_pem().as_bytes())
         .expect("Error writing the private key");
     Ok(())
 }
