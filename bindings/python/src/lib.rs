@@ -1,6 +1,5 @@
 use std::{
     collections::HashMap,
-    fs::File,
     io::{self, Read},
     sync::Mutex,
 };
@@ -322,32 +321,54 @@ impl Clone for PublicKeys {
 impl PublicKeys {
     #[new]
     #[pyo3(signature = (*args))]
-    fn new(args: &Bound<PyTuple>) -> Result<Self, WrappedError> {
+    /// Main constructor: PEM-based
+    fn from_pem(args: &Bound<PyTuple>) -> Result<Self, WrappedError> {
         let mut keys = Vec::new();
 
         for element in args {
-            // String argument: this is a path
-            // "/path/to/public.pem"
-            if let Ok(path) = element.downcast::<PyString>() {
-                let mut file = File::open(path.to_string())?;
-                // Load the the ECC and MLKEM keys in-memory and parse it
-                let mut buf = Vec::new();
-                file.read_to_end(&mut buf)?;
+            // PEM public key submitted as a string
+            // "-----PUBLIC KEY[...]"
+            if let Ok(data) = element.downcast::<PyString>() {
+                // Convert PyString to &str
+                let string = data.to_str()?;
+                // Convert &str to &[u8]
+                let bytes = string.as_bytes();
                 keys.push(
-                    parse_mlakey_pubkey_pem(&buf)
-                        .or_else(|_| parse_mlakey_pubkey_der(&buf))
+                    parse_mlakey_pubkey_pem(bytes)
                         .map_err(|_| mla::errors::Error::InvalidKeyFormat)?,
                 );
             } else if let Ok(data) = element.downcast::<PyBytes>() {
                 keys.push(
                     parse_mlakey_pubkey_pem(&data[..])
-                        .or_else(|_| parse_mlakey_pubkey_der(&data[..]))
                         .map_err(|_| mla::errors::Error::InvalidKeyFormat)?,
                 );
             } else {
-                return Err(
-                    PyTypeError::new_err("Expect a path (as a string) or data (as bytes)").into(),
+                return Err(PyTypeError::new_err(
+                    "Expect a PEM public key as a string or as bytes",
+                )
+                .into());
+            }
+        }
+        Ok(Self {
+            inner: Mutex::new(PublicKeysInner { keys }),
+        })
+    }
+
+    /// Alternative constructor: DER-based
+    #[classmethod]
+    #[pyo3(signature = (*args))]
+    fn from_der(_cls: &Bound<PyType>, args: &Bound<PyTuple>) -> Result<Self, WrappedError> {
+        let mut keys = Vec::new();
+
+        for element in args {
+            // DER public key is encoded, hence PyString is not supported below
+            if let Ok(data) = element.downcast::<PyBytes>() {
+                keys.push(
+                    parse_mlakey_pubkey_der(&data[..])
+                        .map_err(|_| mla::errors::Error::InvalidKeyFormat)?,
                 );
+            } else {
+                return Err(PyTypeError::new_err("Expect a DER public key as bytes").into());
             }
         }
         Ok(Self {
@@ -411,33 +432,54 @@ impl Clone for PrivateKeys {
 impl PrivateKeys {
     #[new]
     #[pyo3(signature = (*args))]
-    fn new(args: &Bound<PyTuple>) -> Result<Self, WrappedError> {
+    /// Main constructor: PEM-based
+    fn from_pem(args: &Bound<PyTuple>) -> Result<Self, WrappedError> {
         let mut keys: Vec<HybridPrivateKey> = Vec::new();
 
         for element in args {
-            // String argument: this is a path
-            // "/path/to/public.pem"
-            if let Ok(path) = element.downcast::<PyString>() {
-                let mut file = File::open(path.to_string())?;
-                // Load the the ECC and MLKEM keys in-memory and parse it
-                let mut buf = Vec::new();
-                file.read_to_end(&mut buf)?;
-
+            // PEM private key submitted as a string
+            // "-----PRIVATE KEY[...]"
+            if let Ok(data) = element.downcast::<PyString>() {
+                // Convert PyString to &str
+                let string = data.to_str()?;
+                // Convert &str to &[u8]
+                let bytes = string.as_bytes();
                 keys.push(
-                    parse_mlakey_privkey_pem(&buf)
-                        .or_else(|_| parse_mlakey_privkey_der(&buf))
+                    parse_mlakey_privkey_pem(bytes)
                         .map_err(|_| mla::errors::Error::InvalidKeyFormat)?,
                 );
             } else if let Ok(data) = element.downcast::<PyBytes>() {
                 keys.push(
                     parse_mlakey_privkey_pem(&data[..])
-                        .or_else(|_| parse_mlakey_privkey_der(&data[..]))
                         .map_err(|_| mla::errors::Error::InvalidKeyFormat)?,
                 );
             } else {
-                return Err(
-                    PyTypeError::new_err("Expect a path (as a string) or data (as bytes)").into(),
+                return Err(PyTypeError::new_err(
+                    "Expect a PEM private key as a string or as bytes",
+                )
+                .into());
+            }
+        }
+        Ok(Self {
+            inner: Mutex::new(PrivateKeysInner { keys }),
+        })
+    }
+
+    /// Alternative constructor: DER-based
+    #[classmethod]
+    #[pyo3(signature = (*args))]
+    fn from_der(_cls: &Bound<PyType>, args: &Bound<PyTuple>) -> Result<Self, WrappedError> {
+        let mut keys: Vec<HybridPrivateKey> = Vec::new();
+
+        for element in args {
+            // DER private key is encoded, hence PyString is not supported below
+            if let Ok(data) = element.downcast::<PyBytes>() {
+                keys.push(
+                    parse_mlakey_privkey_der(&data[..])
+                        .map_err(|_| mla::errors::Error::InvalidKeyFormat)?,
                 );
+            } else {
+                return Err(PyTypeError::new_err("Expect a DER private key as bytes").into());
             }
         }
         Ok(Self {
