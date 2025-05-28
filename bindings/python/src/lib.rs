@@ -6,12 +6,15 @@ use std::{
 };
 
 use ml_kem::EncodedSizeUser;
+use mla::crypto::mlakey_parser::{
+    parse_mlakey_privkey_der, parse_mlakey_privkey_pem, parse_mlakey_pubkey_der,
+    parse_mlakey_pubkey_pem,
+};
 use mla::{
     ArchiveReader, ArchiveWriter, Layers,
     config::{ArchiveReaderConfig, ArchiveWriterConfig},
     crypto::hybrid::{HybridPrivateKey, HybridPublicKey},
 };
-use mla::crypto::mlakey_parser::{parse_mlakey_privkey_der, parse_mlakey_privkey_pem, parse_mlakey_pubkey_der, parse_mlakey_pubkey_pem};
 use pyo3::{
     create_exception,
     exceptions::{PyKeyError, PyRuntimeError, PyTypeError},
@@ -143,18 +146,8 @@ create_exception!(
     MLAError,
     "Unable to expand while using the HKDF"
 );
-create_exception!(
-    mla,
-    HPKEError,
-    MLAError,
-    "Error during HPKE computation"
-);
-create_exception!(
-    mla,
-    InvalidLastTag,
-    MLAError,
-    "Wrong last block tag"
-);
+create_exception!(mla, HPKEError, MLAError, "Error during HPKE computation");
+create_exception!(mla, InvalidLastTag, MLAError, "Wrong last block tag");
 
 // Convert potentials errors to the wrapped type
 
@@ -343,13 +336,13 @@ impl PublicKeys {
                 keys.push(
                     parse_mlakey_pubkey_pem(&buf)
                         .or_else(|_| parse_mlakey_pubkey_der(&buf))
-                        .map_err(|_| mla::errors::Error::InvalidKeyFormat)?
+                        .map_err(|_| mla::errors::Error::InvalidKeyFormat)?,
                 );
             } else if let Ok(data) = element.downcast::<PyBytes>() {
                 keys.push(
                     parse_mlakey_pubkey_pem(&data[..])
                         .or_else(|_| parse_mlakey_pubkey_der(&data[..]))
-                        .map_err(|_| mla::errors::Error::InvalidKeyFormat)?
+                        .map_err(|_| mla::errors::Error::InvalidKeyFormat)?,
                 );
             } else {
                 return Err(
@@ -433,13 +426,13 @@ impl PrivateKeys {
                 keys.push(
                     parse_mlakey_privkey_pem(&buf)
                         .or_else(|_| parse_mlakey_privkey_der(&buf))
-                        .map_err(|_| mla::errors::Error::InvalidKeyFormat)?
+                        .map_err(|_| mla::errors::Error::InvalidKeyFormat)?,
                 );
             } else if let Ok(data) = element.downcast::<PyBytes>() {
                 keys.push(
                     parse_mlakey_privkey_pem(&data[..])
                         .or_else(|_| parse_mlakey_privkey_der(&data[..]))
-                        .map_err(|_| mla::errors::Error::InvalidKeyFormat)?
+                        .map_err(|_| mla::errors::Error::InvalidKeyFormat)?,
                 );
             } else {
                 return Err(
@@ -1152,10 +1145,7 @@ fn pymla(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
         py.get_type::<HKDFInvalidKeyLength>(),
     )?;
     m.add("HPKEError", py.get_type::<HPKEError>())?;
-    m.add(
-        "InvalidLastTag",
-        py.get_type::<InvalidLastTag>(),
-    )?;
+    m.add("InvalidLastTag", py.get_type::<InvalidLastTag>())?;
 
     // Add constants
     m.add("LAYER_COMPRESS", Layers::COMPRESS.bits())?;
