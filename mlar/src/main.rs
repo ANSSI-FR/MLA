@@ -1055,7 +1055,7 @@ fn app() -> clap::Command {
         Arg::new("private_keys")
             .long("private_keys")
             .short('k')
-            .help("Candidates ED25519 private key paths (DER or PEM format)")
+            .help("Candidates ED25519 private key paths (PEM format)")
             .num_args(1)
             .action(ArgAction::Append)
             .value_parser(value_parser!(PathBuf)),
@@ -1068,7 +1068,7 @@ fn app() -> clap::Command {
             .value_parser(value_parser!(PathBuf))
             .required(true),
         Arg::new("public_keys")
-            .help("ED25519 Public key paths (DER or PEM format)")
+            .help("ED25519 Public key paths (PEM format)")
             .long("pubkey")
             .short('p')
             .num_args(1)
