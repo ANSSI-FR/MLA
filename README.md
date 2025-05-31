@@ -78,7 +78,7 @@ Quick API usage
 
 * Create an archive, with compression and encryption:
 ```rust
-use mla::crypto::parse_mlakey_pubkey;
+use mla::crypto::parse_mlakey_pubkey_pem;
 use mla::config::ArchiveWriterConfig;
 use mla::ArchiveWriter;
 
@@ -86,7 +86,7 @@ const PUB_KEY: &[u8] = include_bytes!("../../samples/test_mlakey_pub.pem");
 
 fn main() {
     // Load the needed public key
-    let public_key = parse_mlakey_pubkey(PUB_KEY).unwrap();
+    let public_key = parse_mlakey_pubkey_pem(PUB_KEY).unwrap();
 
     // Create an MLA Archive - Output only needs the Write trait
     let mut buf = Vec::new();
@@ -106,7 +106,7 @@ fn main() {
 ```
 * Add files part per part, in a "concurrent" fashion:
 ```rust
-use mla::crypto::parse_mlakey_pubkey;
+use mla::crypto::parse_mlakey_pubkey_pem;
 use mla::config::ArchiveWriterConfig;
 use mla::ArchiveWriter;
 
@@ -114,7 +114,7 @@ const PUB_KEY: &[u8] = include_bytes!("../../samples/test_mlakey_pub.pem");
 
 fn main() {
     // Load the needed public key
-    let public_key = parse_mlakey_pubkey(PUB_KEY).unwrap();
+    let public_key = parse_mlakey_pubkey_pem(PUB_KEY).unwrap();
 
     // Create an MLA Archive - Output only needs the Write trait
     let mut buf = Vec::new();
@@ -162,7 +162,7 @@ fn main() {
 ```
 * Read files from an archive
 ```rust
-use mla::crypto::parse_mlakey_privkey;
+use mla::crypto::parse_mlakey_privkey_der;
 use mla::config::ArchiveReaderConfig;
 use mla::ArchiveReader;
 use std::io;
@@ -172,7 +172,7 @@ const DATA: &[u8] = include_bytes!("../../samples/archive_v2.mla");
 
 fn main() {
     // Get the private key
-    let private_key = parse_mlakey_privkey(PRIV_KEY).unwrap();
+    let private_key = parse_mlakey_privkey_der(PRIV_KEY).unwrap();
 
     // Specify the key for the Reader
     let mut config = ArchiveReaderConfig::new();

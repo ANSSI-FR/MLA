@@ -2,7 +2,7 @@
 use mla::config::ArchiveReaderConfig;
 use mla::config::ArchiveWriterConfig;
 use mla::crypto::mlakey_parser::{
-    parse_mlakey_privkey, parse_mlakey_privkey_der, parse_mlakey_pubkey_der,
+    parse_mlakey_privkey_der, parse_mlakey_privkey_pem, parse_mlakey_pubkey_der,
     parse_mlakey_pubkeys_pem_many,
 };
 use mla::errors::ConfigError;
@@ -408,7 +408,7 @@ pub extern "C" fn mla_reader_config_add_private_key_pem(
     // PEM is a null-terminated string
     let private_key = unsafe { CStr::from_ptr(private_key_pem) }.to_bytes();
 
-    let res = match parse_mlakey_privkey(private_key) {
+    let res = match parse_mlakey_privkey_pem(private_key) {
         Ok(v) => {
             config.add_private_keys(&[v]);
             MLAStatus::Success
