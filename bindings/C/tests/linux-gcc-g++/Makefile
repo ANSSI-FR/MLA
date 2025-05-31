@@ -13,7 +13,7 @@ test_create: $(MLAR) create.elf
 test_create_manykeys: $(MLAR) create_manykeys.elf
 	./create_manykeys.elf
 	$(MLAR) cat test.txt --input ./test.mla -k ../../../../samples/test_mlakey.pem | grep -E '^Hello, World!$$'
-	$(MLAR) cat test.txt --input ./test.mla -k ../../../../samples/test_mlakey_rev.der | grep -E '^Hello, World!$$'
+	$(MLAR) cat test.txt --input ./test.mla -k ../../../../samples/test_mlakey_rev.pem | grep -E '^Hello, World!$$'
 
 test_create_set_compression_level: $(MLAR) create_set_compression_level.elf
 	./create_set_compression_level.elf
