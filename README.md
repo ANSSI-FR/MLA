@@ -437,7 +437,7 @@ The repository contains:
 * integration tests (for `mlar`), testing common scenarios, such as `create`->`list`->`to-tar`, or `create`->truncate->`repair`
 * benchmarking scenarios (for `mla`)
 * [AFL](https://lcamtuf.coredump.cx/afl/) scenario (for `mla`)
-* A [committed archive in format v1](samples/archive_v1.mla), to ensure backward readability over time
+* A [committed archive in format v1](samples/archive_v2.mla), to ensure backward readability over time
 
 Performance
 -
