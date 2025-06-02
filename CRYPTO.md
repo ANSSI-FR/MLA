@@ -312,7 +312,7 @@ Note: $j$ starts at 0. $j+1$ is used because the sequence numbered 0 has already
 
 5. When the layer is finalized, the last chunk of data (with a length lower than or equals to 128KB) is encrypted the same way
 
-6. Finally, a final chunk with sequence number $n+1$ (where n is the number of data chunks) and special content and additional authenticated data is appended:
+6. Finally, a final chunk with sequence number $n+1$ (where $n$ is the number of data chunks) and special content and additional authenticated data is appended:
 
 ```math
 \begin{align*}

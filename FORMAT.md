@@ -104,7 +104,7 @@ The last `DataBlock` is an exception: `encrypted_content` might be smaller. Its 
 
 To protect from a truncation attack, before using an archive, it must be checked that `FinalBlock.tag` is correct and that `msg_final` is `FINALBLOCK`.
 
-Formats for PEM and DER keys are documented in comments of functions `parse_mlakey_privkey_der` and `parse_mlakey_pubkey_der`.
+Formats for DER keys (thus PEM keys too) are documented in comments of functions `parse_mlakey_privkey_der` and `parse_mlakey_pubkey_der`.
 
 ### Example
 
