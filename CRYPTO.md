@@ -131,7 +131,7 @@ ss_{recipient}^i = \textrm{combine}(ss_{ecc}^i, ss_{mlkem}^i, ct_{ecc}^i, ct_{ml
 ```math
 \begin{align}
 (key^i, nonce^i) &= \textrm{KeySchedule}_{recipient}(
-        \textrm{shared\ secret}=ss_{recipient}^i,
+        shared\_secret=ss_{recipient}^i,
     \textrm{info}=\mathtt{"MLA\ Recipient"}
 )\\
 ct_{wrap}^i &= \textrm{Encrypt}_{AES\ 256\ GCM}(\textrm{key}=key^i, \textrm{nonce}=nonce^i, \textrm{data}=ss_{recipients})\\
@@ -161,7 +161,7 @@ ss_{recipient}^i &= \textrm{combine}(ss_{ecc}^i, ss_{mlkem}^i, ct_{ecc}^i, ct_{m
 ```math
 \begin{align}
 (key^i, nonce^i) &= \textrm{KeySchedule}_{recipient}(
-        \textrm{shared\ secret}=ss_{recipient}^i,
+        shared\_secret=ss_{recipient}^i,
     \textrm{info}=\mathtt{"MLA\ Recipient"}
 )\\
 ss_{recipients} &= \textrm{Decrypt}_{AES\ 256\ GCM}(\textrm{key}=key^i, \textrm{nonce}=nonce^i, \textrm{data}=ct_{wrap}^i)
@@ -279,7 +279,7 @@ ss_{recipients},\ ct_{recipients} = \mathrm{MultiRecipientHybridKEM.Encapsulate}
 
 ```math
 (key, base\_nonce) = \textrm{KeySchedule}_{hybrid}(
-        \textrm{shared\ secret}=ss_{recipients},
+        shared\_secret=ss_{recipients},
     \textrm{info}=\mathtt{"MLA\ Encrypt\ Layer"}
 )
 ```
@@ -345,7 +345,7 @@ To decrypt the data at position $pos$:
 \begin{align}
 ss_{recipients} &= \mathrm{MultiRecipientHybridKEM.Decapsulate}((sk_{ecc}^i, sk_{mlkem}^i), ct_{recipients})\\
 (key, base\_nonce) &= \textrm{KeySchedule}_{hybrid}(
-        \textrm{shared\ secret}=ss_{recipients},
+        shared\_secret=ss_{recipients},
     \textrm{info}=\mathtt{"MLA\ Encrypt\ Layer"}
 )
 \end{align}
