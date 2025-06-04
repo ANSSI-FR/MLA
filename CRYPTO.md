@@ -172,7 +172,7 @@ If the decryption is a success, returns $ss_{recipients}$. Otherwise, returns an
 
 #### Arguments
 
-- Using HPKE (RFC 9180 [^hpke]) for both elliptic curve encryption (DHKEM) and encryption offers several benefits[^issuehpke]:
+- Using HPKE (RFC 9180 [^hpke]) for both elliptic curve encryption (DHKEM) and post-quantum encryption (MLKEM) offers several benefits[^issuehpke]:
     - Easier re-implementation of the format MLA, thanks to the availability of HPKE in cryptographic libraries
     - An existing formal analysis [^hpkeanalysis]
     - Easier code and security auditing, thanks to the use of known bricks
@@ -405,7 +405,7 @@ chunk_j& = \textrm{Decrypt}_{AES\ 256\ GCM}(\\
 
 ### Seed derivation
 
-The asymmetric encryption in MLA, particularly the KEMs, provide deterministic API.
+The asymmetric encryption in MLA, particularly the KEMs, provides deterministic API.
 
 These API are usually fed with cryptographically generated data, except for the regression test and the "seed derivation" feature in `mlar` CLI.
 
