@@ -50,10 +50,9 @@ fn build_archive(iters: u64, size: u64, layers: Layers) -> (Vec<u8>, ArchiveRead
             .unwrap();
         mla.end_file(id).unwrap();
     }
-    mla.finalize().unwrap();
+    let dest = mla.finalize().unwrap();
 
     // Instantiate the reader
-    let dest = mla.into_raw();
     let mut config = ArchiveReaderConfig::new();
     config.add_private_keys(&[private_key]);
     (dest, config)
@@ -290,11 +289,11 @@ fn repair_archive(iters: u64, size: u64, layers: Layers) -> Duration {
     // Avoid any layers to speed up writing, as this is not the measurement target
     let mut writer_config = ArchiveWriterConfig::new();
     writer_config.set_layers(Layers::EMPTY);
-    let mut mla_output = ArchiveWriter::from_config(dest, writer_config).unwrap();
+    let mla_output = ArchiveWriter::from_config(dest, writer_config).unwrap();
 
     let start = Instant::now();
     // Measure the convert_to_archive time
-    mla_repair.convert_to_archive(&mut mla_output).unwrap();
+    mla_repair.convert_to_archive(mla_output).unwrap();
     start.elapsed()
 }
 

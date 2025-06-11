@@ -604,7 +604,7 @@ pub extern "C" fn mla_archive_close(archive: *mut MLAArchiveHandle) -> MLAStatus
         *archive = null_mut();
     }
 
-    let mut archive = unsafe { Box::from_raw(handle as *mut ArchiveWriter<CallbackOutput>) };
+    let archive = unsafe { Box::from_raw(handle as *mut ArchiveWriter<CallbackOutput>) };
     match archive.finalize() {
         Ok(_) => MLAStatus::Success,
         Err(e) => MLAStatus::from(e),

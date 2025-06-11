@@ -31,15 +31,7 @@ impl<'a, W: 'a + InnerWriterTrait> PositionLayerWriter<'a, W> {
 }
 
 impl<'a, W: 'a + InnerWriterTrait> LayerWriter<'a, W> for PositionLayerWriter<'a, W> {
-    fn into_inner(self) -> Option<InnerWriterType<'a, W>> {
-        Some(self.inner)
-    }
-
-    fn into_raw(self: Box<Self>) -> W {
-        self.inner.into_raw()
-    }
-
-    fn finalize(&mut self) -> Result<(), Error> {
+    fn finalize(self: Box<Self>) -> Result<W, Error> {
         // Nothing to do
 
         // Recursive call

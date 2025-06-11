@@ -126,10 +126,9 @@ fn run(data: &[u8]) {
         mla.end_file(*id).expect("End block failed");
     }
 
-    mla.finalize().expect("Finalize failed");
+    let dest = mla.finalize().expect("Finalize failed");
 
     // Parse the created MLA Archive
-    let dest = mla.into_raw();
     let buf = Cursor::new(dest.as_slice());
     let private_key = parse_mlakey_privkey_pem(PRIV_KEY).unwrap();
     let mut config = ArchiveReaderConfig::new();
@@ -164,19 +163,18 @@ fn run(data: &[u8]) {
     let mut mla_fsread = ArchiveFailSafeReader::from_config(buf, config).unwrap();
 
     // Repair the archive (without any damage, but trigger the corresponding code)
-    let dest_w = Vec::new();
-    let mut mla_w =
-        ArchiveWriter::from_config(dest_w, ArchiveWriterConfig::new()).expect("Writer init failed");
+    let mut dest_w = Vec::new();
+    let mla_w = ArchiveWriter::from_config(&mut dest_w, ArchiveWriterConfig::new())
+        .expect("Writer init failed");
     if let FailSafeReadError::EndOfOriginalArchiveData =
-        mla_fsread.convert_to_archive(&mut mla_w).unwrap()
+        mla_fsread.convert_to_archive(mla_w).unwrap()
     {
         // Everything runs as expected
     } else {
         panic!();
-    }
+    };
     // Check the resulting files
-    let dest_r = mla_w.into_raw();
-    let buf = Cursor::new(dest_r.as_slice());
+    let buf = Cursor::new(dest_w.as_slice());
     let mut mla_read = ArchiveReader::from_config(buf, ArchiveReaderConfig::new()).unwrap();
     for fname in tflist {
         let mut mla_file = mla_read.get_file(fname.clone()).unwrap().unwrap();
@@ -235,10 +233,10 @@ fn run(data: &[u8]) {
     };
     // Repair the archive (without any damage, but trigger the corresponding code)
     let dest_w = Vec::new();
-    let mut mla_w =
+    let mla_w =
         ArchiveWriter::from_config(dest_w, ArchiveWriterConfig::new()).expect("Writer init failed");
     mla_fsread
-        .convert_to_archive(&mut mla_w)
+        .convert_to_archive(mla_w)
         .expect("End without a FailSafeReadError {}");
 }
 

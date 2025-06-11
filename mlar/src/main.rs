@@ -756,10 +756,10 @@ fn to_tar(matches: &ArgMatches) -> Result<(), MlarError> {
 
 fn repair(matches: &ArgMatches) -> Result<(), MlarError> {
     let mut mla = open_failsafe_mla_file(matches)?;
-    let mut mla_out = writer_from_matches(matches)?;
+    let mla_out = writer_from_matches(matches)?;
 
     // Convert
-    let status = mla.convert_to_archive(&mut mla_out)?;
+    let status = mla.convert_to_archive(mla_out)?;
     match status {
         FailSafeReadError::NoError => {}
         FailSafeReadError::EndOfOriginalArchiveData => {
