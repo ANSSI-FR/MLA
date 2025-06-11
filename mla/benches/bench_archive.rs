@@ -164,7 +164,7 @@ fn read_one_file_by_chunk(iters: u64, size: u64, layers: Layers) -> Duration {
     let mut mla_read = build_archive_reader(1, size * iters, layers);
 
     // Get the file (costly as `seek` are implied)
-    let subfile = mla_read.get_file("file_0".to_string()).unwrap().unwrap();
+    let subfile = mla_read.get_entry("file_0".to_string()).unwrap().unwrap();
 
     // Read iters * size bytes
     let start = Instant::now();
@@ -206,7 +206,7 @@ fn iter_read_multifiles_random(iters: u64, size: u64, layers: Layers) -> Duratio
     let start = Instant::now();
     for i in sample(&mut rng, iters as usize, iters as usize).iter() {
         let subfile = mla_read
-            .get_file(format!("file_{i}").to_string())
+            .get_entry(format!("file_{i}").to_string())
             .unwrap()
             .unwrap();
         let mut src = subfile.data;
