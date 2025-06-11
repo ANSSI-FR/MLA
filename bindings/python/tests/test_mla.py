@@ -18,7 +18,7 @@ FILES = {
 def basic_archive():
     "Create a temporary archive and return its path"
     fname = tempfile.mkstemp(suffix=".mla")[1]
-    archive = MLAFile(fname, "w")
+    archive = MLAFile(fname, "w", config=mla.WriterConfig(layers=0))
     for name, data in FILES.items():
         archive[name] = data
     archive.finalize()
@@ -44,14 +44,14 @@ def test_bad_mode():
 def test_repr():
     "Ensure the repr is correct"
     path = tempfile.mkstemp(suffix=".mla")[1]
-    archive = MLAFile(path, "w")
+    archive = MLAFile(path, "w", config=mla.WriterConfig(layers=0))
     assert repr(archive) == "<MLAFile path='%s' mode='w'>" % path
     archive.finalize()
 
 
 def test_forbidden_in_write_mode():
     "Ensure some API cannot be called in write mode"
-    archive = MLAFile(tempfile.mkstemp(suffix=".mla")[1], "w")
+    archive = MLAFile(tempfile.mkstemp(suffix=".mla")[1], "w", config=mla.WriterConfig(layers=0))
 
     # .keys
     with pytest.raises(mla.BadAPIArgument):
@@ -152,7 +152,7 @@ def test_list_files(basic_archive):
 def test_write_api():
     "Test basics write APIs"
     path = tempfile.mkstemp(suffix=".mla")[1]
-    archive = MLAFile(path, "w")
+    archive = MLAFile(path, "w", config=mla.WriterConfig(layers=0))
 
     # __setitem__
     for name, data in FILES.items():
@@ -170,7 +170,7 @@ def test_write_api():
 
 def test_double_write():
     "Rewriting the file must raise an MLA error"
-    archive = MLAFile(tempfile.mkstemp(suffix=".mla")[1], "w")
+    archive = MLAFile(tempfile.mkstemp(suffix=".mla")[1], "w", config=mla.WriterConfig(layers=0))
     archive["file1"] = FILES["file1"]
 
     with pytest.raises(mla.DuplicateFilename):
@@ -188,21 +188,21 @@ def test_context_read(basic_archive):
 def test_context_write():
     "Test writing using a `with` statement (context management protocol)"
     path = tempfile.mkstemp(suffix=".mla")[1]
-    with MLAFile(path, "w") as mla:
+    with MLAFile(path, "w", config=mla.WriterConfig(layers=0)) as m:
         for name, data in FILES.items():
-            mla[name] = data
+            m[name] = data
 
     # Check the resulting file
-    with MLAFile(path) as mla:
-        assert sorted(mla.keys()) == sorted(list(FILES.keys()))
+    with MLAFile(path) as m:
+        assert sorted(m.keys()) == sorted(list(FILES.keys()))
         for name, data in FILES.items():
-            assert mla[name] == data
+            assert m[name] == data
 
 
 def test_context_write_error():
     "Raise an error during the context write __exit__"
     with pytest.raises(mla.BadAPIArgument):
-        with MLAFile(tempfile.mkstemp(suffix=".mla")[1], "w") as archive:
+        with MLAFile(tempfile.mkstemp(suffix=".mla")[1], "w", config=mla.WriterConfig(layers=0)) as archive:
             # INTENTIONNALY BUGGY
             # .finalize will be called twice, causing an exception
             archive.finalize()
@@ -212,7 +212,7 @@ def test_context_write_error_in_with():
     "Raise an error in the with statement, it must be re-raised"
     CustomException = type("CustomException", (Exception,), {})
     with pytest.raises(CustomException):
-        with MLAFile(tempfile.mkstemp(suffix=".mla")[1], "w") as mla:
+        with MLAFile(tempfile.mkstemp(suffix=".mla")[1], "w", config=mla.WriterConfig(layers=0)) as m:
             # INTENTIONNALY BUGGY
             raise CustomException
 
@@ -566,7 +566,7 @@ def test_add_file_from_str():
     "Test archive.add_file_from(), using the String input version"
     # Create the archive
     path = tempfile.mkstemp(suffix=".mla")[1]
-    with MLAFile(path, "w") as archive:
+    with MLAFile(path, "w", config=mla.WriterConfig(layers=0)) as archive:
         for name, data in FILES.items():
             # Create a file on disk to import
             fname = tempfile.mkstemp()[1]
@@ -586,7 +586,7 @@ def test_add_file_from_io():
     "Test archive.add_file_from(), using the IO input version"
     # Create the archive
     path = tempfile.mkstemp(suffix=".mla")[1]
-    with MLAFile(path, "w") as archive:
+    with MLAFile(path, "w", config=mla.WriterConfig(layers=0)) as archive:
         for name, data in FILES.items():
             # Use a buffered IO
             f = io.BytesIO(data)
@@ -606,7 +606,7 @@ def test_add_file_from_io_chunk_size():
         # Create the archive
         path = tempfile.mkstemp(suffix=".mla")[1]
         data = FILES["file1"]
-        with MLAFile(path, "w") as archive:
+        with MLAFile(path, "w", config=mla.WriterConfig(layers=0)) as archive:
             src = BytesIOCounter(data)
             archive.add_file_from("file1", src, chunk_size=chunk_size)
 
