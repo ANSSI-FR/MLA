@@ -49,13 +49,10 @@ pub(crate) struct InternalConfig {
 pub type ConfigResult<'a> = Result<&'a mut ArchiveWriterConfig, ConfigError>;
 
 impl ArchiveWriterConfig {
-    /// Start a builder without any layers configured
+    /// Config with default layers : Encryption and Compression
+    /// You need to either add public keys or remove encryption layer
     pub fn new() -> ArchiveWriterConfig {
-        ArchiveWriterConfig {
-            layers_enabled: Layers::EMPTY,
-            compress: CompressionConfig::default(),
-            encrypt: EncryptionConfig::default(),
-        }
+        ArchiveWriterConfig::default()
     }
 
     /// Enable a layer
@@ -112,9 +109,8 @@ impl ArchiveWriterConfig {
 }
 
 impl std::default::Default for ArchiveWriterConfig {
-    /// The default version is missing some parameters to work properly; this is intended
-    /// Missing parameters:
-    /// - ecc_encryption_key
+    /// Config with default layers : Encryption and Compression
+    /// You need to either add public keys or remove encryption layer
     fn default() -> Self {
         ArchiveWriterConfig {
             layers_enabled: Layers::default(),
