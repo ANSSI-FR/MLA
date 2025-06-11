@@ -8,6 +8,10 @@
 #include <ostream>
 #include <new>
 
+constexpr static const uint8_t ENCRYPT = 1;
+
+constexpr static const uint8_t COMPRESS = 2;
+
 enum class MLAStatus : uint64_t {
   MLA_STATUS_SUCCESS = 0,
   MLA_STATUS_IO_ERROR = 65536,
@@ -92,9 +96,9 @@ struct FileWriter {
 /// Return the desired output path which is expected to be writable.
 /// The callback developper is responsible all security checks and parent path creation.
 using MLAFileCallBack = int32_t(*)(void *context,
-                                  const uint8_t *filename,
-                                  uintptr_t filename_len,
-                                  FileWriter *file_writer);
+                                   const uint8_t *filename,
+                                   uintptr_t filename_len,
+                                   FileWriter *file_writer);
 
 /// Structure for MLA archive info
 struct ArchiveInfo {
@@ -108,7 +112,7 @@ extern "C" {
 /// return a handle to it
 /// `public_keys_pointers` is an array of pointers to public keys in DER format
 MLAStatus create_mla_writer_config_with_public_keys_der(MLAWriterConfigHandle *handle_out,
-                                                        const uint8_t *public_keys_pointers,
+                                                        const uint8_t *const *public_keys_pointers,
                                                         uintptr_t number_of_public_keys);
 
 /// Create a new configuration with the given public key(s) in PEM format and
@@ -120,16 +124,16 @@ MLAStatus create_mla_writer_config_with_public_keys_pem(MLAWriterConfigHandle *h
 /// Create a new configuration without encryption and return a handle to it
 MLAStatus create_mla_writer_config_without_encryption(MLAWriterConfigHandle *handle_out);
 
-/// Free `handle_in` and create a handle to same config with given compression level
+/// Change handle to same config with given compression level
 /// Currently this level can only be an integer N with 0 <= N <= 11,
 /// and bigger values cause denser but slower compression.
-MLAStatus mla_writer_config_with_compression_level(MLAWriterConfigHandle *handle_in,
-                                                   MLAWriterConfigHandle *handle_out,
+/// Previous handle value becomes invalid after this call.
+MLAStatus mla_writer_config_with_compression_level(MLAWriterConfigHandle *handle_inout,
                                                    uint32_t level);
 
-/// Free `handle_in` and create a handle to same config without compression
-MLAStatus mla_writer_config_without_compression(MLAWriterConfigHandle *handle_in,
-                                                MLAWriterConfigHandle *handle_out);
+/// Change handle to same config without compression.
+/// Previous handle value becomes invalid after this call.
+MLAStatus mla_writer_config_without_compression(MLAWriterConfigHandle *handle_inout);
 
 MLAStatus create_mla_reader_config_without_encryption(MLAReaderConfigHandle *handle_out);
 
