@@ -242,7 +242,7 @@ pub fn reader_multiple_layers_multiple_block_size_multifiles_random(c: &mut Crit
 fn iter_decompress_multifiles_linear(iters: u64, size: u64, layers: Layers) -> Duration {
     let mut mla_read = build_archive_reader(iters, size, layers);
 
-    let fnames: Vec<String> = mla_read.list_files().unwrap().cloned().collect();
+    let fnames: Vec<String> = mla_read.list_entries().unwrap().cloned().collect();
     // Measure the time needed to get and read a file
     // Prepare output
     let mut export: HashMap<&String, io::Sink> =

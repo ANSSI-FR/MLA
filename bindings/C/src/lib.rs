@@ -709,7 +709,7 @@ fn _mla_roarchive_extract<'a, R: Read + Seek + 'a>(
         }
     };
 
-    let mut iter: Vec<String> = match mla.list_files() {
+    let mut iter: Vec<String> = match mla.list_entries() {
         Ok(v) => v.cloned().collect(),
         Err(_) => return MLAStatus::BadAPIArgument,
     };

@@ -542,7 +542,7 @@ fn create(matches: &ArgMatches) -> Result<(), MlarError> {
 fn list(matches: &ArgMatches) -> Result<(), MlarError> {
     let mut mla = open_mla_file(matches)?;
 
-    let mut iter: Vec<String> = mla.list_files()?.cloned().collect();
+    let mut iter: Vec<String> = mla.list_entries()?.cloned().collect();
     iter.sort();
     for fname in iter {
         if matches.get_count("verbose") == 0 {
@@ -589,7 +589,7 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
         err
     })?;
 
-    let mut iter: Vec<String> = mla.list_files()?.cloned().collect();
+    let mut iter: Vec<String> = mla.list_entries()?.cloned().collect();
     iter.sort();
 
     if let ExtractFileNameMatcher::Anything = file_name_matcher {
@@ -662,7 +662,7 @@ fn cat(matches: &ArgMatches) -> Result<(), MlarError> {
     let mut mla = open_mla_file(matches)?;
     if matches.get_flag("glob") {
         // For each glob patterns, enumerate matching files and display them
-        let mut archive_files: Vec<String> = mla.list_files()?.cloned().collect();
+        let mut archive_files: Vec<String> = mla.list_entries()?.cloned().collect();
         archive_files.sort();
         for arg_pattern in files_values {
             let pat = match Pattern::new(arg_pattern) {
@@ -728,7 +728,7 @@ fn to_tar(matches: &ArgMatches) -> Result<(), MlarError> {
     let destination = destination_from_output_argument(output)?;
     let mut tar_file = Builder::new(destination);
 
-    let mut archive_files: Vec<String> = mla.list_files()?.cloned().collect();
+    let mut archive_files: Vec<String> = mla.list_entries()?.cloned().collect();
     archive_files.sort();
     for fname in archive_files {
         let sub_file = match mla.get_entry(fname.clone()) {
@@ -769,7 +769,7 @@ fn repair(matches: &ArgMatches) -> Result<(), MlarError> {
 
 fn convert(matches: &ArgMatches) -> Result<(), MlarError> {
     let mut mla = open_mla_file(matches)?;
-    let mut fnames: Vec<String> = if let Ok(iter) = mla.list_files() {
+    let mut fnames: Vec<String> = if let Ok(iter) = mla.list_entries() {
         // Read the file list using metadata
         iter.cloned().collect()
     } else {

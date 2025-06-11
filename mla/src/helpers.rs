@@ -132,7 +132,7 @@ mod tests {
 
         // Prepare writers
         let file_list: Vec<String> = mla_read
-            .list_files()
+            .list_entries()
             .expect("reader.list_files")
             .cloned()
             .collect();

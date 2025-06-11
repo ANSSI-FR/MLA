@@ -136,7 +136,7 @@ fn run(data: &[u8]) {
     let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
 
     // Check the list of files is correct
-    let mut flist: Vec<String> = mla_read.list_files().unwrap().cloned().collect();
+    let mut flist: Vec<String> = mla_read.list_entries().unwrap().cloned().collect();
     flist.sort();
     #[allow(clippy::iter_cloned_collect)]
     let mut tflist: Vec<String> = test_case.filenames.iter().cloned().collect();
@@ -208,7 +208,7 @@ fn run(data: &[u8]) {
     config.add_private_keys(&[private_key]);
     let _do_steps = || -> Result<(), Error> {
         let mut mla_read = ArchiveReader::from_config(buf, ArchiveReaderConfig::new())?;
-        let flist = mla_read.list_files()?.cloned().collect::<Vec<String>>();
+        let flist = mla_read.list_entries()?.cloned().collect::<Vec<String>>();
         for fname in flist {
             let mut finfo = match mla_read.get_entry(fname)? {
                 Some(finfo) => finfo,
