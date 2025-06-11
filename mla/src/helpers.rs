@@ -190,7 +190,7 @@ mod tests {
         let fname = "my_file".to_string();
         let data: Vec<u8> = Standard.sample_iter(&mut rng).take(file_length).collect();
         assert_eq!(data.len(), file_length);
-        mla.add_file(&fname, data.len() as u64, data.as_slice())
+        mla.add_entry(&fname, data.len() as u64, data.as_slice())
             .unwrap();
 
         let dest = mla.finalize().unwrap();

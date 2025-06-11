@@ -725,7 +725,7 @@ impl ExplicitWriter {
         }
     }
 
-    fn add_file<R: Read>(
+    fn add_entry<R: Read>(
         &mut self,
         key: &str,
         size: u64,
@@ -733,7 +733,7 @@ impl ExplicitWriter {
     ) -> Result<(), mla::errors::Error> {
         match self {
             ExplicitWriter::FileWriter(writer) => {
-                writer.add_file(key, size, reader)?;
+                writer.add_entry(key, size, reader)?;
                 Ok(())
             }
         }
@@ -1001,7 +1001,7 @@ impl MLAFile {
         self.with_writer(|writer| match writer {
             ExplicitWriter::FileWriter(writer) => {
                 let mut reader = std::io::Cursor::new(value);
-                writer.add_file(key, value.len() as u64, &mut reader)?;
+                writer.add_entry(key, value.len() as u64, &mut reader)?;
                 Ok(())
             }
         })
@@ -1114,15 +1114,15 @@ impl MLAFile {
     ///
     /// Example:
     /// ```python
-    /// archive.add_file_from("file1", "/path/to/file1")
+    /// archive.add_entry_from("file1", "/path/to/file1")
     /// ```
     /// Or
     /// ```python
     /// with open("/path/to/file1", "rb") as f:
-    ///    archive.add_file_from("file1", f)
+    ///    archive.add_entry_from("file1", f)
     /// ```
     #[pyo3(signature = (key, src, chunk_size=4194304))]
-    fn add_file_from(
+    fn add_entry_from(
         &mut self,
         py: Python,
         key: &str,
@@ -1132,7 +1132,7 @@ impl MLAFile {
         self.with_writer(|writer| {
             if let Ok(src) = src.downcast::<PyString>() {
                 let mut input = std::fs::File::open(src.to_string())?;
-                writer.add_file(key, input.metadata()?.len(), &mut input)?;
+                writer.add_entry(key, input.metadata()?.len(), &mut input)?;
             } else if src.is_instance(&py.get_type::<MLAFile>().getattr("_buffered_type")?)? {
                 let id = writer.start_file(key)?;
                 loop {

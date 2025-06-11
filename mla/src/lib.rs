@@ -861,7 +861,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         Ok(())
     }
 
-    pub fn add_file<U: Read>(&mut self, filename: &str, size: u64, src: U) -> Result<(), Error> {
+    pub fn add_entry<U: Read>(&mut self, filename: &str, size: u64, src: U) -> Result<(), Error> {
         let id = self.start_file(filename)?;
         self.append_file_content(id, size, src)?;
         self.end_file(id)
@@ -1532,7 +1532,7 @@ pub(crate) mod tests {
             .expect("Writer init failed");
 
         let fake_file = vec![1, 2, 3, 4];
-        mla.add_file("my_file", fake_file.len() as u64, fake_file.as_slice())
+        mla.add_entry("my_file", fake_file.len() as u64, fake_file.as_slice())
             .unwrap();
         let fake_file = vec![5, 6, 7, 8];
         let fake_file2 = vec![9, 10, 11, 12];
@@ -1639,7 +1639,7 @@ pub(crate) mod tests {
             let id_file2 = mla.start_file(&fname2).unwrap();
             mla.append_file_content(id_file2, fake_file2.len() as u64, fake_file2.as_slice())
                 .unwrap();
-            mla.add_file(&fname3, fake_file3.len() as u64, fake_file3.as_slice())
+            mla.add_entry(&fname3, fake_file3.len() as u64, fake_file3.as_slice())
                 .unwrap();
             mla.append_file_content(
                 id_file1,
@@ -1650,11 +1650,11 @@ pub(crate) mod tests {
             mla.end_file(id_file1).unwrap();
             mla.end_file(id_file2).unwrap();
         } else {
-            mla.add_file(&fname1, fake_file1.len() as u64, fake_file1.as_slice())
+            mla.add_entry(&fname1, fake_file1.len() as u64, fake_file1.as_slice())
                 .unwrap();
-            mla.add_file(&fname2, fake_file2.len() as u64, fake_file2.as_slice())
+            mla.add_entry(&fname2, fake_file2.len() as u64, fake_file2.as_slice())
                 .unwrap();
-            mla.add_file(&fname3, fake_file3.len() as u64, fake_file3.as_slice())
+            mla.add_entry(&fname3, fake_file3.len() as u64, fake_file3.as_slice())
                 .unwrap();
         }
         let files_info = mla.files_info.clone();
@@ -1720,7 +1720,7 @@ pub(crate) mod tests {
 
             // Write a file in one part
             let fake_file = vec![1, 2, 3, 4];
-            mla.add_file("my_file", fake_file.len() as u64, fake_file.as_slice())
+            mla.add_entry("my_file", fake_file.len() as u64, fake_file.as_slice())
                 .unwrap();
             // Write a file in multiple part
             let fake_file = vec![5, 6, 7, 8];
@@ -1941,10 +1941,10 @@ pub(crate) mod tests {
         let mut config = ArchiveWriterConfig::new();
         config.set_layers(Layers::EMPTY);
         let mut mla = ArchiveWriter::from_config(buf, config).unwrap();
-        mla.add_file("Test", 4, vec![1, 2, 3, 4].as_slice())
+        mla.add_entry("Test", 4, vec![1, 2, 3, 4].as_slice())
             .unwrap();
         assert!(
-            mla.add_file("Test", 4, vec![1, 2, 3, 4].as_slice())
+            mla.add_entry("Test", 4, vec![1, 2, 3, 4].as_slice())
                 .is_err()
         );
         assert!(mla.start_file("Test").is_err());
@@ -2114,7 +2114,7 @@ pub(crate) mod tests {
         let files = make_format_regression_files();
         // First, add a simple file
         let fname_simple = "simple".to_string();
-        mla.add_file(
+        mla.add_entry(
             &fname_simple,
             files.get(&fname_simple).unwrap().len() as u64,
             files.get(&fname_simple).unwrap().as_slice(),
@@ -2164,7 +2164,7 @@ pub(crate) mod tests {
 
         // Add a big file
         let fname_big = "big".to_string();
-        mla.add_file(
+        mla.add_entry(
             &fname_big,
             files.get(&fname_big).unwrap().len() as u64,
             files.get(&fname_big).unwrap().as_slice(),
@@ -2173,7 +2173,7 @@ pub(crate) mod tests {
 
         // Add sha256sum file
         let fname_sha256sum = "sha256sum".to_string();
-        mla.add_file(
+        mla.add_entry(
             &fname_sha256sum,
             files.get(&fname_sha256sum).unwrap().len() as u64,
             files.get(&fname_sha256sum).unwrap().as_slice(),

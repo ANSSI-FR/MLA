@@ -114,7 +114,7 @@ fn upgrade(matches: &ArgMatches) -> Result<(), Error> {
             Ok(Some(mla)) => mla,
         };
         mla_out
-            .add_file(&sub_file.filename, sub_file.size, sub_file.data)
+            .add_entry(&sub_file.filename, sub_file.size, sub_file.data)
             .unwrap();
     }
     mla_out.finalize().expect("Finalization error");
