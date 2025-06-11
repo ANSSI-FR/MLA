@@ -1099,7 +1099,7 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
     }
 
     #[allow(clippy::type_complexity)]
-    pub fn get_file(
+    pub fn get_entry(
         &mut self,
         filename: String,
     ) -> Result<Option<ArchiveEntry<ArchiveEntryDataReader<Box<dyn 'b + LayerReader<'b, R>>>>>, Error>
@@ -1555,14 +1555,14 @@ pub(crate) mod tests {
             mla_read.config.get_encrypt_parameters().unwrap()
         );
 
-        let mut file = mla_read.get_file("my_file".to_string()).unwrap().unwrap();
+        let mut file = mla_read.get_entry("my_file".to_string()).unwrap().unwrap();
         let mut rez = Vec::new();
         file.data.read_to_end(&mut rez).unwrap();
         assert_eq!(rez, vec![1, 2, 3, 4]);
         // Explicit drop here, because otherwise mla_read.get_file() cannot be
         // recall. It is not detected by the NLL analysis
         drop(file);
-        let mut file2 = mla_read.get_file("my_file2".to_string()).unwrap().unwrap();
+        let mut file2 = mla_read.get_entry("my_file2".to_string()).unwrap().unwrap();
         let mut rez2 = Vec::new();
         file2.data.read_to_end(&mut rez2).unwrap();
         assert_eq!(rez2, vec![5, 6, 7, 8, 9, 10, 11, 12]);
@@ -1686,7 +1686,7 @@ pub(crate) mod tests {
         let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
 
         for (fname, content) in files {
-            let mut file = mla_read.get_file(fname).unwrap().unwrap();
+            let mut file = mla_read.get_entry(fname).unwrap().unwrap();
             let mut rez = Vec::new();
             file.data.read_to_end(&mut rez).unwrap();
             assert_eq!(rez, content);
@@ -1739,14 +1739,14 @@ pub(crate) mod tests {
             config.add_private_keys(std::slice::from_ref(&private_key));
             let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
 
-            let mut file = mla_read.get_file("my_file".to_string()).unwrap().unwrap();
+            let mut file = mla_read.get_entry("my_file".to_string()).unwrap().unwrap();
             let mut rez = Vec::new();
             file.data.read_to_end(&mut rez).unwrap();
             assert_eq!(rez, vec![1, 2, 3, 4]);
             // Explicit drop here, because otherwise mla_read.get_file() cannot be
             // recall. It is not detected by the NLL analysis
             drop(file);
-            let mut file2 = mla_read.get_file("my_file2".to_string()).unwrap().unwrap();
+            let mut file2 = mla_read.get_entry("my_file2".to_string()).unwrap().unwrap();
 
             // Read the file in 2 blocks: 6, then 2 bytes (it is made of two 4-bytes block)
             let mut rez2 = [0u8; 6];
@@ -1784,7 +1784,7 @@ pub(crate) mod tests {
 
         // Get and check file per file, not in the writing order
         for (fname, content) in files.iter().rev() {
-            let mut mla_file = mla_read.get_file(fname.clone()).unwrap().unwrap();
+            let mut mla_file = mla_read.get_entry(fname.clone()).unwrap().unwrap();
             assert_eq!(mla_file.filename, fname.clone());
             let mut buf = Vec::new();
             mla_file.data.read_to_end(&mut buf).unwrap();
@@ -1841,7 +1841,7 @@ pub(crate) mod tests {
 
         // Get and check file per file, not in the writing order
         for (fname, content) in files.iter().rev() {
-            let mut mla_file = mla_read.get_file(fname.clone()).unwrap().unwrap();
+            let mut mla_file = mla_read.get_entry(fname.clone()).unwrap().unwrap();
             assert_eq!(mla_file.filename, fname.clone());
             let mut buf = Vec::new();
             mla_file.data.read_to_end(&mut buf).unwrap();
@@ -1911,7 +1911,7 @@ pub(crate) mod tests {
                 // Get and check file per file, not in the writing order
                 for (fname, content) in files.iter().rev() {
                     // The file may be missing
-                    let mut mla_file = match mla_read.get_file(fname.clone()).unwrap() {
+                    let mut mla_file = match mla_read.get_entry(fname.clone()).unwrap() {
                         Some(mla_file) => mla_file,
                         None => continue,
                     };
@@ -1970,7 +1970,7 @@ pub(crate) mod tests {
             let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
 
             for (fname, data) in &files {
-                let mla_file = mla_read.get_file(fname.to_string()).unwrap().unwrap();
+                let mla_file = mla_read.get_entry(fname.to_string()).unwrap().unwrap();
                 assert_eq!(mla_file.size, data.len() as u64);
             }
         }
@@ -2238,8 +2238,8 @@ pub(crate) mod tests {
 
         // Get and check file per file
         for (fname, content) in files.iter() {
-            let mut mla_file = mla_read.get_file(fname.clone()).unwrap().unwrap();
-            let mut mla_rep_file = mla_repread.get_file(fname.clone()).unwrap().unwrap();
+            let mut mla_file = mla_read.get_entry(fname.clone()).unwrap().unwrap();
+            let mut mla_rep_file = mla_repread.get_entry(fname.clone()).unwrap().unwrap();
             assert_eq!(mla_file.filename, fname.clone());
             assert_eq!(mla_rep_file.filename, fname.clone());
             let mut buf = Vec::new();
@@ -2278,7 +2278,7 @@ pub(crate) mod tests {
             ArchiveReader::from_config(buf, ArchiveReaderConfig::new()).expect("archive reader");
         let mut out = Vec::new();
         mla_read
-            .get_file(fname)
+            .get_entry(fname)
             .unwrap()
             .unwrap()
             .data
@@ -2361,7 +2361,7 @@ pub(crate) mod tests {
 
         let mut chunk = vec![0u8; CHUNK_SIZE];
         for file_name in file_names.into_iter() {
-            let mut file_stream = mla_read.get_file(file_name).unwrap().unwrap().data;
+            let mut file_stream = mla_read.get_entry(file_name).unwrap().unwrap().data;
             loop {
                 let read = file_stream.read(&mut chunk).unwrap();
                 let expect: Vec<u8> = Standard.sample_iter(&mut rng_data).take(read).collect();

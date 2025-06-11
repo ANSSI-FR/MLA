@@ -548,7 +548,7 @@ fn list(matches: &ArgMatches) -> Result<(), MlarError> {
         if matches.get_count("verbose") == 0 {
             println!("{fname}");
         } else {
-            let mla_file = mla.get_file(fname)?.expect("Unable to get the file");
+            let mla_file = mla.get_entry(fname)?.expect("Unable to get the file");
             let filename = mla_file.filename;
             let size = mla_file.size.format_size(DECIMAL);
             if matches.get_count("verbose") == 1 {
@@ -627,7 +627,7 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
         }
 
         // Look for the file in the archive
-        let mut sub_file = match mla.get_file(fname.clone()) {
+        let mut sub_file = match mla.get_entry(fname.clone()) {
             Err(err) => {
                 eprintln!(" [!] Error while looking up subfile \"{fname}\" ({err:?})");
                 continue;
@@ -676,7 +676,7 @@ fn cat(matches: &ArgMatches) -> Result<(), MlarError> {
                 if !pat.matches(fname) {
                     continue;
                 }
-                match mla.get_file(fname.to_string()) {
+                match mla.get_entry(fname.to_string()) {
                     Err(err) => {
                         eprintln!(" [!] Error while looking up file \"{fname}\" ({err:?})");
                         continue;
@@ -699,7 +699,7 @@ fn cat(matches: &ArgMatches) -> Result<(), MlarError> {
     } else {
         // Retrieve all the files that are specified
         for fname in files_values {
-            match mla.get_file(fname.to_string()) {
+            match mla.get_entry(fname.to_string()) {
                 Err(err) => {
                     eprintln!(" [!] Error while looking up file \"{fname}\" ({err:?})");
                     continue;
@@ -731,7 +731,7 @@ fn to_tar(matches: &ArgMatches) -> Result<(), MlarError> {
     let mut archive_files: Vec<String> = mla.list_files()?.cloned().collect();
     archive_files.sort();
     for fname in archive_files {
-        let sub_file = match mla.get_file(fname.clone()) {
+        let sub_file = match mla.get_entry(fname.clone()) {
             Err(err) => {
                 eprintln!(" [!] Error while looking up subfile \"{fname}\" ({err:?})");
                 continue;
@@ -782,7 +782,7 @@ fn convert(matches: &ArgMatches) -> Result<(), MlarError> {
     // Convert
     for fname in fnames {
         eprintln!("{fname}");
-        let sub_file = match mla.get_file(fname.clone()) {
+        let sub_file = match mla.get_entry(fname.clone()) {
             Err(err) => {
                 eprintln!("Error while adding {fname} ({err:?})");
                 continue;

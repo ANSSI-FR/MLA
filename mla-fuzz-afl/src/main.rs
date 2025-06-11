@@ -147,7 +147,7 @@ fn run(data: &[u8]) {
     // Get and check file per file
     let empty = Vec::new();
     for fname in &tflist {
-        let mut mla_file = mla_read.get_file(fname.clone()).unwrap().unwrap();
+        let mut mla_file = mla_read.get_entry(fname.clone()).unwrap().unwrap();
         assert_eq!(mla_file.filename, fname.clone());
         let mut buf = Vec::new();
         mla_file.data.read_to_end(&mut buf).unwrap();
@@ -177,7 +177,7 @@ fn run(data: &[u8]) {
     let buf = Cursor::new(dest_w.as_slice());
     let mut mla_read = ArchiveReader::from_config(buf, ArchiveReaderConfig::new()).unwrap();
     for fname in tflist {
-        let mut mla_file = mla_read.get_file(fname.clone()).unwrap().unwrap();
+        let mut mla_file = mla_read.get_entry(fname.clone()).unwrap().unwrap();
         assert_eq!(mla_file.filename, fname.clone());
         let mut buf = Vec::new();
         mla_file.data.read_to_end(&mut buf).unwrap();
@@ -210,7 +210,7 @@ fn run(data: &[u8]) {
         let mut mla_read = ArchiveReader::from_config(buf, ArchiveReaderConfig::new())?;
         let flist = mla_read.list_files()?.cloned().collect::<Vec<String>>();
         for fname in flist {
-            let mut finfo = match mla_read.get_file(fname)? {
+            let mut finfo = match mla_read.get_entry(fname)? {
                 Some(finfo) => finfo,
                 None => continue,
             };

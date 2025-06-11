@@ -244,7 +244,7 @@ mod tests {
         let mut mla_read = ArchiveReader::from_config(buf, ArchiveReaderConfig::new()).unwrap();
         let mut content1 = Vec::new();
         mla_read
-            .get_file("my_file".to_string())
+            .get_entry("my_file".to_string())
             .unwrap()
             .unwrap()
             .data
@@ -253,7 +253,7 @@ mod tests {
         assert_eq!(content1.as_slice(), fake_file.as_slice());
         let mut content2 = Vec::new();
         mla_read
-            .get_file("my_file2".to_string())
+            .get_entry("my_file2".to_string())
             .unwrap()
             .unwrap()
             .data
