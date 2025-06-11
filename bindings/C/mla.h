@@ -48,7 +48,9 @@ enum MLAStatus {
 };
 typedef uint64_t MLAStatus;
 
-typedef void *MLAConfigHandle;
+typedef void *MLAWriterConfigHandle;
+
+typedef void *MLAReaderConfigHandle;
 
 /**
  * Implemented by the developper. Takes a buffer of a certain number of bytes of MLA
@@ -117,44 +119,45 @@ typedef struct ArchiveInfo {
  * return a handle to it
  * `public_keys_pointers` is an array of pointers to public keys in DER format
  */
-MLAStatus create_mla_config_with_public_keys_der(MLAConfigHandle *handle_out,
-                                                 const uint8_t *public_keys_pointers,
-                                                 uintptr_t number_of_public_keys);
+MLAStatus create_mla_writer_config_with_public_keys_der(MLAWriterConfigHandle *handle_out,
+                                                        const uint8_t *public_keys_pointers,
+                                                        uintptr_t number_of_public_keys);
 
 /**
  * Create a new configuration with the given public key(s) in PEM format and
  * return a handle to it
  * `public_keys` is a C string containing concatenated PEM public keys
  */
-MLAStatus create_mla_config_with_public_keys_pem(MLAConfigHandle *handle_out,
-                                                 const char *public_keys);
+MLAStatus create_mla_writer_config_with_public_keys_pem(MLAWriterConfigHandle *handle_out,
+                                                        const char *public_keys);
 
 /**
  * Create a new configuration without encryption and return a handle to it
  */
-MLAStatus create_mla_config_without_encryption(MLAConfigHandle *handle_out);
+MLAStatus create_mla_writer_config_without_encryption(MLAWriterConfigHandle *handle_out);
 
 /**
  * Free `handle_in` and create a handle to same config with given compression level
  * Currently this level can only be an integer N with 0 <= N <= 11,
  * and bigger values cause denser but slower compression.
  */
-MLAStatus mla_config_with_compression_level(MLAConfigHandle *handle_in,
-                                            MLAConfigHandle *handle_out,
-                                            uint32_t level);
+MLAStatus mla_writer_config_with_compression_level(MLAWriterConfigHandle *handle_in,
+                                                   MLAWriterConfigHandle *handle_out,
+                                                   uint32_t level);
 
 /**
  * Free `handle_in` and create a handle to same config without compression
  */
-MLAStatus mla_config_without_compression(MLAConfigHandle *handle_in, MLAConfigHandle *handle_out);
+MLAStatus mla_writer_config_without_compression(MLAWriterConfigHandle *handle_in,
+                                                MLAWriterConfigHandle *handle_out);
 
-MLAStatus create_mla_reader_config_without_encryption(MLAConfigHandle *handle_out);
+MLAStatus create_mla_reader_config_without_encryption(MLAReaderConfigHandle *handle_out);
 
 /**
  * Appends the given private key in DER format to an existing given configuration
  * (referenced by the handle returned by mla_reader_config_new()).
  */
-MLAStatus create_mla_reader_config_with_private_keys_der(MLAConfigHandle *handle_out,
+MLAStatus create_mla_reader_config_with_private_keys_der(MLAReaderConfigHandle *handle_out,
                                                          const uint8_t *private_keys_pointers,
                                                          uintptr_t number_of_private_keys);
 
@@ -162,7 +165,7 @@ MLAStatus create_mla_reader_config_with_private_keys_der(MLAConfigHandle *handle
  * Appends the given private key in DER format to an existing given configuration
  * (referenced by the handle returned by mla_reader_config_new()).
  */
-MLAStatus create_mla_reader_config_with_private_keys_der_accept_unencrypted(MLAConfigHandle *handle_out,
+MLAStatus create_mla_reader_config_with_private_keys_der_accept_unencrypted(MLAReaderConfigHandle *handle_out,
                                                                             const uint8_t *private_keys_pointers,
                                                                             uintptr_t number_of_private_keys);
 
@@ -170,10 +173,10 @@ MLAStatus create_mla_reader_config_with_private_keys_der_accept_unencrypted(MLAC
  * Appends the given private key in PEM format to an existing given configuration
  * (referenced by the handle returned by mla_reader_config_new()).
  */
-MLAStatus create_mla_reader_config_with_private_key_pem_many(MLAConfigHandle *handle_out,
+MLAStatus create_mla_reader_config_with_private_key_pem_many(MLAReaderConfigHandle *handle_out,
                                                              const char *private_key_pem);
 
-MLAStatus create_mla_reader_config_with_private_key_pem_many_accept_unencrypted(MLAConfigHandle *handle_out,
+MLAStatus create_mla_reader_config_with_private_key_pem_many_accept_unencrypted(MLAReaderConfigHandle *handle_out,
                                                                                 const char *private_key_pem);
 
 /**
@@ -183,7 +186,7 @@ MLAStatus create_mla_reader_config_with_private_key_pem_many_accept_unencrypted(
  * written. The context pointer can be used to hold any information, and is passed
  * as an argument when any of the two callbacks are called.
  */
-MLAStatus mla_archive_new(MLAConfigHandle *config,
+MLAStatus mla_archive_new(MLAWriterConfigHandle *config,
                           MLAWriteCallback write_callback,
                           MLAFlushCallback flush_callback,
                           void *context,
@@ -239,7 +242,7 @@ MLAStatus mla_archive_close(MLAArchiveHandle *archive);
  * file_callback is used to convert each archive file's name to pathes where extract the data
  * The caller is responsible of all security checks related to callback provided paths
  */
-MLAStatus mla_roarchive_extract(MLAConfigHandle *config,
+MLAStatus mla_roarchive_extract(MLAReaderConfigHandle *config,
                                 MlaReadCallback read_callback,
                                 MlaSeekCallback seek_callback,
                                 MlaFileCalback file_callback,

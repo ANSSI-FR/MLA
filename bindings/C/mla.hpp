@@ -2,12 +2,13 @@
 
 #pragma once
 
-#include <stdarg.h>
-#include <stdbool.h>
-#include <stdint.h>
-#include <stdlib.h>
+#include <cstdarg>
+#include <cstdint>
+#include <cstdlib>
+#include <ostream>
+#include <new>
 
-enum MLAStatus {
+enum class MLAStatus : uint64_t {
   MLA_STATUS_SUCCESS = 0,
   MLA_STATUS_IO_ERROR = 65536,
   MLA_STATUS_WRONG_MAGIC = 131072,
@@ -46,208 +47,168 @@ enum MLAStatus {
   MLA_STATUS_ENCRYPTION_ASKED_BUT_NOT_MARKED_PRESENT = 1572864,
   MLA_STATUS_MLA_KEY_PARSER_ERROR = 15859712,
 };
-typedef uint64_t MLAStatus;
 
-typedef void *MLAConfigHandle;
+using MLAWriterConfigHandle = void*;
 
-/**
- * Implemented by the developper. Takes a buffer of a certain number of bytes of MLA
- * file, and does whatever it wants with it (e.g. write it to a file, to a HTTP stream, etc.)
- * If successful, returns 0 and sets the number of bytes actually written to its last
- * parameter. Otherwise, returns an error code on failure.
- */
-typedef int32_t (*MLAWriteCallback)(const uint8_t *buffer,
+using MLAReaderConfigHandle = void*;
+
+/// Implemented by the developper. Takes a buffer of a certain number of bytes of MLA
+/// file, and does whatever it wants with it (e.g. write it to a file, to a HTTP stream, etc.)
+/// If successful, returns 0 and sets the number of bytes actually written to its last
+/// parameter. Otherwise, returns an error code on failure.
+using MLAWriteCallback = int32_t(*)(const uint8_t *buffer,
                                     uint32_t buffer_len,
                                     void *context,
                                     uint32_t *bytes_written);
 
-/**
- * Implemented by the developper. Should ask the underlying medium (file buffering, HTTP
- * buffering, etc.) to flush any internal buffer.
- */
-typedef int32_t (*MLAFlushCallback)(void *context);
+/// Implemented by the developper. Should ask the underlying medium (file buffering, HTTP
+/// buffering, etc.) to flush any internal buffer.
+using MLAFlushCallback = int32_t(*)(void *context);
 
-typedef void *MLAArchiveHandle;
+using MLAArchiveHandle = void*;
 
-typedef void *MLAArchiveFileHandle;
+using MLAArchiveFileHandle = void*;
 
-/**
- * Implemented by the developper. Read between 0 and buffer_len into buffer.
- * If successful, returns 0 and sets the number of bytes actually read to its last
- * parameter. Otherwise, returns an error code on failure.
- */
-typedef int32_t (*MlaReadCallback)(uint8_t *buffer,
+/// Implemented by the developper. Read between 0 and buffer_len into buffer.
+/// If successful, returns 0 and sets the number of bytes actually read to its last
+/// parameter. Otherwise, returns an error code on failure.
+using MlaReadCallback = int32_t(*)(uint8_t *buffer,
                                    uint32_t buffer_len,
                                    void *context,
                                    uint32_t *bytes_read);
 
-/**
- * Implemented by the developper. Seek in the source data.
- * If successful, returns 0 and sets the new position to its last
- * parameter. Otherwise, returns an error code on failure.
- */
-typedef int32_t (*MlaSeekCallback)(int64_t offset, int32_t whence, void *context, uint64_t *new_pos);
+/// Implemented by the developper. Seek in the source data.
+/// If successful, returns 0 and sets the new position to its last
+/// parameter. Otherwise, returns an error code on failure.
+using MlaSeekCallback = int32_t(*)(int64_t offset, int32_t whence, void *context, uint64_t *new_pos);
 
-typedef struct FileWriter {
+struct FileWriter {
   MLAWriteCallback write_callback;
   MLAFlushCallback flush_callback;
   void *context;
-} FileWriter;
+};
 
-/**
- * Implemented by the developper
- * Return the desired output path which is expected to be writable.
- * The callback developper is responsible all security checks and parent path creation.
- */
-typedef int32_t (*MlaFileCalback)(void *context,
+/// Implemented by the developper
+/// Return the desired output path which is expected to be writable.
+/// The callback developper is responsible all security checks and parent path creation.
+using MlaFileCalback = int32_t(*)(void *context,
                                   const uint8_t *filename,
                                   uintptr_t filename_len,
-                                  struct FileWriter *file_writer);
+                                  FileWriter *file_writer);
 
-/**
- * Structure for MLA archive info
- */
-typedef struct ArchiveInfo {
+/// Structure for MLA archive info
+struct ArchiveInfo {
   uint32_t version;
   uint8_t layers;
-} ArchiveInfo;
+};
 
-/**
- * Create a new configuration with the given public key(s) in DER format and
- * return a handle to it
- * `public_keys_pointers` is an array of pointers to public keys in DER format
- */
-MLAStatus create_mla_config_with_public_keys_der(MLAConfigHandle *handle_out,
-                                                 const uint8_t *public_keys_pointers,
-                                                 uintptr_t number_of_public_keys);
+extern "C" {
 
-/**
- * Create a new configuration with the given public key(s) in PEM format and
- * return a handle to it
- * `public_keys` is a C string containing concatenated PEM public keys
- */
-MLAStatus create_mla_config_with_public_keys_pem(MLAConfigHandle *handle_out,
-                                                 const char *public_keys);
+/// Create a new configuration with the given public key(s) in DER format and
+/// return a handle to it
+/// `public_keys_pointers` is an array of pointers to public keys in DER format
+MLAStatus create_mla_writer_config_with_public_keys_der(MLAWriterConfigHandle *handle_out,
+                                                        const uint8_t *public_keys_pointers,
+                                                        uintptr_t number_of_public_keys);
 
-/**
- * Create a new configuration without encryption and return a handle to it
- */
-MLAStatus create_mla_config_without_encryption(MLAConfigHandle *handle_out);
+/// Create a new configuration with the given public key(s) in PEM format and
+/// return a handle to it
+/// `public_keys` is a C string containing concatenated PEM public keys
+MLAStatus create_mla_writer_config_with_public_keys_pem(MLAWriterConfigHandle *handle_out,
+                                                        const char *public_keys);
 
-/**
- * Free `handle_in` and create a handle to same config with given compression level
- * Currently this level can only be an integer N with 0 <= N <= 11,
- * and bigger values cause denser but slower compression.
- */
-MLAStatus mla_config_with_compression_level(MLAConfigHandle *handle_in,
-                                            MLAConfigHandle *handle_out,
-                                            uint32_t level);
+/// Create a new configuration without encryption and return a handle to it
+MLAStatus create_mla_writer_config_without_encryption(MLAWriterConfigHandle *handle_out);
 
-/**
- * Free `handle_in` and create a handle to same config without compression
- */
-MLAStatus mla_config_without_compression(MLAConfigHandle *handle_in, MLAConfigHandle *handle_out);
+/// Free `handle_in` and create a handle to same config with given compression level
+/// Currently this level can only be an integer N with 0 <= N <= 11,
+/// and bigger values cause denser but slower compression.
+MLAStatus mla_writer_config_with_compression_level(MLAWriterConfigHandle *handle_in,
+                                                   MLAWriterConfigHandle *handle_out,
+                                                   uint32_t level);
 
-MLAStatus create_mla_reader_config_without_encryption(MLAConfigHandle *handle_out);
+/// Free `handle_in` and create a handle to same config without compression
+MLAStatus mla_writer_config_without_compression(MLAWriterConfigHandle *handle_in,
+                                                MLAWriterConfigHandle *handle_out);
 
-/**
- * Appends the given private key in DER format to an existing given configuration
- * (referenced by the handle returned by mla_reader_config_new()).
- */
-MLAStatus create_mla_reader_config_with_private_keys_der(MLAConfigHandle *handle_out,
+MLAStatus create_mla_reader_config_without_encryption(MLAReaderConfigHandle *handle_out);
+
+/// Appends the given private key in DER format to an existing given configuration
+/// (referenced by the handle returned by mla_reader_config_new()).
+MLAStatus create_mla_reader_config_with_private_keys_der(MLAReaderConfigHandle *handle_out,
                                                          const uint8_t *private_keys_pointers,
                                                          uintptr_t number_of_private_keys);
 
-/**
- * Appends the given private key in DER format to an existing given configuration
- * (referenced by the handle returned by mla_reader_config_new()).
- */
-MLAStatus create_mla_reader_config_with_private_keys_der_accept_unencrypted(MLAConfigHandle *handle_out,
+/// Appends the given private key in DER format to an existing given configuration
+/// (referenced by the handle returned by mla_reader_config_new()).
+MLAStatus create_mla_reader_config_with_private_keys_der_accept_unencrypted(MLAReaderConfigHandle *handle_out,
                                                                             const uint8_t *private_keys_pointers,
                                                                             uintptr_t number_of_private_keys);
 
-/**
- * Appends the given private key in PEM format to an existing given configuration
- * (referenced by the handle returned by mla_reader_config_new()).
- */
-MLAStatus create_mla_reader_config_with_private_key_pem_many(MLAConfigHandle *handle_out,
+/// Appends the given private key in PEM format to an existing given configuration
+/// (referenced by the handle returned by mla_reader_config_new()).
+MLAStatus create_mla_reader_config_with_private_key_pem_many(MLAReaderConfigHandle *handle_out,
                                                              const char *private_key_pem);
 
-MLAStatus create_mla_reader_config_with_private_key_pem_many_accept_unencrypted(MLAConfigHandle *handle_out,
+MLAStatus create_mla_reader_config_with_private_key_pem_many_accept_unencrypted(MLAReaderConfigHandle *handle_out,
                                                                                 const char *private_key_pem);
 
-/**
- * Open a new MLA archive using the given configuration, which is consumed and freed
- * (its handle cannot be reused to create another archive). The archive is streamed
- * through the write_callback, and flushed at least at the end when the last byte is
- * written. The context pointer can be used to hold any information, and is passed
- * as an argument when any of the two callbacks are called.
- */
-MLAStatus mla_archive_new(MLAConfigHandle *config,
+/// Open a new MLA archive using the given configuration, which is consumed and freed
+/// (its handle cannot be reused to create another archive). The archive is streamed
+/// through the write_callback, and flushed at least at the end when the last byte is
+/// written. The context pointer can be used to hold any information, and is passed
+/// as an argument when any of the two callbacks are called.
+MLAStatus mla_archive_new(MLAWriterConfigHandle *config,
                           MLAWriteCallback write_callback,
                           MLAFlushCallback flush_callback,
                           void *context,
                           MLAArchiveHandle *handle_out);
 
-/**
- * Open a new file in the archive identified by the handle returned by
- * mla_archive_new(). The given name must be a unique NULL-terminated string.
- * Returns MLA_STATUS_SUCCESS on success, or an error code.
- */
+/// Open a new file in the archive identified by the handle returned by
+/// mla_archive_new(). The given name must be a unique NULL-terminated string.
+/// Returns MLA_STATUS_SUCCESS on success, or an error code.
 MLAStatus mla_archive_file_new(MLAArchiveHandle archive,
                                const char *file_name,
                                MLAArchiveFileHandle *handle_out);
 
-/**
- * Append data to the end of an already opened file identified by the
- * handle returned by mla_archive_file_new(). Returns MLA_STATUS_SUCCESS on
- * success, or an error code.
- */
+/// Append data to the end of an already opened file identified by the
+/// handle returned by mla_archive_file_new(). Returns MLA_STATUS_SUCCESS on
+/// success, or an error code.
 MLAStatus mla_archive_file_append(MLAArchiveHandle archive,
                                   MLAArchiveFileHandle file,
                                   const uint8_t *buffer,
                                   uint64_t length);
 
-/**
- * Flush any data to be written buffered in MLA to the write_callback,
- * then calls the flush_callback given during archive initialization.
- * Returns MLA_STATUS_SUCCESS on success, or an error code.
- */
+/// Flush any data to be written buffered in MLA to the write_callback,
+/// then calls the flush_callback given during archive initialization.
+/// Returns MLA_STATUS_SUCCESS on success, or an error code.
 MLAStatus mla_archive_flush(MLAArchiveHandle archive);
 
-/**
- * Close the given file, which queues its End-Of-File marker and integrity
- * checks to be written to the callback. Must be called before closing the
- * archive. The file handle must be passed as a mutable reference so it is
- * cleared and cannot be reused after free by accident. Returns
- * MLA_STATUS_SUCCESS on success, or an error code.
- */
+/// Close the given file, which queues its End-Of-File marker and integrity
+/// checks to be written to the callback. Must be called before closing the
+/// archive. The file handle must be passed as a mutable reference so it is
+/// cleared and cannot be reused after free by accident. Returns
+/// MLA_STATUS_SUCCESS on success, or an error code.
 MLAStatus mla_archive_file_close(MLAArchiveHandle archive, MLAArchiveFileHandle *file);
 
-/**
- * Close the given archive (must only be called after all files have been
- * closed), flush the output and free any allocated resource. The archive
- * handle must be passed as a mutable reference so it is cleared and
- * cannot be reused after free by accident. Returns MLA_STATUS_SUCCESS on success,
- * or an error code.
- */
+/// Close the given archive (must only be called after all files have been
+/// closed), flush the output and free any allocated resource. The archive
+/// handle must be passed as a mutable reference so it is cleared and
+/// cannot be reused after free by accident. Returns MLA_STATUS_SUCCESS on success,
+/// or an error code.
 MLAStatus mla_archive_close(MLAArchiveHandle *archive);
 
-/**
- * Open and extract an existing MLA archive, using the given configuration.
- * read_callback and seek_callback are used to read the archive data
- * file_callback is used to convert each archive file's name to pathes where extract the data
- * The caller is responsible of all security checks related to callback provided paths
- */
-MLAStatus mla_roarchive_extract(MLAConfigHandle *config,
+/// Open and extract an existing MLA archive, using the given configuration.
+/// read_callback and seek_callback are used to read the archive data
+/// file_callback is used to convert each archive file's name to pathes where extract the data
+/// The caller is responsible of all security checks related to callback provided paths
+MLAStatus mla_roarchive_extract(MLAReaderConfigHandle *config,
                                 MlaReadCallback read_callback,
                                 MlaSeekCallback seek_callback,
                                 MlaFileCalback file_callback,
                                 void *context);
 
-/**
- * Get info on an existing MLA archive
- */
-MLAStatus mla_roarchive_info(MlaReadCallback read_callback,
-                             void *context,
-                             struct ArchiveInfo *info_out);
+/// Get info on an existing MLA archive
+MLAStatus mla_roarchive_info(MlaReadCallback read_callback, void *context, ArchiveInfo *info_out);
+
+}  // extern "C"
