@@ -562,8 +562,8 @@ def test_write_file_to_file_chunk_size(basic_archive):
         assert output.read() == FILES["file1"]
 
 
-def test_add_file_from_str():
-    "Test archive.add_file_from(), using the String input version"
+def test_add_entry_from_str():
+    "Test archive.add_entry_from(), using the String input version"
     # Create the archive
     path = tempfile.mkstemp(suffix=".mla")[1]
     with MLAFile(path, "w", config=mla.WriterConfig(layers=0)) as archive:
@@ -573,7 +573,7 @@ def test_add_file_from_str():
             with open(fname, "wb") as f:
                 f.write(data)
             # Import the file
-            archive.add_file_from(name, fname)
+            archive.add_entry_from(name, fname)
 
     # Read the archive
     with MLAFile(path) as archive:
@@ -582,8 +582,8 @@ def test_add_file_from_str():
             assert archive[name] == data
 
 
-def test_add_file_from_io():
-    "Test archive.add_file_from(), using the IO input version"
+def test_add_entry_from_io():
+    "Test archive.add_entry_from(), using the IO input version"
     # Create the archive
     path = tempfile.mkstemp(suffix=".mla")[1]
     with MLAFile(path, "w", config=mla.WriterConfig(layers=0)) as archive:
@@ -591,7 +591,7 @@ def test_add_file_from_io():
             # Use a buffered IO
             f = io.BytesIO(data)
             # Import the data
-            archive.add_file_from(name, f)
+            archive.add_entry_from(name, f)
 
     # Read the archive
     with MLAFile(path) as archive:
@@ -600,15 +600,15 @@ def test_add_file_from_io():
             assert archive[name] == data
 
 
-def test_add_file_from_io_chunk_size():
-    "Test archive.add_file_from(), using the IO input version"
+def test_add_entry_from_io_chunk_size():
+    "Test archive.add_entry_from(), using the IO input version"
     for chunk_size in [1, 2]:
         # Create the archive
         path = tempfile.mkstemp(suffix=".mla")[1]
         data = FILES["file1"]
         with MLAFile(path, "w", config=mla.WriterConfig(layers=0)) as archive:
             src = BytesIOCounter(data)
-            archive.add_file_from("file1", src, chunk_size=chunk_size)
+            archive.add_entry_from("file1", src, chunk_size=chunk_size)
 
             # Check the number of calls
             if chunk_size == 1:

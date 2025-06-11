@@ -497,7 +497,7 @@ fn add_file_or_dir(mla: &mut ArchiveWriter<OutputTypes>, path: &Path) -> Result<
         let file = File::open(path)?;
         let length = file.metadata()?.len();
         eprintln!("{filename}");
-        mla.add_file(&filename, length, file)?;
+        mla.add_entry(&filename, length, file)?;
     }
     Ok(())
 }
@@ -793,7 +793,7 @@ fn convert(matches: &ArgMatches) -> Result<(), MlarError> {
             }
             Ok(Some(mla)) => mla,
         };
-        mla_out.add_file(&sub_file.filename, sub_file.size, sub_file.data)?;
+        mla_out.add_entry(&sub_file.filename, sub_file.size, sub_file.data)?;
     }
     mla_out.finalize().expect("Finalization error");
 
