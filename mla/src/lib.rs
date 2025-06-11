@@ -513,7 +513,7 @@ impl TryFrom<u8> for ArchiveFileBlockType {
 use format::ArchiveFileBlock;
 
 #[derive(Debug, Clone)]
-pub enum ArchiveWriterState {
+enum ArchiveWriterState {
     /// Initialized, with files opened
     OpenedFiles {
         ids: Vec<ArchiveFileID>,
