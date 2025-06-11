@@ -875,7 +875,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
 // -------- Reader --------
 
 #[derive(Debug)]
-pub struct ArchiveFile<T: Read> {
+pub struct ArchiveEntry<T: Read> {
     /// File inside a MLA Archive
     pub filename: String,
     pub data: T,
@@ -1102,7 +1102,7 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
     pub fn get_file(
         &mut self,
         filename: String,
-    ) -> Result<Option<ArchiveFile<ArchiveEntryDataReader<Box<dyn 'b + LayerReader<'b, R>>>>>, Error>
+    ) -> Result<Option<ArchiveEntry<ArchiveEntryDataReader<Box<dyn 'b + LayerReader<'b, R>>>>>, Error>
     {
         if let Some(ArchiveFooter { files_info }) = &self.metadata {
             // Get file relative information
@@ -1118,7 +1118,7 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
 
             // Instantiate the file representation
             let reader = ArchiveEntryDataReader::new(&mut self.src, &file_info.offsets)?;
-            Ok(Some(ArchiveFile {
+            Ok(Some(ArchiveEntry {
                 filename,
                 data: reader,
                 size: file_info.size,
