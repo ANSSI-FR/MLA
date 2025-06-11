@@ -1,4 +1,4 @@
-use crate::ArchiveFileID;
+use crate::ArchiveEntryId;
 use hkdf::InvalidLength;
 use hpke::HpkeError;
 use std::error;
@@ -141,15 +141,15 @@ pub enum FailSafeReadError {
     /// An error occurs in the middle of a file
     ErrorInFile(io::Error, String),
     /// A file ID is being reused
-    ArchiveFileIDReuse(ArchiveFileID),
+    ArchiveFileIDReuse(ArchiveEntryId),
     /// A filename is being reused
     FilenameReuse(String),
     /// Data for a file already closed
-    ArchiveFileIDAlreadyClose(ArchiveFileID),
+    ArchiveFileIDAlreadyClose(ArchiveEntryId),
     /// Content for an unknown file
-    ContentForUnknownFile(ArchiveFileID),
+    ContentForUnknownFile(ArchiveEntryId),
     /// Termination of an unknwown file
-    EOFForUnknownFile(ArchiveFileID),
+    EOFForUnknownFile(ArchiveEntryId),
     /// Wraps an already existing error and indicates which files are not
     /// finished (a file can be finished but uncompleted)
     UnfinishedFiles {

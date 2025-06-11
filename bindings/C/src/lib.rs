@@ -9,7 +9,7 @@ use mla::errors::ConfigError;
 use mla::errors::Error as MLAError;
 use mla::format::ArchiveHeader;
 use mla::helpers::linear_extract;
-use mla::ArchiveFileID;
+use mla::ArchiveEntryId;
 use mla::ArchiveReader;
 use mla::ArchiveWriter;
 use std::collections::HashMap;
@@ -521,7 +521,7 @@ pub extern "C" fn mla_archive_file_append(
     let slice = unsafe { std::slice::from_raw_parts(buffer, length_usize) };
 
     let mut archive = unsafe { Box::from_raw(archive as *mut ArchiveWriter<CallbackOutput>) };
-    let file = unsafe { Box::from_raw(file as *mut ArchiveFileID) };
+    let file = unsafe { Box::from_raw(file as *mut ArchiveEntryId) };
     let res = match archive.append_file_content(*file, length, slice) {
         Ok(_) => MLAStatus::Success,
         Err(e) => MLAStatus::from(e),
@@ -573,7 +573,7 @@ pub extern "C" fn mla_archive_file_close(
     }
 
     let mut archive = unsafe { Box::from_raw(archive as *mut ArchiveWriter<CallbackOutput>) };
-    let file = unsafe { Box::from_raw(handle as *mut ArchiveFileID) };
+    let file = unsafe { Box::from_raw(handle as *mut ArchiveEntryId) };
 
     let res = match archive.end_file(*file) {
         Ok(_) => MLAStatus::Success,

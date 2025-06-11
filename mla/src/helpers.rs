@@ -2,7 +2,7 @@ use crate::layers::traits::InnerReaderTrait;
 
 use super::layers::traits::InnerWriterTrait;
 /// Helpers for common operation with MLA Archives
-use super::{ArchiveFileBlock, ArchiveFileID, ArchiveReader, ArchiveWriter, Error};
+use super::{ArchiveEntryId, ArchiveFileBlock, ArchiveReader, ArchiveWriter, Error};
 use std::collections::HashMap;
 use std::hash::BuildHasher;
 use std::io::{self, Read, Seek, Write};
@@ -34,7 +34,7 @@ pub fn linear_extract<W1: InnerWriterTrait, R: InnerReaderTrait, S: BuildHasher>
 
     // Associate an ID in the archive to the corresponding filename
     // Do not directly associate to the writer to keep an easier fn API
-    let mut id2filename: HashMap<ArchiveFileID, String> = HashMap::new();
+    let mut id2filename: HashMap<ArchiveEntryId, String> = HashMap::new();
 
     'read_block: loop {
         match ArchiveFileBlock::from(&mut src)? {
@@ -82,11 +82,11 @@ pub fn linear_extract<W1: InnerWriterTrait, R: InnerReaderTrait, S: BuildHasher>
 /// facilities to perform multiples block addition in the archive
 pub struct StreamWriter<'a, 'b, W: InnerWriterTrait> {
     archive: &'b mut ArchiveWriter<'a, W>,
-    file_id: ArchiveFileID,
+    file_id: ArchiveEntryId,
 }
 
 impl<'a, 'b, W: InnerWriterTrait> StreamWriter<'a, 'b, W> {
-    pub fn new(archive: &'b mut ArchiveWriter<'a, W>, file_id: ArchiveFileID) -> Self {
+    pub fn new(archive: &'b mut ArchiveWriter<'a, W>, file_id: ArchiveEntryId) -> Self {
         Self { archive, file_id }
     }
 }

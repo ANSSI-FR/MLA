@@ -7,7 +7,7 @@ use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
 pub use crate::crypto::hybrid::HybridRecipientEncapsulatedKey;
 use crate::{
-    ArchiveFileBlockType, ArchiveFileID, BINCODE_CONFIG, FILENAME_MAX_SIZE, MLA_FORMAT_VERSION,
+    ArchiveEntryId, ArchiveFileBlockType, BINCODE_CONFIG, FILENAME_MAX_SIZE, MLA_FORMAT_VERSION,
     MLA_MAGIC, Sha256Hash, config::ArchivePersistentConfig, errors::Error,
 };
 pub struct ArchiveHeader {
@@ -84,7 +84,10 @@ pub enum ArchiveFileBlock<T: Read> {
     /// The `id` is used to keep track internally of which file a `ArchiveFileBlock` belongs to
     ///
     /// Start of a file
-    FileStart { filename: String, id: ArchiveFileID },
+    FileStart {
+        filename: String,
+        id: ArchiveEntryId,
+    },
     /// File content.
     /// (length, data) is used instead of a Vec to avoid having the whole data
     /// in memory. On parsing, the data can be set to None. It indicates to the
@@ -93,10 +96,13 @@ pub enum ArchiveFileBlock<T: Read> {
     FileContent {
         length: u64,
         data: Option<T>,
-        id: ArchiveFileID,
+        id: ArchiveEntryId,
     },
     /// End of file (last block) - contains the SHA256 of the whole file
-    EndOfFile { id: ArchiveFileID, hash: Sha256Hash },
+    EndOfFile {
+        id: ArchiveEntryId,
+        hash: Sha256Hash,
+    },
     /// End of archive data (no more files after that)
     EndOfArchiveData,
 }

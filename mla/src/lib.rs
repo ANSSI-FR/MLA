@@ -415,7 +415,7 @@ pub(crate) const BINCODE_CONFIG: bincode::config::Configuration<
 
 use format::Layers;
 
-pub type ArchiveFileID = u64;
+pub type ArchiveEntryId = u64;
 
 // -------- MLA Format Footer --------
 
@@ -432,8 +432,8 @@ impl ArchiveFooter {
     /// Performs zero-copy serialization of a footer
     fn serialize_into<W: Write>(
         mut dest: W,
-        files_info: &HashMap<String, ArchiveFileID>,
-        ids_info: &HashMap<ArchiveFileID, FileInfo>,
+        files_info: &HashMap<String, ArchiveEntryId>,
+        ids_info: &HashMap<ArchiveEntryId, FileInfo>,
     ) -> Result<(), Error> {
         // Combine `files_info` and `ids_info` to ArchiveFooter.files_info,
         // avoiding copies (only references)
@@ -516,8 +516,8 @@ use format::ArchiveFileBlock;
 enum ArchiveWriterState {
     /// Initialized, with files opened
     OpenedFiles {
-        ids: Vec<ArchiveFileID>,
-        hashes: HashMap<ArchiveFileID, Sha256>,
+        ids: Vec<ArchiveEntryId>,
+        hashes: HashMap<ArchiveEntryId, Sha256>,
     },
     /// File finalized, no more change allowed
     Finalized,
@@ -527,7 +527,7 @@ impl ArchiveWriterState {
     /// Wrap a `impl Read` with hash updating, corresponding to the file identified by `id`
     fn wrap_with_hash<R: Read>(
         &mut self,
-        id: ArchiveFileID,
+        id: ArchiveEntryId,
         src: R,
     ) -> Result<HashWrapperReader<R>, Error> {
         let hash = match self {
@@ -611,7 +611,7 @@ pub struct ArchiveWriter<'a, W: 'a + InnerWriterTrait> {
     /// Filename -> Corresponding ArchiveFileID
     ///
     /// This is done to keep a quick check for filename existence
-    files_info: HashMap<String, ArchiveFileID>,
+    files_info: HashMap<String, ArchiveEntryId>,
     /// ID -> Corresponding FileInfo
     ///
     /// File chunks identify their relative file using the `ArchiveFileID`.
@@ -620,11 +620,11 @@ pub struct ArchiveWriter<'a, W: 'a + InnerWriterTrait> {
     /// String, thus increasing memory footprint.
     /// These hashmaps are actually merged at the last moment, on footer
     /// serialization
-    ids_info: HashMap<ArchiveFileID, FileInfo>,
+    ids_info: HashMap<ArchiveEntryId, FileInfo>,
     /// Next file id to use
-    next_id: ArchiveFileID,
+    next_id: ArchiveEntryId,
     /// Current file being written (for continuous block detection)
-    current_id: ArchiveFileID,
+    current_id: ArchiveEntryId,
 }
 
 // This is an unstable feature for now (`Vec.remove_item`), use a function
@@ -722,7 +722,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
 
     /// Add the current offset to the corresponding list if the file id is not
     /// the current one, ie. if blocks are not continuous
-    fn mark_continuous_block(&mut self, id: ArchiveFileID) -> Result<(), Error> {
+    fn mark_continuous_block(&mut self, id: ArchiveEntryId) -> Result<(), Error> {
         if id != self.current_id {
             let offset = self.dest.position();
             match self.ids_info.get_mut(&id) {
@@ -739,7 +739,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
     }
 
     /// Set the EoF offset to the current offset for the corresponding file id
-    fn mark_eof(&mut self, id: ArchiveFileID) -> Result<(), Error> {
+    fn mark_eof(&mut self, id: ArchiveEntryId) -> Result<(), Error> {
         let offset = self.dest.position();
         match self.ids_info.get_mut(&id) {
             Some(file_info) => file_info.eof_offset = offset,
@@ -753,7 +753,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
     }
 
     /// Add the current block size to the total size of the corresponding file id
-    fn extend_file_size(&mut self, id: ArchiveFileID, block_size: u64) -> Result<(), Error> {
+    fn extend_file_size(&mut self, id: ArchiveEntryId, block_size: u64) -> Result<(), Error> {
         match self.ids_info.get_mut(&id) {
             Some(file_info) => file_info.size += block_size,
             None => {
@@ -765,7 +765,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         Ok(())
     }
 
-    pub fn start_file(&mut self, filename: &str) -> Result<ArchiveFileID, Error> {
+    pub fn start_file(&mut self, filename: &str) -> Result<ArchiveEntryId, Error> {
         check_state!(self.state, OpenedFiles);
 
         if self.files_info.contains_key(filename) {
@@ -811,7 +811,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
 
     pub fn append_file_content<U: Read>(
         &mut self,
-        id: ArchiveFileID,
+        id: ArchiveEntryId,
         size: u64,
         src: U,
     ) -> Result<(), Error> {
@@ -834,7 +834,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         .dump(&mut self.dest)
     }
 
-    pub fn end_file(&mut self, id: ArchiveFileID) -> Result<(), Error> {
+    pub fn end_file(&mut self, id: ArchiveEntryId) -> Result<(), Error> {
         check_state_file_opened!(&self.state, &id);
 
         let hash = match &mut self.state {
@@ -896,7 +896,7 @@ pub struct ArchiveEntryDataReader<'a, R: Read + Seek> {
     src: &'a mut R,
     state: ArchiveEntryDataReaderState,
     /// id of the File being read
-    id: ArchiveFileID,
+    id: ArchiveEntryId,
     /// position in `offsets` of the last offset used
     current_offset: usize,
     /// List of offsets of continuous blocks corresponding to where the file can be read
@@ -1196,13 +1196,13 @@ impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
 
         // Associate an id retrieved from the archive to repair, to the
         // corresponding output file id
-        let mut id_failsafe2id_output: HashMap<ArchiveFileID, ArchiveFileID> = HashMap::new();
+        let mut id_failsafe2id_output: HashMap<ArchiveEntryId, ArchiveEntryId> = HashMap::new();
         // Associate an id retrieved from the archive to corresponding filename
-        let mut id_failsafe2filename: HashMap<ArchiveFileID, String> = HashMap::new();
+        let mut id_failsafe2filename: HashMap<ArchiveEntryId, String> = HashMap::new();
         // List of IDs from the archive already fully added
         let mut id_failsafe_done = Vec::new();
         // Associate an id retrieved from the archive with its ongoing Hash
-        let mut id_failsafe2hash: HashMap<ArchiveFileID, Sha256> = HashMap::new();
+        let mut id_failsafe2hash: HashMap<ArchiveEntryId, Sha256> = HashMap::new();
 
         'read_block: loop {
             match ArchiveFileBlock::from(&mut self.src) {
@@ -1592,8 +1592,8 @@ pub(crate) mod tests {
         HybridPrivateKey,
         HybridPublicKey,
         Vec<(String, Vec<u8>)>,
-        HashMap<String, ArchiveFileID>,
-        HashMap<ArchiveFileID, FileInfo>,
+        HashMap<String, ArchiveEntryId>,
+        HashMap<ArchiveEntryId, FileInfo>,
     ) {
         // Build an archive with 3 files
         let file = Vec::new();

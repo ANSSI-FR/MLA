@@ -9,7 +9,7 @@ use std::io::{self, Cursor, Read, Write};
 
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
 use mla::errors::{Error, FailSafeReadError};
-use mla::{ArchiveFailSafeReader, ArchiveFileID, ArchiveReader, ArchiveWriter, format::Layers};
+use mla::{ArchiveEntryId, ArchiveFailSafeReader, ArchiveReader, ArchiveWriter, format::Layers};
 
 use std::collections::HashMap;
 
@@ -66,7 +66,7 @@ fn run(data: &[u8]) {
         .add_public_keys(&[public_key]);
     let mut mla = ArchiveWriter::from_config(&mut buf, config).unwrap();
 
-    let mut num2id: HashMap<u8, ArchiveFileID> = HashMap::new();
+    let mut num2id: HashMap<u8, ArchiveEntryId> = HashMap::new();
     let mut filename2content: HashMap<String, Vec<u8>> = HashMap::new();
     for part in test_case.parts {
         let num = {
