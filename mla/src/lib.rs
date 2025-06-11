@@ -484,9 +484,9 @@ impl ArchiveHeader {
 
 // -------- MLA Format Footer --------
 
-pub struct ArchiveFooter {
+struct ArchiveFooter {
     /// Filename -> Corresponding FileInfo
-    pub files_info: HashMap<String, FileInfo>,
+    files_info: HashMap<String, FileInfo>,
 }
 
 impl ArchiveFooter {
@@ -1176,13 +1176,13 @@ impl<T: Read + Seek> Read for BlocksToFileReader<'_, T> {
 
 #[derive(Encode, Decode)]
 #[cfg_attr(test, derive(PartialEq, Eq, Debug, Clone))]
-pub struct FileInfo {
+pub(crate) struct FileInfo {
     /// File information to save in the footer
     ///
     /// Offsets of continuous chunks of `ArchiveFileBlock`
     offsets: Vec<u64>,
     /// Size of the file, in bytes
-    pub size: u64,
+    size: u64,
     /// Offset of the ArchiveFileBlock::EndOfFile
     ///
     /// This offset is used to retrieve information from the EoF tag, such as
