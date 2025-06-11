@@ -1,6 +1,7 @@
 use crate::layers::traits::InnerReaderTrait;
 
-use super::layers::traits::InnerWriterTrait;
+pub use super::layers::traits::InnerWriterTrait;
+
 /// Helpers for common operation with MLA Archives
 use super::{ArchiveEntryId, ArchiveFileBlock, ArchiveReader, ArchiveWriter, Error};
 use std::collections::HashMap;
