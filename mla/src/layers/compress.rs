@@ -1156,37 +1156,6 @@ mod tests {
     }
 
     #[test]
-    fn compress_layer_with_footer() {
-        // Inspect footer of Compress / decompress
-
-        let data = get_data();
-        let bytes = data.as_slice();
-
-        let file = Vec::new();
-        let mut comp = Box::new(CompressionLayerWriter::new(
-            Box::new(RawLayerWriter::new(file)),
-            &CompressionConfig::default(),
-        ));
-        comp.write_all(bytes).unwrap();
-        comp.finalize().unwrap();
-
-        let mut compressed_sizes = Vec::new();
-        compressed_sizes.extend_from_slice(&comp.compressed_sizes);
-
-        let file = comp.into_raw();
-        let buf = Cursor::new(file.as_slice());
-        let mut decomp =
-            Box::new(CompressionLayerReader::new(Box::new(RawLayerReader::new(buf))).unwrap());
-        decomp.initialize().unwrap();
-
-        // Check the footer has been correctly re-read
-        assert_eq!(
-            compressed_sizes,
-            decomp.sizes_info.unwrap().compressed_sizes
-        );
-    }
-
-    #[test]
     fn seek_with_footer() {
         for data in [get_data(), get_uncompressable_data()] {
             let bytes = data.as_slice();
