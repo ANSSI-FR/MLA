@@ -39,6 +39,7 @@ const MLKEM_1024_OID: Oid<'static> = oid!(1.2.250.1.223.201);
 const MLKEM_1024_PUBKEY_SIZE: usize = 1568;
 const MLKEM_1024_PRIVKEY_SIZE: usize = 3168;
 
+pub const MLAKEY_PRIVKEY_DER_SIZE: usize = 3243;
 pub const MLAKEY_PUBKEY_DER_SIZE: usize = 1636;
 
 // ---- Error handling ----
@@ -489,6 +490,20 @@ pub fn parse_mlakey_privkey_pem(data: &[u8]) -> Result<HybridPrivateKey, MLAKeyP
     } else {
         Err(MLAKeyParserError::InvalidData)
     }
+}
+
+/// Parse several contiguous MLA public keys in PEM format
+pub fn parse_mlakey_privkeys_pem_many(
+    data: &[u8],
+) -> Result<Vec<HybridPrivateKey>, MLAKeyParserError> {
+    let mut output = Vec::new();
+    for pem_data in pem::parse_many(data)? {
+        if pem_data.tag().as_bytes() != PRIVATE_TAG {
+            return Err(MLAKeyParserError::InvalidPEMTag);
+        }
+        output.push(parse_mlakey_privkey_der(pem_data.contents())?);
+    }
+    Ok(output)
 }
 
 /// Parse an MLA public key in PEM format
