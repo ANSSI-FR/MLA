@@ -149,6 +149,7 @@ fn open_public_keys(matches: &ArgMatches) -> Result<Vec<HybridPublicKey>, Error>
 /// Return the ArchiveWriterConfig corresponding to provided arguments
 fn config_from_matches(matches: &ArgMatches) -> ArchiveWriterConfig {
     let mut config = ArchiveWriterConfig::new();
+    config.set_layers(Layers::EMPTY);
 
     // Get layers
     let mut layers = Vec::new();
