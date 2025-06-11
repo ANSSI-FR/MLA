@@ -29,7 +29,7 @@ use tar::{Builder, Header};
 // ----- Error ------
 
 #[derive(Debug)]
-pub enum MlarError {
+enum MlarError {
     /// Wrap a MLA error
     MlaError(Error),
     /// IO Error (not enough data, etc.)
@@ -459,7 +459,7 @@ struct FileWriter<'a> {
 }
 
 /// Max number of fd simultaneously opened
-pub const FILE_WRITER_POOL_SIZE: usize = 1000;
+const FILE_WRITER_POOL_SIZE: usize = 1000;
 
 impl Write for FileWriter<'_> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
