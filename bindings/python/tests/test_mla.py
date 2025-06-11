@@ -201,7 +201,7 @@ def test_context_write():
 
 def test_context_write_error():
     "Raise an error during the context write __exit__"
-    with pytest.raises(mla.WrongArchiveWriterState):
+    with pytest.raises(mla.BadAPIArgument):
         with MLAFile(tempfile.mkstemp(suffix=".mla")[1], "w") as archive:
             # INTENTIONNALY BUGGY
             # .finalize will be called twice, causing an exception

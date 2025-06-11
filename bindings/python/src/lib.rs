@@ -705,9 +705,18 @@ enum ExplicitWriters {
     FileWriter(ArchiveWriter<'static, std::fs::File>),
 }
 
+fn finalize_if_not_already(opt_writer: &mut Option<Box<ExplicitWriters>>) -> Result<(), WrappedError> {
+    match opt_writer.take() {
+        Some(writer) => writer.finalize().map_err(WrappedError::from),
+        None => Err(mla::errors::Error::BadAPIArgument(
+            "Cannot call any API on already finalized MLAFile".to_owned(),
+        ).into())
+    }
+}
+
 /// Wrap calls to the inner type
 impl ExplicitWriters {
-    fn finalize(&mut self) -> Result<(), mla::errors::Error> {
+    fn finalize(self) -> Result<(), mla::errors::Error> {
         match self {
             ExplicitWriters::FileWriter(writer) => {
                 writer.finalize()?;
@@ -773,7 +782,7 @@ impl ExplicitReaders {
 /// Opening Mode for a MLAFile
 enum OpeningModeInner {
     Read(ExplicitReaders),
-    Write(Box<ExplicitWriters>),
+    Write(Option<Box<ExplicitWriters>>),
 }
 
 pub struct MLAFileInner {
@@ -801,7 +810,7 @@ impl MLAFile {
         let mut inner_lock = self.inner.lock().expect("Mutex poisoned");
         match &mut inner_lock.inner {
             OpeningModeInner::Read(inner) => f(inner),
-            _ => Err(mla::errors::Error::BadAPIArgument(
+            OpeningModeInner::Write(_) => Err(mla::errors::Error::BadAPIArgument(
                 "This API is only callable in Read mode".to_owned(),
             )
             .into()),
@@ -817,15 +826,28 @@ impl MLAFile {
     where
         F: FnOnce(&mut ExplicitWriters) -> Result<R, WrappedError>,
     {
+        self.with_maybe_finalized_writer(|opt_inner| match opt_inner {
+            Some(inner) => f(inner),
+            None => Err(mla::errors::Error::BadAPIArgument(
+                "Cannot call any API on already finalized MLAFile".to_owned(),
+            ).into())
+        })
+    }
+
+    fn with_maybe_finalized_writer<F, R>(&self, f: F) -> Result<R, WrappedError>
+    where
+        F: FnOnce(&mut Option<Box<ExplicitWriters>>) -> Result<R, WrappedError>,
+    {
         let mut inner_lock = self.inner.lock().expect("Mutex poisoned");
         match &mut inner_lock.inner {
-            OpeningModeInner::Write(inner) => f(inner),
-            _ => Err(mla::errors::Error::BadAPIArgument(
+            OpeningModeInner::Write(opt_inner) => f(opt_inner),
+            OpeningModeInner::Read(_) => Err(mla::errors::Error::BadAPIArgument(
                 "This API is only callable in Write mode".to_owned(),
             )
             .into()),
         }
     }
+
 }
 
 #[pymethods]
@@ -871,9 +893,9 @@ impl MLAFile {
                 let arch_writer = ArchiveWriter::from_config(output_file, wconfig)?;
                 Ok(MLAFile {
                     inner: Mutex::new(MLAFileInner {
-                        inner: OpeningModeInner::Write(Box::new(ExplicitWriters::FileWriter(
+                        inner: OpeningModeInner::Write(Some(Box::new(ExplicitWriters::FileWriter(
                             arch_writer,
-                        ))),
+                        )))),
                         path: path.to_owned(),
                     }),
                 })
@@ -993,7 +1015,7 @@ impl MLAFile {
     /// Finalize the archive creation. This API *must* be called or essential records will no be written
     /// An archive can only be finalized once
     fn finalize(&mut self) -> Result<(), WrappedError> {
-        self.with_writer(|writer| writer.finalize().map_err(WrappedError::from))
+        self.with_maybe_finalized_writer(finalize_if_not_already)
     }
 
     // Context management protocol (PEP 0343)
@@ -1019,9 +1041,9 @@ impl MLAFile {
             OpeningModeInner::Read(_) => {
                 // Nothing to do, dropping this object should close the inner stream
             }
-            OpeningModeInner::Write(ref mut writer) => {
+            OpeningModeInner::Write(ref mut opt_writer) => {
                 // Finalize. If an exception occured, raise it
-                writer.finalize()?;
+                finalize_if_not_already(opt_writer)?;
             }
         }
         Ok(false)
