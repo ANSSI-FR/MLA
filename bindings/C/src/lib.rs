@@ -8,10 +8,10 @@ use mla::crypto::mlakey::{
 use mla::errors::ConfigError;
 use mla::errors::Error as MLAError;
 use mla::helpers::linear_extract;
+use mla::ArchiveFileID;
 use mla::ArchiveHeader;
 use mla::ArchiveReader;
 use mla::ArchiveWriter;
-use mla::{ArchiveFileID, Layers};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::ffi::{c_void, CStr};
@@ -255,8 +255,7 @@ pub extern "C" fn mla_config_default_new(handle_out: *mut MLAConfigHandle) -> ML
         return MLAStatus::BadAPIArgument;
     }
 
-    let mut config = ArchiveWriterConfig::new();
-    config.set_layers(Layers::DEFAULT);
+    let config = ArchiveWriterConfig::default();
 
     let ptr = Box::into_raw(Box::new(config));
     unsafe {
