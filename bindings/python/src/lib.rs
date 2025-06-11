@@ -701,11 +701,11 @@ impl ReaderConfig {
 /// `'static` lifetime for the writer. This should not be a problem as the writer is not
 /// supposed to be used after the drop of the parent object
 /// (see https://pyo3.rs/v0.24.0/class#no-lifetime-parameters)
-enum ExplicitWriters {
+enum ExplicitWriter {
     FileWriter(ArchiveWriter<'static, std::fs::File>),
 }
 
-fn finalize_if_not_already(opt_writer: &mut Option<Box<ExplicitWriters>>) -> Result<(), WrappedError> {
+fn finalize_if_not_already(opt_writer: &mut Option<Box<ExplicitWriter>>) -> Result<(), WrappedError> {
     match opt_writer.take() {
         Some(writer) => writer.finalize().map_err(WrappedError::from),
         None => Err(mla::errors::Error::BadAPIArgument(
@@ -715,10 +715,10 @@ fn finalize_if_not_already(opt_writer: &mut Option<Box<ExplicitWriters>>) -> Res
 }
 
 /// Wrap calls to the inner type
-impl ExplicitWriters {
+impl ExplicitWriter {
     fn finalize(self) -> Result<(), mla::errors::Error> {
         match self {
-            ExplicitWriters::FileWriter(writer) => {
+            ExplicitWriter::FileWriter(writer) => {
                 writer.finalize()?;
                 Ok(())
             }
@@ -732,7 +732,7 @@ impl ExplicitWriters {
         reader: &mut R,
     ) -> Result<(), mla::errors::Error> {
         match self {
-            ExplicitWriters::FileWriter(writer) => {
+            ExplicitWriter::FileWriter(writer) => {
                 writer.add_file(key, size, reader)?;
                 Ok(())
             }
@@ -741,7 +741,7 @@ impl ExplicitWriters {
 
     fn start_file(&mut self, key: &str) -> Result<u64, mla::errors::Error> {
         match self {
-            ExplicitWriters::FileWriter(writer) => writer.start_file(key),
+            ExplicitWriter::FileWriter(writer) => writer.start_file(key),
         }
     }
 
@@ -752,7 +752,7 @@ impl ExplicitWriters {
         data: &[u8],
     ) -> Result<(), mla::errors::Error> {
         match self {
-            ExplicitWriters::FileWriter(writer) => {
+            ExplicitWriter::FileWriter(writer) => {
                 writer.append_file_content(id, size as u64, data)
             }
         }
@@ -760,29 +760,29 @@ impl ExplicitWriters {
 
     fn end_file(&mut self, id: u64) -> Result<(), mla::errors::Error> {
         match self {
-            ExplicitWriters::FileWriter(writer) => writer.end_file(id),
+            ExplicitWriter::FileWriter(writer) => writer.end_file(id),
         }
     }
 }
 
-/// See `ExplicitWriters` for details
-enum ExplicitReaders {
+/// See `ExplicitWriter` for details
+enum ExplicitReader {
     FileReader(ArchiveReader<'static, std::fs::File>),
 }
 
 /// Wrap calls to the inner type
-impl ExplicitReaders {
+impl ExplicitReader {
     fn list_files(&self) -> Result<impl Iterator<Item = &String>, mla::errors::Error> {
         match self {
-            ExplicitReaders::FileReader(reader) => reader.list_files(),
+            ExplicitReader::FileReader(reader) => reader.list_files(),
         }
     }
 }
 
 /// Opening Mode for a MLAFile
 enum OpeningModeInner {
-    Read(ExplicitReaders),
-    Write(Option<Box<ExplicitWriters>>),
+    Read(ExplicitReader),
+    Write(Option<Box<ExplicitWriter>>),
 }
 
 pub struct MLAFileInner {
@@ -805,7 +805,7 @@ impl MLAFile {
     /// ```
     fn with_reader<F, R>(&self, f: F) -> Result<R, WrappedError>
     where
-        F: FnOnce(&mut ExplicitReaders) -> Result<R, WrappedError>,
+        F: FnOnce(&mut ExplicitReader) -> Result<R, WrappedError>,
     {
         let mut inner_lock = self.inner.lock().expect("Mutex poisoned");
         match &mut inner_lock.inner {
@@ -824,7 +824,7 @@ impl MLAFile {
     /// ```
     fn with_writer<F, R>(&self, f: F) -> Result<R, WrappedError>
     where
-        F: FnOnce(&mut ExplicitWriters) -> Result<R, WrappedError>,
+        F: FnOnce(&mut ExplicitWriter) -> Result<R, WrappedError>,
     {
         self.with_maybe_finalized_writer(|opt_inner| match opt_inner {
             Some(inner) => f(inner),
@@ -836,7 +836,7 @@ impl MLAFile {
 
     fn with_maybe_finalized_writer<F, R>(&self, f: F) -> Result<R, WrappedError>
     where
-        F: FnOnce(&mut Option<Box<ExplicitWriters>>) -> Result<R, WrappedError>,
+        F: FnOnce(&mut Option<Box<ExplicitWriter>>) -> Result<R, WrappedError>,
     {
         let mut inner_lock = self.inner.lock().expect("Mutex poisoned");
         match &mut inner_lock.inner {
@@ -874,7 +874,7 @@ impl MLAFile {
                 let arch_reader = ArchiveReader::from_config(input_file, rconfig)?;
                 Ok(MLAFile {
                     inner: Mutex::new(MLAFileInner {
-                        inner: OpeningModeInner::Read(ExplicitReaders::FileReader(arch_reader)),
+                        inner: OpeningModeInner::Read(ExplicitReader::FileReader(arch_reader)),
                         path: path.to_owned(),
                     }),
                 })
@@ -893,7 +893,7 @@ impl MLAFile {
                 let arch_writer = ArchiveWriter::from_config(output_file, wconfig)?;
                 Ok(MLAFile {
                     inner: Mutex::new(MLAFileInner {
-                        inner: OpeningModeInner::Write(Some(Box::new(ExplicitWriters::FileWriter(
+                        inner: OpeningModeInner::Write(Some(Box::new(ExplicitWriter::FileWriter(
                             arch_writer,
                         )))),
                         path: path.to_owned(),
@@ -950,7 +950,7 @@ impl MLAFile {
                     hash: None,
                 };
                 match inner {
-                    ExplicitReaders::FileReader(reader) => {
+                    ExplicitReader::FileReader(reader) => {
                         if include_size {
                             metadata.size = Some(
                                 reader
@@ -983,7 +983,7 @@ impl MLAFile {
     /// Return the content of a file as bytes
     fn __getitem__(&mut self, key: &str) -> Result<Vec<u8>, WrappedError> {
         self.with_reader(|inner| match inner {
-            ExplicitReaders::FileReader(reader) => {
+            ExplicitReader::FileReader(reader) => {
                 let file = reader.get_file(key.to_owned())?;
                 if let Some(mut archive_file) = file {
                     let mut buf = Vec::new();
@@ -999,7 +999,7 @@ impl MLAFile {
     /// Add a file to the archive
     fn __setitem__(&mut self, key: &str, value: &[u8]) -> Result<(), WrappedError> {
         self.with_writer(|writer| match writer {
-            ExplicitWriters::FileWriter(writer) => {
+            ExplicitWriter::FileWriter(writer) => {
                 let mut reader = std::io::Cursor::new(value);
                 writer.add_file(key, value.len() as u64, &mut reader)?;
                 Ok(())
@@ -1081,7 +1081,7 @@ impl MLAFile {
     ) -> Result<(), WrappedError> {
         self.with_reader(|reader| {
             let archive_file = match reader {
-                ExplicitReaders::FileReader(reader) => reader.get_file(key.to_owned())?,
+                ExplicitReader::FileReader(reader) => reader.get_file(key.to_owned())?,
             };
 
             if let Ok(dest) = dest.downcast::<PyString>() {
