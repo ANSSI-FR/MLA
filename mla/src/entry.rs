@@ -4,7 +4,6 @@ use crate::{errors::Error, format::ArchiveFileBlock};
 
 pub type ArchiveEntryId = u64;
 
-#[derive(Debug)]
 pub struct ArchiveEntry<T: Read> {
     /// File inside a MLA Archive
     pub filename: String,
@@ -20,7 +19,6 @@ enum ArchiveEntryDataReaderState {
     Finish,
 }
 
-#[derive(Debug)]
 pub struct ArchiveEntryDataReader<'a, R: Read + Seek> {
     /// This structure wraps the internals to get back a file's content
     src: &'a mut R,
