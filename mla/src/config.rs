@@ -53,7 +53,7 @@ impl ArchiveWriterConfig {
 
 /// Configuration stored in the header, to be reloaded
 #[derive(Encode, Decode)]
-pub struct ArchivePersistentConfig {
+pub(crate) struct ArchivePersistentConfig {
     pub layers_enabled: Layers,
 
     // Layers specifics

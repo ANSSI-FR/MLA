@@ -12,7 +12,6 @@ use mla::crypto::mlakey::{
 };
 use mla::errors::ConfigError;
 use mla::errors::Error as MLAError;
-use mla::format::ArchiveHeader;
 use mla::helpers::linear_extract;
 use mla::ArchiveEntryId;
 use mla::ArchiveReader;
@@ -891,6 +890,9 @@ pub struct ArchiveInfo {
     layers: u8,
 }
 
+const ENCRYPT: u8 = 0b0000_0001;
+const COMPRESS: u8 = 0b0000_0010;
+
 /// Get info on an existing MLA archive
 #[no_mangle]
 pub extern "C" fn mla_roarchive_info(
@@ -915,15 +917,22 @@ pub extern "C" fn mla_roarchive_info(
 }
 
 fn _mla_roarchive_info<R: Read>(src: &mut R, info_out: *mut ArchiveInfo) -> MLAStatus {
-    let header = match ArchiveHeader::from(src) {
-        Ok(header) => header,
+    let info = match mla::info::read_header_info(src) {
+        Ok(info) => info,
         Err(e) => return MLAStatus::from(e),
     };
-    let layers = header.config.layers_enabled;
+    let version = info.get_format_version();
+    let mut layers = 0;
+    if info.is_compression_enabled() {
+        layers |= COMPRESS;
+    }
+    if info.is_encryption_enabled() {
+        layers |= ENCRYPT;
+    }
 
     unsafe {
-        (*info_out).version = header.format_version;
-        (*info_out).layers = layers.bits();
+        (*info_out).version = version;
+        (*info_out).layers = layers;
     }
     MLAStatus::Success
 }

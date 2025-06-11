@@ -381,7 +381,7 @@ pub mod crypto;
 use crate::crypto::hash::{HashWrapperReader, Sha256Hash};
 use sha2::{Digest, Sha256};
 
-pub mod format;
+mod format;
 pub mod helpers;
 use format::ArchiveHeader;
 

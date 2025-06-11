@@ -9,7 +9,7 @@ use std::io::{self, Cursor, Read, Write};
 
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
 use mla::errors::{Error, FailSafeReadError};
-use mla::{ArchiveEntryId, ArchiveFailSafeReader, ArchiveReader, ArchiveWriter, format::Layers};
+use mla::{ArchiveEntryId, ArchiveFailSafeReader, ArchiveReader, ArchiveWriter};
 
 use std::collections::HashMap;
 
@@ -26,6 +26,34 @@ pub(crate) const BINCODE_CONFIG: bincode::config::Configuration<
 > = bincode::config::standard()
     .with_limit::<{ BINCODE_MAX_DECODE }>()
     .with_fixed_int_encoding();
+
+#[derive(Debug, Clone, Copy, PartialEq, Encode, Decode)]
+pub struct Layers(u8);
+
+bitflags::bitflags! {
+    /// Available layers. Order is relevant:
+    /// ```ascii-art
+    /// [File to blocks decomposition]
+    /// [Compression (COMPRESS)]
+    /// [Encryption (ENCRYPT)]
+    /// [Raw File I/O]
+    /// ```
+    impl Layers: u8 {
+        const ENCRYPT = 0b0000_0001;
+        const COMPRESS = 0b0000_0010;
+        /// Recommended layering
+        const DEFAULT = Self::ENCRYPT.bits() | Self::COMPRESS.bits();
+        /// No additional layer (ie, for debugging purpose)
+        const DEBUG = 0;
+        const EMPTY = 0;
+    }
+}
+
+impl std::default::Default for Layers {
+    fn default() -> Self {
+        Layers::DEFAULT
+    }
+}
 
 #[derive(Encode, Decode, Debug)]
 struct TestInput {
@@ -60,10 +88,7 @@ fn run(data: &[u8]) {
 
     // Create a MLA Archive
     let mut buf = Vec::new();
-    let mut config = ArchiveWriterConfig::new();
-    config
-        .set_layers(test_case.layers)
-        .add_public_keys(&[public_key]);
+    let mut config = ArchiveWriterConfigBuilder::begin().with_public_keys(&[public_key]).without_compression();
     let mut mla = ArchiveWriter::from_config(&mut buf, config).unwrap();
 
     let mut num2id: HashMap<u8, ArchiveEntryId> = HashMap::new();
