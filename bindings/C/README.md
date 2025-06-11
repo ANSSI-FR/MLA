@@ -65,8 +65,8 @@ FILE* f = fopen("test.mla", "w");
 
 // Create a configuration for the archive writer
 MLAStatus status;
-MLAConfigHandle hConfig = NULL;
-status = create_mla_config_with_public_keys(hConfig, szPubkey);
+MLAWriterConfigHandle hConfig = NULL;
+status = create_mla_writer_config_with_public_keys(&hConfig, szPubkey);
 // Error code can be obtained with MLA_STATUS
 if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
 {

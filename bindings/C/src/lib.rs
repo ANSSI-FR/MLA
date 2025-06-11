@@ -217,7 +217,7 @@ impl From<MLAError> for MLAStatus {
 // Opaque types exposed to C callers (not *mut c_void because of
 // file IDs being represented as u64, even on 32-bit systems)
 
-pub type MLAConfigHandle = *mut c_void;
+pub type MLAWriterConfigHandle = *mut c_void;
 pub type MLAArchiveHandle = *mut c_void;
 pub type MLAArchiveFileHandle = *mut c_void;
 
@@ -261,8 +261,8 @@ impl Write for CallbackOutput {
 /// return a handle to it
 /// `public_keys_pointers` is an array of pointers to public keys in DER format
 #[no_mangle]
-pub extern "C" fn create_mla_config_with_public_keys_der(
-    handle_out: *mut MLAConfigHandle,
+pub extern "C" fn create_mla_writer_config_with_public_keys_der(
+    handle_out: *mut MLAWriterConfigHandle,
     public_keys_pointers: *const u8,
     number_of_public_keys: usize,
 ) -> MLAStatus {
@@ -290,7 +290,7 @@ pub extern "C" fn create_mla_config_with_public_keys_der(
 
     let ptr = Box::into_raw(Box::new(config));
     unsafe {
-        *handle_out = ptr as MLAConfigHandle;
+        *handle_out = ptr as MLAWriterConfigHandle;
     }
     MLAStatus::Success
 }
@@ -299,8 +299,8 @@ pub extern "C" fn create_mla_config_with_public_keys_der(
 /// return a handle to it
 /// `public_keys` is a C string containing concatenated PEM public keys
 #[no_mangle]
-pub extern "C" fn create_mla_config_with_public_keys_pem(
-    handle_out: *mut MLAConfigHandle,
+pub extern "C" fn create_mla_writer_config_with_public_keys_pem(
+    handle_out: *mut MLAWriterConfigHandle,
     public_keys: *const c_char,
 ) -> MLAStatus {
     if handle_out.is_null() || public_keys.is_null() {
@@ -319,15 +319,15 @@ pub extern "C" fn create_mla_config_with_public_keys_pem(
 
     let ptr = Box::into_raw(Box::new(config));
     unsafe {
-        *handle_out = ptr as MLAConfigHandle;
+        *handle_out = ptr as MLAWriterConfigHandle;
     }
     MLAStatus::Success
 }
 
 /// Create a new configuration without encryption and return a handle to it
 #[no_mangle]
-pub extern "C" fn create_mla_config_without_encryption(
-    handle_out: *mut MLAConfigHandle,
+pub extern "C" fn create_mla_writer_config_without_encryption(
+    handle_out: *mut MLAWriterConfigHandle,
 ) -> MLAStatus {
     if handle_out.is_null() {
         return MLAStatus::BadAPIArgument;
@@ -337,7 +337,7 @@ pub extern "C" fn create_mla_config_without_encryption(
 
     let ptr = Box::into_raw(Box::new(config));
     unsafe {
-        *handle_out = ptr as MLAConfigHandle;
+        *handle_out = ptr as MLAWriterConfigHandle;
     }
     MLAStatus::Success
 }
@@ -346,9 +346,9 @@ pub extern "C" fn create_mla_config_without_encryption(
 /// Currently this level can only be an integer N with 0 <= N <= 11,
 /// and bigger values cause denser but slower compression.
 #[no_mangle]
-pub extern "C" fn mla_config_with_compression_level(
-    handle_in: *mut MLAConfigHandle,
-    handle_out: *mut MLAConfigHandle,
+pub extern "C" fn mla_writer_config_with_compression_level(
+    handle_in: *mut MLAWriterConfigHandle,
+    handle_out: *mut MLAWriterConfigHandle,
     level: u32,
 ) -> MLAStatus {
     if handle_in.is_null() || handle_out.is_null() {
@@ -364,7 +364,7 @@ pub extern "C" fn mla_config_with_compression_level(
         Ok(out_config) => {
             let ptr = Box::into_raw(Box::new(out_config));
             unsafe {
-                *handle_out = ptr as MLAConfigHandle;
+                *handle_out = ptr as MLAWriterConfigHandle;
             }
             MLAStatus::Success
         }
@@ -374,9 +374,9 @@ pub extern "C" fn mla_config_with_compression_level(
 
 /// Free `handle_in` and create a handle to same config without compression
 #[no_mangle]
-pub extern "C" fn mla_config_without_compression(
-    handle_in: *mut MLAConfigHandle,
-    handle_out: *mut MLAConfigHandle,
+pub extern "C" fn mla_writer_config_without_compression(
+    handle_in: *mut MLAWriterConfigHandle,
+    handle_out: *mut MLAWriterConfigHandle,
 ) -> MLAStatus {
     if handle_in.is_null() || handle_out.is_null() {
         return MLAStatus::BadAPIArgument;
@@ -391,14 +391,14 @@ pub extern "C" fn mla_config_without_compression(
 
     let ptr = Box::into_raw(Box::new(out_config));
     unsafe {
-        *handle_out = ptr as MLAConfigHandle;
+        *handle_out = ptr as MLAWriterConfigHandle;
     }
     MLAStatus::Success
 }
 
 #[no_mangle]
 pub extern "C" fn create_mla_reader_config_without_encryption(
-    handle_out: *mut MLAConfigHandle,
+    handle_out: *mut MLAWriterConfigHandle,
 ) -> MLAStatus {
     if handle_out.is_null() {
         return MLAStatus::BadAPIArgument;
@@ -408,7 +408,7 @@ pub extern "C" fn create_mla_reader_config_without_encryption(
 
     let ptr = Box::into_raw(Box::new(config));
     unsafe {
-        *handle_out = ptr as MLAConfigHandle;
+        *handle_out = ptr as MLAWriterConfigHandle;
     }
     MLAStatus::Success
 }
@@ -417,7 +417,7 @@ pub extern "C" fn create_mla_reader_config_without_encryption(
 /// (referenced by the handle returned by mla_reader_config_new()).
 #[no_mangle]
 pub extern "C" fn create_mla_reader_config_with_private_keys_der(
-    handle_out: *mut MLAConfigHandle,
+    handle_out: *mut MLAWriterConfigHandle,
     private_keys_pointers: *const u8,
     number_of_private_keys: usize,
 ) -> MLAStatus {
@@ -433,7 +433,7 @@ pub extern "C" fn create_mla_reader_config_with_private_keys_der(
 /// (referenced by the handle returned by mla_reader_config_new()).
 #[no_mangle]
 pub extern "C" fn create_mla_reader_config_with_private_keys_der_accept_unencrypted(
-    handle_out: *mut MLAConfigHandle,
+    handle_out: *mut MLAWriterConfigHandle,
     private_keys_pointers: *const u8,
     number_of_private_keys: usize,
 ) -> MLAStatus {
@@ -446,7 +446,7 @@ pub extern "C" fn create_mla_reader_config_with_private_keys_der_accept_unencryp
 }
 
 fn create_mla_reader_config_with_private_keys_der_generic<F>(
-    handle_out: *mut MLAConfigHandle,
+    handle_out: *mut MLAWriterConfigHandle,
     private_keys_pointers: *const u8,
     number_of_private_keys: usize,
     f: F,
@@ -478,7 +478,7 @@ where
 
     let ptr = Box::into_raw(Box::new(config));
     unsafe {
-        *handle_out = ptr as MLAConfigHandle;
+        *handle_out = ptr as MLAWriterConfigHandle;
     }
     MLAStatus::Success
 }
@@ -487,7 +487,7 @@ where
 /// (referenced by the handle returned by mla_reader_config_new()).
 #[no_mangle]
 pub extern "C" fn create_mla_reader_config_with_private_key_pem_many(
-    handle_out: *mut MLAConfigHandle,
+    handle_out: *mut MLAWriterConfigHandle,
     private_key_pem: *const c_char,
 ) -> MLAStatus {
     create_mla_reader_config_with_private_key_pem_many_generic(
@@ -499,7 +499,7 @@ pub extern "C" fn create_mla_reader_config_with_private_key_pem_many(
 
 #[no_mangle]
 pub extern "C" fn create_mla_reader_config_with_private_key_pem_many_accept_unencrypted(
-    handle_out: *mut MLAConfigHandle,
+    handle_out: *mut MLAWriterConfigHandle,
     private_key_pem: *const c_char,
 ) -> MLAStatus {
     create_mla_reader_config_with_private_key_pem_many_generic(
@@ -510,7 +510,7 @@ pub extern "C" fn create_mla_reader_config_with_private_key_pem_many_accept_unen
 }
 
 fn create_mla_reader_config_with_private_key_pem_many_generic<F>(
-    handle_out: *mut MLAConfigHandle,
+    handle_out: *mut MLAWriterConfigHandle,
     private_keys_pem: *const c_char,
     f: F,
 ) -> MLAStatus
@@ -533,7 +533,7 @@ where
 
     let ptr = Box::into_raw(Box::new(config));
     unsafe {
-        *handle_out = ptr as MLAConfigHandle;
+        *handle_out = ptr as MLAWriterConfigHandle;
     }
     MLAStatus::Success
 }
@@ -545,7 +545,7 @@ where
 /// as an argument when any of the two callbacks are called.
 #[no_mangle]
 pub extern "C" fn mla_archive_new(
-    config: *mut MLAConfigHandle,
+    config: *mut MLAWriterConfigHandle,
     write_callback: MLAWriteCallback,
     flush_callback: MLAFlushCallback,
     context: *mut c_void,
@@ -776,7 +776,7 @@ impl Seek for CallbackInputRead {
 /// The caller is responsible of all security checks related to callback provided paths
 #[no_mangle]
 pub extern "C" fn mla_roarchive_extract(
-    config: *mut MLAConfigHandle,
+    config: *mut MLAWriterConfigHandle,
     read_callback: MlaReadCallback,
     seek_callback: MlaSeekCallback,
     file_callback: MlaFileCalback,
@@ -809,7 +809,7 @@ pub extern "C" fn mla_roarchive_extract(
 
 #[allow(clippy::extra_unused_lifetimes)]
 fn _mla_roarchive_extract<'a, R: Read + Seek + 'a>(
-    config: *mut MLAConfigHandle,
+    config: *mut MLAWriterConfigHandle,
     src: R,
     file_callback: MlaFileCalbackRaw,
     context: *mut c_void,

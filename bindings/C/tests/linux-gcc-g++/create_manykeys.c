@@ -37,7 +37,7 @@ int main()
    }
 
    MLAStatus status = 0;
-   MLAConfigHandle hConfig = NULL;
+   MLAWriterConfigHandle hConfig = NULL;
 
    status = create_mla_config_with_public_keys_pem(&hConfig, szPubkey);
    if (status != MLA_STATUS_SUCCESS)
