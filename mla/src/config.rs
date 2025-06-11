@@ -80,7 +80,7 @@ impl ArchiveWriterConfig {
     pub(crate) fn to_persistent(
         &self,
     ) -> Result<(ArchivePersistentConfig, InternalConfig), ConfigError> {
-        let (encrypt_persistent, encrypt_internal) = if self.is_layers_enabled(Layers::ENCRYPT) {
+        let (encrypt_persistent, encrypt_internal) = if self.are_layers_enabled(Layers::ENCRYPT) {
             let (persistent, internal) = self.encrypt.to_persistent()?;
             (Some(persistent), Some(internal))
         } else {
@@ -98,13 +98,13 @@ impl ArchiveWriterConfig {
     }
 
     /// Check if layers are enabled
-    pub fn is_layers_enabled(&self, layer: Layers) -> bool {
+    pub fn are_layers_enabled(&self, layer: Layers) -> bool {
         self.layers_enabled.contains(layer)
     }
 
     /// Consistency check
     pub fn check(&self) -> Result<(), ConfigError> {
-        if self.is_layers_enabled(Layers::ENCRYPT) {
+        if self.are_layers_enabled(Layers::ENCRYPT) {
             self.encrypt.check()?;
         }
         Ok(())

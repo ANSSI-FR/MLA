@@ -825,7 +825,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         .dump(&mut dest)?;
 
         // Enable layers depending on user option
-        if config.is_layers_enabled(Layers::ENCRYPT) {
+        if config.are_layers_enabled(Layers::ENCRYPT) {
             dest = Box::new(EncryptionLayerWriter::new(
                 dest,
                 internal
@@ -834,7 +834,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
                     .ok_or(ConfigError::EncryptionKeyIsMissing)?,
             )?);
         }
-        if config.is_layers_enabled(Layers::COMPRESS) {
+        if config.are_layers_enabled(Layers::COMPRESS) {
             dest = Box::new(CompressionLayerWriter::new(dest, &config.compress));
         }
 

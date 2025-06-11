@@ -175,7 +175,7 @@ fn config_from_matches(matches: &ArgMatches) -> ArchiveWriterConfig {
 
     // Encryption specifics
     if matches.contains_id("public_keys") {
-        if !config.is_layers_enabled(Layers::ENCRYPT) {
+        if !config.are_layers_enabled(Layers::ENCRYPT) {
             eprintln!(
                 "[WARNING] 'public_keys' argument ignored, because 'encrypt' layer is not enabled"
             );
@@ -192,7 +192,7 @@ fn config_from_matches(matches: &ArgMatches) -> ArchiveWriterConfig {
 
     // Compression specifics
     if matches.contains_id("compression_level") {
-        if !config.is_layers_enabled(Layers::COMPRESS) {
+        if !config.are_layers_enabled(Layers::COMPRESS) {
             eprintln!(
                 "[WARNING] 'compression_level' argument ignored, because 'compress' layer is not enabled"
             );
