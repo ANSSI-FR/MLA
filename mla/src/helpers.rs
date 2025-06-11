@@ -125,7 +125,7 @@ mod tests {
         let (mla, key, _pubkey, files) = build_archive(None, false);
 
         // Prepare the reader
-        let dest = Cursor::new(mla.into_raw());
+        let dest = Cursor::new(mla);
         let mut config = ArchiveReaderConfig::new();
         config.add_private_keys(std::slice::from_ref(&key));
         let mut mla_read = ArchiveReader::from_config(dest, config).unwrap();
@@ -152,7 +152,7 @@ mod tests {
         let (mla, key, _pubkey, files) = build_archive(None, false);
 
         // Prepare the reader
-        let dest = Cursor::new(mla.into_raw());
+        let dest = Cursor::new(mla);
         let mut config = ArchiveReaderConfig::new();
         config.add_private_keys(std::slice::from_ref(&key));
         let mut mla_read = ArchiveReader::from_config(dest, config).unwrap();
@@ -193,12 +193,12 @@ mod tests {
         mla.add_file(&fname, data.len() as u64, data.as_slice())
             .unwrap();
 
-        mla.finalize().unwrap();
+        let dest = mla.finalize().unwrap();
 
         // --------------------------
 
         // Prepare the reader
-        let dest = Cursor::new(mla.into_raw());
+        let dest = Cursor::new(dest);
         let mut config = ArchiveReaderConfig::new();
         config.add_private_keys(std::slice::from_ref(&private_key));
         let mut mla_read = ArchiveReader::from_config(dest, config).unwrap();
@@ -236,10 +236,9 @@ mod tests {
         );
         mla.end_file(id).unwrap();
 
-        mla.finalize().unwrap();
+        let dest = mla.finalize().unwrap();
 
         // Read the obtained stream
-        let dest = mla.into_raw();
         let buf = Cursor::new(dest.as_slice());
         let mut mla_read = ArchiveReader::from_config(buf, ArchiveReaderConfig::new()).unwrap();
         let mut content1 = Vec::new();

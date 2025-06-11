@@ -351,15 +351,7 @@ impl<'a, W: 'a + InnerWriterTrait> EncryptionLayerWriter<'a, W> {
 }
 
 impl<'a, W: 'a + InnerWriterTrait> LayerWriter<'a, W> for EncryptionLayerWriter<'a, W> {
-    fn into_inner(self) -> Option<InnerWriterType<'a, W>> {
-        Some(self.inner)
-    }
-
-    fn into_raw(self: Box<Self>) -> W {
-        self.inner.into_raw()
-    }
-
-    fn finalize(&mut self) -> Result<(), Error> {
+    fn finalize(mut self: Box<Self>) -> Result<W, Error> {
         // Write the tag of the current chunk
         // Get previous chunk tag and initialize final block content cipher context with specific AAD
         let last_content_tag = self.last_renew_cipher()?;
@@ -781,9 +773,8 @@ mod tests {
         );
         encrypt_w.write_all(&FAKE_FILE[..21]).unwrap();
         encrypt_w.write_all(&FAKE_FILE[21..]).unwrap();
-        encrypt_w.finalize().unwrap();
 
-        let out = encrypt_w.into_raw();
+        let out = encrypt_w.finalize().unwrap();
         assert_eq!(out.len(), FAKE_FILE.len() + TAG_LENGTH + FINAL_BLOCK_SIZE);
         assert_ne!(out[..FAKE_FILE.len()], FAKE_FILE);
         out
@@ -907,9 +898,8 @@ mod tests {
         let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(0);
         let data: Vec<u8> = Alphanumeric.sample_iter(&mut rng).take(length).collect();
         encrypt_w.write_all(&data).unwrap();
-        encrypt_w.finalize().unwrap();
+        let out = encrypt_w.finalize().unwrap();
 
-        let out = encrypt_w.into_raw();
         assert_eq!(out.len(), length + 2 * TAG_LENGTH + FINAL_BLOCK_SIZE);
         assert_ne!(&out[..length], data.as_slice());
 

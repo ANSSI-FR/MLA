@@ -519,21 +519,6 @@ pub struct CompressionLayerWriter<'a, W: 'a + InnerWriterTrait> {
     compression_level: u32,
 }
 
-impl<W: InnerWriterTrait> CompressionLayerWriterState<W> {
-    fn into_inner(self) -> W {
-        match self {
-            CompressionLayerWriterState::Ready(inner) => inner,
-            CompressionLayerWriterState::InData(_written, compress) => {
-                compress.into_inner().into_inner()
-            }
-            // `panic!` explicitly called to avoid propagating an error which
-            // must never happens (ie, calling `into_inner` in an inconsistent
-            // internal state)
-            _ => panic!("[Writer] Empty type to inner is impossible"),
-        }
-    }
-}
-
 impl<'a, W: 'a + InnerWriterTrait> CompressionLayerWriter<'a, W> {
     pub fn new(
         inner: InnerWriterType<'a, W>,
@@ -548,15 +533,7 @@ impl<'a, W: 'a + InnerWriterTrait> CompressionLayerWriter<'a, W> {
 }
 
 impl<'a, W: 'a + InnerWriterTrait> LayerWriter<'a, W> for CompressionLayerWriter<'a, W> {
-    fn into_inner(self) -> Option<InnerWriterType<'a, W>> {
-        Some(self.state.into_inner())
-    }
-
-    fn into_raw(self: Box<Self>) -> W {
-        self.state.into_inner().into_raw()
-    }
-
-    fn finalize(&mut self) -> Result<(), Error> {
+    fn finalize(mut self: Box<Self>) -> Result<W, Error> {
         // Use this mem::replace trick to be able to get back the compressor
         // inner and freely move from CompressionLayerWriterState to others
         let old_state = std::mem::replace(&mut self.state, CompressionLayerWriterState::Empty);
@@ -593,10 +570,7 @@ impl<'a, W: 'a + InnerWriterTrait> LayerWriter<'a, W> for CompressionLayerWriter
         self.compressed_sizes = sinfo.compressed_sizes;
 
         // Recursive call
-        inner.finalize()?;
-        // Store inner, for further into_inner / into_raw calls
-        self.state = CompressionLayerWriterState::Ready(inner);
-        Ok(())
+        inner.finalize()
     }
 }
 
@@ -956,7 +930,7 @@ mod tests {
         let fake_data2 = vec![5, 6, 7, 8];
         comp.write_all(fake_data.as_slice()).unwrap();
         comp.write_all(fake_data2.as_slice()).unwrap();
-        let file = comp.into_raw();
+        let file = comp.finalize().unwrap();
 
         let mut src = Cursor::new(file.as_slice());
         let mut reader = brotli::Decompressor::new(&mut src, 0);
@@ -989,7 +963,7 @@ mod tests {
             bytes.len()
         );
 
-        let file = comp.into_raw();
+        let file = comp.finalize().unwrap();
         println!("{}", file.len());
         let mut src = Cursor::new(file.as_slice());
         // Highlight the use of BrotliDecompressStream
@@ -1085,8 +1059,7 @@ mod tests {
             ));
             let now = Instant::now();
             comp.write_all(bytes).unwrap();
-            comp.finalize().unwrap();
-            let file = comp.into_raw();
+            let file = comp.finalize().unwrap();
             let buf = Cursor::new(file.as_slice());
             let mut decomp =
                 Box::new(CompressionLayerReader::new(Box::new(RawLayerReader::new(buf))).unwrap());
@@ -1118,8 +1091,7 @@ mod tests {
             ));
             let now = Instant::now();
             comp.write_all(bytes).unwrap();
-            comp.finalize().unwrap();
-            let file = comp.into_raw();
+            let file = comp.finalize().unwrap();
             let mut decomp = Box::new(
                 CompressionLayerFailSafeReader::new(Box::new(RawLayerFailSafeReader::new(
                     file.as_slice(),
@@ -1154,8 +1126,7 @@ mod tests {
             ));
             let now = Instant::now();
             comp.write_all(bytes).unwrap();
-            comp.finalize().unwrap();
-            let file = comp.into_raw();
+            let file = comp.finalize().unwrap();
 
             // Truncate at the middle
             let stop = file.len() / 2;
@@ -1226,9 +1197,8 @@ mod tests {
                 &CompressionConfig::default(),
             ));
             comp.write_all(bytes).unwrap();
-            comp.finalize().unwrap();
 
-            let file = comp.into_raw();
+            let file = comp.finalize().unwrap();
             let buf = Cursor::new(file.as_slice());
             let mut decomp =
                 Box::new(CompressionLayerReader::new(Box::new(RawLayerReader::new(buf))).unwrap());
@@ -1323,7 +1293,6 @@ mod tests {
             &config.compress,
         ));
         comp.write_all(bytes).unwrap();
-        comp.finalize().unwrap();
 
         let file2 = Vec::new();
         let mut config2 = ArchiveWriterConfig::new();
@@ -1336,11 +1305,10 @@ mod tests {
             &config2.compress,
         ));
         comp2.write_all(bytes).unwrap();
-        comp2.finalize().unwrap();
 
         // file2 must be better compressed than file
-        let file = comp.into_raw();
-        let file2 = comp2.into_raw();
+        let file = comp.finalize().unwrap();
+        let file2 = comp2.finalize().unwrap();
         assert!(file.len() > file2.len());
 
         // Check content

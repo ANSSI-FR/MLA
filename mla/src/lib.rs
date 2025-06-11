@@ -863,7 +863,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         Self::from_config(dest, config)
     }
 
-    pub fn finalize(&mut self) -> Result<(), Error> {
+    pub fn finalize(mut self) -> Result<W, Error> {
         // Check final state (empty ids, empty hashes)
         check_state!(self.state, OpenedFiles);
         match &mut self.state {
@@ -891,8 +891,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         ArchiveFooter::serialize_into(&mut self.dest, &self.files_info, &self.ids_info)?;
 
         // Recursive call
-        self.dest.finalize()?;
-        Ok(())
+        self.dest.finalize()
     }
 
     /// Add the current offset to the corresponding list if the file id is not
@@ -1042,11 +1041,6 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         self.end_file(id)
     }
 
-    /// Unwraps the inner writer
-    pub fn into_raw(self) -> W {
-        self.dest.into_raw()
-    }
-
     pub fn flush(&mut self) -> io::Result<()> {
         self.dest.flush()
     }
@@ -1181,7 +1175,7 @@ impl<T: Read + Seek> Read for BlocksToFileReader<'_, T> {
 }
 
 #[derive(Encode, Decode)]
-#[cfg_attr(test, derive(PartialEq, Eq, Debug))]
+#[cfg_attr(test, derive(PartialEq, Eq, Debug, Clone))]
 pub struct FileInfo {
     /// File information to save in the footer
     ///
@@ -1370,7 +1364,7 @@ impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
     #[allow(clippy::cognitive_complexity)]
     pub fn convert_to_archive<W: InnerWriterTrait>(
         &mut self,
-        output: &mut ArchiveWriter<W>,
+        mut output: ArchiveWriter<W>,
     ) -> Result<FailSafeReadError, Error> {
         let mut error = FailSafeReadError::NoError;
 
@@ -1720,11 +1714,10 @@ pub(crate) mod tests {
         mla.append_file_content(id, fake_file2.len() as u64, fake_file2.as_slice())
             .unwrap();
         mla.end_file(id).unwrap();
-        mla.finalize().unwrap();
 
         let mla_key = mla.internal_config.encrypt.as_ref().unwrap().key;
         let mla_nonce = mla.internal_config.encrypt.as_ref().unwrap().nonce;
-        let dest = mla.into_raw();
+        let dest = mla.finalize().unwrap();
         let buf = Cursor::new(dest.as_slice());
         let mut config = ArchiveReaderConfig::new();
         config.add_private_keys(std::slice::from_ref(&private_key));
@@ -1752,10 +1745,27 @@ pub(crate) mod tests {
         layers: Option<Layers>,
         interleaved: bool,
     ) -> (
-        ArchiveWriter<'static, Vec<u8>>,
+        Vec<u8>,
         HybridPrivateKey,
         HybridPublicKey,
         Vec<(String, Vec<u8>)>,
+    ) {
+        let (written_archive, privkey, pubkey, files_content, _, _) =
+            build_archive2(layers, interleaved);
+        (written_archive, privkey, pubkey, files_content)
+    }
+
+    #[allow(clippy::type_complexity)]
+    pub(crate) fn build_archive2(
+        layers: Option<Layers>,
+        interleaved: bool,
+    ) -> (
+        Vec<u8>,
+        HybridPrivateKey,
+        HybridPublicKey,
+        Vec<(String, Vec<u8>)>,
+        HashMap<String, ArchiveFileID>,
+        HashMap<ArchiveFileID, FileInfo>,
     ) {
         // Build an archive with 3 files
         let file = Vec::new();
@@ -1819,11 +1829,12 @@ pub(crate) mod tests {
             mla.add_file(&fname3, fake_file3.len() as u64, fake_file3.as_slice())
                 .unwrap();
         }
-
-        mla.finalize().unwrap();
+        let files_info = mla.files_info.clone();
+        let ids_info = mla.ids_info.clone();
+        let written_archive = mla.finalize().unwrap();
 
         (
-            mla,
+            written_archive,
             private_key,
             public_key,
             vec![
@@ -1831,6 +1842,8 @@ pub(crate) mod tests {
                 (fname2, fake_file2),
                 (fname3, fake_file3),
             ],
+            files_info,
+            ids_info,
         )
     }
 
@@ -1839,8 +1852,7 @@ pub(crate) mod tests {
         // Build an archive with 3 interleaved files
         let (mla, key, _pubkey, files) = build_archive(None, true);
 
-        let dest = mla.into_raw();
-        let buf = Cursor::new(dest.as_slice());
+        let buf = Cursor::new(mla.as_slice());
         let mut config = ArchiveReaderConfig::new();
         config.add_private_keys(std::slice::from_ref(&key));
         let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
@@ -1891,10 +1903,9 @@ pub(crate) mod tests {
             mla.append_file_content(id, fake_file2.len() as u64, fake_file2.as_slice())
                 .unwrap();
             mla.end_file(id).unwrap();
-            mla.finalize().unwrap();
+            let dest = mla.finalize().unwrap();
 
             // Read the obtained stream
-            let dest = mla.into_raw();
             let buf = Cursor::new(dest.as_slice());
             let mut config = ArchiveReaderConfig::new();
             config.add_private_keys(std::slice::from_ref(&private_key));
@@ -1927,8 +1938,7 @@ pub(crate) mod tests {
         // Build an archive with 3 files
         let (mla, key, _pubkey, files) = build_archive(None, false);
 
-        let dest = mla.into_raw();
-        let buf = Cursor::new(dest.as_slice());
+        let buf = Cursor::new(mla.as_slice());
         let mut config = ArchiveReaderConfig::new();
         config.add_private_keys(std::slice::from_ref(&key));
         let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
@@ -1957,27 +1967,26 @@ pub(crate) mod tests {
     #[test]
     fn convert_failsafe() {
         // Build an archive with 3 files
-        let (mla, key, pubkey, files) = build_archive(None, false);
+        let (dest, key, pubkey, files) = build_archive(None, false);
 
         // Prepare the failsafe reader
-        let dest = mla.into_raw();
         let mut config = ArchiveReaderConfig::new();
         config.add_private_keys(std::slice::from_ref(&key));
         let mut mla_fsread = ArchiveFailSafeReader::from_config(dest.as_slice(), config).unwrap();
 
         // Prepare the writer
-        let dest_w = Vec::new();
+        let mut dest_w = Vec::new();
         let mut config = ArchiveWriterConfig::new();
         config
             .enable_layer(Layers::COMPRESS)
             .enable_layer(Layers::ENCRYPT)
             .add_public_keys(&[pubkey]);
-        let mut mla_w = ArchiveWriter::from_config(dest_w, config).expect("Writer init failed");
+        let mla_w = ArchiveWriter::from_config(&mut dest_w, config).expect("Writer init failed");
 
         // Conversion
-        match mla_fsread.convert_to_archive(&mut mla_w).unwrap() {
+        match mla_fsread.convert_to_archive(mla_w).unwrap() {
             FailSafeReadError::EndOfOriginalArchiveData => {
-                // We expect to ends with the final tag - all files have been
+                // We expect to end with the final tag - all files have been
                 // read and we stop on the tag before the footer
             }
             status => {
@@ -1986,8 +1995,7 @@ pub(crate) mod tests {
         };
 
         // New archive can now be checked
-        let dest2 = mla_w.into_raw();
-        let buf2 = Cursor::new(dest2.as_slice());
+        let buf2 = Cursor::new(dest_w.as_slice());
         let mut config = ArchiveReaderConfig::new();
         config.add_private_keys(std::slice::from_ref(&key));
         let mut mla_read = ArchiveReader::from_config(buf2, config).unwrap();
@@ -2017,19 +2025,18 @@ pub(crate) mod tests {
     fn convert_trunc_failsafe() {
         for interleaved in &[false, true] {
             // Build an archive with 3 files, without compressing to truncate at the correct place
-            let (mla, key, pubkey, files) =
-                build_archive(Some(Layers::default() ^ Layers::COMPRESS), *interleaved);
+            let (dest, key, pubkey, files, files_info, _) =
+                build_archive2(Some(Layers::default() ^ Layers::COMPRESS), *interleaved);
             // Truncate the resulting file (before the footer, hopefully after the header), and prepare the failsafe reader
             let mut buffer: &mut [u8] = &mut vec![0; BINCODE_MAX_DECODE];
             let footer_size = bincode::encode_into_std_write::<_, _, &mut [u8]>(
-                &mla.files_info,
+                &files_info,
                 &mut buffer,
                 BINCODE_CONFIG,
             )
             .or(Err(Error::SerializationError))
             .unwrap()
                 + 4;
-            let dest = mla.into_raw();
 
             for remove in &[1, 10, 30, 50, 70, 95, 100] {
                 let mut config = ArchiveReaderConfig::new();
@@ -2041,16 +2048,15 @@ pub(crate) mod tests {
                 .expect("Unable to create");
 
                 // Prepare the writer
-                let dest_w = Vec::new();
-                let mut mla_w =
-                    ArchiveWriter::new(dest_w, &[pubkey.clone()]).expect("Writer init failed");
+                let mut dest_w = Vec::new();
+                let mla_w =
+                    ArchiveWriter::new(&mut dest_w, &[pubkey.clone()]).expect("Writer init failed");
 
                 // Conversion
-                let _status = mla_fsread.convert_to_archive(&mut mla_w).unwrap();
+                let _status = mla_fsread.convert_to_archive(mla_w).unwrap();
 
                 // New archive can now be checked
-                let dest2 = mla_w.into_raw();
-                let buf2 = Cursor::new(dest2.as_slice());
+                let buf2 = Cursor::new(dest_w.as_slice());
                 let mut config = ArchiveReaderConfig::new();
                 config.add_private_keys(std::slice::from_ref(&key));
                 let mut mla_read = ArchiveReader::from_config(buf2, config).unwrap();
@@ -2120,15 +2126,15 @@ pub(crate) mod tests {
         // Build an archive with 3 non-interleaved files and another with
         // interleaved files
         for interleaved in &[false, true] {
-            let (mla, key, _pubkey, files) = build_archive(None, *interleaved);
+            let (dest, key, _pubkey, files, files_info, ids_info) =
+                build_archive2(None, *interleaved);
 
             for (fname, data) in &files {
-                let id = mla.files_info.get(fname).unwrap();
-                let size = mla.ids_info.get(id).unwrap().size;
+                let id = files_info.get(fname).unwrap();
+                let size = ids_info.get(id).unwrap().size;
                 assert_eq!(size, data.len() as u64);
             }
 
-            let dest = mla.into_raw();
             let buf = Cursor::new(dest.as_slice());
             let mut config = ArchiveReaderConfig::new();
             config.add_private_keys(std::slice::from_ref(&key));
@@ -2144,10 +2150,9 @@ pub(crate) mod tests {
     #[test]
     fn failsafe_detect_integrity() {
         // Build an archive with 3 files
-        let (mla, _key, _pubkey, files) = build_archive(Some(Layers::DEBUG), false);
+        let (mut dest, _key, _pubkey, files) = build_archive(Some(Layers::DEBUG), false);
 
         // Swap the first 2 bytes of file1
-        let mut dest = mla.into_raw();
         let expect = files[0].1.as_slice();
         let pos: Vec<usize> = dest
             .iter()
@@ -2169,11 +2174,11 @@ pub(crate) mod tests {
 
         // Prepare the writer
         let dest_w = Vec::new();
-        let mut mla_w = ArchiveWriter::from_config(dest_w, ArchiveWriterConfig::new())
+        let mla_w = ArchiveWriter::from_config(dest_w, ArchiveWriterConfig::new())
             .expect("Writer init failed");
 
         // Conversion
-        match mla_fsread.convert_to_archive(&mut mla_w).unwrap() {
+        match mla_fsread.convert_to_archive(mla_w).unwrap() {
             FailSafeReadError::UnfinishedFiles {
                 filenames,
                 stopping_error,
@@ -2196,10 +2201,9 @@ pub(crate) mod tests {
     #[test]
     fn get_hash() {
         // Build an archive with 3 files
-        let (mla, key, _pubkey, files) = build_archive(None, false);
+        let (dest, key, _pubkey, files) = build_archive(None, false);
 
         // Prepare the reader
-        let dest = mla.into_raw();
         let buf = Cursor::new(dest.as_slice());
         let mut config = ArchiveReaderConfig::new();
         config.add_private_keys(std::slice::from_ref(&key));
@@ -2345,9 +2349,8 @@ pub(crate) mod tests {
             files.get(&fname_sha256sum).unwrap().as_slice(),
         )
         .unwrap();
-        mla.finalize().unwrap();
+        let raw_mla = mla.finalize().unwrap();
 
-        let raw_mla = mla.into_raw();
         std::fs::File::create(std::path::Path::new(&format!(
             "../samples/archive_v{}.mla",
             MLA_FORMAT_VERSION
@@ -2385,18 +2388,18 @@ pub(crate) mod tests {
         let mut mla_fsread = ArchiveFailSafeReader::from_config(mla_data, config).unwrap();
 
         // Repair the archive (without any damage, but trigger the corresponding code)
-        let dest_w = Vec::new();
-        let mut mla_w = ArchiveWriter::from_config(dest_w, ArchiveWriterConfig::new())
+        let mut dest_w = Vec::new();
+        let mla_w = ArchiveWriter::from_config(&mut dest_w, ArchiveWriterConfig::new())
             .expect("Writer init failed");
         if let FailSafeReadError::EndOfOriginalArchiveData =
-            mla_fsread.convert_to_archive(&mut mla_w).unwrap()
+            mla_fsread.convert_to_archive(mla_w).unwrap()
         {
             // Everything runs as expected
         } else {
             panic!();
         }
         // Get a reader on the repaired archive
-        let buf2 = Cursor::new(mla_w.into_raw());
+        let buf2 = Cursor::new(dest_w);
         let mut mla_repread = ArchiveReader::from_config(buf2, ArchiveReaderConfig::new()).unwrap();
 
         assert_eq!(files.len(), mla_read.list_files().unwrap().count());
@@ -2436,8 +2439,7 @@ pub(crate) mod tests {
             .expect("add rest");
         mla.end_file(id).unwrap();
 
-        mla.finalize().unwrap();
-        let mla_data = mla.into_raw();
+        let mla_data = mla.finalize().unwrap();
 
         let buf = Cursor::new(mla_data);
         let mut mla_read =
@@ -2501,10 +2503,9 @@ pub(crate) mod tests {
             mla.end_file(id).unwrap();
             nb_file += 1;
         }
-        mla.finalize().unwrap();
+        let mla_data = mla.finalize().unwrap();
 
         // List files and check the list
-        let mla_data = mla.into_raw();
 
         let buf = Cursor::new(mla_data);
         let mut config = ArchiveReaderConfig::new();
