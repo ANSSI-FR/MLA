@@ -8,7 +8,7 @@ use std::fs::File;
 use std::io::{self, Cursor, Read, Write};
 
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
-use mla::errors::{Error, FailSafeReadError};
+use mla::errors::{Error, TruncatedReadError};
 use mla::{ArchiveEntryId, TruncatedArchiveReader, ArchiveReader, ArchiveWriter};
 
 use std::collections::HashMap;
@@ -191,7 +191,7 @@ fn run(data: &[u8]) {
     let mut dest_w = Vec::new();
     let mla_w = ArchiveWriter::from_config(&mut dest_w, ArchiveWriterConfig::new())
         .expect("Writer init failed");
-    if let FailSafeReadError::EndOfOriginalArchiveData =
+    if let TruncatedReadError::EndOfOriginalArchiveData =
         mla_fsread.convert_to_archive(mla_w).unwrap()
     {
         // Everything runs as expected
@@ -262,7 +262,7 @@ fn run(data: &[u8]) {
         ArchiveWriter::from_config(dest_w, ArchiveWriterConfig::new()).expect("Writer init failed");
     mla_fsread
         .convert_to_archive(mla_w)
-        .expect("End without a FailSafeReadError {}");
+        .expect("End without a TruncatedReadError {}");
 }
 
 #[cfg(fuzzing)]

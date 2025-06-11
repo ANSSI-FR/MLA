@@ -110,7 +110,7 @@ impl error::Error for Error {
 }
 
 #[derive(Debug)]
-pub enum FailSafeReadError {
+pub enum TruncatedReadError {
     /// Everything ends correctly
     NoError,
     /// An unexpected EOF occurs while getting the next block
@@ -135,7 +135,7 @@ pub enum FailSafeReadError {
     /// finished (a file can be finished but uncompleted)
     UnfinishedFiles {
         filenames: Vec<String>,
-        stopping_error: Box<FailSafeReadError>,
+        stopping_error: Box<TruncatedReadError>,
     },
     /// End of original archive reached - this is the best case
     EndOfOriginalArchiveData,
@@ -148,19 +148,19 @@ pub enum FailSafeReadError {
     },
 }
 
-impl fmt::Display for FailSafeReadError {
+impl fmt::Display for TruncatedReadError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // For now, use the debug derived version
         write!(f, "{self:?}")
     }
 }
 
-impl error::Error for FailSafeReadError {
+impl error::Error for TruncatedReadError {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match &self {
-            FailSafeReadError::IOErrorOnNextBlock(err) => Some(err),
-            FailSafeReadError::ErrorOnNextBlock(err) => Some(err),
-            FailSafeReadError::ErrorInFile(err, _path) => Some(err),
+            TruncatedReadError::IOErrorOnNextBlock(err) => Some(err),
+            TruncatedReadError::ErrorOnNextBlock(err) => Some(err),
+            TruncatedReadError::ErrorInFile(err, _path) => Some(err),
             _ => None,
         }
     }
