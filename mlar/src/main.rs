@@ -9,12 +9,8 @@ use mla::crypto::mlakey::{
 };
 use mla::errors::{Error, FailSafeReadError};
 use mla::helpers::linear_extract;
-use mla::layers::encrypt::EncryptionLayerReader;
-use mla::layers::raw::RawLayerReader;
-use mla::layers::traits::{InnerReaderTrait, LayerReader};
 use mla::{
-    ArchiveFailSafeReader, ArchiveFile, ArchiveFooter, ArchiveHeader, ArchiveReader, ArchiveWriter,
-    Layers,
+    ArchiveFailSafeReader, ArchiveFile, ArchiveHeader, ArchiveReader, ArchiveWriter, Layers,
 };
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
@@ -879,53 +875,6 @@ fn keyderive(matches: &ArgMatches) -> Result<(), MlarError> {
         .write_all(key_pair.0.to_pem().as_bytes())
         .expect("Error writing the private key");
     Ok(())
-}
-
-pub struct ArchiveInfoReader {
-    /// MLA Archive format Reader
-    //
-    /// User's reading configuration
-    pub config: ArchiveReaderConfig,
-    /// Metadata (from footer if any)
-    metadata: Option<ArchiveFooter>,
-}
-
-impl ArchiveInfoReader {
-    pub fn from_config<'a, R>(
-        mut src: R,
-        mut config: ArchiveReaderConfig,
-    ) -> Result<Self, MlarError>
-    where
-        R: 'a + InnerReaderTrait,
-    {
-        // Make sure we read the archive header from the start
-        src.rewind()?;
-        let header = ArchiveHeader::from(&mut src)?;
-        config.load_persistent(header.config)?;
-
-        // Pin the current position (after header) as the new 0
-        let mut raw_src = Box::new(RawLayerReader::new(src));
-        raw_src.reset_position()?;
-
-        // Enable layers depending on user option. Order is relevant
-        let mut src: Box<dyn 'a + LayerReader<'a, R>> = raw_src;
-        if config.layers_enabled.contains(Layers::ENCRYPT) {
-            src = Box::new(EncryptionLayerReader::new(src, &config.encrypt)?)
-        }
-
-        let metadata = Some(ArchiveFooter::deserialize_from(&mut src)?);
-
-        src.rewind()?;
-        Ok(ArchiveInfoReader { config, metadata })
-    }
-
-    pub fn get_files_size(&self) -> Result<u64, MlarError> {
-        if let Some(ArchiveFooter { files_info, .. }) = &self.metadata {
-            Ok(files_info.values().map(|f| f.size).sum())
-        } else {
-            Err(Error::MissingMetadata.into())
-        }
-    }
 }
 
 fn info(matches: &ArgMatches) -> Result<(), MlarError> {
