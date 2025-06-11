@@ -1,6 +1,6 @@
 use bincode::{Decode, Encode};
 
-use crate::crypto::hybrid::HybridPublicKey;
+use crate::crypto::hybrid::{HybridPrivateKey, HybridPublicKey};
 use crate::errors::ConfigError;
 use crate::format::Layers;
 use crate::layers::compress::CompressionConfig;
@@ -69,29 +69,44 @@ pub(crate) struct InternalConfig {
 }
 
 /// User's configuration used to read an archive
-#[derive(Default)]
 pub struct ArchiveReaderConfig {
-    pub layers_enabled: Layers,
-
+    pub(crate) accept_unencrypted: bool,
     // Layers specifics
-    pub encrypt: EncryptionReaderConfig,
+    pub(crate) encrypt: EncryptionReaderConfig,
 }
 
 impl ArchiveReaderConfig {
-    /// Start a builder, without any specific option
-    pub fn new() -> Self {
+    pub fn with_private_keys(keys: &[HybridPrivateKey]) -> Self {
+        let mut encrypt = EncryptionReaderConfig::default();
+        encrypt.set_private_keys(keys);
         Self {
-            layers_enabled: Layers::EMPTY,
-            encrypt: EncryptionReaderConfig::default(),
+            accept_unencrypted: false,
+            encrypt,
         }
     }
 
-    pub fn load_persistent(
+    pub fn with_private_keys_accept_unencrypted(keys: &[HybridPrivateKey]) -> Self {
+        let mut encrypt = EncryptionReaderConfig::default();
+        encrypt.set_private_keys(keys);
+        Self {
+            accept_unencrypted: true,
+            encrypt,
+        }
+    }
+
+    pub fn without_encryption() -> Self {
+        let encrypt = EncryptionReaderConfig::default();
+        Self {
+            accept_unencrypted: true,
+            encrypt,
+        }
+    }
+
+    pub(crate) fn load_persistent(
         &mut self,
         config: ArchivePersistentConfig,
     ) -> Result<&mut ArchiveReaderConfig, ConfigError> {
-        self.layers_enabled = config.layers_enabled;
-        if self.layers_enabled.contains(Layers::ENCRYPT) {
+        if config.layers_enabled.contains(Layers::ENCRYPT) {
             match config.encrypt {
                 Some(to_load) => {
                     self.encrypt.load_persistent(to_load)?;
