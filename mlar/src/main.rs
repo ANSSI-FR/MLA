@@ -5,9 +5,9 @@ use humansize::{DECIMAL, FormatSize};
 use lru::LruCache;
 use ml_kem::EncodedSizeUser;
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
-use mla::crypto::hybrid::{HybridPrivateKey, HybridPublicKey};
 use mla::crypto::mlakey::{
-    generate_keypair, parse_mlakey_privkey_der, parse_mlakey_privkey_pem, parse_mlakey_pubkey_pem,
+    HybridPrivateKey, HybridPublicKey, generate_keypair_from_rng, parse_mlakey_privkey_pem,
+    parse_mlakey_pubkey_pem,
 };
 use mla::errors::{Error, FailSafeReadError};
 use mla::helpers::linear_extract;
@@ -831,17 +831,17 @@ fn keygen(matches: &ArgMatches) -> Result<(), MlarError> {
         None => ChaChaRng::from_entropy(),
     };
 
-    let key_pair = generate_keypair(&mut csprng).expect("Error while generating the key-pair");
+    let (privkey, pubkey) = generate_keypair_from_rng(&mut csprng);
 
     // Output the public key in PEM format, to ease integration in text based
     // configs
     output_pub
-        .write_all(key_pair.public_as_pem().as_bytes())
+        .write_all(pubkey.to_pem().as_bytes())
         .expect("Error writing the public key");
 
     // Output the private key in PEM format, to ease integration in text based
     output_priv
-        .write_all(key_pair.private_as_pem().as_bytes())
+        .write_all(privkey.to_pem().as_bytes())
         .expect("Error writing the private key");
     Ok(())
 }
@@ -906,10 +906,9 @@ fn keyderive(matches: &ArgMatches) -> Result<(), MlarError> {
     {
         let mut csprng = ChaChaRng::from_seed(apply_derive(path, secret));
 
-        // Use the high-level API to avoid duplicating code from curve25519-parser in case of futur changes
-        key_pair =
-            Some(generate_keypair(&mut csprng).expect("Error while generating the key-pair"));
-        secret = parse_mlakey_privkey_der(&key_pair.as_ref().unwrap().private_der).unwrap();
+        let (privkey, pubkey) = generate_keypair_from_rng(&mut csprng);
+        secret = privkey.clone();
+        key_pair = Some((privkey, pubkey));
     }
 
     // Safe to unwrap, there is at least one derivation path
@@ -918,12 +917,12 @@ fn keyderive(matches: &ArgMatches) -> Result<(), MlarError> {
     // Output the public key in PEM format, to ease integration in text based
     // configs
     output_pub
-        .write_all(key_pair.public_as_pem().as_bytes())
+        .write_all(key_pair.1.to_pem().as_bytes())
         .expect("Error writing the public key");
 
     // Output the private key in PEM format, to ease integration in text based
     output_priv
-        .write_all(key_pair.private_as_pem().as_bytes())
+        .write_all(key_pair.0.to_pem().as_bytes())
         .expect("Error writing the private key");
     Ok(())
 }
@@ -1268,7 +1267,8 @@ fn main() {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use mla::crypto::hybrid::{MLKEMDecapsulationKey, generate_keypair_from_rng};
+    use mla::crypto::hybrid::MLKEMDecapsulationKey;
+    use mla::crypto::mlakey::generate_keypair_from_rng;
     use std::iter::FromIterator;
     use x25519_dalek::StaticSecret;
 
