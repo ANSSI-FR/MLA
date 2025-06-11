@@ -7,9 +7,9 @@ use mla::crypto::mlakey::{
 };
 use mla::errors::ConfigError;
 use mla::errors::Error as MLAError;
+use mla::format::ArchiveHeader;
 use mla::helpers::linear_extract;
 use mla::ArchiveFileID;
-use mla::ArchiveHeader;
 use mla::ArchiveReader;
 use mla::ArchiveWriter;
 use std::collections::HashMap;

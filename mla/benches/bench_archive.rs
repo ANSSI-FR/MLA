@@ -6,7 +6,7 @@ use criterion::Throughput;
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
 use mla::crypto::mlakey::generate_keypair_from_rng;
 use mla::helpers::linear_extract;
-use mla::{ArchiveFailSafeReader, Layers};
+use mla::{ArchiveFailSafeReader, format::Layers};
 use mla::{ArchiveReader, ArchiveWriter};
 use rand::SeedableRng;
 use rand::distributions::{Alphanumeric, Distribution};

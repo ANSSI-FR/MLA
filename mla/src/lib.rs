@@ -380,13 +380,15 @@ pub mod errors;
 use crate::errors::{Error, FailSafeReadError};
 
 pub mod config;
-use crate::config::{ArchivePersistentConfig, ArchiveReaderConfig, ArchiveWriterConfig};
+use crate::config::{ArchiveReaderConfig, ArchiveWriterConfig};
 
 pub mod crypto;
 use crate::crypto::hash::{HashWrapperReader, Sha256Hash};
 use sha2::{Digest, Sha256};
 
+pub mod format;
 pub mod helpers;
+use format::ArchiveHeader;
 
 #[cfg(test)]
 #[macro_use]
@@ -411,76 +413,9 @@ pub(crate) const BINCODE_CONFIG: bincode::config::Configuration<
     .with_limit::<{ BINCODE_MAX_DECODE }>()
     .with_fixed_int_encoding();
 
-#[derive(Debug, Clone, Copy, PartialEq, Encode, Decode)]
-pub struct Layers(u8);
-
-bitflags! {
-    /// Available layers. Order is relevant:
-    /// ```ascii-art
-    /// [File to blocks decomposition]
-    /// [Compression (COMPRESS)]
-    /// [Encryption (ENCRYPT)]
-    /// [Raw File I/O]
-    /// ```
-    impl Layers: u8 {
-        const ENCRYPT = 0b0000_0001;
-        const COMPRESS = 0b0000_0010;
-        /// Recommended layering
-        const DEFAULT = Self::ENCRYPT.bits() | Self::COMPRESS.bits();
-        /// No additional layer (ie, for debugging purpose)
-        const DEBUG = 0;
-        const EMPTY = 0;
-    }
-}
-
-impl std::default::Default for Layers {
-    fn default() -> Self {
-        Layers::DEFAULT
-    }
-}
+use format::Layers;
 
 pub type ArchiveFileID = u64;
-
-// -------- MLA Format Header --------
-
-pub struct ArchiveHeader {
-    pub format_version: u32,
-    pub config: ArchivePersistentConfig,
-}
-
-impl ArchiveHeader {
-    pub fn from<T: Read>(src: &mut T) -> Result<Self, Error> {
-        let mut buf = vec![00u8; MLA_MAGIC.len()];
-        src.read_exact(buf.as_mut_slice())?;
-        if buf != MLA_MAGIC {
-            return Err(Error::WrongMagic);
-        }
-        let format_version = src.read_u32::<LittleEndian>()?;
-        if format_version != MLA_FORMAT_VERSION {
-            return Err(Error::UnsupportedVersion);
-        }
-        let config: ArchivePersistentConfig =
-            match bincode::decode_from_std_read(src, BINCODE_CONFIG) {
-                Ok(config) => config,
-                _ => {
-                    return Err(Error::DeserializationError);
-                }
-            };
-        Ok(ArchiveHeader {
-            format_version,
-            config,
-        })
-    }
-
-    fn dump<T: Write>(&self, dest: &mut T) -> Result<(), Error> {
-        dest.write_all(MLA_MAGIC)?;
-        dest.write_u32::<LittleEndian>(self.format_version)?;
-        if bincode::encode_into_std_write(&self.config, dest, BINCODE_CONFIG).is_err() {
-            return Err(Error::SerializationError);
-        }
-        Ok(())
-    }
-}
 
 // -------- MLA Format Footer --------
 
@@ -1589,6 +1524,8 @@ impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
 
 #[cfg(test)]
 pub(crate) mod tests {
+    use crate::config::ArchivePersistentConfig;
+
     use super::*;
     use crypto::hybrid::{HybridPrivateKey, generate_keypair_from_rng};
     // use curve25519_parser::{parse_openssl_25519_privkey, parse_openssl_25519_pubkey};

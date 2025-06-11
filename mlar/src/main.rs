@@ -10,7 +10,8 @@ use mla::crypto::mlakey::{
 use mla::errors::{Error, FailSafeReadError};
 use mla::helpers::linear_extract;
 use mla::{
-    ArchiveFailSafeReader, ArchiveFile, ArchiveHeader, ArchiveReader, ArchiveWriter, Layers,
+    ArchiveFailSafeReader, ArchiveFile, ArchiveReader, ArchiveWriter, format::ArchiveHeader,
+    format::Layers,
 };
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;

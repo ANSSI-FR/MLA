@@ -49,7 +49,7 @@ fn app() -> Command {
 
 fn writer_from_matches(matches: &ArgMatches) -> mla::ArchiveWriter<'static, File> {
     let mut config = mla::config::ArchiveWriterConfig::new();
-    config.enable_layer(mla::Layers::COMPRESS);
+    config.enable_layer(mla::format::Layers::COMPRESS);
     if let Some(public_key_args) = matches.get_many::<PathBuf>("public_keys") {
         let mut public_keys = Vec::new();
         for public_key_arg in public_key_args {
@@ -60,7 +60,7 @@ fn writer_from_matches(matches: &ArgMatches) -> mla::ArchiveWriter<'static, File
 
             public_keys.push(public_key);
         }
-        config.enable_layer(mla::Layers::ENCRYPT);
+        config.enable_layer(mla::format::Layers::ENCRYPT);
         config.add_public_keys(&public_keys);
     }
     let out_file_path = matches.get_one::<PathBuf>("output").unwrap();
