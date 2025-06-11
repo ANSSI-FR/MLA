@@ -40,30 +40,30 @@ const MLKEM_1024_PRIVKEY_SIZE: usize = 3168;
 #[derive(Debug)]
 pub enum MLAKeyParserError {
     /// BER Parsing error (wrong tag, not enough DER elements, etc.)
-    BerError(der_parser::error::BerError),
+    BerError,
     /// PEM Parsing error
-    PemError(pem::PemError),
+    PemError,
     /// Nom parsing error (wrong format, unexpected elements, etc.)
-    NomError(nom::Err<der_parser::error::BerError>),
+    NomError,
     UnknownOid,
     InvalidData,
     InvalidPEMTag,
 }
 impl From<der_parser::error::BerError> for MLAKeyParserError {
-    fn from(error: der_parser::error::BerError) -> Self {
-        MLAKeyParserError::BerError(error)
+    fn from(_error: der_parser::error::BerError) -> Self {
+        MLAKeyParserError::BerError
     }
 }
 
 impl From<pem::PemError> for MLAKeyParserError {
-    fn from(error: pem::PemError) -> Self {
-        MLAKeyParserError::PemError(error)
+    fn from(_error: pem::PemError) -> Self {
+        MLAKeyParserError::PemError
     }
 }
 
 impl From<nom::Err<der_parser::error::BerError>> for MLAKeyParserError {
-    fn from(error: nom::Err<der_parser::error::BerError>) -> Self {
-        MLAKeyParserError::NomError(error)
+    fn from(_error: nom::Err<der_parser::error::BerError>) -> Self {
+        MLAKeyParserError::NomError
     }
 }
 
