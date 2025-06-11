@@ -218,6 +218,7 @@ impl From<MLAError> for MLAStatus {
 // file IDs being represented as u64, even on 32-bit systems)
 
 pub type MLAWriterConfigHandle = *mut c_void;
+pub type MLAReaderConfigHandle = *mut c_void;
 pub type MLAArchiveHandle = *mut c_void;
 pub type MLAArchiveFileHandle = *mut c_void;
 
@@ -398,7 +399,7 @@ pub extern "C" fn mla_writer_config_without_compression(
 
 #[no_mangle]
 pub extern "C" fn create_mla_reader_config_without_encryption(
-    handle_out: *mut MLAWriterConfigHandle,
+    handle_out: *mut MLAReaderConfigHandle,
 ) -> MLAStatus {
     if handle_out.is_null() {
         return MLAStatus::BadAPIArgument;
@@ -417,7 +418,7 @@ pub extern "C" fn create_mla_reader_config_without_encryption(
 /// (referenced by the handle returned by mla_reader_config_new()).
 #[no_mangle]
 pub extern "C" fn create_mla_reader_config_with_private_keys_der(
-    handle_out: *mut MLAWriterConfigHandle,
+    handle_out: *mut MLAReaderConfigHandle,
     private_keys_pointers: *const u8,
     number_of_private_keys: usize,
 ) -> MLAStatus {
@@ -433,7 +434,7 @@ pub extern "C" fn create_mla_reader_config_with_private_keys_der(
 /// (referenced by the handle returned by mla_reader_config_new()).
 #[no_mangle]
 pub extern "C" fn create_mla_reader_config_with_private_keys_der_accept_unencrypted(
-    handle_out: *mut MLAWriterConfigHandle,
+    handle_out: *mut MLAReaderConfigHandle,
     private_keys_pointers: *const u8,
     number_of_private_keys: usize,
 ) -> MLAStatus {
@@ -446,7 +447,7 @@ pub extern "C" fn create_mla_reader_config_with_private_keys_der_accept_unencryp
 }
 
 fn create_mla_reader_config_with_private_keys_der_generic<F>(
-    handle_out: *mut MLAWriterConfigHandle,
+    handle_out: *mut MLAReaderConfigHandle,
     private_keys_pointers: *const u8,
     number_of_private_keys: usize,
     f: F,
@@ -478,7 +479,7 @@ where
 
     let ptr = Box::into_raw(Box::new(config));
     unsafe {
-        *handle_out = ptr as MLAWriterConfigHandle;
+        *handle_out = ptr as MLAReaderConfigHandle;
     }
     MLAStatus::Success
 }
@@ -487,7 +488,7 @@ where
 /// (referenced by the handle returned by mla_reader_config_new()).
 #[no_mangle]
 pub extern "C" fn create_mla_reader_config_with_private_key_pem_many(
-    handle_out: *mut MLAWriterConfigHandle,
+    handle_out: *mut MLAReaderConfigHandle,
     private_key_pem: *const c_char,
 ) -> MLAStatus {
     create_mla_reader_config_with_private_key_pem_many_generic(
@@ -499,7 +500,7 @@ pub extern "C" fn create_mla_reader_config_with_private_key_pem_many(
 
 #[no_mangle]
 pub extern "C" fn create_mla_reader_config_with_private_key_pem_many_accept_unencrypted(
-    handle_out: *mut MLAWriterConfigHandle,
+    handle_out: *mut MLAReaderConfigHandle,
     private_key_pem: *const c_char,
 ) -> MLAStatus {
     create_mla_reader_config_with_private_key_pem_many_generic(
@@ -510,7 +511,7 @@ pub extern "C" fn create_mla_reader_config_with_private_key_pem_many_accept_unen
 }
 
 fn create_mla_reader_config_with_private_key_pem_many_generic<F>(
-    handle_out: *mut MLAWriterConfigHandle,
+    handle_out: *mut MLAReaderConfigHandle,
     private_keys_pem: *const c_char,
     f: F,
 ) -> MLAStatus
@@ -533,7 +534,7 @@ where
 
     let ptr = Box::into_raw(Box::new(config));
     unsafe {
-        *handle_out = ptr as MLAWriterConfigHandle;
+        *handle_out = ptr as MLAReaderConfigHandle;
     }
     MLAStatus::Success
 }
@@ -776,7 +777,7 @@ impl Seek for CallbackInputRead {
 /// The caller is responsible of all security checks related to callback provided paths
 #[no_mangle]
 pub extern "C" fn mla_roarchive_extract(
-    config: *mut MLAWriterConfigHandle,
+    config: *mut MLAReaderConfigHandle,
     read_callback: MlaReadCallback,
     seek_callback: MlaSeekCallback,
     file_callback: MlaFileCalback,
@@ -809,7 +810,7 @@ pub extern "C" fn mla_roarchive_extract(
 
 #[allow(clippy::extra_unused_lifetimes)]
 fn _mla_roarchive_extract<'a, R: Read + Seek + 'a>(
-    config: *mut MLAWriterConfigHandle,
+    config: *mut MLAReaderConfigHandle,
     src: R,
     file_callback: MlaFileCalbackRaw,
     context: *mut c_void,
