@@ -1413,6 +1413,9 @@ impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
     }
 }
 
+/// Extract information from MLA Header
+pub mod info;
+
 #[cfg(test)]
 pub(crate) mod tests {
     use crate::config::ArchivePersistentConfig;

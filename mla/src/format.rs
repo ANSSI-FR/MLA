@@ -7,8 +7,7 @@ use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
 pub use crate::crypto::hybrid::HybridRecipientEncapsulatedKey;
 use crate::{
-    ArchiveEntryId, ArchiveFileBlockType, BINCODE_CONFIG, FILENAME_MAX_SIZE, MLA_FORMAT_VERSION,
-    MLA_MAGIC, Sha256Hash, config::ArchivePersistentConfig, errors::Error,
+    config::ArchivePersistentConfig, errors::Error, ArchiveEntryId, ArchiveFileBlockType, Sha256Hash, BINCODE_CONFIG, FILENAME_MAX_SIZE, MLA_FORMAT_VERSION, MLA_MAGIC
 };
 pub struct ArchiveHeader {
     pub format_version: u32,
