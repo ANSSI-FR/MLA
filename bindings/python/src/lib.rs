@@ -12,7 +12,7 @@ use mla::crypto::mlakey::{
 use mla::{
     ArchiveReader, ArchiveWriter, Layers,
     config::{ArchiveReaderConfig, ArchiveWriterConfig},
-    crypto::hybrid::{HybridPrivateKey, HybridPublicKey},
+    crypto::mlakey::{HybridPrivateKey, HybridPublicKey},
 };
 use pyo3::{
     create_exception,

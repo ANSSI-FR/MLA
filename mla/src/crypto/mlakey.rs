@@ -11,16 +11,16 @@ use core::convert::{From, TryInto};
 use curve25519_dalek::edwards::CompressedEdwardsY;
 use curve25519_dalek::montgomery::MontgomeryPoint;
 use ml_kem::EncodedSizeUser;
-use rand::{CryptoRng, RngCore};
 use sha2::{Digest, Sha512};
 // Re-export x25519_dalek structures for convenience
 use x25519_dalek::{PublicKey, StaticSecret};
 
 use core::fmt;
 
-use crate::crypto::hybrid::{
-    HybridPrivateKey, HybridPublicKey, MLKEMDecapsulationKey, MLKEMEncapsulationKey,
-};
+pub use crate::crypto::hybrid::{HybridPrivateKey, HybridPublicKey};
+pub use crate::crypto::hybrid::{generate_keypair, generate_keypair_from_rng};
+
+use crate::crypto::hybrid::{MLKEMDecapsulationKey, MLKEMEncapsulationKey};
 
 const ED_25519_OID: Oid<'static> = oid!(1.3.101.112);
 const X_25519_OID: Oid<'static> = oid!(1.3.101.110);
@@ -535,58 +535,44 @@ const PUB_DER_LEN: usize =
 const PRIV_KEY_TAG: &str = "PRIVATE KEY";
 const PUB_KEY_TAG: &str = "PUBLIC KEY";
 
-pub struct KeyPair {
-    pub public_der: [u8; PUB_DER_LEN],
-    pub private_der: [u8; PRIV_DER_LEN],
-}
+impl HybridPublicKey {
+    pub fn to_der(&self) -> [u8; PUB_DER_LEN] {
+        let mut public_der = [0u8; PUB_DER_LEN];
+        public_der[..PUB_KEY_PREFIX1.len()].copy_from_slice(PUB_KEY_PREFIX1);
+        public_der[PUB_KEY_PREFIX1.len()..PUB_KEY_PREFIX1.len() + ECC_PUBKEY_SIZE]
+            .copy_from_slice(&self.public_key_ecc.to_bytes());
+        public_der[PUB_KEY_PREFIX1.len() + ECC_PUBKEY_SIZE
+            ..PUB_KEY_PREFIX1.len() + ECC_PUBKEY_SIZE + PUB_KEY_PREFIX2.len()]
+            .copy_from_slice(PUB_KEY_PREFIX2);
+        public_der[PUB_KEY_PREFIX1.len() + ECC_PUBKEY_SIZE + PUB_KEY_PREFIX2.len()..]
+            .copy_from_slice(&self.public_key_ml.as_bytes());
 
-impl KeyPair {
-    pub fn public_as_pem(&self) -> String {
-        let out = pem::Pem::new(PUB_KEY_TAG, self.public_der.to_vec());
-        pem::encode(&out)
+        public_der
     }
 
-    pub fn private_as_pem(&self) -> String {
-        let out = pem::Pem::new(PRIV_KEY_TAG, self.private_der.to_vec());
-        pem::encode(&out)
+    pub fn to_pem(&self) -> String {
+        pem::encode(&pem::Pem::new(PUB_KEY_TAG, self.to_der()))
     }
 }
 
-/// Generate a keypair, in DER format, using the provided CSPRNG
-///
-/// Keypairs can later be converted to PEM using `public_as_pem`, `private_as_pem`
-pub fn generate_keypair<T>(csprng: &mut T) -> Option<KeyPair>
-where
-    T: RngCore + CryptoRng,
-{
-    let (priv_key, public_key) = crate::crypto::hybrid::generate_keypair_from_rng(csprng);
+impl HybridPrivateKey {
+    pub fn to_der(&self) -> [u8; PRIV_DER_LEN] {
+        let mut private_der = [0u8; PRIV_DER_LEN];
+        private_der[..PRIV_KEY_PREFIX1.len()].copy_from_slice(PRIV_KEY_PREFIX1);
+        private_der[PRIV_KEY_PREFIX1.len()..PRIV_KEY_PREFIX1.len() + ECC_PRIVKEY_SIZE]
+            .copy_from_slice(&self.private_key_ecc.to_bytes());
+        private_der[PRIV_KEY_PREFIX1.len() + ECC_PRIVKEY_SIZE
+            ..PRIV_KEY_PREFIX1.len() + ECC_PRIVKEY_SIZE + PRIV_KEY_PREFIX2.len()]
+            .copy_from_slice(PRIV_KEY_PREFIX2);
+        private_der[PRIV_KEY_PREFIX1.len() + ECC_PRIVKEY_SIZE + PRIV_KEY_PREFIX2.len()..]
+            .copy_from_slice(&self.private_key_ml.as_bytes());
 
-    // Build the private data bytes
-    let mut private_der = [0u8; PRIV_DER_LEN];
-    private_der[..PRIV_KEY_PREFIX1.len()].copy_from_slice(PRIV_KEY_PREFIX1);
-    private_der[PRIV_KEY_PREFIX1.len()..PRIV_KEY_PREFIX1.len() + ECC_PRIVKEY_SIZE]
-        .copy_from_slice(&priv_key.private_key_ecc.to_bytes());
-    private_der[PRIV_KEY_PREFIX1.len() + ECC_PRIVKEY_SIZE
-        ..PRIV_KEY_PREFIX1.len() + ECC_PRIVKEY_SIZE + PRIV_KEY_PREFIX2.len()]
-        .copy_from_slice(PRIV_KEY_PREFIX2);
-    private_der[PRIV_KEY_PREFIX1.len() + ECC_PRIVKEY_SIZE + PRIV_KEY_PREFIX2.len()..]
-        .copy_from_slice(&priv_key.private_key_ml.as_bytes());
+        private_der
+    }
 
-    // Build the public data bytes
-    let mut public_der = [0u8; PUB_DER_LEN];
-    public_der[..PUB_KEY_PREFIX1.len()].copy_from_slice(PUB_KEY_PREFIX1);
-    public_der[PUB_KEY_PREFIX1.len()..PUB_KEY_PREFIX1.len() + ECC_PUBKEY_SIZE]
-        .copy_from_slice(&public_key.public_key_ecc.to_bytes());
-    public_der[PUB_KEY_PREFIX1.len() + ECC_PUBKEY_SIZE
-        ..PUB_KEY_PREFIX1.len() + ECC_PUBKEY_SIZE + PUB_KEY_PREFIX2.len()]
-        .copy_from_slice(PUB_KEY_PREFIX2);
-    public_der[PUB_KEY_PREFIX1.len() + ECC_PUBKEY_SIZE + PUB_KEY_PREFIX2.len()..]
-        .copy_from_slice(&public_key.public_key_ml.as_bytes());
-
-    Some(KeyPair {
-        public_der,
-        private_der,
-    })
+    pub fn to_pem(&self) -> String {
+        pem::encode(&pem::Pem::new(PRIV_KEY_TAG, self.to_der()))
+    }
 }
 
 #[cfg(test)]
@@ -645,10 +631,10 @@ mod tests {
     #[test]
     fn keypair_and_export() {
         let mut csprng = OsRng {};
-        let keypair = generate_keypair(&mut csprng).unwrap();
+        let keypair = generate_keypair_from_rng(&mut csprng);
 
-        let priv_key = parse_mlakey_privkey_der(&keypair.private_der).unwrap();
-        let pub_key = parse_mlakey_pubkey_der(&keypair.public_der).unwrap();
+        let priv_key = parse_mlakey_privkey_pem(keypair.0.to_pem().as_bytes()).unwrap();
+        let pub_key = parse_mlakey_pubkey_pem(keypair.1.to_pem().as_bytes()).unwrap();
 
         check_key_pair(pub_key, priv_key);
     }
@@ -660,16 +646,16 @@ mod tests {
 
         // Check the created key is deterministic
         let mut csprng = ChaChaRng::seed_from_u64(0);
-        let keypair1 = generate_keypair(&mut csprng).unwrap();
+        let keypair1 = generate_keypair_from_rng(&mut csprng);
         let mut csprng = ChaChaRng::seed_from_u64(0);
-        let keypair2 = generate_keypair(&mut csprng).unwrap();
-        assert_eq!(keypair1.private_der, keypair2.private_der);
-        assert_eq!(keypair1.public_der, keypair2.public_der);
+        let keypair2 = generate_keypair_from_rng(&mut csprng);
+        assert_eq!(keypair1.0.to_der(), keypair2.0.to_der());
+        assert_eq!(keypair1.1.to_der(), keypair2.1.to_der());
 
         // Ensure it is not always the same
         let mut csprng = ChaChaRng::seed_from_u64(1);
-        let keypair3 = generate_keypair(&mut csprng).unwrap();
-        assert_ne!(keypair1.private_der, keypair3.private_der);
+        let keypair3 = generate_keypair_from_rng(&mut csprng);
+        assert_ne!(keypair1.0.to_der(), keypair3.0.to_der());
     }
 
     /// Check PEM export from KeyPair
@@ -677,16 +663,18 @@ mod tests {
     fn keypair_export_pem() {
         // Generate a KeyPair
         let mut csprng = OsRng {};
-        let keypair = generate_keypair(&mut csprng).unwrap();
+        let keypair = generate_keypair_from_rng(&mut csprng);
 
         // Parse it as DER, then in PEM form
-        let priv_key = parse_mlakey_privkey_der(&keypair.private_der).unwrap();
-        let pub_key = parse_mlakey_pubkey_der(&keypair.public_der).unwrap();
+        let priv_der = keypair.0.to_der();
+        let pub_der = keypair.1.to_der();
+        let priv_key = parse_mlakey_privkey_der(&priv_der).unwrap();
+        let pub_key = parse_mlakey_pubkey_der(&pub_der).unwrap();
 
-        let priv_pem = keypair.private_as_pem();
-        let pub_pem = keypair.public_as_pem();
-        assert_ne!(&keypair.private_der, priv_pem.as_bytes());
-        assert_ne!(&keypair.public_der, pub_pem.as_bytes());
+        let priv_pem = keypair.0.to_pem();
+        let pub_pem = keypair.1.to_pem();
+        assert_ne!(&priv_der, priv_pem.as_bytes());
+        assert_ne!(&pub_der, pub_pem.as_bytes());
 
         let priv_key_pem = parse_mlakey_privkey_pem(priv_pem.as_bytes()).unwrap();
         let pub_key_pem = parse_mlakey_pubkey_pem(pub_pem.as_bytes()).unwrap();

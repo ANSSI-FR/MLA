@@ -4,7 +4,7 @@ use criterion::BenchmarkId;
 use criterion::Throughput;
 
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
-use mla::crypto::hybrid::generate_keypair_from_rng;
+use mla::crypto::mlakey::generate_keypair_from_rng;
 use mla::helpers::linear_extract;
 use mla::{ArchiveFailSafeReader, Layers};
 use mla::{ArchiveReader, ArchiveWriter};
