@@ -1,6 +1,4 @@
 use crate::ArchiveEntryId;
-use hkdf::InvalidLength;
-use hpke::HpkeError;
 use std::error;
 use std::fmt;
 use std::io;
@@ -35,7 +33,7 @@ pub enum Error {
     /// The writer state is not in the expected state for the current operation
     WrongWriterState(String),
     /// Error with the inner random generator
-    RandError(rand::Error),
+    RandError,
     /// A Private Key is required to decrypt the encrypted cipher key
     PrivateKeyNeeded,
     /// Deserialization error. May happens when starting from a wrong offset /
@@ -59,7 +57,7 @@ pub enum Error {
     /// Unable to expand while using the HKDF
     HKDFInvalidKeyLength,
     /// Error during HPKE computation
-    HPKEError(HpkeError),
+    HPKEError,
     /// Invalid last tag
     InvalidLastTag,
     /// User asked for encryption but archive was not marked as encrypted
@@ -85,12 +83,6 @@ impl From<std::string::FromUtf8Error> for Error {
     }
 }
 
-impl From<rand::Error> for Error {
-    fn from(error: rand::Error) -> Self {
-        Error::RandError(error)
-    }
-}
-
 impl From<Error> for io::Error {
     fn from(error: Error) -> Self {
         io::Error::other(format!("{error}"))
@@ -106,24 +98,11 @@ impl From<ConfigError> for Error {
     }
 }
 
-impl From<InvalidLength> for Error {
-    fn from(_error: InvalidLength) -> Self {
-        Error::HKDFInvalidKeyLength
-    }
-}
-
-impl From<HpkeError> for Error {
-    fn from(error: HpkeError) -> Self {
-        Error::HPKEError(error)
-    }
-}
-
 impl error::Error for Error {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match &self {
             Error::IOError(err) => Some(err),
             Error::UTF8ConversionError(err) => Some(err),
-            Error::RandError(err) => Some(err),
             Error::ConfigError(err) => Some(err),
             _ => None,
         }

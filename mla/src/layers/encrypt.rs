@@ -20,7 +20,6 @@ use bincode::{
     de::{BorrowDecoder, Decoder},
     error::DecodeError,
 };
-use hpke::HpkeError;
 use kem::{Decapsulate, Encapsulate};
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
@@ -305,10 +304,7 @@ impl<'a, W: 'a + InnerWriterTrait> EncryptionLayerWriter<'a, W> {
 
     fn renew_cipher_aad(&mut self, aad: &[u8]) -> Result<Tag, Error> {
         // Prepare a new cipher
-        self.current_ctr = self
-            .current_ctr
-            .checked_add(1)
-            .ok_or(HpkeError::MessageLimitReached)?;
+        self.current_ctr = self.current_ctr.checked_add(1).ok_or(Error::HPKEError)?;
         self.current_chunk_offset = 0;
         let cipher = AesGcm256::new(
             &self.key,
@@ -687,7 +683,7 @@ impl<R: Read> Read for EncryptionLayerFailSafeReader<'_, R> {
             self.current_chunk_number = self
                 .current_chunk_number
                 .checked_add(1)
-                .ok_or(Error::HPKEError(HpkeError::MessageLimitReached))?;
+                .ok_or(Error::HPKEError)?;
             self.current_chunk_offset = 0;
             self.cipher = AesGcm256::new(
                 &self.key,

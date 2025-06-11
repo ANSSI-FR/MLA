@@ -163,7 +163,7 @@ impl From<MLAError> for MLAStatus {
             MLAError::AssertionError(_) => MLAStatus::AssertionError,
             MLAError::WrongReaderState(_) => MLAStatus::WrongReaderState,
             MLAError::WrongWriterState(_) => MLAStatus::WrongWriterState,
-            MLAError::RandError(_) => MLAStatus::RandError,
+            MLAError::RandError => MLAStatus::RandError,
             MLAError::PrivateKeyNeeded => MLAStatus::PrivateKeyNeeded,
             MLAError::DeserializationError => MLAStatus::DeserializationError,
             MLAError::SerializationError => MLAStatus::SerializationError,
@@ -204,7 +204,7 @@ impl From<MLAError> for MLAStatus {
             MLAError::DuplicateFilename => MLAStatus::DuplicateFilename,
             MLAError::AuthenticatedDecryptionWrongTag => MLAStatus::AuthenticatedDecryptionWrongTag,
             MLAError::HKDFInvalidKeyLength => MLAStatus::HKDFInvalidKeyLength,
-            MLAError::HPKEError(_) => MLAStatus::HPKEError,
+            MLAError::HPKEError => MLAStatus::HPKEError,
             MLAError::InvalidLastTag => MLAStatus::InvalidLastTag,
             MLAError::EncryptionAskedButNotMarkedPresent => {
                 MLAStatus::EncryptionAskedButNotMarkedPresent

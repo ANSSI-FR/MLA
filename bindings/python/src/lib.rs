@@ -213,8 +213,8 @@ impl From<WrappedError> for PyErr {
                 )),
                 mla::errors::Error::WrongReaderState(msg) => PyErr::new::<WrongReaderState, _>(msg),
                 mla::errors::Error::WrongWriterState(msg) => PyErr::new::<WrongWriterState, _>(msg),
-                mla::errors::Error::RandError(err) => {
-                    PyErr::new::<RandError, _>(format!("{:}", err))
+                mla::errors::Error::RandError => {
+                    PyErr::new::<RandError, _>("Rand error")
                 }
                 mla::errors::Error::PrivateKeyNeeded => PyErr::new::<PrivateKeyNeeded, _>(
                     "A Private Key is required to decrypt the encrypted cipher key",
@@ -246,8 +246,8 @@ impl From<WrappedError> for PyErr {
                 mla::errors::Error::HKDFInvalidKeyLength => {
                     PyErr::new::<HKDFInvalidKeyLength, _>("Unable to expand while using the HKDF")
                 }
-                mla::errors::Error::HPKEError(msg) => {
-                    PyErr::new::<HPKEError, _>(format!("{:}", msg))
+                mla::errors::Error::HPKEError => {
+                    PyErr::new::<HPKEError, _>("HPKE error")
                 }
                 mla::errors::Error::InvalidLastTag => {
                     PyErr::new::<InvalidLastTag, _>("Wrong last block tag")
