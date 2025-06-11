@@ -118,7 +118,7 @@ fn combine(
 // to avoid confusion / prone-to-error code
 
 /// Per-recipient hybrid encapsulated shared secret
-struct HybridRecipientEncapsulatedKey {
+pub struct HybridRecipientEncapsulatedKey {
     ct_ml: MLKEMCiphertext,
     /// Ciphertext for DH-KEM (actually an ECC ephemeral public key)
     ct_ecc: DHKEMCiphertext,
@@ -179,7 +179,7 @@ impl<'de, Context> BorrowDecode<'de, Context> for HybridRecipientEncapsulatedKey
 /// Will be store in and load from the header
 pub struct HybridMultiRecipientEncapsulatedKey {
     /// Key wrapping for each recipient
-    recipients: Vec<HybridRecipientEncapsulatedKey>,
+    pub recipients: Vec<HybridRecipientEncapsulatedKey>,
 }
 
 impl Encode for HybridMultiRecipientEncapsulatedKey {
