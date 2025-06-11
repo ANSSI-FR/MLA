@@ -765,10 +765,10 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         Ok(())
     }
 
-    pub fn start_entry(&mut self, filename: &str) -> Result<ArchiveEntryId, Error> {
+    pub fn start_entry(&mut self, name: &str) -> Result<ArchiveEntryId, Error> {
         check_state!(self.state, OpenedFiles);
 
-        if self.files_info.contains_key(filename) {
+        if self.files_info.contains_key(name) {
             return Err(Error::DuplicateFilename);
         }
 
@@ -776,7 +776,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         let id = self.next_id;
         self.next_id += 1;
         self.current_id = id;
-        self.files_info.insert(filename.to_string(), id);
+        self.files_info.insert(name.to_string(), id);
 
         // Save the current position
         self.ids_info.insert(
@@ -789,7 +789,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         );
         // Use std::io::Empty as a readable placeholder type
         ArchiveFileBlock::FileStart::<std::io::Empty> {
-            filename: filename.to_string(),
+            filename: name.to_string(),
             id,
         }
         .dump(&mut self.dest)?;
@@ -861,8 +861,8 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         Ok(())
     }
 
-    pub fn add_entry<U: Read>(&mut self, filename: &str, size: u64, src: U) -> Result<(), Error> {
-        let id = self.start_entry(filename)?;
+    pub fn add_entry<U: Read>(&mut self, name: &str, size: u64, src: U) -> Result<(), Error> {
+        let id = self.start_entry(name)?;
         self.append_entry_content(id, size, src)?;
         self.end_entry(id)
     }
