@@ -5,7 +5,7 @@ use std::{
 };
 
 use ml_kem::EncodedSizeUser;
-use mla::crypto::mlakey_parser::{
+use mla::crypto::mlakey::{
     parse_mlakey_privkey_der, parse_mlakey_privkey_pem, parse_mlakey_pubkey_der,
     parse_mlakey_pubkey_pem,
 };
