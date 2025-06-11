@@ -11,7 +11,6 @@ use crate::layers::traits::{
 };
 use crate::{BINCODE_CONFIG, Error};
 
-use crate::config::{ArchiveWriterConfig, ConfigResult};
 use crate::errors::ConfigError;
 
 use super::traits::InnerReaderTrait;
@@ -47,14 +46,17 @@ impl std::default::Default for CompressionConfig {
     }
 }
 
-impl ArchiveWriterConfig {
+impl CompressionConfig {
     /// Set the compression level
     /// compression level (0-11); bigger values cause denser, but slower compression
-    pub fn with_compression_level(&mut self, compression_level: u32) -> ConfigResult {
+    pub(crate) fn set_compression_level(
+        &mut self,
+        compression_level: u32,
+    ) -> Result<&mut Self, ConfigError> {
         if compression_level > 11 {
             Err(ConfigError::CompressionLevelOutOfRange)
         } else {
-            self.compress.compression_level = compression_level;
+            self.compression_level = compression_level;
             Ok(self)
         }
     }
