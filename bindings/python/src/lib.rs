@@ -8,7 +8,7 @@ use mla::crypto::mlakey::{
     parse_mlakey_pubkey_pem,
 };
 use mla::{
-    ArchiveReader, ArchiveWriter, format::Layers,
+    ArchiveReader, ArchiveWriter,
     config::{ArchiveReaderConfig, ArchiveWriterConfig},
     crypto::mlakey::{HybridPrivateKey, HybridPublicKey},
 };
@@ -1150,10 +1150,6 @@ fn pymla(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("InvalidLastTag", py.get_type::<InvalidLastTag>())?;
 
     // Add constants
-    m.add("LAYER_COMPRESS", Layers::COMPRESS.bits())?;
-    m.add("LAYER_ENCRYPT", Layers::ENCRYPT.bits())?;
-    m.add("LAYER_DEFAULT", Layers::DEFAULT.bits())?;
-    m.add("LAYER_EMPTY", Layers::EMPTY.bits())?;
     m.add("DEFAULT_COMPRESSION_LEVEL", DEFAULT_COMPRESSION_LEVEL)?;
     Ok(())
 }

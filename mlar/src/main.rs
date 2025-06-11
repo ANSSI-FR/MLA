@@ -9,10 +9,7 @@ use mla::crypto::mlakey::{
 };
 use mla::errors::{Error, FailSafeReadError};
 use mla::helpers::linear_extract;
-use mla::{
-    ArchiveEntry, ArchiveFailSafeReader, ArchiveReader, ArchiveWriter, format::ArchiveHeader,
-    format::Layers,
-};
+use mla::{ArchiveEntry, ArchiveFailSafeReader, ArchiveReader, ArchiveWriter};
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use sha2::{Digest, Sha512};
@@ -867,30 +864,18 @@ fn keyderive(matches: &ArgMatches) -> Result<(), MlarError> {
 fn info(matches: &ArgMatches) -> Result<(), MlarError> {
     // Safe to use unwrap() because the option is required()
     let mla_file = matches.get_one::<PathBuf>("input").unwrap();
-    let path = Path::new(&mla_file);
-    let mut file = File::open(path)?;
+    let mut src = File::open(mla_file)?;
 
-    // Get Header
-    let header = ArchiveHeader::from(&mut file)?;
+    let info = mla::info::read_header_info(&mut src)?;
 
-    let encryption = header.config.layers_enabled.contains(Layers::ENCRYPT);
-    let compression = header.config.layers_enabled.contains(Layers::COMPRESS);
+    let encryption = info.is_encryption_enabled();
+    let compression = info.is_compression_enabled();
 
     // Format Version
-    println!("Format version: {}", header.format_version);
+    println!("Format version: {}", info.get_format_version());
 
     // Encryption config
     println!("Encryption: {encryption}");
-    if encryption && matches.get_flag("verbose") {
-        let encrypt_config = header.config.encrypt.expect("Encryption config not found");
-        println!(
-            "  Recipients: {}",
-            encrypt_config
-                .hybrid_multi_recipient_encapsulate_key
-                .count_keys()
-        );
-    }
-
     println!("Compression: {compression}");
 
     Ok(())
