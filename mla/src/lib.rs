@@ -382,7 +382,6 @@ use crate::errors::{Error, FailSafeReadError};
 pub mod config;
 use crate::config::{ArchivePersistentConfig, ArchiveReaderConfig, ArchiveWriterConfig};
 
-#[doc(hidden)]
 pub mod crypto;
 use crate::crypto::hash::{HashWrapperReader, Sha256Hash};
 use sha2::{Digest, Sha256};
