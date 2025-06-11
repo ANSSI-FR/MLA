@@ -883,7 +883,7 @@ pub struct ArchiveFile<T: Read> {
 }
 
 #[derive(PartialEq, Debug)]
-enum BlocksToFileReaderState {
+enum ArchiveEntryDataReaderState {
     // Remaining size
     InFile(usize),
     Ready,
@@ -891,10 +891,10 @@ enum BlocksToFileReaderState {
 }
 
 #[derive(Debug)]
-pub struct BlocksToFileReader<'a, R: Read + Seek> {
+pub struct ArchiveEntryDataReader<'a, R: Read + Seek> {
     /// This structure wraps the internals to get back a file's content
     src: &'a mut R,
-    state: BlocksToFileReaderState,
+    state: ArchiveEntryDataReaderState,
     /// id of the File being read
     id: ArchiveFileID,
     /// position in `offsets` of the last offset used
@@ -903,8 +903,8 @@ pub struct BlocksToFileReader<'a, R: Read + Seek> {
     offsets: &'a [u64],
 }
 
-impl<'a, R: Read + Seek> BlocksToFileReader<'a, R> {
-    fn new(src: &'a mut R, offsets: &'a [u64]) -> Result<BlocksToFileReader<'a, R>, Error> {
+impl<'a, R: Read + Seek> ArchiveEntryDataReader<'a, R> {
+    fn new(src: &'a mut R, offsets: &'a [u64]) -> Result<ArchiveEntryDataReader<'a, R>, Error> {
         // Set the inner layer at the start of the file
         src.seek(SeekFrom::Start(offsets[0]))?;
 
@@ -918,9 +918,9 @@ impl<'a, R: Read + Seek> BlocksToFileReader<'a, R> {
             }
         };
 
-        Ok(BlocksToFileReader {
+        Ok(ArchiveEntryDataReader {
             src,
-            state: BlocksToFileReaderState::Ready,
+            state: ArchiveEntryDataReaderState::Ready,
             id,
             current_offset: 0,
             offsets,
@@ -941,10 +941,10 @@ impl<'a, R: Read + Seek> BlocksToFileReader<'a, R> {
     }
 }
 
-impl<T: Read + Seek> Read for BlocksToFileReader<'_, T> {
+impl<T: Read + Seek> Read for ArchiveEntryDataReader<'_, T> {
     fn read(&mut self, into: &mut [u8]) -> io::Result<usize> {
         let (remaining, count) = match self.state {
-            BlocksToFileReaderState::Ready => {
+            ArchiveEntryDataReaderState::Ready => {
                 // Start a new block FileContent
                 match ArchiveFileBlock::from(&mut self.src)? {
                     ArchiveFileBlock::FileContent { length, id, .. } => {
@@ -961,7 +961,7 @@ impl<T: Read + Seek> Read for BlocksToFileReader<'_, T> {
                             self.move_to_next_block()?;
                             return self.read(into);
                         }
-                        self.state = BlocksToFileReaderState::Finish;
+                        self.state = ArchiveEntryDataReaderState::Finish;
                         return Ok(0);
                     }
                     ArchiveFileBlock::FileStart { id, .. } => {
@@ -982,19 +982,19 @@ impl<T: Read + Seek> Read for BlocksToFileReader<'_, T> {
                     }
                 }
             }
-            BlocksToFileReaderState::InFile(remaining) => {
+            ArchiveEntryDataReaderState::InFile(remaining) => {
                 let count = self.src.by_ref().take(remaining as u64).read(into)?;
                 (remaining - count, count)
             }
-            BlocksToFileReaderState::Finish => {
+            ArchiveEntryDataReaderState::Finish => {
                 return Ok(0);
             }
         };
         if remaining > 0 {
-            self.state = BlocksToFileReaderState::InFile(remaining);
+            self.state = ArchiveEntryDataReaderState::InFile(remaining);
         } else {
             // remaining is 0 (> never happens thanks to take)
-            self.state = BlocksToFileReaderState::Ready;
+            self.state = ArchiveEntryDataReaderState::Ready;
         }
         Ok(count)
     }
@@ -1102,7 +1102,7 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
     pub fn get_file(
         &mut self,
         filename: String,
-    ) -> Result<Option<ArchiveFile<BlocksToFileReader<Box<dyn 'b + LayerReader<'b, R>>>>>, Error>
+    ) -> Result<Option<ArchiveFile<ArchiveEntryDataReader<Box<dyn 'b + LayerReader<'b, R>>>>>, Error>
     {
         if let Some(ArchiveFooter { files_info }) = &self.metadata {
             // Get file relative information
@@ -1117,7 +1117,7 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
             }
 
             // Instantiate the file representation
-            let reader = BlocksToFileReader::new(&mut self.src, &file_info.offsets)?;
+            let reader = ArchiveEntryDataReader::new(&mut self.src, &file_info.offsets)?;
             Ok(Some(ArchiveFile {
                 filename,
                 data: reader,
@@ -1510,8 +1510,8 @@ pub(crate) mod tests {
 
         let mut data_source = std::io::Cursor::new(buf);
         let offsets = [0];
-        let mut reader =
-            BlocksToFileReader::new(&mut data_source, &offsets).expect("BlockToFileReader failed");
+        let mut reader = ArchiveEntryDataReader::new(&mut data_source, &offsets)
+            .expect("BlockToFileReader failed");
         let mut output = Vec::new();
         reader.read_to_end(&mut output).unwrap();
         assert_eq!(output.len(), fake_content.len() + fake_content2.len());
@@ -1519,7 +1519,7 @@ pub(crate) mod tests {
         expected_output.extend(fake_content);
         expected_output.extend(fake_content2);
         assert_eq!(output, expected_output);
-        assert_eq!(reader.state, BlocksToFileReaderState::Finish);
+        assert_eq!(reader.state, ArchiveEntryDataReaderState::Finish);
     }
 
     #[test]
