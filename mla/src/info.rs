@@ -1,6 +1,9 @@
 use std::io::Read;
 
-use crate::{errors::Error, format::{ArchiveHeader, Layers}};
+use crate::{
+    errors::Error,
+    format::{ArchiveHeader, Layers},
+};
 
 pub struct ArchiveHeaderInfo {
     format_version: u32,

@@ -14,7 +14,7 @@ use crate::layers::traits::{
 use std::io;
 use std::io::{BufReader, Cursor, Read, Seek, SeekFrom, Write};
 
-use crate::config::{ArchiveReaderConfig, ArchiveWriterConfig};
+use crate::config::ArchiveReaderConfig;
 use crate::errors::ConfigError;
 use bincode::{
     BorrowDecode, Decode, Encode,
@@ -193,15 +193,6 @@ impl Default for EncapsulationRNG {
 }
 
 impl EncryptionConfig {
-    /// Consistency check
-    pub fn check(&self) -> Result<(), ConfigError> {
-        if self.public_keys.keys.is_empty() {
-            Err(ConfigError::NoRecipients)
-        } else {
-            Ok(())
-        }
-    }
-
     /// Create a persistent version of the configuration to be reloaded
     ///    and the internal configuration, containing the cryptographic material
     ///
@@ -232,12 +223,9 @@ impl EncryptionConfig {
             cryptographic_material,
         ))
     }
-}
 
-impl ArchiveWriterConfig {
-    /// Set public keys to use
-    pub fn add_public_keys(&mut self, keys: &[HybridPublicKey]) -> &mut ArchiveWriterConfig {
-        self.encrypt.public_keys.keys.extend_from_slice(keys);
+    pub(crate) fn add_public_keys(&mut self, keys: &[HybridPublicKey]) -> &mut EncryptionConfig {
+        self.public_keys.keys.extend_from_slice(keys);
         self
     }
 }
