@@ -45,10 +45,10 @@ fn build_archive(iters: u64, size: u64, layers: Layers) -> (Vec<u8>, ArchiveRead
             .sample_iter(&mut rng)
             .take(size as usize)
             .collect();
-        let id = mla.start_file(&format!("file_{i}")).unwrap();
-        mla.append_file_content(id, data.len() as u64, data.as_slice())
+        let id = mla.start_entry(&format!("file_{i}")).unwrap();
+        mla.append_entry_content(id, data.len() as u64, data.as_slice())
             .unwrap();
-        mla.end_file(id).unwrap();
+        mla.end_entry(id).unwrap();
     }
     let dest = mla.finalize().unwrap();
 
@@ -100,12 +100,12 @@ pub fn writer_multiple_layers_multiple_block_size(c: &mut Criterion) {
                 .add_public_keys(&[public_key.clone()]);
             let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
 
-            let id = mla.start_file("file").unwrap();
+            let id = mla.start_entry("file").unwrap();
             group.bench_with_input(
                 BenchmarkId::new(format!("{layers:?}"), size),
                 size,
                 |b, &_size| {
-                    b.iter(|| mla.append_file_content(id, data.len() as u64, data.as_slice()));
+                    b.iter(|| mla.append_entry_content(id, data.len() as u64, data.as_slice()));
                 },
             );
         }
@@ -142,12 +142,12 @@ pub fn multiple_compression_quality(c: &mut Criterion) {
             .unwrap();
         let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
 
-        let id = mla.start_file("file").unwrap();
+        let id = mla.start_entry("file").unwrap();
         group.bench_with_input(
             BenchmarkId::new(format!("CompressionLevel {quality}"), size),
             &size,
             |b, &_size| {
-                b.iter(|| mla.append_file_content(id, data.len() as u64, data.as_slice()));
+                b.iter(|| mla.append_entry_content(id, data.len() as u64, data.as_slice()));
             },
         );
     }

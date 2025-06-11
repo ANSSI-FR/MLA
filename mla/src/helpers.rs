@@ -94,7 +94,7 @@ impl<'a, 'b, W: InnerWriterTrait> StreamWriter<'a, 'b, W> {
 impl<W: InnerWriterTrait> Write for StreamWriter<'_, '_, W> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.archive
-            .append_file_content(self.file_id, buf.len() as u64, buf)?;
+            .append_entry_content(self.file_id, buf.len() as u64, buf)?;
         Ok(buf.len())
     }
 
@@ -222,20 +222,20 @@ mod tests {
         let fake_file = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
         // Using write API
-        let id = mla.start_file("my_file").unwrap();
+        let id = mla.start_entry("my_file").unwrap();
         let mut sw = StreamWriter::new(&mut mla, id);
         sw.write_all(&fake_file[..5]).unwrap();
         sw.write_all(&fake_file[5..]).unwrap();
-        mla.end_file(id).unwrap();
+        mla.end_entry(id).unwrap();
 
         // Using io::copy
-        let id = mla.start_file("my_file2").unwrap();
+        let id = mla.start_entry("my_file2").unwrap();
         let mut sw = StreamWriter::new(&mut mla, id);
         assert_eq!(
             io::copy(&mut fake_file.as_slice(), &mut sw).unwrap(),
             fake_file.len() as u64
         );
-        mla.end_file(id).unwrap();
+        mla.end_entry(id).unwrap();
 
         let dest = mla.finalize().unwrap();
 

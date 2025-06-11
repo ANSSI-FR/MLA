@@ -487,7 +487,7 @@ pub extern "C" fn mla_archive_file_new(
     let file_name = unsafe { CStr::from_ptr(file_name) }.to_string_lossy();
 
     let mut archive = unsafe { Box::from_raw(archive as *mut ArchiveWriter<CallbackOutput>) };
-    let res = match archive.start_file(&file_name) {
+    let res = match archive.start_entry(&file_name) {
         Ok(fileid) => {
             let ptr = Box::into_raw(Box::new(fileid));
             unsafe {
@@ -522,7 +522,7 @@ pub extern "C" fn mla_archive_file_append(
 
     let mut archive = unsafe { Box::from_raw(archive as *mut ArchiveWriter<CallbackOutput>) };
     let file = unsafe { Box::from_raw(file as *mut ArchiveEntryId) };
-    let res = match archive.append_file_content(*file, length, slice) {
+    let res = match archive.append_entry_content(*file, length, slice) {
         Ok(_) => MLAStatus::Success,
         Err(e) => MLAStatus::from(e),
     };
@@ -575,7 +575,7 @@ pub extern "C" fn mla_archive_file_close(
     let mut archive = unsafe { Box::from_raw(archive as *mut ArchiveWriter<CallbackOutput>) };
     let file = unsafe { Box::from_raw(handle as *mut ArchiveEntryId) };
 
-    let res = match archive.end_file(*file) {
+    let res = match archive.end_entry(*file) {
         Ok(_) => MLAStatus::Success,
         Err(e) => MLAStatus::from(e),
     };
