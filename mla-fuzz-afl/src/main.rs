@@ -9,7 +9,7 @@ use std::io::{self, Cursor, Read, Write};
 
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
 use mla::errors::{Error, FailSafeReadError};
-use mla::{ArchiveFailSafeReader, ArchiveFileID, ArchiveReader, ArchiveWriter, Layers};
+use mla::{ArchiveFailSafeReader, ArchiveFileID, ArchiveReader, ArchiveWriter, format::Layers};
 
 use std::collections::HashMap;
 

@@ -10,7 +10,7 @@ use mla::crypto::mlakey::{
     parse_mlakey_pubkey_pem,
 };
 use mla::{
-    ArchiveReader, ArchiveWriter, Layers,
+    ArchiveReader, ArchiveWriter, format::Layers,
     config::{ArchiveReaderConfig, ArchiveWriterConfig},
     crypto::mlakey::{HybridPrivateKey, HybridPublicKey},
 };

@@ -1,7 +1,7 @@
 use bincode::{Decode, Encode};
 
-use crate::Layers;
 use crate::errors::ConfigError;
+use crate::format::Layers;
 use crate::layers::compress::CompressionConfig;
 use crate::layers::encrypt::{
     EncryptionConfig, EncryptionPersistentConfig, EncryptionReaderConfig, InternalEncryptionConfig,
