@@ -264,7 +264,7 @@ impl Write for CallbackOutput {
 #[no_mangle]
 pub extern "C" fn create_mla_writer_config_with_public_keys_der(
     handle_out: *mut MLAWriterConfigHandle,
-    public_keys_pointers: *const u8,
+    public_keys_pointers: *const *const u8,
     number_of_public_keys: usize,
 ) -> MLAStatus {
     if handle_out.is_null() || public_keys_pointers.is_null() || number_of_public_keys == 0 {
@@ -274,11 +274,17 @@ pub extern "C" fn create_mla_writer_config_with_public_keys_der(
     let public_keys_pointers =
         unsafe { std::slice::from_raw_parts(public_keys_pointers, number_of_public_keys) };
 
+    for pointer in public_keys_pointers {
+        if pointer.is_null() {
+            return MLAStatus::BadAPIArgument;
+        }
+    }
+
     let public_keys = public_keys_pointers
         .iter()
         .map(|pointer| {
             let public_key_data =
-                unsafe { std::slice::from_raw_parts(pointer, MLAKEY_PUBKEY_DER_SIZE) };
+                unsafe { std::slice::from_raw_parts(*pointer, MLAKEY_PUBKEY_DER_SIZE) };
             parse_mlakey_pubkey_der(public_key_data)
         })
         .collect::<Result<Vec<HybridPublicKey>, MLAKeyParserError>>();
