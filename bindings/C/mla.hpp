@@ -136,13 +136,13 @@ MLAStatus create_mla_reader_config_without_encryption(MLAReaderConfigHandle *han
 /// Appends the given private key in DER format to an existing given configuration
 /// (referenced by the handle returned by mla_reader_config_new()).
 MLAStatus create_mla_reader_config_with_private_keys_der(MLAReaderConfigHandle *handle_out,
-                                                         const uint8_t *private_keys_pointers,
+                                                         const uint8_t *const *private_keys_pointers,
                                                          uintptr_t number_of_private_keys);
 
 /// Appends the given private key in DER format to an existing given configuration
 /// (referenced by the handle returned by mla_reader_config_new()).
 MLAStatus create_mla_reader_config_with_private_keys_der_accept_unencrypted(MLAReaderConfigHandle *handle_out,
-                                                                            const uint8_t *private_keys_pointers,
+                                                                            const uint8_t *const *private_keys_pointers,
                                                                             uintptr_t number_of_private_keys);
 
 /// Appends the given private key in PEM format to an existing given configuration
