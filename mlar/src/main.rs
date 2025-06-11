@@ -7,7 +7,7 @@ use mla::crypto::mlakey::{
     HybridPrivateKey, HybridPublicKey, derive_keypair_from_path, generate_keypair_from_rng,
     parse_mlakey_privkey_pem, parse_mlakey_pubkey_pem,
 };
-use mla::errors::{Error, FailSafeReadError};
+use mla::errors::{Error, TruncatedReadError};
 use mla::helpers::linear_extract;
 use mla::{ArchiveEntry, TruncatedArchiveReader, ArchiveReader, ArchiveWriter};
 use rand::SeedableRng;
@@ -739,8 +739,8 @@ fn repair(matches: &ArgMatches) -> Result<(), MlarError> {
     // Convert
     let status = mla.convert_to_archive(mla_out)?;
     match status {
-        FailSafeReadError::NoError => {}
-        FailSafeReadError::EndOfOriginalArchiveData => {
+        TruncatedReadError::NoError => {}
+        TruncatedReadError::EndOfOriginalArchiveData => {
             eprintln!("[WARNING] The whole archive has been recovered");
         }
         _ => {

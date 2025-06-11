@@ -372,7 +372,7 @@ use crate::layers::traits::{
     InnerWriterTrait, InnerWriterType, LayerFailSafeReader, LayerReader, LayerWriter,
 };
 pub mod errors;
-use crate::errors::{Error, FailSafeReadError};
+use crate::errors::{Error, TruncatedReadError};
 
 pub mod config;
 use crate::config::{ArchiveReaderConfig, ArchiveWriterConfig};
@@ -1147,13 +1147,13 @@ const CACHE_SIZE: usize = 8 * 1024 * 1024; // 8MB
 
 /// Used to update the error state only if it was NoError
 /// ```text
-/// update_error!(error_var, FailSafeReadError::...)
+/// update_error!(error_var, TruncatedReadError::...)
 /// ```
 macro_rules! update_error {
     ( $x:ident = $y:expr ) => {
         #[allow(clippy::single_match)]
         match $x {
-            FailSafeReadError::NoError => {
+            TruncatedReadError::NoError => {
                 $x = $y;
             }
             _ => {}
@@ -1189,8 +1189,8 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
     pub fn convert_to_archive<W: InnerWriterTrait>(
         &mut self,
         mut output: ArchiveWriter<W>,
-    ) -> Result<FailSafeReadError, Error> {
-        let mut error = FailSafeReadError::NoError;
+    ) -> Result<TruncatedReadError, Error> {
+        let mut error = TruncatedReadError::NoError;
 
         // Associate an id retrieved from the archive to repair, to the
         // corresponding output file id
@@ -1206,26 +1206,26 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
             match ArchiveFileBlock::from(&mut self.src) {
                 Err(Error::IOError(err)) => {
                     if let std::io::ErrorKind::UnexpectedEof = err.kind() {
-                        update_error!(error = FailSafeReadError::UnexpectedEOFOnNextBlock);
+                        update_error!(error = TruncatedReadError::UnexpectedEOFOnNextBlock);
                         break;
                     }
-                    update_error!(error = FailSafeReadError::IOErrorOnNextBlock(err));
+                    update_error!(error = TruncatedReadError::IOErrorOnNextBlock(err));
                     break;
                 }
                 Err(err) => {
-                    update_error!(error = FailSafeReadError::ErrorOnNextBlock(err));
+                    update_error!(error = TruncatedReadError::ErrorOnNextBlock(err));
                     break;
                 }
                 Ok(block) => {
                     match block {
                         ArchiveFileBlock::FileStart { filename, id } => {
                             if let Some(_id_output) = id_failsafe2id_output.get(&id) {
-                                update_error!(error = FailSafeReadError::ArchiveFileIDReuse(id));
+                                update_error!(error = TruncatedReadError::ArchiveFileIDReuse(id));
                                 break 'read_block;
                             }
                             if id_failsafe_done.contains(&id) {
                                 update_error!(
-                                    error = FailSafeReadError::ArchiveFileIDAlreadyClose(id)
+                                    error = TruncatedReadError::ArchiveFileIDAlreadyClose(id)
                                 );
                                 break 'read_block;
                             }
@@ -1234,7 +1234,7 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
                             let id_output = match output.start_entry(&filename) {
                                 Err(Error::DuplicateFilename) => {
                                     update_error!(
-                                        error = FailSafeReadError::FilenameReuse(filename)
+                                        error = TruncatedReadError::FilenameReuse(filename)
                                     );
                                     break 'read_block;
                                 }
@@ -1251,14 +1251,14 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
                                 Some(id_output) => *id_output,
                                 None => {
                                     update_error!(
-                                        error = FailSafeReadError::ContentForUnknownFile(id)
+                                        error = TruncatedReadError::ContentForUnknownFile(id)
                                     );
                                     break 'read_block;
                                 }
                             };
                             if id_failsafe_done.contains(&id) {
                                 update_error!(
-                                    error = FailSafeReadError::ArchiveFileIDAlreadyClose(id)
+                                    error = TruncatedReadError::ArchiveFileIDAlreadyClose(id)
                                 );
                                 break 'read_block;
                             }
@@ -1307,7 +1307,7 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
                                                 &buf[..next_write_pos],
                                             )?;
                                             update_error!(
-                                                error = FailSafeReadError::ErrorInFile(
+                                                error = TruncatedReadError::ErrorInFile(
                                                     err,
                                                     fname.clone()
                                                 )
@@ -1336,13 +1336,15 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
                             let id_output = match id_failsafe2id_output.get(&id) {
                                 Some(id_output) => *id_output,
                                 None => {
-                                    update_error!(error = FailSafeReadError::EOFForUnknownFile(id));
+                                    update_error!(
+                                        error = TruncatedReadError::EOFForUnknownFile(id)
+                                    );
                                     break 'read_block;
                                 }
                             };
                             if id_failsafe_done.contains(&id) {
                                 update_error!(
-                                    error = FailSafeReadError::ArchiveFileIDAlreadyClose(id)
+                                    error = TruncatedReadError::ArchiveFileIDAlreadyClose(id)
                                 );
                                 break 'read_block;
                             }
@@ -1351,7 +1353,7 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
                                     let computed_hash = hash_archive.finalize();
                                     if computed_hash.as_slice() != hash {
                                         update_error!(
-                                            error = FailSafeReadError::HashDiffers {
+                                            error = TruncatedReadError::HashDiffers {
                                                 expected: Vec::from(computed_hash.as_slice()),
                                                 obtained: Vec::from(&hash[..]),
                                             }
@@ -1362,7 +1364,7 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
                                 None => {
                                     // Synchronisation error
                                     update_error!(
-                                        error = FailSafeReadError::FailSafeReadInternalError
+                                        error = TruncatedReadError::FailSafeReadInternalError
                                     );
                                     break 'read_block;
                                 }
@@ -1373,7 +1375,7 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
                         }
                         ArchiveFileBlock::EndOfArchiveData => {
                             // Expected end
-                            update_error!(error = FailSafeReadError::EndOfOriginalArchiveData);
+                            update_error!(error = TruncatedReadError::EndOfOriginalArchiveData);
                             break 'read_block;
                         }
                     }
@@ -1400,7 +1402,7 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
 
         // Report which files are not completed, if any
         if !unfinished_files.is_empty() {
-            error = FailSafeReadError::UnfinishedFiles {
+            error = TruncatedReadError::UnfinishedFiles {
                 filenames: unfinished_files,
                 stopping_error: Box::new(error),
             };
@@ -1810,7 +1812,7 @@ pub(crate) mod tests {
 
         // Conversion
         match mla_fsread.convert_to_archive(mla_w).unwrap() {
-            FailSafeReadError::EndOfOriginalArchiveData => {
+            TruncatedReadError::EndOfOriginalArchiveData => {
                 // We expect to end with the final tag - all files have been
                 // read and we stop on the tag before the footer
             }
@@ -2002,14 +2004,14 @@ pub(crate) mod tests {
 
         // Conversion
         match mla_fsread.convert_to_archive(mla_w).unwrap() {
-            FailSafeReadError::UnfinishedFiles {
+            TruncatedReadError::UnfinishedFiles {
                 filenames,
                 stopping_error,
             } => {
                 // We expect to ends with a HashDiffers on first file
                 assert_eq!(filenames, vec![files[0].0.to_string()]);
                 match *stopping_error {
-                    FailSafeReadError::HashDiffers { .. } => {}
+                    TruncatedReadError::HashDiffers { .. } => {}
                     _ => {
                         panic!("Unexpected stopping_error: {}", stopping_error);
                     }
@@ -2218,7 +2220,7 @@ pub(crate) mod tests {
         let mut dest_w = Vec::new();
         let config = ArchiveWriterConfig::without_encryption().without_compression();
         let mla_w = ArchiveWriter::from_config(&mut dest_w, config).expect("Writer init failed");
-        if let FailSafeReadError::EndOfOriginalArchiveData =
+        if let TruncatedReadError::EndOfOriginalArchiveData =
             mla_fsread.convert_to_archive(mla_w).unwrap()
         {
             // Everything runs as expected
