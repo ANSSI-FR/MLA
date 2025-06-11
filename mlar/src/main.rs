@@ -9,7 +9,7 @@ use mla::crypto::mlakey::{
 };
 use mla::errors::{Error, TruncatedReadError};
 use mla::helpers::linear_extract;
-use mla::{ArchiveEntry, TruncatedArchiveReader, ArchiveReader, ArchiveWriter};
+use mla::{ArchiveReader, ArchiveWriter, TruncatedArchiveReader, entry::ArchiveEntry};
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use sha2::{Digest, Sha512};
