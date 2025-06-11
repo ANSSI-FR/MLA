@@ -101,7 +101,7 @@ typedef struct FileWriter {
  * Return the desired output path which is expected to be writable.
  * The callback developper is responsible all security checks and parent path creation.
  */
-typedef int32_t (*MlaFileCalback)(void *context,
+typedef int32_t (*MLAFileCallBack)(void *context,
                                   const uint8_t *filename,
                                   uintptr_t filename_len,
                                   struct FileWriter *file_writer);
@@ -245,7 +245,7 @@ MLAStatus mla_archive_close(MLAArchiveHandle *archive);
 MLAStatus mla_roarchive_extract(MLAReaderConfigHandle *config,
                                 MlaReadCallback read_callback,
                                 MlaSeekCallback seek_callback,
-                                MlaFileCalback file_callback,
+                                MLAFileCallBack file_callback,
                                 void *context);
 
 /**

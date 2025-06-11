@@ -91,7 +91,7 @@ struct FileWriter {
 /// Implemented by the developper
 /// Return the desired output path which is expected to be writable.
 /// The callback developper is responsible all security checks and parent path creation.
-using MlaFileCalback = int32_t(*)(void *context,
+using MLAFileCallBack = int32_t(*)(void *context,
                                   const uint8_t *filename,
                                   uintptr_t filename_len,
                                   FileWriter *file_writer);
@@ -205,7 +205,7 @@ MLAStatus mla_archive_close(MLAArchiveHandle *archive);
 MLAStatus mla_roarchive_extract(MLAReaderConfigHandle *config,
                                 MlaReadCallback read_callback,
                                 MlaSeekCallback seek_callback,
-                                MlaFileCalback file_callback,
+                                MLAFileCallBack file_callback,
                                 void *context);
 
 /// Get info on an existing MLA archive
