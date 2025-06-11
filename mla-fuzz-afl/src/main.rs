@@ -80,7 +80,7 @@ fn run(data: &[u8]) {
             if let Some(id) = num2id.get(&num) {
                 *id
             } else {
-                let id = match mla.start_file(&test_case.filenames[num as usize]) {
+                let id = match mla.start_entry(&test_case.filenames[num as usize]) {
                     Err(Error::DuplicateFilename) => {
                         return;
                     }
@@ -91,7 +91,7 @@ fn run(data: &[u8]) {
                 id
             }
         };
-        mla.append_file_content(id, part.len() as u64, &part[..])
+        mla.append_entry_content(id, part.len() as u64, &part[..])
             .expect("Add part failed");
 
         let content = {
@@ -111,7 +111,7 @@ fn run(data: &[u8]) {
         if !filename2content.contains_key(fname) {
             num2id.insert(
                 i as u8,
-                match mla.start_file(fname) {
+                match mla.start_entry(fname) {
                     Err(Error::DuplicateFilename) => {
                         return;
                     }
@@ -123,7 +123,7 @@ fn run(data: &[u8]) {
     }
 
     for id in num2id.values() {
-        mla.end_file(*id).expect("End block failed");
+        mla.end_entry(*id).expect("End block failed");
     }
 
     let dest = mla.finalize().expect("Finalize failed");

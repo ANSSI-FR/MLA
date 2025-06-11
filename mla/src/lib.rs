@@ -765,7 +765,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         Ok(())
     }
 
-    pub fn start_file(&mut self, filename: &str) -> Result<ArchiveEntryId, Error> {
+    pub fn start_entry(&mut self, filename: &str) -> Result<ArchiveEntryId, Error> {
         check_state!(self.state, OpenedFiles);
 
         if self.files_info.contains_key(filename) {
@@ -809,7 +809,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         Ok(id)
     }
 
-    pub fn append_file_content<U: Read>(
+    pub fn append_entry_content<U: Read>(
         &mut self,
         id: ArchiveEntryId,
         size: u64,
@@ -834,7 +834,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         .dump(&mut self.dest)
     }
 
-    pub fn end_file(&mut self, id: ArchiveEntryId) -> Result<(), Error> {
+    pub fn end_entry(&mut self, id: ArchiveEntryId) -> Result<(), Error> {
         check_state_file_opened!(&self.state, &id);
 
         let hash = match &mut self.state {
@@ -862,9 +862,9 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
     }
 
     pub fn add_entry<U: Read>(&mut self, filename: &str, size: u64, src: U) -> Result<(), Error> {
-        let id = self.start_file(filename)?;
-        self.append_file_content(id, size, src)?;
-        self.end_file(id)
+        let id = self.start_entry(filename)?;
+        self.append_entry_content(id, size, src)?;
+        self.end_entry(id)
     }
 
     pub fn flush(&mut self) -> io::Result<()> {
@@ -1233,7 +1233,7 @@ impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
                             }
 
                             id_failsafe2filename.insert(id, filename.clone());
-                            let id_output = match output.start_file(&filename) {
+                            let id_output = match output.start_entry(&filename) {
                                 Err(Error::DuplicateFilename) => {
                                     update_error!(
                                         error = FailSafeReadError::FilenameReuse(filename)
@@ -1303,7 +1303,7 @@ impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
                                         }
                                         Err(err) => {
                                             // Stop reconstruction
-                                            output.append_file_content(
+                                            output.append_entry_content(
                                                 id_output,
                                                 next_write_pos as u64,
                                                 &buf[..next_write_pos],
@@ -1322,7 +1322,7 @@ impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
                                         break 'buf_fill;
                                     }
                                 }
-                                output.append_file_content(
+                                output.append_entry_content(
                                     id_output,
                                     next_write_pos as u64,
                                     &buf[..next_write_pos],
@@ -1370,7 +1370,7 @@ impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
                                 }
                             };
 
-                            output.end_file(id_output)?;
+                            output.end_entry(id_output)?;
                             id_failsafe_done.push(id);
                         }
                         ArchiveFileBlock::EndOfArchiveData => {
@@ -1395,7 +1395,7 @@ impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
             let fname = id_failsafe2filename
                 .get(&id_failsafe)
                 .expect("`id_failsafe2filename` not more sync with `id_failsafe2id_output`");
-            output.end_file(id_output)?;
+            output.end_entry(id_output)?;
 
             unfinished_files.push(fname.clone());
         }
@@ -1536,12 +1536,12 @@ pub(crate) mod tests {
             .unwrap();
         let fake_file = vec![5, 6, 7, 8];
         let fake_file2 = vec![9, 10, 11, 12];
-        let id = mla.start_file("my_file2").unwrap();
-        mla.append_file_content(id, fake_file.len() as u64, fake_file.as_slice())
+        let id = mla.start_entry("my_file2").unwrap();
+        mla.append_entry_content(id, fake_file.len() as u64, fake_file.as_slice())
             .unwrap();
-        mla.append_file_content(id, fake_file2.len() as u64, fake_file2.as_slice())
+        mla.append_entry_content(id, fake_file2.len() as u64, fake_file2.as_slice())
             .unwrap();
-        mla.end_file(id).unwrap();
+        mla.end_entry(id).unwrap();
 
         let mla_key = mla.internal_config.encrypt.as_ref().unwrap().key;
         let mla_nonce = mla.internal_config.encrypt.as_ref().unwrap().nonce;
@@ -1629,26 +1629,26 @@ pub(crate) mod tests {
             // [File1 content 4 5 6 7 8]
             // [File1 end]
             // [File2 end]
-            let id_file1 = mla.start_file(&fname1).unwrap();
-            mla.append_file_content(
+            let id_file1 = mla.start_entry(&fname1).unwrap();
+            mla.append_entry_content(
                 id_file1,
                 fake_file_part1.len() as u64,
                 fake_file_part1.as_slice(),
             )
             .unwrap();
-            let id_file2 = mla.start_file(&fname2).unwrap();
-            mla.append_file_content(id_file2, fake_file2.len() as u64, fake_file2.as_slice())
+            let id_file2 = mla.start_entry(&fname2).unwrap();
+            mla.append_entry_content(id_file2, fake_file2.len() as u64, fake_file2.as_slice())
                 .unwrap();
             mla.add_entry(&fname3, fake_file3.len() as u64, fake_file3.as_slice())
                 .unwrap();
-            mla.append_file_content(
+            mla.append_entry_content(
                 id_file1,
                 fake_file_part2.len() as u64,
                 fake_file_part2.as_slice(),
             )
             .unwrap();
-            mla.end_file(id_file1).unwrap();
-            mla.end_file(id_file2).unwrap();
+            mla.end_entry(id_file1).unwrap();
+            mla.end_entry(id_file2).unwrap();
         } else {
             mla.add_entry(&fname1, fake_file1.len() as u64, fake_file1.as_slice())
                 .unwrap();
@@ -1725,12 +1725,12 @@ pub(crate) mod tests {
             // Write a file in multiple part
             let fake_file = vec![5, 6, 7, 8];
             let fake_file2 = vec![9, 10, 11, 12];
-            let id = mla.start_file("my_file2").unwrap();
-            mla.append_file_content(id, fake_file.len() as u64, fake_file.as_slice())
+            let id = mla.start_entry("my_file2").unwrap();
+            mla.append_entry_content(id, fake_file.len() as u64, fake_file.as_slice())
                 .unwrap();
-            mla.append_file_content(id, fake_file2.len() as u64, fake_file2.as_slice())
+            mla.append_entry_content(id, fake_file2.len() as u64, fake_file2.as_slice())
                 .unwrap();
-            mla.end_file(id).unwrap();
+            mla.end_entry(id).unwrap();
             let dest = mla.finalize().unwrap();
 
             // Read the obtained stream
@@ -1947,7 +1947,7 @@ pub(crate) mod tests {
             mla.add_entry("Test", 4, vec![1, 2, 3, 4].as_slice())
                 .is_err()
         );
-        assert!(mla.start_file("Test").is_err());
+        assert!(mla.start_entry("Test").is_err());
     }
 
     #[test]
@@ -2128,7 +2128,7 @@ pub(crate) mod tests {
         // Start files in normal order
         (0..=255)
             .map(|i| {
-                let id = mla.start_file(&fnames[i]).unwrap();
+                let id = mla.start_entry(&fnames[i]).unwrap();
                 name2id.insert(&fnames[i], id);
             })
             .for_each(drop);
@@ -2138,7 +2138,7 @@ pub(crate) mod tests {
             .rev()
             .map(|i| {
                 let id = name2id.get(&fnames[i]).unwrap();
-                mla.append_file_content(*id, 32, &files.get(&fnames[i]).unwrap()[..32])
+                mla.append_entry_content(*id, 32, &files.get(&fnames[i]).unwrap()[..32])
                     .unwrap();
             })
             .for_each(drop);
@@ -2148,7 +2148,7 @@ pub(crate) mod tests {
             .map(|i| {
                 let id = name2id.get(&fnames[i]).unwrap();
                 let data = &files.get(&fnames[i]).unwrap()[32..];
-                mla.append_file_content(*id, data.len() as u64, data)
+                mla.append_entry_content(*id, data.len() as u64, data)
                     .unwrap();
             })
             .for_each(drop);
@@ -2158,7 +2158,7 @@ pub(crate) mod tests {
             .rev()
             .map(|i| {
                 let id = name2id.get(&fnames[i]).unwrap();
-                mla.end_file(*id).unwrap();
+                mla.end_entry(*id).unwrap();
             })
             .for_each(drop);
 
@@ -2262,14 +2262,14 @@ pub(crate) mod tests {
         let fname = "my_file".to_string();
         let fake_file = vec![1, 2, 3, 4, 5, 6, 7, 8];
 
-        let id = mla.start_file(&fname).expect("start_file");
-        mla.append_file_content(id, 4, &fake_file[..4])
+        let id = mla.start_entry(&fname).expect("start_file");
+        mla.append_entry_content(id, 4, &fake_file[..4])
             .expect("add content");
-        mla.append_file_content(id, 0, &fake_file[..1])
+        mla.append_entry_content(id, 0, &fake_file[..1])
             .expect("add content empty");
-        mla.append_file_content(id, fake_file.len() as u64 - 4, &fake_file[4..])
+        mla.append_entry_content(id, fake_file.len() as u64 - 4, &fake_file[4..])
             .expect("add rest");
-        mla.end_file(id).unwrap();
+        mla.end_entry(id).unwrap();
 
         let mla_data = mla.finalize().unwrap();
 
@@ -2305,7 +2305,7 @@ pub(crate) mod tests {
         let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
 
         // At least one file will be bigger than 32bits
-        let id1 = mla.start_file("file_0").unwrap();
+        let id1 = mla.start_entry("file_0").unwrap();
         let mut cur_size = 0;
         while cur_size < MORE_THAN_U32 {
             let size = std::cmp::min(rng.next_u32() as u64, MORE_THAN_U32 - cur_size);
@@ -2313,26 +2313,27 @@ pub(crate) mod tests {
                 .sample_iter(&mut rng_data)
                 .take(size as usize)
                 .collect();
-            mla.append_file_content(id1, size, data.as_slice()).unwrap();
+            mla.append_entry_content(id1, size, data.as_slice())
+                .unwrap();
             cur_size += size;
         }
-        mla.end_file(id1).unwrap();
+        mla.end_entry(id1).unwrap();
 
         let mut nb_file = 1;
 
         // Complete up to MAX_SIZE
         while cur_size < MAX_SIZE {
             let id = mla
-                .start_file(format!("file_{:}", nb_file).as_str())
+                .start_entry(format!("file_{:}", nb_file).as_str())
                 .unwrap();
             let size = std::cmp::min(rng.next_u32() as u64, MAX_SIZE - cur_size);
             let data: Vec<u8> = Standard
                 .sample_iter(&mut rng_data)
                 .take(size as usize)
                 .collect();
-            mla.append_file_content(id, size, data.as_slice()).unwrap();
+            mla.append_entry_content(id, size, data.as_slice()).unwrap();
             cur_size += size;
-            mla.end_file(id).unwrap();
+            mla.end_entry(id).unwrap();
             nb_file += 1;
         }
         let mla_data = mla.finalize().unwrap();
