@@ -1025,8 +1025,6 @@ pub(crate) struct FileInfo {
 pub struct ArchiveReader<'a, R: 'a + InnerReaderTrait> {
     /// MLA Archive format Reader
     //
-    /// User's reading configuration
-    pub config: ArchiveReaderConfig,
     /// Source
     src: Box<dyn 'a + LayerReader<'a, R>>,
     /// Metadata (from footer if any)
@@ -1063,11 +1061,7 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
         // Reset the position for further uses
         src.rewind()?;
 
-        Ok(ArchiveReader {
-            config,
-            src,
-            metadata,
-        })
+        Ok(ArchiveReader { src, metadata })
     }
 
     /// Return an iterator on filenames present in the archive
