@@ -215,8 +215,9 @@ mod tests {
     #[test]
     fn stream_writer() {
         let file = Vec::new();
-        let mut mla = ArchiveWriter::from_config(file, ArchiveWriterConfig::new())
-            .expect("Writer init failed");
+        let mut config = ArchiveWriterConfig::new();
+        config.set_layers(Layers::EMPTY);
+        let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
 
         let fake_file = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 

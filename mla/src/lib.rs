@@ -2110,7 +2110,8 @@ pub(crate) mod tests {
     #[test]
     fn avoid_duplicate_filename() {
         let buf = Vec::new();
-        let config = ArchiveWriterConfig::new();
+        let mut config = ArchiveWriterConfig::new();
+        config.set_layers(Layers::EMPTY);
         let mut mla = ArchiveWriter::from_config(buf, config).unwrap();
         mla.add_file("Test", 4, vec![1, 2, 3, 4].as_slice())
             .unwrap();
@@ -2174,8 +2175,9 @@ pub(crate) mod tests {
 
         // Prepare the writer
         let dest_w = Vec::new();
-        let mla_w = ArchiveWriter::from_config(dest_w, ArchiveWriterConfig::new())
-            .expect("Writer init failed");
+        let mut config = ArchiveWriterConfig::new();
+        config.set_layers(Layers::EMPTY);
+        let mla_w = ArchiveWriter::from_config(dest_w, config).expect("Writer init failed");
 
         // Conversion
         match mla_fsread.convert_to_archive(mla_w).unwrap() {
@@ -2389,8 +2391,9 @@ pub(crate) mod tests {
 
         // Repair the archive (without any damage, but trigger the corresponding code)
         let mut dest_w = Vec::new();
-        let mla_w = ArchiveWriter::from_config(&mut dest_w, ArchiveWriterConfig::new())
-            .expect("Writer init failed");
+        let mut config = ArchiveWriterConfig::new();
+        config.set_layers(Layers::EMPTY);
+        let mla_w = ArchiveWriter::from_config(&mut dest_w, config).expect("Writer init failed");
         if let FailSafeReadError::EndOfOriginalArchiveData =
             mla_fsread.convert_to_archive(mla_w).unwrap()
         {
@@ -2424,8 +2427,9 @@ pub(crate) mod tests {
     fn empty_blocks() {
         // Add a file with containning an empty block - it should works
         let file = Vec::new();
-        let mut mla = ArchiveWriter::from_config(file, ArchiveWriterConfig::new())
-            .expect("Writer init failed");
+        let mut config = ArchiveWriterConfig::new();
+        config.set_layers(Layers::EMPTY);
+        let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
 
         let fname = "my_file".to_string();
         let fake_file = vec![1, 2, 3, 4, 5, 6, 7, 8];
