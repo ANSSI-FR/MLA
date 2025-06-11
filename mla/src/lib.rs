@@ -175,7 +175,7 @@
 //!
 //!     // Get a file
 //!     let mut file = mla_read
-//!         .get_file("simple".to_string())
+//!         .get_entry("simple".to_string())
 //!         .unwrap() // An error can be raised (I/O, decryption, etc.)
 //!         .unwrap(); // Option(file), as the file might not exist in the archive
 //!
@@ -185,7 +185,7 @@
 //!     std::io::copy(&mut file.data, &mut output).unwrap();
 //!
 //!     // Get back the list of files in the archive:
-//!     for fname in mla_read.list_files().unwrap() {
+//!     for fname in mla_read.list_entries().unwrap() {
 //!         println!("{}", fname);
 //!     }
 //! }
@@ -1559,7 +1559,7 @@ pub(crate) mod tests {
         let mut rez = Vec::new();
         file.data.read_to_end(&mut rez).unwrap();
         assert_eq!(rez, vec![1, 2, 3, 4]);
-        // Explicit drop here, because otherwise mla_read.get_file() cannot be
+        // Explicit drop here, because otherwise mla_read.get_entry() cannot be
         // recall. It is not detected by the NLL analysis
         drop(file);
         let mut file2 = mla_read.get_entry("my_file2".to_string()).unwrap().unwrap();
@@ -1743,7 +1743,7 @@ pub(crate) mod tests {
             let mut rez = Vec::new();
             file.data.read_to_end(&mut rez).unwrap();
             assert_eq!(rez, vec![1, 2, 3, 4]);
-            // Explicit drop here, because otherwise mla_read.get_file() cannot be
+            // Explicit drop here, because otherwise mla_read.get_entry() cannot be
             // recall. It is not detected by the NLL analysis
             drop(file);
             let mut file2 = mla_read.get_entry("my_file2".to_string()).unwrap().unwrap();
