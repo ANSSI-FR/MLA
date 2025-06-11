@@ -5,7 +5,7 @@ use criterion::Throughput;
 
 use mla::TruncatedArchiveReader;
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
-use mla::crypto::mlakey::{HybridPublicKey, generate_keypair_from_rng};
+use mla::crypto::mlakey::{HybridPublicKey, generate_keypair_from_seed};
 use mla::helpers::linear_extract;
 use mla::{ArchiveReader, ArchiveWriter};
 use rand::SeedableRng;
@@ -35,7 +35,7 @@ fn build_archive(
 ) -> (Vec<u8>, ArchiveReaderConfig) {
     // Setup
     let mut rng = ChaChaRng::seed_from_u64(0);
-    let (private_key, public_key) = generate_keypair_from_rng(&mut rng);
+    let (private_key, public_key) = generate_keypair_from_seed([0; 32]);
     let file = Vec::new();
     // Create the initial archive with `iters` files of `size` bytes
     let config = if encryption {
@@ -106,7 +106,7 @@ pub fn writer_multiple_layers_multiple_block_size(c: &mut Criterion) {
     // Setup
     // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
     let mut rng = ChaChaRng::seed_from_u64(0);
-    let (_private_key, public_key) = generate_keypair_from_rng(&mut rng);
+    let (_private_key, public_key) = generate_keypair_from_seed([0; 32]);
 
     let mut group = c.benchmark_group("writer_multiple_layers_multiple_block_size");
     group.measurement_time(Duration::from_secs(10));

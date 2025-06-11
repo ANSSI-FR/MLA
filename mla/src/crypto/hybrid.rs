@@ -11,7 +11,8 @@ use bincode::{
 use hkdf::Hkdf;
 use kem::{Decapsulate, Encapsulate};
 use ml_kem::{KemCore, MlKem1024};
-use rand::Rng;
+use rand::{Rng, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 use rand_chacha::rand_core::CryptoRngCore;
 use sha2::Sha512;
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
@@ -351,7 +352,13 @@ impl Encapsulate<HybridMultiRecipientEncapsulatedKey, HybridKemSharedSecret>
 }
 
 /// Generate an Hybrid key pair using the provided csprng
-pub fn generate_keypair_from_rng(
+pub fn generate_keypair_from_seed(seed: [u8; 32]) -> (HybridPrivateKey, HybridPublicKey) {
+    let mut csprng = ChaCha20Rng::from_seed(seed);
+    generate_keypair_from_rng(&mut csprng)
+}
+
+/// Generate an Hybrid key pair using the provided csprng
+fn generate_keypair_from_rng(
     mut csprng: impl CryptoRngCore,
 ) -> (HybridPrivateKey, HybridPublicKey) {
     let private_key_ecc = X25519StaticSecret::random_from_rng(&mut csprng);
