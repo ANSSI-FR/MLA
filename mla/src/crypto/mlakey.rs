@@ -8,7 +8,6 @@ use nom::IResult;
 use nom::combinator::{complete, eof};
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
-use zeroize::Zeroize;
 
 use core::convert::{From, TryInto};
 
@@ -613,7 +612,7 @@ const DERIVE_PATH_SALT: &[u8; 15] = b"PATH DERIVATION";
 /// Note: the secret is consumed on call
 ///
 /// \[1\] <https://eprint.iacr.org/2023/861>
-fn apply_derive(path: &[u8], mut src: HybridPrivateKey) -> [u8; 32] {
+fn apply_derive(path: &[u8], src: HybridPrivateKey) -> [u8; 32] {
     // Force uniform-randomness on ECC-key, used as the future HKDF "salt" argument
     let (dprf_salt, _hkdf) = Hkdf::<Sha512>::extract(None, src.private_key_ecc.as_bytes());
 
@@ -622,9 +621,6 @@ fn apply_derive(path: &[u8], mut src: HybridPrivateKey) -> [u8; 32] {
     let mut seed = [0u8; 32];
     hkdf.expand_multi_info(&[DERIVE_PATH_SALT, path], &mut seed)
         .expect("Unexpected error while derivating along the path");
-
-    // Consume the secret
-    src.zeroize();
 
     seed
 }
