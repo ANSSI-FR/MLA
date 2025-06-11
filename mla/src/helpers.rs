@@ -1,6 +1,4 @@
-use crate::layers::traits::InnerReaderTrait;
-
-pub use super::layers::traits::InnerWriterTrait;
+pub use super::layers::traits::{InnerReaderTrait, InnerWriterTrait};
 
 /// Helpers for common operation with MLA Archives
 use super::{ArchiveEntryId, ArchiveFileBlock, ArchiveReader, ArchiveWriter, Error};
