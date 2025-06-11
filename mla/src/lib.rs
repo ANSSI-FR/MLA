@@ -89,7 +89,7 @@
 //!     let mut mla = ArchiveWriter::from_config(&mut buf, config).unwrap();
 //!
 //!     // Add a file
-//!     mla.add_file("filename", 4, &[0, 1, 2, 3][..]).unwrap();
+//!     mla.add_entry("filename", 4, &[0, 1, 2, 3][..]).unwrap();
 //!
 //!     // Complete the archive
 //!     mla.finalize().unwrap();
@@ -120,32 +120,32 @@
 //!     let mut mla = ArchiveWriter::from_config(&mut buf, config).unwrap();
 //!
 //!     // A file is tracked by an id, and follows this API's call order:
-//!     // 1. id = start_file(filename);
-//!     // 2. append_file_content(id, content length, content (impl Read))
+//!     // 1. id = start_entry(filename);
+//!     // 2. append_entry_content(id, content length, content (impl Read))
 //!     // 2-bis. repeat 2.
-//!     // 3. end_file(id)
+//!     // 3. end_entry(id)
 //!
 //!     // Start a file and add content
-//!     let id_file1 = mla.start_file("fname1").unwrap();
+//!     let id_entry1 = mla.start_entry("fname1").unwrap();
 //!     let file1_part1 = vec![11, 12, 13, 14];
-//!     mla.append_file_content(id_file1, file1_part1.len() as u64, file1_part1.as_slice()).unwrap();
+//!     mla.append_entry_content(id_entry1, file1_part1.len() as u64, file1_part1.as_slice()).unwrap();
 //!
 //!     // Start a second file and add content
-//!     let id_file2 = mla.start_file("fname2").unwrap();
+//!     let id_entry2 = mla.start_entry("fname2").unwrap();
 //!     let file2_part1 = vec![21, 22, 23, 24];
-//!     mla.append_file_content(id_file2, file2_part1.len() as u64, file2_part1.as_slice()).unwrap();
+//!     mla.append_entry_content(id_entry2, file2_part1.len() as u64, file2_part1.as_slice()).unwrap();
 //!
 //!     // Add a file as a whole
 //!     let file3 = vec![31, 32, 33, 34];
-//!     mla.add_file("fname3", file3.len() as u64, file3.as_slice()).unwrap();
+//!     mla.add_entry("fname3", file3.len() as u64, file3.as_slice()).unwrap();
 //!
 //!     // Add new content to the first file
 //!     let file1_part2 = vec![15, 16, 17, 18];
-//!     mla.append_file_content(id_file1, file1_part2.len() as u64, file1_part2.as_slice()).unwrap();
+//!     mla.append_entry_content(id_entry1, file1_part2.len() as u64, file1_part2.as_slice()).unwrap();
 //!
 //!     // Mark still opened files as finished
-//!     mla.end_file(id_file1).unwrap();
-//!     mla.end_file(id_file2).unwrap();
+//!     mla.end_entry(id_entry1).unwrap();
+//!     mla.end_entry(id_entry2).unwrap();
 //!
 //!     // Complete the archive
 //!     mla.finalize().unwrap();
