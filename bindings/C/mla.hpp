@@ -1,4 +1,4 @@
-/* Automatically generated with cbindgen --config cbindgen_cpp.toml (do not modify) */
+/* Automatically generated with cbindgen --config cbindgen_c.toml (do not modify) */
 
 #pragma once
 
@@ -101,24 +101,31 @@ struct ArchiveInfo {
 
 extern "C" {
 
-/// Create a new configuration with default options, and return a handle to it.
-MLAStatus mla_config_default_new(MLAConfigHandle *handle_out);
+/// Create a new configuration with the given public key(s) in DER format and
+/// return a handle to it
+/// `public_keys_pointers` is an array of pointers to public keys in DER format
+MLAStatus create_mla_config_with_public_keys_der(MLAConfigHandle *handle_out,
+                                                 const uint8_t *public_keys_pointers,
+                                                 uintptr_t number_of_public_keys);
 
-/// Appends the given public key(s) in DER format to an existing given configuration
-/// (referenced by the handle returned by mla_config_default_new()).
-MLAStatus mla_config_add_public_keys_der(MLAConfigHandle config,
-                                         const uint8_t *public_keys_data,
-                                         uintptr_t public_keys_len);
+/// Create a new configuration with the given public key(s) in PEM format and
+/// return a handle to it
+/// `public_keys` is a C string containing concatenated PEM public keys
+MLAStatus create_mla_config_with_public_keys_pem(MLAConfigHandle *handle_out,
+                                                 const char *public_keys);
 
-/// Appends the given public key(s) in PEM format to an existing given configuration
-/// (referenced by the handle returned by mla_config_default_new()).
-MLAStatus mla_config_add_public_keys_pem(MLAConfigHandle config, const char *public_keys);
+/// Create a new configuration without encryption and return a handle to it
+MLAStatus create_mla_config_without_encryption(MLAConfigHandle *handle_out);
 
-/// Sets the compression level in an existing given configuration
-/// (referenced by the handle returned by mla_config_default_new()).
+/// Free `handle_in` and create a handle to same config with given compression level
 /// Currently this level can only be an integer N with 0 <= N <= 11,
 /// and bigger values cause denser but slower compression.
-MLAStatus mla_config_set_compression_level(MLAConfigHandle config, uint32_t level);
+MLAStatus mla_config_with_compression_level(MLAConfigHandle *handle_in,
+                                            MLAConfigHandle *handle_out,
+                                            uint32_t level);
+
+/// Free `handle_in` and create a handle to same config without compression
+MLAStatus mla_config_without_compression(MLAConfigHandle *handle_in, MLAConfigHandle *handle_out);
 
 /// Create an empty ReaderConfig
 MLAStatus mla_reader_config_new(MLAConfigHandle *handle_out);

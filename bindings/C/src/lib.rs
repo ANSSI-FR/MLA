@@ -1,6 +1,9 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 use mla::config::ArchiveReaderConfig;
 use mla::config::ArchiveWriterConfig;
+use mla::crypto::mlakey::HybridPublicKey;
+use mla::crypto::mlakey::MLAKeyParserError;
+use mla::crypto::mlakey::MLAKEY_PUBKEY_DER_SIZE;
 use mla::crypto::mlakey::{
     parse_mlakey_privkey_der, parse_mlakey_privkey_pem, parse_mlakey_pubkey_der,
     parse_mlakey_pubkeys_pem_many,
@@ -248,14 +251,36 @@ impl Write for CallbackOutput {
 
 // The actual C API exposed to external callers
 
-/// Create a new configuration with default options, and return a handle to it.
+/// Create a new configuration with the given public key(s) in DER format and
+/// return a handle to it
+/// `public_keys_pointers` is an array of pointers to public keys in DER format
 #[no_mangle]
-pub extern "C" fn mla_config_default_new(handle_out: *mut MLAConfigHandle) -> MLAStatus {
-    if handle_out.is_null() {
+pub extern "C" fn create_mla_config_with_public_keys_der(
+    handle_out: *mut MLAConfigHandle,
+    public_keys_pointers: *const u8,
+    number_of_public_keys: usize,
+) -> MLAStatus {
+    if handle_out.is_null() || public_keys_pointers.is_null() || number_of_public_keys == 0 {
         return MLAStatus::BadAPIArgument;
     }
 
-    let config = ArchiveWriterConfig::default();
+    let public_keys_pointers =
+        unsafe { std::slice::from_raw_parts(public_keys_pointers, number_of_public_keys) };
+
+    let public_keys = public_keys_pointers
+        .iter()
+        .map(|pointer| {
+            let public_key_data =
+                unsafe { std::slice::from_raw_parts(pointer, MLAKEY_PUBKEY_DER_SIZE) };
+            parse_mlakey_pubkey_der(public_key_data)
+        })
+        .collect::<Result<Vec<HybridPublicKey>, MLAKeyParserError>>();
+    let public_keys = match public_keys {
+        Ok(public_keys) => public_keys,
+        Err(_) => return MLAStatus::MlaKeyParserError,
+    };
+
+    let config = ArchiveWriterConfig::with_public_keys(&public_keys);
 
     let ptr = Box::into_raw(Box::new(config));
     unsafe {
@@ -264,85 +289,105 @@ pub extern "C" fn mla_config_default_new(handle_out: *mut MLAConfigHandle) -> ML
     MLAStatus::Success
 }
 
-/// Appends the given public key(s) in DER format to an existing given configuration
-/// (referenced by the handle returned by mla_config_default_new()).
+/// Create a new configuration with the given public key(s) in PEM format and
+/// return a handle to it
+/// `public_keys` is a C string containing concatenated PEM public keys
 #[no_mangle]
-pub extern "C" fn mla_config_add_public_keys_der(
-    config: MLAConfigHandle,
-    public_keys_data: *const u8,
-    public_keys_len: usize,
-) -> MLAStatus {
-    if config.is_null() || public_keys_data.is_null() || public_keys_len == 0 {
-        return MLAStatus::BadAPIArgument;
-    }
-
-    let mut config = unsafe { Box::from_raw(config as *mut ArchiveWriterConfig) };
-
-    // DER can contain null bytes, so use from_raw_parts
-    let public_keys = unsafe { std::slice::from_raw_parts(public_keys_data, public_keys_len) };
-
-    let res = match parse_mlakey_pubkey_der(public_keys) {
-        Ok(v) => {
-            config.add_public_keys(&[v]);
-            MLAStatus::Success
-        }
-        _ => MLAStatus::MlaKeyParserError,
-    };
-
-    Box::leak(config);
-    res
-}
-
-/// Appends the given public key(s) in PEM format to an existing given configuration
-/// (referenced by the handle returned by mla_config_default_new()).
-#[no_mangle]
-pub extern "C" fn mla_config_add_public_keys_pem(
-    config: MLAConfigHandle,
+pub extern "C" fn create_mla_config_with_public_keys_pem(
+    handle_out: *mut MLAConfigHandle,
     public_keys: *const c_char,
 ) -> MLAStatus {
-    if config.is_null() || public_keys.is_null() {
+    if handle_out.is_null() || public_keys.is_null() {
         return MLAStatus::BadAPIArgument;
     }
-
-    let mut config = unsafe { Box::from_raw(config as *mut ArchiveWriterConfig) };
 
     // Create a slice from the NULL-terminated string
     let public_keys = unsafe { CStr::from_ptr(public_keys) }.to_bytes();
     // Parse as MLA public key(s)
-    let res = match parse_mlakey_pubkeys_pem_many(public_keys) {
-        Ok(v) => {
-            config.add_public_keys(&v);
-            MLAStatus::Success
-        }
-        _ => MLAStatus::MlaKeyParserError,
+    let public_keys = match parse_mlakey_pubkeys_pem_many(public_keys) {
+        Ok(public_keys) => public_keys,
+        Err(_) => return MLAStatus::MlaKeyParserError,
     };
 
-    Box::leak(config);
-    res
+    let config = ArchiveWriterConfig::with_public_keys(&public_keys);
+
+    let ptr = Box::into_raw(Box::new(config));
+    unsafe {
+        *handle_out = ptr as MLAConfigHandle;
+    }
+    MLAStatus::Success
 }
 
-/// Sets the compression level in an existing given configuration
-/// (referenced by the handle returned by mla_config_default_new()).
-/// Currently this level can only be an integer N with 0 <= N <= 11,
-/// and bigger values cause denser but slower compression.
+/// Create a new configuration without encryption and return a handle to it
 #[no_mangle]
-pub extern "C" fn mla_config_set_compression_level(
-    config: MLAConfigHandle,
-    level: u32,
+pub extern "C" fn create_mla_config_without_encryption(
+    handle_out: *mut MLAConfigHandle,
 ) -> MLAStatus {
-    if config.is_null() {
+    if handle_out.is_null() {
         return MLAStatus::BadAPIArgument;
     }
 
-    let mut config = unsafe { Box::from_raw(config as *mut ArchiveWriterConfig) };
+    let config = ArchiveWriterConfig::without_encryption();
 
-    let res = match config.with_compression_level(level) {
-        Ok(_) => MLAStatus::Success,
+    let ptr = Box::into_raw(Box::new(config));
+    unsafe {
+        *handle_out = ptr as MLAConfigHandle;
+    }
+    MLAStatus::Success
+}
+
+/// Free `handle_in` and create a handle to same config with given compression level
+/// Currently this level can only be an integer N with 0 <= N <= 11,
+/// and bigger values cause denser but slower compression.
+#[no_mangle]
+pub extern "C" fn mla_config_with_compression_level(
+    handle_in: *mut MLAConfigHandle,
+    handle_out: *mut MLAConfigHandle,
+    level: u32,
+) -> MLAStatus {
+    if handle_in.is_null() || handle_out.is_null() {
+        return MLAStatus::BadAPIArgument;
+    }
+    let handle_in_ptr = unsafe { *(handle_in as *mut *mut ArchiveWriterConfig) };
+    // Avoid any use-after-free of this handle by the caller
+    unsafe {
+        *handle_in = null_mut();
+    }
+    let in_config = unsafe { Box::from_raw(handle_in_ptr) };
+    match in_config.with_compression_level(level) {
+        Ok(out_config) => {
+            let ptr = Box::into_raw(Box::new(out_config));
+            unsafe {
+                *handle_out = ptr as MLAConfigHandle;
+            }
+            MLAStatus::Success
+        }
         Err(e) => MLAStatus::from(MLAError::ConfigError(e)),
-    };
+    }
+}
 
-    Box::leak(config);
-    res
+/// Free `handle_in` and create a handle to same config without compression
+#[no_mangle]
+pub extern "C" fn mla_config_without_compression(
+    handle_in: *mut MLAConfigHandle,
+    handle_out: *mut MLAConfigHandle,
+) -> MLAStatus {
+    if handle_in.is_null() || handle_out.is_null() {
+        return MLAStatus::BadAPIArgument;
+    }
+    let handle_in_ptr = unsafe { *(handle_in as *mut *mut ArchiveWriterConfig) };
+    // Avoid any use-after-free of this handle by the caller
+    unsafe {
+        *handle_in = null_mut();
+    }
+    let in_config = unsafe { Box::from_raw(handle_in_ptr) };
+    let out_config = in_config.without_compression();
+
+    let ptr = Box::into_raw(Box::new(out_config));
+    unsafe {
+        *handle_out = ptr as MLAConfigHandle;
+    }
+    MLAStatus::Success
 }
 
 /// Create an empty ReaderConfig

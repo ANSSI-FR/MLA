@@ -18,24 +18,17 @@ FILES = {
 def basic_archive():
     "Create a temporary archive and return its path"
     fname = tempfile.mkstemp(suffix=".mla")[1]
-    archive = MLAFile(fname, "w", config=mla.WriterConfig(layers=0))
+    archive = MLAFile(fname, "w", config=mla.WriterConfig.without_encryption())
     for name, data in FILES.items():
         archive[name] = data
     archive.finalize()
     return fname
 
-
-def test_layers_bitflag_export():
-    assert mla.LAYER_DEFAULT == mla.LAYER_COMPRESS | mla.LAYER_ENCRYPT
-    assert mla.LAYER_EMPTY == 0
-    assert mla.LAYER_DEFAULT != mla.LAYER_EMPTY
-
-
 def test_bad_mode():
     "Ensure MLAFile with an unknown mode raise an error"
     target_file = "/tmp/must_not_exists"
     with pytest.raises(mla.BadAPIArgument):
-        MLAFile(target_file, "x")
+        MLAFile(target_file, "x", config=mla.WriterConfig.without_encryption())
     # Ensure the file has not been created
     with pytest.raises(FileNotFoundError):
         open(target_file)
@@ -44,14 +37,14 @@ def test_bad_mode():
 def test_repr():
     "Ensure the repr is correct"
     path = tempfile.mkstemp(suffix=".mla")[1]
-    archive = MLAFile(path, "w", config=mla.WriterConfig(layers=0))
+    archive = MLAFile(path, "w", config=mla.WriterConfig.without_encryption())
     assert repr(archive) == "<MLAFile path='%s' mode='w'>" % path
     archive.finalize()
 
 
 def test_forbidden_in_write_mode():
     "Ensure some API cannot be called in write mode"
-    archive = MLAFile(tempfile.mkstemp(suffix=".mla")[1], "w", config=mla.WriterConfig(layers=0))
+    archive = MLAFile(tempfile.mkstemp(suffix=".mla")[1], "w", config=mla.WriterConfig.without_encryption())
 
     # .keys
     with pytest.raises(mla.BadAPIArgument):
@@ -76,7 +69,7 @@ def test_forbidden_in_write_mode():
 
 def test_forbidden_in_read_mode(basic_archive):
     "Ensure some API cannot be called in write mode"
-    archive = MLAFile(basic_archive)
+    archive = MLAFile(basic_archive, "r", config=mla.ReaderConfig())
 
     # __setitem__
     with pytest.raises(mla.BadAPIArgument):
@@ -89,7 +82,7 @@ def test_forbidden_in_read_mode(basic_archive):
 
 def test_read_api(basic_archive):
     "Test basics read APIs"
-    archive = MLAFile(basic_archive)
+    archive = MLAFile(basic_archive, "r", config=mla.ReaderConfig())
 
     # .keys
     assert sorted(archive.keys()) == sorted(list(FILES.keys()))
@@ -110,7 +103,7 @@ def test_read_api(basic_archive):
 
 def test_list_entries(basic_archive):
     "Test list files possibilities"
-    archive = MLAFile(basic_archive)
+    archive = MLAFile(basic_archive, "r", config=mla.ReaderConfig())
 
     # Basic
     assert sorted(archive.list_entries()) == sorted(list(FILES.keys()))
@@ -152,7 +145,7 @@ def test_list_entries(basic_archive):
 def test_write_api():
     "Test basics write APIs"
     path = tempfile.mkstemp(suffix=".mla")[1]
-    archive = MLAFile(path, "w", config=mla.WriterConfig(layers=0))
+    archive = MLAFile(path, "w", config=mla.WriterConfig.without_encryption())
 
     # __setitem__
     for name, data in FILES.items():
@@ -162,7 +155,7 @@ def test_write_api():
     archive.finalize()
 
     # Check the resulting archive
-    archive = MLAFile(path)
+    archive = MLAFile(path, "r", config=mla.ReaderConfig())
     assert sorted(archive.keys()) == sorted(list(FILES.keys()))
     assert archive["file1"] == FILES["file1"]
     assert archive["file2"] == FILES["file2"]
@@ -170,7 +163,7 @@ def test_write_api():
 
 def test_double_write():
     "Rewriting the file must raise an MLA error"
-    archive = MLAFile(tempfile.mkstemp(suffix=".mla")[1], "w", config=mla.WriterConfig(layers=0))
+    archive = MLAFile(tempfile.mkstemp(suffix=".mla")[1], "w", config=mla.WriterConfig.without_encryption())
     archive["file1"] = FILES["file1"]
 
     with pytest.raises(mla.DuplicateFilename):
@@ -179,21 +172,21 @@ def test_double_write():
 
 def test_context_read(basic_archive):
     "Test reading using a `with` statement (context management protocol)"
-    with MLAFile(basic_archive) as mla:
-        assert sorted(mla.keys()) == sorted(list(FILES.keys()))
+    with MLAFile(basic_archive, "r", config=mla.ReaderConfig()) as m:
+        assert sorted(m.keys()) == sorted(list(FILES.keys()))
         for name, data in FILES.items():
-            assert mla[name] == data
+            assert m[name] == data
 
 
 def test_context_write():
     "Test writing using a `with` statement (context management protocol)"
     path = tempfile.mkstemp(suffix=".mla")[1]
-    with MLAFile(path, "w", config=mla.WriterConfig(layers=0)) as m:
+    with MLAFile(path, "w", config=mla.WriterConfig.without_encryption()) as m:
         for name, data in FILES.items():
             m[name] = data
 
     # Check the resulting file
-    with MLAFile(path) as m:
+    with MLAFile(path, "r", config=mla.ReaderConfig()) as m:
         assert sorted(m.keys()) == sorted(list(FILES.keys()))
         for name, data in FILES.items():
             assert m[name] == data
@@ -202,7 +195,7 @@ def test_context_write():
 def test_context_write_error():
     "Raise an error during the context write __exit__"
     with pytest.raises(mla.BadAPIArgument):
-        with MLAFile(tempfile.mkstemp(suffix=".mla")[1], "w", config=mla.WriterConfig(layers=0)) as archive:
+        with MLAFile(tempfile.mkstemp(suffix=".mla")[1], "w", config=mla.WriterConfig.without_encryption()) as archive:
             # INTENTIONNALY BUGGY
             # .finalize will be called twice, causing an exception
             archive.finalize()
@@ -212,56 +205,13 @@ def test_context_write_error_in_with():
     "Raise an error in the with statement, it must be re-raised"
     CustomException = type("CustomException", (Exception,), {})
     with pytest.raises(CustomException):
-        with MLAFile(tempfile.mkstemp(suffix=".mla")[1], "w", config=mla.WriterConfig(layers=0)) as m:
+        with MLAFile(tempfile.mkstemp(suffix=".mla")[1], "w", config=mla.WriterConfig.without_encryption()) as m:
             # INTENTIONNALY BUGGY
             raise CustomException
 
-
-def test_writer_config_layers():
-    "Test writer config creation for layers"
-    # Enable and disable layers
-    config = mla.WriterConfig()
-    assert config.layers == mla.LAYER_DEFAULT
-
-    config = mla.WriterConfig(layers=mla.LAYER_COMPRESS)
-    assert config.layers == mla.LAYER_COMPRESS
-
-    config.enable_layer(mla.LAYER_ENCRYPT)
-    assert config.layers == mla.LAYER_COMPRESS | mla.LAYER_ENCRYPT
-
-    config.disable_layer(mla.LAYER_COMPRESS)
-    assert config.layers == mla.LAYER_ENCRYPT
-
-    config.disable_layer(mla.LAYER_ENCRYPT)
-    assert config.layers == mla.LAYER_EMPTY
-
-    # Check for error on unknown layer (0xFF)
-    with pytest.raises(mla.BadAPIArgument):
-        config.enable_layer(0xFF)
-
-    with pytest.raises(mla.BadAPIArgument):
-        config.disable_layer(0xFF)
-
-    with pytest.raises(mla.BadAPIArgument):
-        config.set_layers(0xFF)
-
-    with pytest.raises(mla.BadAPIArgument):
-        config = mla.WriterConfig(layers=0xFF)
-
-    # Chaining
-    config = (
-        mla.WriterConfig()
-        .enable_layer(mla.LAYER_COMPRESS)
-        .enable_layer(mla.LAYER_ENCRYPT)
-        .disable_layer(mla.LAYER_COMPRESS)
-        .set_layers(mla.LAYER_COMPRESS)
-    )
-    assert config.layers == mla.LAYER_COMPRESS
-
-
 def test_writer_config_compression():
     "Test compression API in WriterConfig creation"
-    config = mla.WriterConfig()
+    config = mla.WriterConfig.without_encryption()
     with pytest.raises(OverflowError):
         config.with_compression_level(-1)
     with pytest.raises(mla.ConfigError):
@@ -269,9 +219,7 @@ def test_writer_config_compression():
 
     # Value
     config.with_compression_level(mla.DEFAULT_COMPRESSION_LEVEL)
-    assert config.compression_level == mla.DEFAULT_COMPRESSION_LEVEL
     config.with_compression_level(1)
-    assert config.compression_level == 1
 
     # Chaining
     out = config.with_compression_level(mla.DEFAULT_COMPRESSION_LEVEL)
@@ -362,29 +310,23 @@ def test_writer_config_public_keys():
     "Test public keys API in WriterConfig creation"
 
     # Test API call
-    config = mla.WriterConfig()
     with pytest.raises(mla.InvalidKeyFormat):
-        config.set_public_keys(mla.PublicKeys(b"NOT A KEY"))
+        mla.WriterConfig(mla.PublicKeys(b"NOT A KEY"))
 
     # Test shortcut on object build
     config = mla.WriterConfig(
-        public_keys=mla.PublicKeys(
+        mla.PublicKeys(
             open(os.path.join(SAMPLE_PATH, "test_mlakey_pub.pem"), "rb").read()
         )
     )
-    # Test the getter
-    assert len(config.public_keys.keys) == 1
 
     # Chaining
-    out = config.set_public_keys(
+    out = mla.WriterConfig(
         mla.PublicKeys(
             open(os.path.join(SAMPLE_PATH, "test_mlakey_pub.pem"), "rb").read(),
             open(os.path.join(SAMPLE_PATH, "test_mlakey_2_pub.pem"), "rb").read(),
         )
     )
-    assert out is config
-    assert len(config.public_keys.keys) == 2
-
 
 def test_mlafile_bad_config():
     "Try to create a MLAFile with the wrong config parameter"
@@ -395,7 +337,7 @@ def test_mlafile_bad_config():
         MLAFile(tempfile.mkstemp(suffix=".mla")[1], "w", config=mla.ReaderConfig())
 
     with pytest.raises(TypeError):
-        MLAFile(tempfile.mkstemp(suffix=".mla")[1], "r", config=mla.WriterConfig())
+        MLAFile(tempfile.mkstemp(suffix=".mla")[1], "r", config=mla.WriterConfig.without_encryption())
 
 
 def test_reader_config_api():
@@ -434,10 +376,9 @@ def test_write_then_read_encrypted():
         path,
         "w",
         config=mla.WriterConfig(
-            public_keys=mla.PublicKeys(
+            mla.PublicKeys(
                 open(os.path.join(SAMPLE_PATH, "test_mlakey_pub.pem"), "rb").read()
-            ),
-            layers=mla.LAYER_ENCRYPT,
+            )
         ),
     ) as archive:
         for name, data in FILES.items():
@@ -446,6 +387,7 @@ def test_write_then_read_encrypted():
     # Read the archive
     with MLAFile(
         path,
+        "r", 
         config=mla.ReaderConfig(
             private_keys=mla.PrivateKeys(
                 open(os.path.join(SAMPLE_PATH, "test_mlakey.pem"), "rb").read()
@@ -465,10 +407,9 @@ def test_read_encrypted_archive_bad_key():
         path,
         "w",
         config=mla.WriterConfig(
-            public_keys=mla.PublicKeys(
+            mla.PublicKeys(
                 open(os.path.join(SAMPLE_PATH, "test_mlakey_pub.pem"), "rb").read()
-            ),
-            layers=mla.LAYER_ENCRYPT,
+            ),            
         ),
     ) as archive:
         for name, data in FILES.items():
@@ -476,13 +417,14 @@ def test_read_encrypted_archive_bad_key():
 
     # Try to read without a key
     with pytest.raises(mla.PrivateKeyNeeded):
-        with MLAFile(path) as archive:
+        with MLAFile(path, "r", config=mla.ReaderConfig()) as archive:
             pass
 
     # Try to read with an incorrect key (mla.ConfigError: PrivateKeyNotFound)
     with pytest.raises(mla.ConfigError):
         with MLAFile(
             path,
+            "r", 
             config=mla.ReaderConfig(
                 private_keys=mla.PrivateKeys.from_der(
                     open(os.path.join(SAMPLE_PATH, "test_mlakey_2.der"), "rb").read()
@@ -496,7 +438,7 @@ def test_write_entry_to_str(basic_archive):
     """Test archive.write_entry_to(), using the String output version"""
     # Temporary directory for extraction
     tmpdir = tempfile.mkdtemp()
-    with MLAFile(basic_archive) as archive:
+    with MLAFile(basic_archive, "r", config=mla.ReaderConfig()) as archive:
         # Extract all files using the String output version
         for name in archive.keys():
             archive.write_entry_to(name, os.path.join(tmpdir, name))
@@ -510,7 +452,7 @@ def test_write_entry_to_file(basic_archive):
     """Test archive.write_entry_to(), using the File output version"""
     # Temporary directory for extraction
     tmpdir = tempfile.mkdtemp()
-    with MLAFile(basic_archive) as archive:
+    with MLAFile(basic_archive, "r", config=mla.ReaderConfig()) as archive:
         # Extract all files using the File output version
         for name in archive.keys():
             with open(os.path.join(tmpdir, name), "wb") as f:
@@ -542,7 +484,7 @@ class BytesIOCounter(io.BytesIO):
 
 def test_write_entry_to_file_chunk_size(basic_archive):
     """Test archive.write_entry_to(), using the File output version"""
-    with MLAFile(basic_archive) as archive:
+    with MLAFile(basic_archive, "r", config=mla.ReaderConfig()) as archive:
         # Chunk size set to 1 -> expect 5 calls
         output = BytesIOCounter()
         archive.write_entry_to("file1", output, chunk_size=1)
@@ -566,7 +508,7 @@ def test_add_entry_from_str():
     "Test archive.add_entry_from(), using the String input version"
     # Create the archive
     path = tempfile.mkstemp(suffix=".mla")[1]
-    with MLAFile(path, "w", config=mla.WriterConfig(layers=0)) as archive:
+    with MLAFile(path, "w", config=mla.WriterConfig.without_encryption()) as archive:
         for name, data in FILES.items():
             # Create a file on disk to import
             fname = tempfile.mkstemp()[1]
@@ -576,7 +518,7 @@ def test_add_entry_from_str():
             archive.add_entry_from(name, fname)
 
     # Read the archive
-    with MLAFile(path) as archive:
+    with MLAFile(path, "r", config=mla.ReaderConfig()) as archive:
         assert sorted(archive.keys()) == sorted(list(FILES.keys()))
         for name, data in FILES.items():
             assert archive[name] == data
@@ -586,7 +528,7 @@ def test_add_entry_from_io():
     "Test archive.add_entry_from(), using the IO input version"
     # Create the archive
     path = tempfile.mkstemp(suffix=".mla")[1]
-    with MLAFile(path, "w", config=mla.WriterConfig(layers=0)) as archive:
+    with MLAFile(path, "w", config=mla.WriterConfig.without_encryption()) as archive:
         for name, data in FILES.items():
             # Use a buffered IO
             f = io.BytesIO(data)
@@ -594,7 +536,7 @@ def test_add_entry_from_io():
             archive.add_entry_from(name, f)
 
     # Read the archive
-    with MLAFile(path) as archive:
+    with MLAFile(path, "r", config=mla.ReaderConfig()) as archive:
         assert sorted(archive.keys()) == sorted(list(FILES.keys()))
         for name, data in FILES.items():
             assert archive[name] == data
@@ -606,7 +548,7 @@ def test_add_entry_from_io_chunk_size():
         # Create the archive
         path = tempfile.mkstemp(suffix=".mla")[1]
         data = FILES["file1"]
-        with MLAFile(path, "w", config=mla.WriterConfig(layers=0)) as archive:
+        with MLAFile(path, "w", config=mla.WriterConfig.without_encryption()) as archive:
             src = BytesIOCounter(data)
             archive.add_entry_from("file1", src, chunk_size=chunk_size)
 
@@ -619,5 +561,5 @@ def test_add_entry_from_io_chunk_size():
                 assert src.read_count == 4
 
         # Read the archive
-        with MLAFile(path) as archive:
+        with MLAFile(path, "r", config=mla.ReaderConfig()) as archive:
             assert archive["file1"] == data

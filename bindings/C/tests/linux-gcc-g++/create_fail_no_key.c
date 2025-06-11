@@ -41,7 +41,7 @@ int main()
 
    MLAStatus status;
    MLAConfigHandle hConfig = NULL;
-   status = mla_config_default_new(&hConfig);
+   status = create_mla_config_without_encryption(&hConfig);
    if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
    {
       fprintf(stderr, " [!] Config creation failed with code %" PRIX64 "\n", (uint64_t)status);

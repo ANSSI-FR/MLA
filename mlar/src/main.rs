@@ -141,10 +141,7 @@ fn open_public_keys(matches: &ArgMatches) -> Result<Vec<HybridPublicKey>, Error>
 }
 
 /// Return the ArchiveWriterConfig corresponding to provided arguments
-fn config_from_matches(matches: &ArgMatches) -> ArchiveWriterConfig {
-    let mut config = ArchiveWriterConfig::new();
-    config.set_layers(Layers::EMPTY);
-
+fn config_from_matches(matches: &ArgMatches) -> Result<ArchiveWriterConfig, MlarError> {
     // Get layers
     let mut layers = Vec::new();
     if matches.contains_id("layers") {
@@ -158,51 +155,52 @@ fn config_from_matches(matches: &ArgMatches) -> ArchiveWriterConfig {
         layers.push("encrypt");
     };
 
-    for layer in layers {
-        if layer == "compress" {
-            config.enable_layer(Layers::COMPRESS);
-        } else if layer == "encrypt" {
-            config.enable_layer(Layers::ENCRYPT);
-        } else {
-            panic!("[ERROR] Unknown layer {}", layer);
-        }
+    if layers.contains(&"encrypt") && !matches.contains_id("public_keys") {
+        eprintln!("Encryption was asked, but no public key was given");
+        return Err(MlarError::ConfigError(
+            mla::errors::ConfigError::EncryptionKeyIsMissing,
+        ));
     }
 
-    // Encryption specifics
-    if matches.contains_id("public_keys") {
-        if !config.are_layers_enabled(Layers::ENCRYPT) {
+    let config = if matches.contains_id("public_keys") {
+        if !layers.contains(&"encrypt") {
             eprintln!(
-                "[WARNING] 'public_keys' argument ignored, because 'encrypt' layer is not enabled"
+                "[WARNING] 'public_keys' was given, but encrypt layer was not asked. Enabling it"
             );
-        } else {
-            let public_keys = match open_public_keys(matches) {
-                Ok(public_keys) => public_keys,
-                Err(error) => {
-                    panic!("[ERROR] Unable to open public keys: {}", error);
-                }
-            };
-            config.add_public_keys(&public_keys);
         }
-    }
+        let public_keys = match open_public_keys(matches) {
+            Ok(public_keys) => public_keys,
+            Err(error) => {
+                panic!("[ERROR] Unable to open public keys: {}", error);
+            }
+        };
+        ArchiveWriterConfig::with_public_keys(&public_keys)
+    } else {
+        ArchiveWriterConfig::without_encryption()
+    };
 
-    // Compression specifics
-    if matches.contains_id("compression_level") {
-        if !config.are_layers_enabled(Layers::COMPRESS) {
+    let config = if layers.contains(&"compress") || matches.contains_id("compression_level") {
+        if !layers.contains(&"compress") && matches.contains_id("compression_level") {
             eprintln!(
-                "[WARNING] 'compression_level' argument ignored, because 'compress' layer is not enabled"
+                "[WARNING] 'compression_level' was given, but compression layer was not asked. Enabling it"
             );
-        } else {
+        }
+        if matches.contains_id("compression_level") {
             let comp_level: u32 = *matches
                 .get_one::<u32>("compression_level")
                 .expect("compression_level must be an int");
             if comp_level > 11 {
                 panic!("compression_level must be in [0 .. 11]");
             }
-            config.with_compression_level(comp_level).unwrap();
+            config.with_compression_level(comp_level).unwrap()
+        } else {
+            config
         }
-    }
+    } else {
+        config.without_compression()
+    };
 
-    config
+    Ok(config)
 }
 
 fn destination_from_output_argument(output_argument: &PathBuf) -> Result<OutputTypes, MlarError> {
@@ -221,7 +219,7 @@ fn destination_from_output_argument(output_argument: &PathBuf) -> Result<OutputT
 fn writer_from_matches<'a>(
     matches: &ArgMatches,
 ) -> Result<ArchiveWriter<'a, OutputTypes>, MlarError> {
-    let config = config_from_matches(matches);
+    let config = config_from_matches(matches)?;
 
     // Safe to use unwrap() because the option is required()
     let output = matches.get_one::<PathBuf>("output").unwrap();

@@ -123,7 +123,7 @@ mod tests {
     #[test]
     fn full_linear_extract() {
         // Build an archive with 3 files
-        let (mla, key, _pubkey, files) = build_archive(None, false);
+        let (mla, key, _pubkey, files) = build_archive(true, true, false);
 
         // Prepare the reader
         let dest = Cursor::new(mla);
@@ -150,7 +150,7 @@ mod tests {
     #[test]
     fn one_linear_extract() {
         // Build an archive with 3 files
-        let (mla, key, _pubkey, files) = build_archive(None, false);
+        let (mla, key, _pubkey, files) = build_archive(true, true, false);
 
         // Prepare the reader
         let dest = Cursor::new(mla);
@@ -183,9 +183,7 @@ mod tests {
         // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
         let mut rng = ChaChaRng::seed_from_u64(0);
         let (private_key, public_key) = generate_keypair_from_rng(&mut rng);
-        let mut config = ArchiveWriterConfig::new();
-        let layers = Layers::ENCRYPT | Layers::COMPRESS;
-        config.set_layers(layers).add_public_keys(&[public_key]);
+        let config = ArchiveWriterConfig::with_public_keys(&[public_key]);
         let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
 
         let fname = "my_file".to_string();
@@ -216,8 +214,7 @@ mod tests {
     #[test]
     fn stream_writer() {
         let file = Vec::new();
-        let mut config = ArchiveWriterConfig::new();
-        config.set_layers(Layers::EMPTY);
+        let config = ArchiveWriterConfig::without_encryption().without_compression();
         let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
 
         let fake_file = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
