@@ -69,7 +69,7 @@ def test_forbidden_in_write_mode():
 
 def test_forbidden_in_read_mode(basic_archive):
     "Ensure some API cannot be called in write mode"
-    archive = MLAFile(basic_archive, "r", config=mla.ReaderConfig())
+    archive = MLAFile(basic_archive, "r", config=mla.ReaderConfig.without_encryption())
 
     # __setitem__
     with pytest.raises(mla.BadAPIArgument):
@@ -82,7 +82,7 @@ def test_forbidden_in_read_mode(basic_archive):
 
 def test_read_api(basic_archive):
     "Test basics read APIs"
-    archive = MLAFile(basic_archive, "r", config=mla.ReaderConfig())
+    archive = MLAFile(basic_archive, "r", config=mla.ReaderConfig.without_encryption())
 
     # .keys
     assert sorted(archive.keys()) == sorted(list(FILES.keys()))
@@ -103,7 +103,7 @@ def test_read_api(basic_archive):
 
 def test_list_entries(basic_archive):
     "Test list files possibilities"
-    archive = MLAFile(basic_archive, "r", config=mla.ReaderConfig())
+    archive = MLAFile(basic_archive, "r", config=mla.ReaderConfig.without_encryption())
 
     # Basic
     assert sorted(archive.list_entries()) == sorted(list(FILES.keys()))
@@ -155,7 +155,7 @@ def test_write_api():
     archive.finalize()
 
     # Check the resulting archive
-    archive = MLAFile(path, "r", config=mla.ReaderConfig())
+    archive = MLAFile(path, "r", config=mla.ReaderConfig.without_encryption())
     assert sorted(archive.keys()) == sorted(list(FILES.keys()))
     assert archive["file1"] == FILES["file1"]
     assert archive["file2"] == FILES["file2"]
@@ -172,7 +172,7 @@ def test_double_write():
 
 def test_context_read(basic_archive):
     "Test reading using a `with` statement (context management protocol)"
-    with MLAFile(basic_archive, "r", config=mla.ReaderConfig()) as m:
+    with MLAFile(basic_archive, "r", config=mla.ReaderConfig.without_encryption()) as m:
         assert sorted(m.keys()) == sorted(list(FILES.keys()))
         for name, data in FILES.items():
             assert m[name] == data
@@ -186,7 +186,7 @@ def test_context_write():
             m[name] = data
 
     # Check the resulting file
-    with MLAFile(path, "r", config=mla.ReaderConfig()) as m:
+    with MLAFile(path, "r", config=mla.ReaderConfig.without_encryption()) as m:
         assert sorted(m.keys()) == sorted(list(FILES.keys()))
         for name, data in FILES.items():
             assert m[name] == data
@@ -334,7 +334,7 @@ def test_mlafile_bad_config():
         MLAFile(tempfile.mkstemp(suffix=".mla")[1], "w", config="NOT A CONFIG")
 
     with pytest.raises(TypeError):
-        MLAFile(tempfile.mkstemp(suffix=".mla")[1], "w", config=mla.ReaderConfig())
+        MLAFile(tempfile.mkstemp(suffix=".mla")[1], "w", config=mla.ReaderConfig.without_encryption())
 
     with pytest.raises(TypeError):
         MLAFile(tempfile.mkstemp(suffix=".mla")[1], "r", config=mla.WriterConfig.without_encryption())
@@ -343,30 +343,12 @@ def test_mlafile_bad_config():
 def test_reader_config_api():
     "Test the ReaderConfig API"
     # Add a remove private keys
-    config = mla.ReaderConfig()
-    assert config.private_keys is None
-
-    config.set_private_keys(
-        mla.PrivateKeys(open(os.path.join(SAMPLE_PATH, "test_mlakey.pem"), "rb").read())
-    )
-    assert len(config.private_keys.keys) == 1
-
+    config = mla.ReaderConfig(mla.PrivateKeys(open(os.path.join(SAMPLE_PATH, "test_mlakey.pem"), "rb").read()))
     config = mla.ReaderConfig(
         private_keys=mla.PrivateKeys(
             open(os.path.join(SAMPLE_PATH, "test_mlakey.pem"), "rb").read()
         )
     )
-    assert len(config.private_keys.keys) == 1
-
-    # Chaining
-    config = mla.ReaderConfig()
-    out = config.set_private_keys(
-        mla.PrivateKeys(
-            open(os.path.join(SAMPLE_PATH, "test_mlakey.pem"), "rb").read()
-        ),
-    )
-    assert out is config
-
 
 def test_write_then_read_encrypted():
     "Create an encrypted archive, then read it"
@@ -417,7 +399,7 @@ def test_read_encrypted_archive_bad_key():
 
     # Try to read without a key
     with pytest.raises(mla.PrivateKeyNeeded):
-        with MLAFile(path, "r", config=mla.ReaderConfig()) as archive:
+        with MLAFile(path, "r", config=mla.ReaderConfig.without_encryption()) as archive:
             pass
 
     # Try to read with an incorrect key (mla.ConfigError: PrivateKeyNotFound)
@@ -438,7 +420,7 @@ def test_write_entry_to_str(basic_archive):
     """Test archive.write_entry_to(), using the String output version"""
     # Temporary directory for extraction
     tmpdir = tempfile.mkdtemp()
-    with MLAFile(basic_archive, "r", config=mla.ReaderConfig()) as archive:
+    with MLAFile(basic_archive, "r", config=mla.ReaderConfig.without_encryption()) as archive:
         # Extract all files using the String output version
         for name in archive.keys():
             archive.write_entry_to(name, os.path.join(tmpdir, name))
@@ -452,7 +434,7 @@ def test_write_entry_to_file(basic_archive):
     """Test archive.write_entry_to(), using the File output version"""
     # Temporary directory for extraction
     tmpdir = tempfile.mkdtemp()
-    with MLAFile(basic_archive, "r", config=mla.ReaderConfig()) as archive:
+    with MLAFile(basic_archive, "r", config=mla.ReaderConfig.without_encryption()) as archive:
         # Extract all files using the File output version
         for name in archive.keys():
             with open(os.path.join(tmpdir, name), "wb") as f:
@@ -484,7 +466,7 @@ class BytesIOCounter(io.BytesIO):
 
 def test_write_entry_to_file_chunk_size(basic_archive):
     """Test archive.write_entry_to(), using the File output version"""
-    with MLAFile(basic_archive, "r", config=mla.ReaderConfig()) as archive:
+    with MLAFile(basic_archive, "r", config=mla.ReaderConfig.without_encryption()) as archive:
         # Chunk size set to 1 -> expect 5 calls
         output = BytesIOCounter()
         archive.write_entry_to("file1", output, chunk_size=1)
@@ -518,7 +500,7 @@ def test_add_entry_from_str():
             archive.add_entry_from(name, fname)
 
     # Read the archive
-    with MLAFile(path, "r", config=mla.ReaderConfig()) as archive:
+    with MLAFile(path, "r", config=mla.ReaderConfig.without_encryption()) as archive:
         assert sorted(archive.keys()) == sorted(list(FILES.keys()))
         for name, data in FILES.items():
             assert archive[name] == data
@@ -536,7 +518,7 @@ def test_add_entry_from_io():
             archive.add_entry_from(name, f)
 
     # Read the archive
-    with MLAFile(path, "r", config=mla.ReaderConfig()) as archive:
+    with MLAFile(path, "r", config=mla.ReaderConfig.without_encryption()) as archive:
         assert sorted(archive.keys()) == sorted(list(FILES.keys()))
         for name, data in FILES.items():
             assert archive[name] == data
@@ -561,5 +543,5 @@ def test_add_entry_from_io_chunk_size():
                 assert src.read_count == 4
 
         # Read the archive
-        with MLAFile(path, "r", config=mla.ReaderConfig()) as archive:
+        with MLAFile(path, "r", config=mla.ReaderConfig.without_encryption()) as archive:
             assert archive["file1"] == data

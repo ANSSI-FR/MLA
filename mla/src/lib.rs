@@ -1714,7 +1714,12 @@ pub(crate) mod tests {
         let config_compress = ArchiveWriterConfig::without_encryption();
         let config_both = ArchiveWriterConfig::with_public_keys(&[public_key.clone()]);
 
-        for config in [config_nolayer, config_encrypt, config_compress, config_both] {
+        for (config, encryption) in [
+            (config_nolayer, false),
+            (config_encrypt, true),
+            (config_compress, false),
+            (config_both, true),
+        ] {
             // Build initial file in a stream
             let file = Vec::new();
             let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
@@ -1736,7 +1741,11 @@ pub(crate) mod tests {
 
             // Read the obtained stream
             let buf = Cursor::new(dest.as_slice());
-            let config = ArchiveReaderConfig::with_private_keys(&[private_key.clone()]);
+            let config = if encryption {
+                ArchiveReaderConfig::with_private_keys(&[private_key.clone()])
+            } else {
+                ArchiveReaderConfig::without_encryption()
+            };
             let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
 
             let mut file = mla_read.get_entry("my_file".to_string()).unwrap().unwrap();
@@ -2224,11 +2233,7 @@ pub(crate) mod tests {
         }
         // Get a reader on the repaired archive
         let buf2 = Cursor::new(dest_w);
-        let repread_config =
-            ArchiveReaderConfig::with_private_keys(&[crypto::mlakey::parse_mlakey_privkey_der(
-                der_priv,
-            )
-            .unwrap()]);
+        let repread_config = ArchiveReaderConfig::without_encryption();
         let mut mla_repread = ArchiveReader::from_config(buf2, repread_config).unwrap();
 
         assert_eq!(files.len(), mla_read.list_entries().unwrap().count());

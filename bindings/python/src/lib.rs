@@ -145,6 +145,7 @@ create_exception!(
 );
 create_exception!(mla, HPKEError, MLAError, "Error during HPKE computation");
 create_exception!(mla, InvalidLastTag, MLAError, "Wrong last block tag");
+create_exception!(mla, EncryptionAskedButNotMarkedPresent, MLAError, "User asked for encryption but archive was not marked as encrypted");
 
 // Convert potentials errors to the wrapped type
 
@@ -250,6 +251,9 @@ impl From<WrappedError> for PyErr {
                 }
                 mla::errors::Error::InvalidLastTag => {
                     PyErr::new::<InvalidLastTag, _>("Wrong last block tag")
+                }
+                mla::errors::Error::EncryptionAskedButNotMarkedPresent => {
+                    PyErr::new::<EncryptionAskedButNotMarkedPresent, _>("User asked for encryption but archive was not marked as encrypted")
                 }
             },
             WrappedError::WrappedPy(inner_err) => inner_err,
@@ -582,6 +586,7 @@ impl WriterConfig {
 // `ArchiveReaderConfig`. That way, it can be used to produced many of them, as they are
 // consumed during the `ArchiveReader` init
 struct ReaderConfigInner {
+    accept_unencrypted: bool,
     private_keys: Option<PrivateKeys>,
 }
 
@@ -593,41 +598,46 @@ struct ReaderConfig {
 #[pymethods]
 impl ReaderConfig {
     #[new]
-    #[pyo3(signature = (private_keys=None))]
-    fn new(private_keys: Option<PrivateKeys>) -> Self {
+    #[pyo3(signature = (private_keys))]
+    fn new(private_keys: PrivateKeys) -> Self {
         ReaderConfig {
-            inner: Mutex::new(ReaderConfigInner { private_keys }),
+            inner: Mutex::new(ReaderConfigInner { accept_unencrypted: false, private_keys: Some(private_keys) }),
         }
     }
 
-    /// Set private keys
-    fn set_private_keys(
-        slf: PyRefMut<Self>,
-        private_keys: PrivateKeys,
-    ) -> Result<PyRefMut<Self>, WrappedError> {
-        slf.inner.lock().expect("Mutex poisoned").private_keys = Some(private_keys);
-        Ok(slf)
+    #[classmethod]
+    #[pyo3(signature = (private_keys))]
+    fn with_private_keys_accept_unencrypted(_cls: &Bound<PyType>, private_keys: PrivateKeys) -> Self {
+        ReaderConfig {
+            inner: Mutex::new(ReaderConfigInner { accept_unencrypted: true, private_keys: Some(private_keys) }),
+        }
     }
 
-    #[getter]
-    fn private_keys(&self) -> Option<PrivateKeys> {
-        self.inner
-            .lock()
-            .expect("Mutex poisoned")
-            .private_keys
-            .clone()
+    #[classmethod]
+    #[pyo3(signature = ())]
+    fn without_encryption(_cls: &Bound<PyType>) -> Self {
+        ReaderConfig {
+            inner: Mutex::new(ReaderConfigInner { accept_unencrypted: true, private_keys: None }),
+        }
     }
 }
 
 impl ReaderConfig {
     /// Create an `ArchiveReaderConfig` out of the python object
-    fn to_archive_reader_config(&self) -> Result<ArchiveReaderConfig, WrappedError> {
-        let mut config = ArchiveReaderConfig::new();
-        if let Some(ref private_keys) = self.inner.lock().expect("Mutex poisoned").private_keys {
-            config.add_private_keys(&private_keys.inner.lock().expect("Mutex poisoned").keys);
-            config.layers_enabled |= Layers::ENCRYPT;
+    fn to_archive_reader_config(&self) -> ArchiveReaderConfig {
+        let inner = self.inner.lock().expect("Mutex poisoned");
+        if let Some(ref private_keys) = inner.private_keys {
+            let private_keys = &private_keys.inner.lock().expect("Mutex poisoned").keys;
+            if inner.accept_unencrypted {
+                ArchiveReaderConfig::with_private_keys_accept_unencrypted(private_keys)
+            } else {
+                ArchiveReaderConfig::with_private_keys(private_keys)
+            }
+        } else if inner.accept_unencrypted {
+            ArchiveReaderConfig::without_encryption()
+        } else {
+            panic!("Given ReaderConfig API this should not happen. Please report bug")
         }
-        Ok(config)
     }
 }
 
@@ -803,7 +813,7 @@ impl MLAFile {
             "r" => {
                 let rconfig = config
                                 .extract::<PyRef<ReaderConfig>>()?
-                                .to_archive_reader_config()?;
+                                .to_archive_reader_config();
                 let input_file = std::fs::File::open(path)?;
                 let arch_reader = ArchiveReader::from_config(input_file, rconfig)?;
                 Ok(MLAFile {
