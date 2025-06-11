@@ -10,7 +10,7 @@ use mla::crypto::mlakey::{
 use mla::errors::{Error, FailSafeReadError};
 use mla::helpers::linear_extract;
 use mla::{
-    ArchiveFailSafeReader, ArchiveFile, ArchiveReader, ArchiveWriter, format::ArchiveHeader,
+    ArchiveEntry, ArchiveFailSafeReader, ArchiveReader, ArchiveWriter, format::ArchiveHeader,
     format::Layers,
 };
 use rand::SeedableRng;
@@ -292,7 +292,7 @@ fn open_failsafe_mla_file<'a>(
 
 fn add_file_to_tar<R: Read, W: Write>(
     tar_file: &mut Builder<W>,
-    sub_file: ArchiveFile<R>,
+    sub_file: ArchiveEntry<R>,
 ) -> io::Result<()> {
     // Use indexes to avoid in-memory copy
     let mut header = Header::new_gnu();
