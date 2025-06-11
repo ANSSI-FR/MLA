@@ -66,7 +66,7 @@ FILE* f = fopen("test.mla", "w");
 // Create a configuration for the archive writer
 MLAStatus status;
 MLAConfigHandle hConfig = NULL;
-status = mla_config_default_new(&hConfig);
+status = create_mla_config_with_public_keys(hConfig, szPubkey);
 // Error code can be obtained with MLA_STATUS
 if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
 {
@@ -77,7 +77,6 @@ if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
 // For the sake of readability, checks are now omitted
 
 // Add a recipient
-status = mla_config_add_public_keys(hConfig, szPubkey);
 
 // Create the archive writer
 // `callback_write` and `callback_flush` will received whatever context is given to `mla_archive_new`

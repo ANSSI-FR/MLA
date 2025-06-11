@@ -164,7 +164,7 @@ impl<'de, Context> BorrowDecode<'de, Context> for EncryptionPersistentConfig {
 
 #[derive(Default)]
 /// ArchiveWriterConfig specific configuration for the Encryption, to let API users specify encryption options
-pub struct EncryptionConfig {
+pub(crate) struct EncryptionConfig {
     /// Public keys of recipients
     public_keys: HybridMultiRecipientsPublicKeys,
     pub(crate) rng: EncapsulationRNG,

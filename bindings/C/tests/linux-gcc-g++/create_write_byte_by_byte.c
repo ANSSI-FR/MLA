@@ -44,22 +44,16 @@ int main()
    }
 
    MLAStatus status;
-   MLAConfigHandle hConfig = NULL;
-   status = mla_config_default_new(&hConfig);
-   if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
-   {
-      fprintf(stderr, " [!] Config creation failed with code %" PRIX64 "\n", (uint64_t)status);
-      return (int)status;
-   }
-
-   status = mla_config_add_public_keys_pem(hConfig, szPubkey);
+   MLAConfigHandle hConfig1 = NULL;
+   MLAConfigHandle hConfig2 = NULL;
+   status = create_mla_config_with_public_keys_pem(&hConfig1, szPubkey);
    if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
    {
       fprintf(stderr, " [!] Public key set failed with code %" PRIX64 "\n", (uint64_t)status);
       return (int)status;
    }
 
-   status = mla_config_set_compression_level(hConfig, 10);
+   status = mla_config_with_compression_level(&hConfig1, &hConfig2, 10);
    if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
    {
       fprintf(stderr, " [!] Compression level set failed with code %" PRIX64 "\n", (uint64_t)status);
@@ -67,7 +61,7 @@ int main()
    }
 
    MLAArchiveHandle hArchive = NULL;
-   status = mla_archive_new(&hConfig, &callback_write, &callback_flush, f, &hArchive);
+   status = mla_archive_new(&hConfig2, &callback_write, &callback_flush, f, &hArchive);
    if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
    {
       fprintf(stderr, " [!] Archive creation failed with code %" PRIX64 "\n", (uint64_t)status);

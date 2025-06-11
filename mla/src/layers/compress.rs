@@ -868,7 +868,7 @@ impl<'a, R: 'a + Read> Read for CompressionLayerFailSafeReader<'a, R> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Layers;
+    use crate::config::ArchiveWriterConfig;
 
     use crate::layers::raw::{RawLayerFailSafeReader, RawLayerReader, RawLayerWriter};
     use brotli::writer::StandardAlloc;
@@ -1233,26 +1233,22 @@ mod tests {
         let bytes = data.as_slice();
 
         let file = Vec::new();
-        let mut config = ArchiveWriterConfig::new();
-        config
-            .enable_layer(Layers::COMPRESS)
+        let config = ArchiveWriterConfig::without_encryption()
             .with_compression_level(0)
             .unwrap();
         let mut comp = Box::new(CompressionLayerWriter::new(
             Box::new(RawLayerWriter::new(file)),
-            &config.compress,
+            &config.compression_config.unwrap(),
         ));
         comp.write_all(bytes).unwrap();
 
         let file2 = Vec::new();
-        let mut config2 = ArchiveWriterConfig::new();
-        config2
-            .enable_layer(Layers::COMPRESS)
+        let config2 = ArchiveWriterConfig::without_encryption()
             .with_compression_level(5)
             .unwrap();
         let mut comp2 = Box::new(CompressionLayerWriter::new(
             Box::new(RawLayerWriter::new(file2)),
-            &config2.compress,
+            &config2.compression_config.unwrap(),
         ));
         comp2.write_all(bytes).unwrap();
 

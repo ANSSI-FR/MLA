@@ -39,6 +39,8 @@ const MLKEM_1024_OID: Oid<'static> = oid!(1.2.250.1.223.201);
 const MLKEM_1024_PUBKEY_SIZE: usize = 1568;
 const MLKEM_1024_PRIVKEY_SIZE: usize = 3168;
 
+pub const MLAKEY_PUBKEY_DER_SIZE: usize = 1636;
+
 // ---- Error handling ----
 
 #[derive(Debug)]

@@ -515,8 +515,7 @@ const DEFAULT_COMPRESSION_LEVEL: u32 = 5;
 // `ArchiveWriterConfig`. That way, it can be used to produced many of them, as they are
 // consumed during the `ArchiveWriter` init (to avoid reusing cryptographic materials)
 struct WriterConfigInner {
-    layers: Layers,
-    compression_level: u32,
+    compression_level: Option<u32>,
     public_keys: Option<PublicKeys>,
 }
 
@@ -528,61 +527,28 @@ struct WriterConfig {
 #[pymethods]
 impl WriterConfig {
     #[new]
-    #[pyo3(signature = (layers=None, compression_level=DEFAULT_COMPRESSION_LEVEL, public_keys=None))]
+    #[pyo3(signature = (public_keys))]
     fn new(
-        layers: Option<u8>,
-        compression_level: u32,
-        public_keys: Option<PublicKeys>,
+        public_keys: PublicKeys,
     ) -> Result<Self, WrappedError> {
-        // Check parameters
-        let layers = match layers {
-            Some(layers_enabled) => Layers::from_bits(layers_enabled).ok_or(
-                mla::errors::Error::BadAPIArgument("Unknown layers".to_owned()),
-            )?,
-            None => Layers::DEFAULT,
-        };
-
-        // Check compression level is correct using a fake object
-        ArchiveWriterConfig::new().with_compression_level(compression_level)?;
 
         Ok(WriterConfig {
             inner: Mutex::new(WriterConfigInner {
-                layers,
-                compression_level,
-                public_keys,
+                compression_level: Some(DEFAULT_COMPRESSION_LEVEL),
+                public_keys: Some(public_keys),
             }),
         })
     }
 
-    #[getter]
-    fn layers(&self) -> u8 {
-        self.inner.lock().expect("Mutex poisoned").layers.bits()
-    }
-
-    /// Enable a layer
-    fn enable_layer(slf: PyRefMut<Self>, layer: u8) -> Result<PyRefMut<Self>, WrappedError> {
-        let layer = Layers::from_bits(layer).ok_or(mla::errors::Error::BadAPIArgument(
-            "Unknown layer".to_owned(),
-        ))?;
-        slf.inner.lock().expect("Mutex poisoned").layers |= layer;
-        Ok(slf)
-    }
-
-    /// Disable a layer
-    fn disable_layer(slf: PyRefMut<Self>, layer: u8) -> Result<PyRefMut<Self>, WrappedError> {
-        let layer = Layers::from_bits(layer).ok_or(mla::errors::Error::BadAPIArgument(
-            "Unknown layer".to_owned(),
-        ))?;
-        slf.inner.lock().expect("Mutex poisoned").layers &= !layer;
-        Ok(slf)
-    }
-
-    /// Set several layers at once
-    fn set_layers(slf: PyRefMut<Self>, layers: u8) -> Result<PyRefMut<Self>, WrappedError> {
-        slf.inner.lock().expect("Mutex poisoned").layers = Layers::from_bits(layers).ok_or(
-            mla::errors::Error::BadAPIArgument("Unknown layer".to_owned()),
-        )?;
-        Ok(slf)
+    #[classmethod]
+    #[pyo3(signature = ())]
+    fn without_encryption(_cls: &Bound<PyType>) -> Result<Self, WrappedError> {
+        Ok(WriterConfig {
+            inner: Mutex::new(WriterConfigInner {
+                compression_level: Some(DEFAULT_COMPRESSION_LEVEL),
+                public_keys: None,
+            }),
+        })
     }
 
     /// Set the compression level
@@ -592,46 +558,32 @@ impl WriterConfig {
         compression_level: u32,
     ) -> Result<PyRefMut<Self>, WrappedError> {
         // Check compression level is correct using a fake object
-        ArchiveWriterConfig::new().with_compression_level(compression_level)?;
+        ArchiveWriterConfig::without_encryption().with_compression_level(compression_level)?;
 
-        slf.inner.lock().expect("Mutex poisoned").compression_level = compression_level;
+        slf.inner.lock().expect("Mutex poisoned").compression_level = Some(compression_level);
         Ok(slf)
     }
 
-    #[getter]
-    fn compression_level(&self) -> u32 {
-        self.inner.lock().expect("Mutex poisoned").compression_level
-    }
-
-    /// Set public keys
-    fn set_public_keys(
+    fn without_compression(
         slf: PyRefMut<Self>,
-        public_keys: PublicKeys,
     ) -> Result<PyRefMut<Self>, WrappedError> {
-        slf.inner.lock().expect("Mutex poisoned").public_keys = Some(public_keys);
+        slf.inner.lock().expect("Mutex poisoned").compression_level = None;
         Ok(slf)
-    }
-
-    #[getter]
-    fn get_public_keys(&self) -> Option<PublicKeys> {
-        self.inner
-            .lock()
-            .expect("Mutex poisoned")
-            .public_keys
-            .clone()
     }
 }
 
 impl WriterConfig {
     /// Create an `ArchiveWriterConfig` out of the python object
     fn to_archive_writer_config(&self) -> Result<ArchiveWriterConfig, WrappedError> {
-        let mut config = ArchiveWriterConfig::new();
         let inner = self.inner.lock().expect("Mutex poisoned");
-        config.set_layers(inner.layers);
-        config.with_compression_level(inner.compression_level)?;
-        if let Some(ref public_keys) = inner.public_keys {
-            config.add_public_keys(&public_keys.inner.lock().expect("Mutex poisoned").keys);
-        }
+        let config = match inner.public_keys.as_ref() {
+            Some(public_keys) => ArchiveWriterConfig::with_public_keys(&public_keys.inner.lock().expect("Mutex poisoned").keys),
+            None => ArchiveWriterConfig::without_encryption(),
+        };
+        let config = match inner.compression_level.as_ref() {
+            Some(compression_level) => config.with_compression_level(*compression_level)?,
+            None => config.without_compression(),
+        };
         Ok(config)
     }
 }
@@ -853,23 +805,17 @@ impl MLAFile {
 #[pymethods]
 impl MLAFile {
     #[new]
-    #[pyo3(signature = (path, mode="r", config=None))]
+    #[pyo3(signature = (path, mode, config))]
     fn new(
         path: &str,
         mode: &str,
-        config: Option<&Bound<'_, PyAny>>,
+        config: &Bound<'_, PyAny>,
     ) -> Result<Self, WrappedError> {
         match mode {
             "r" => {
-                let rconfig = match config {
-                    Some(config) => {
-                        // Must be a ReaderConfig
-                        config
-                            .extract::<PyRef<ReaderConfig>>()?
-                            .to_archive_reader_config()?
-                    }
-                    None => ArchiveReaderConfig::new(),
-                };
+                let rconfig = config
+                                .extract::<PyRef<ReaderConfig>>()?
+                                .to_archive_reader_config()?;
                 let input_file = std::fs::File::open(path)?;
                 let arch_reader = ArchiveReader::from_config(input_file, rconfig)?;
                 Ok(MLAFile {
@@ -880,15 +826,9 @@ impl MLAFile {
                 })
             }
             "w" => {
-                let wconfig = match config {
-                    Some(config) => {
-                        // Must be a WriterConfig
-                        config
+                let wconfig = config
                             .extract::<PyRef<WriterConfig>>()?
-                            .to_archive_writer_config()?
-                    }
-                    None => ArchiveWriterConfig::new(),
-                };
+                            .to_archive_writer_config()?;
                 let output_file = std::fs::File::create(path)?;
                 let arch_writer = ArchiveWriter::from_config(output_file, wconfig)?;
                 Ok(MLAFile {

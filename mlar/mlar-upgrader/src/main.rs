@@ -5,6 +5,7 @@ use std::{
 };
 
 use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
+use mla::config::ArchiveWriterConfig;
 
 fn app() -> Command {
     Command::new(env!("CARGO_PKG_NAME"))
@@ -48,21 +49,20 @@ fn app() -> Command {
 }
 
 fn writer_from_matches(matches: &ArgMatches) -> mla::ArchiveWriter<'static, File> {
-    let mut config = mla::config::ArchiveWriterConfig::new();
-    config.enable_layer(mla::format::Layers::COMPRESS);
-    if let Some(public_key_args) = matches.get_many::<PathBuf>("public_keys") {
+    let config = if let Some(public_key_args) = matches.get_many::<PathBuf>("public_keys") {
         let mut public_keys = Vec::new();
         for public_key_arg in public_key_args {
             let key_bytes = fs::read(public_key_arg).expect("Failed to read public key");
-            let public_key = mla::crypto::mlakey::parse_mlakey_pubkey_pem(&key_bytes)
+            let parsed = mla::crypto::mlakey::parse_mlakey_pubkeys_pem_many(&key_bytes)
                 .map_err(|err| format!("Failed to parse public key as PEM: {err}"))
                 .unwrap();
 
-            public_keys.push(public_key);
+            public_keys.extend(parsed);
         }
-        config.enable_layer(mla::format::Layers::ENCRYPT);
-        config.add_public_keys(&public_keys);
-    }
+        ArchiveWriterConfig::with_public_keys(&public_keys)
+    } else {
+        ArchiveWriterConfig::without_encryption()
+    };
     let out_file_path = matches.get_one::<PathBuf>("output").unwrap();
     let out_file = File::create(out_file_path).unwrap();
     mla::ArchiveWriter::from_config(out_file, config).unwrap()

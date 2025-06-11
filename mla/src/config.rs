@@ -64,7 +64,8 @@ pub struct ArchivePersistentConfig {
 #[derive(Default)]
 pub(crate) struct InternalConfig {
     // Layers specifics
-    pub(crate) encrypt: Option<InternalEncryptionConfig>,
+    #[allow(dead_code)]
+    pub encrypt: Option<InternalEncryptionConfig>,
 }
 
 /// User's configuration used to read an archive
