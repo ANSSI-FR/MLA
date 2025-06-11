@@ -11,7 +11,6 @@ use mla::crypto::mlakey_parser::{
 };
 use mla::errors::{Error, FailSafeReadError};
 use mla::helpers::linear_extract;
-use mla::layers::compress::CompressionLayerReader;
 use mla::layers::encrypt::EncryptionLayerReader;
 use mla::layers::raw::RawLayerReader;
 use mla::layers::traits::{InnerReaderTrait, LayerReader};
@@ -933,8 +932,6 @@ pub struct ArchiveInfoReader {
     //
     /// User's reading configuration
     pub config: ArchiveReaderConfig,
-    /// Compressed sizes from CompressionLayer
-    pub compressed_size: Option<u64>,
     /// Metadata (from footer if any)
     metadata: Option<ArchiveFooter>,
 }
@@ -961,28 +958,11 @@ impl ArchiveInfoReader {
         if config.layers_enabled.contains(Layers::ENCRYPT) {
             src = Box::new(EncryptionLayerReader::new(src, &config.encrypt)?)
         }
-        let compressed_size = if config.layers_enabled.contains(Layers::COMPRESS) {
-            let mut src_compress = Box::new(CompressionLayerReader::new(src)?);
-            src_compress.initialize()?;
-            let size = src_compress
-                .sizes_info
-                .as_ref()
-                .map(|v| v.get_compressed_size());
-            src = src_compress;
-            size
-        } else {
-            src.initialize()?;
-            None
-        };
 
         let metadata = Some(ArchiveFooter::deserialize_from(&mut src)?);
 
         src.rewind()?;
-        Ok(ArchiveInfoReader {
-            config,
-            compressed_size,
-            metadata,
-        })
+        Ok(ArchiveInfoReader { config, metadata })
     }
 
     pub fn get_files_size(&self) -> Result<u64, MlarError> {
@@ -1006,14 +986,6 @@ fn info(matches: &ArgMatches) -> Result<(), MlarError> {
     let encryption = header.config.layers_enabled.contains(Layers::ENCRYPT);
     let compression = header.config.layers_enabled.contains(Layers::COMPRESS);
 
-    // Instantiate reader as needed
-    let mla = if compression {
-        let config = readerconfig_from_matches(matches);
-        Some(ArchiveInfoReader::from_config(file, config)?)
-    } else {
-        None
-    };
-
     // Format Version
     println!("Format version: {}", header.format_version);
 
@@ -1029,15 +1001,7 @@ fn info(matches: &ArgMatches) -> Result<(), MlarError> {
         );
     }
 
-    // Compression config
     println!("Compression: {compression}");
-    if compression && matches.get_flag("verbose") {
-        let mla_ = mla.expect("MLA is required for verbose compression info");
-        let output_size = mla_.get_files_size()?;
-        let compressed_size: u64 = mla_.compressed_size.expect("Missing compression size");
-        let compression_rate = output_size as f64 / compressed_size as f64;
-        println!("  Compression rate: {compression_rate:.2}");
-    }
 
     Ok(())
 }

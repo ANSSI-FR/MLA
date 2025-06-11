@@ -90,9 +90,9 @@ impl<R: Read> fmt::Debug for CompressionLayerReaderState<R> {
 }
 
 #[derive(Encode, Decode, Debug)]
-pub struct SizesInfo {
+struct SizesInfo {
     /// Ordered list of chunk compressed size; only set at init
-    pub compressed_sizes: Vec<u32>,
+    compressed_sizes: Vec<u32>,
     /// Last block uncompressed size
     last_block_size: u32,
 }
@@ -118,16 +118,11 @@ impl SizesInfo {
         (self.compressed_sizes.len() as u64 - 1) * UNCOMPRESSED_DATA_SIZE as u64
             + self.last_block_size as u64
     }
-
-    // Sum the compressed_sizes
-    pub fn get_compressed_size(&self) -> u64 {
-        self.compressed_sizes.iter().map(|v| *v as u64).sum()
-    }
 }
 
 pub struct CompressionLayerReader<'a, R: 'a + Read> {
     state: CompressionLayerReaderState<Box<dyn 'a + LayerReader<'a, R>>>,
-    pub sizes_info: Option<SizesInfo>,
+    sizes_info: Option<SizesInfo>,
     /// Position in the under-layer (uncompressed stream)
     // /!\ Due to the decompressor having a block size of the compressed size,
     // any read on it may forward the inner layer to the beginning of the next
