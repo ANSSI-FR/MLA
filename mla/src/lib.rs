@@ -1068,7 +1068,7 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
     /// Return an iterator on filenames present in the archive
     ///
     /// Order is not relevant, and may change
-    pub fn list_files(&self) -> Result<impl Iterator<Item = &String>, Error> {
+    pub fn list_entries(&self) -> Result<impl Iterator<Item = &String>, Error> {
         if let Some(ArchiveFooter { files_info, .. }) = &self.metadata {
             Ok(files_info.keys())
         } else {
@@ -1772,7 +1772,7 @@ pub(crate) mod tests {
         let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
 
         // Check the list of files is correct
-        let mut sorted_list: Vec<String> = mla_read.list_files().unwrap().cloned().collect();
+        let mut sorted_list: Vec<String> = mla_read.list_entries().unwrap().cloned().collect();
         sorted_list.sort();
         assert_eq!(
             sorted_list,
@@ -1829,7 +1829,7 @@ pub(crate) mod tests {
         let mut mla_read = ArchiveReader::from_config(buf2, config).unwrap();
 
         // Check the list of files is correct
-        let mut sorted_list: Vec<String> = mla_read.list_files().unwrap().cloned().collect();
+        let mut sorted_list: Vec<String> = mla_read.list_entries().unwrap().cloned().collect();
         sorted_list.sort();
         assert_eq!(
             sorted_list,
@@ -1895,7 +1895,7 @@ pub(crate) mod tests {
                     .map(|(x, _y)| x.clone())
                     .collect::<Vec<String>>();
                 let mut file_list = mla_read
-                    .list_files()
+                    .list_entries()
                     .unwrap()
                     .cloned()
                     .collect::<Vec<String>>();
@@ -2233,8 +2233,8 @@ pub(crate) mod tests {
         let buf2 = Cursor::new(dest_w);
         let mut mla_repread = ArchiveReader::from_config(buf2, ArchiveReaderConfig::new()).unwrap();
 
-        assert_eq!(files.len(), mla_read.list_files().unwrap().count());
-        assert_eq!(files.len(), mla_repread.list_files().unwrap().count());
+        assert_eq!(files.len(), mla_read.list_entries().unwrap().count());
+        assert_eq!(files.len(), mla_repread.list_entries().unwrap().count());
 
         // Get and check file per file
         for (fname, content) in files.iter() {
@@ -2347,7 +2347,7 @@ pub(crate) mod tests {
 
         let file_names: Vec<String> = (0..nb_file).map(|nb| format!("file_{:}", nb)).collect();
         let mut file_list = mla_read
-            .list_files()
+            .list_entries()
             .unwrap()
             .cloned()
             .collect::<Vec<String>>();
