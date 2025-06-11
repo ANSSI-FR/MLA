@@ -43,6 +43,7 @@ enum MLAStatus {
   MLA_STATUS_HKDF_INVALID_KEY_LENGTH = 1507328,
   MLA_STATUS_HPKE_ERROR = 98304,
   MLA_STATUS_INVALID_LAST_TAG = 102400,
+  MLA_STATUS_ENCRYPTION_ASKED_BUT_NOT_MARKED_PRESENT = 1572864,
   MLA_STATUS_MLA_KEY_PARSER_ERROR = 15859712,
 };
 typedef uint64_t MLAStatus;
@@ -147,25 +148,33 @@ MLAStatus mla_config_with_compression_level(MLAConfigHandle *handle_in,
  */
 MLAStatus mla_config_without_compression(MLAConfigHandle *handle_in, MLAConfigHandle *handle_out);
 
-/**
- * Create an empty ReaderConfig
- */
-MLAStatus mla_reader_config_new(MLAConfigHandle *handle_out);
+MLAStatus create_mla_reader_config_without_encryption(MLAConfigHandle *handle_out);
 
 /**
  * Appends the given private key in DER format to an existing given configuration
  * (referenced by the handle returned by mla_reader_config_new()).
  */
-MLAStatus mla_reader_config_add_private_key_der(MLAConfigHandle config,
-                                                const uint8_t *private_key_data,
-                                                uintptr_t private_key_len);
+MLAStatus create_mla_reader_config_with_private_keys_der(MLAConfigHandle *handle_out,
+                                                         const uint8_t *private_keys_pointers,
+                                                         uintptr_t number_of_private_keys);
+
+/**
+ * Appends the given private key in DER format to an existing given configuration
+ * (referenced by the handle returned by mla_reader_config_new()).
+ */
+MLAStatus create_mla_reader_config_with_private_keys_der_accept_unencrypted(MLAConfigHandle *handle_out,
+                                                                            const uint8_t *private_keys_pointers,
+                                                                            uintptr_t number_of_private_keys);
 
 /**
  * Appends the given private key in PEM format to an existing given configuration
  * (referenced by the handle returned by mla_reader_config_new()).
  */
-MLAStatus mla_reader_config_add_private_key_pem(MLAConfigHandle config,
-                                                const char *private_key_pem);
+MLAStatus create_mla_reader_config_with_private_key_pem_many(MLAConfigHandle *handle_out,
+                                                             const char *private_key_pem);
+
+MLAStatus create_mla_reader_config_with_private_key_pem_many_accept_unencrypted(MLAConfigHandle *handle_out,
+                                                                                const char *private_key_pem);
 
 /**
  * Open a new MLA archive using the given configuration, which is consumed and freed

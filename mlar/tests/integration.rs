@@ -550,6 +550,7 @@ fn test_multiple_compression_level() {
         // `mlar to-tar -i {src} -o {tar_name}`
         let mut cmd = Command::cargo_bin(UTIL).unwrap();
         cmd.arg("to-tar")
+            .arg("--accept-unencrypted")
             .arg("-i")
             .arg(src.path())
             .arg("-o")
@@ -772,7 +773,10 @@ fn test_verbose_listing() {
 
     // `mlar list -i output.mla`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
-    cmd.arg("list").arg("-i").arg(mlar_file.path());
+    cmd.arg("list")
+        .arg("--accept-unencrypted")
+        .arg("-i")
+        .arg(mlar_file.path());
 
     println!("{cmd:?}");
     let assert = cmd.assert();
@@ -780,7 +784,11 @@ fn test_verbose_listing() {
 
     // `mlar list -v -i output.mla`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
-    cmd.arg("list").arg("-v").arg("-i").arg(mlar_file.path());
+    cmd.arg("list")
+        .arg("--accept-unencrypted")
+        .arg("-v")
+        .arg("-i")
+        .arg(mlar_file.path());
 
     println!("{cmd:?}");
     let assert = cmd.assert();
@@ -788,7 +796,11 @@ fn test_verbose_listing() {
 
     // `mlar list -vv -i output.mla`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
-    cmd.arg("list").arg("-vv").arg("-i").arg(mlar_file.path());
+    cmd.arg("list")
+        .arg("--accept-unencrypted")
+        .arg("-vv")
+        .arg("-i")
+        .arg(mlar_file.path());
 
     println!("{cmd:?}");
     let assert = cmd.assert();
@@ -826,6 +838,7 @@ fn test_extract() {
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("extract")
         .arg("-v")
+        .arg("--accept-unencrypted")
         .arg("-i")
         .arg(mlar_file.path())
         .arg("-o")
@@ -845,6 +858,7 @@ fn test_extract() {
     let output_dir = TempDir::new().unwrap();
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("extract")
+        .arg("--accept-unencrypted")
         .arg("-v")
         .arg("-i")
         .arg(mlar_file.path())
@@ -881,6 +895,7 @@ fn test_extract() {
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("extract")
         .arg("-v")
+        .arg("--accept-unencrypted")
         .arg("-i")
         .arg(mlar_file.path())
         .arg("-o")
@@ -901,6 +916,7 @@ fn test_extract() {
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("extract")
         .arg("-v")
+        .arg("--accept-unencrypted")
         .arg("-i")
         .arg(mlar_file.path())
         .arg("-o")
@@ -941,6 +957,7 @@ fn test_cat() {
     cmd.arg("cat")
         .arg("-i")
         .arg(mlar_file.path())
+        .arg("--accept-unencrypted")
         .arg(&testfs.files_archive_order[2]);
 
     println!("{cmd:?}");
@@ -1314,6 +1331,7 @@ fn test_extract_lot_files() {
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("extract")
         .arg("-v")
+        .arg("--accept-unencrypted")
         .arg("-i")
         .arg(mlar_file.path())
         .arg("-o")
@@ -1334,6 +1352,7 @@ fn test_extract_lot_files() {
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("extract")
         .arg("-v")
+        .arg("--accept-unencrypted")
         .arg("-i")
         .arg(mlar_file.path())
         .arg("-o")
@@ -1369,6 +1388,7 @@ fn test_extract_lot_files() {
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("extract")
         .arg("-v")
+        .arg("--accept-unencrypted")
         .arg("-i")
         .arg(mlar_file.path())
         .arg("-o")

@@ -1,11 +1,13 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 use mla::config::ArchiveReaderConfig;
 use mla::config::ArchiveWriterConfig;
+use mla::crypto::mlakey::HybridPrivateKey;
 use mla::crypto::mlakey::HybridPublicKey;
 use mla::crypto::mlakey::MLAKeyParserError;
+use mla::crypto::mlakey::MLAKEY_PRIVKEY_DER_SIZE;
 use mla::crypto::mlakey::MLAKEY_PUBKEY_DER_SIZE;
 use mla::crypto::mlakey::{
-    parse_mlakey_privkey_der, parse_mlakey_privkey_pem, parse_mlakey_pubkey_der,
+    parse_mlakey_privkey_der, parse_mlakey_privkeys_pem_many, parse_mlakey_pubkey_der,
     parse_mlakey_pubkeys_pem_many,
 };
 use mla::errors::ConfigError;
@@ -64,6 +66,7 @@ pub enum MLAStatus {
     HKDFInvalidKeyLength = 0x170000,
     HPKEError = 0x18000,
     InvalidLastTag = 0x19000,
+    EncryptionAskedButNotMarkedPresent = 0x180000,
     // Keep 0xF10000 slot for backward compatibility
     // Curve25519ParserError = 0xF10000,
     MlaKeyParserError = 0xF20000,
@@ -204,6 +207,9 @@ impl From<MLAError> for MLAStatus {
             MLAError::HKDFInvalidKeyLength => MLAStatus::HKDFInvalidKeyLength,
             MLAError::HPKEError(_) => MLAStatus::HPKEError,
             MLAError::InvalidLastTag => MLAStatus::InvalidLastTag,
+            MLAError::EncryptionAskedButNotMarkedPresent => {
+                MLAStatus::EncryptionAskedButNotMarkedPresent
+            }
         }
     }
 }
@@ -390,14 +396,15 @@ pub extern "C" fn mla_config_without_compression(
     MLAStatus::Success
 }
 
-/// Create an empty ReaderConfig
 #[no_mangle]
-pub extern "C" fn mla_reader_config_new(handle_out: *mut MLAConfigHandle) -> MLAStatus {
+pub extern "C" fn create_mla_reader_config_without_encryption(
+    handle_out: *mut MLAConfigHandle,
+) -> MLAStatus {
     if handle_out.is_null() {
         return MLAStatus::BadAPIArgument;
     }
 
-    let config = ArchiveReaderConfig::new();
+    let config = ArchiveReaderConfig::without_encryption();
 
     let ptr = Box::into_raw(Box::new(config));
     unsafe {
@@ -409,59 +416,126 @@ pub extern "C" fn mla_reader_config_new(handle_out: *mut MLAConfigHandle) -> MLA
 /// Appends the given private key in DER format to an existing given configuration
 /// (referenced by the handle returned by mla_reader_config_new()).
 #[no_mangle]
-pub extern "C" fn mla_reader_config_add_private_key_der(
-    config: MLAConfigHandle,
-    private_key_data: *const u8,
-    private_key_len: usize,
+pub extern "C" fn create_mla_reader_config_with_private_keys_der(
+    handle_out: *mut MLAConfigHandle,
+    private_keys_pointers: *const u8,
+    number_of_private_keys: usize,
 ) -> MLAStatus {
-    if config.is_null() || private_key_data.is_null() || private_key_len == 0 {
+    create_mla_reader_config_with_private_keys_der_generic(
+        handle_out,
+        private_keys_pointers,
+        number_of_private_keys,
+        ArchiveReaderConfig::with_private_keys,
+    )
+}
+
+/// Appends the given private key in DER format to an existing given configuration
+/// (referenced by the handle returned by mla_reader_config_new()).
+#[no_mangle]
+pub extern "C" fn create_mla_reader_config_with_private_keys_der_accept_unencrypted(
+    handle_out: *mut MLAConfigHandle,
+    private_keys_pointers: *const u8,
+    number_of_private_keys: usize,
+) -> MLAStatus {
+    create_mla_reader_config_with_private_keys_der_generic(
+        handle_out,
+        private_keys_pointers,
+        number_of_private_keys,
+        ArchiveReaderConfig::with_private_keys_accept_unencrypted,
+    )
+}
+
+fn create_mla_reader_config_with_private_keys_der_generic<F>(
+    handle_out: *mut MLAConfigHandle,
+    private_keys_pointers: *const u8,
+    number_of_private_keys: usize,
+    f: F,
+) -> MLAStatus
+where
+    F: FnOnce(&[HybridPrivateKey]) -> ArchiveReaderConfig,
+{
+    if handle_out.is_null() || private_keys_pointers.is_null() || number_of_private_keys == 0 {
         return MLAStatus::BadAPIArgument;
     }
 
-    let mut config = unsafe { Box::from_raw(config as *mut ArchiveReaderConfig) };
+    let private_keys_pointers =
+        unsafe { std::slice::from_raw_parts(private_keys_pointers, number_of_private_keys) };
 
-    // DER can contain null bytes, so use from_raw_parts
-    let private_key: &[u8] =
-        unsafe { std::slice::from_raw_parts(private_key_data, private_key_len) };
-
-    let res = match parse_mlakey_privkey_der(private_key) {
-        Ok(v) => {
-            config.add_private_keys(&[v]);
-            MLAStatus::Success
-        }
-        _ => MLAStatus::MlaKeyParserError,
+    let private_keys = private_keys_pointers
+        .iter()
+        .map(|pointer| {
+            let private_key_data =
+                unsafe { std::slice::from_raw_parts(pointer, MLAKEY_PRIVKEY_DER_SIZE) };
+            parse_mlakey_privkey_der(private_key_data)
+        })
+        .collect::<Result<Vec<HybridPrivateKey>, MLAKeyParserError>>();
+    let private_keys = match private_keys {
+        Ok(private_keys) => private_keys,
+        Err(_) => return MLAStatus::MlaKeyParserError,
     };
 
-    Box::leak(config);
-    res
+    let config = f(&private_keys);
+
+    let ptr = Box::into_raw(Box::new(config));
+    unsafe {
+        *handle_out = ptr as MLAConfigHandle;
+    }
+    MLAStatus::Success
 }
 
 /// Appends the given private key in PEM format to an existing given configuration
 /// (referenced by the handle returned by mla_reader_config_new()).
 #[no_mangle]
-pub extern "C" fn mla_reader_config_add_private_key_pem(
-    config: MLAConfigHandle,
+pub extern "C" fn create_mla_reader_config_with_private_key_pem_many(
+    handle_out: *mut MLAConfigHandle,
     private_key_pem: *const c_char,
 ) -> MLAStatus {
-    if config.is_null() || private_key_pem.is_null() {
+    create_mla_reader_config_with_private_key_pem_many_generic(
+        handle_out,
+        private_key_pem,
+        ArchiveReaderConfig::with_private_keys,
+    )
+}
+
+#[no_mangle]
+pub extern "C" fn create_mla_reader_config_with_private_key_pem_many_accept_unencrypted(
+    handle_out: *mut MLAConfigHandle,
+    private_key_pem: *const c_char,
+) -> MLAStatus {
+    create_mla_reader_config_with_private_key_pem_many_generic(
+        handle_out,
+        private_key_pem,
+        ArchiveReaderConfig::with_private_keys_accept_unencrypted,
+    )
+}
+
+fn create_mla_reader_config_with_private_key_pem_many_generic<F>(
+    handle_out: *mut MLAConfigHandle,
+    private_keys_pem: *const c_char,
+    f: F,
+) -> MLAStatus
+where
+    F: FnOnce(&[HybridPrivateKey]) -> ArchiveReaderConfig,
+{
+    if handle_out.is_null() || private_keys_pem.is_null() {
         return MLAStatus::BadAPIArgument;
     }
 
-    let mut config = unsafe { Box::from_raw(config as *mut ArchiveReaderConfig) };
-
     // PEM is a null-terminated string
-    let private_key = unsafe { CStr::from_ptr(private_key_pem) }.to_bytes();
+    let private_keys = unsafe { CStr::from_ptr(private_keys_pem) }.to_bytes();
 
-    let res = match parse_mlakey_privkey_pem(private_key) {
-        Ok(v) => {
-            config.add_private_keys(&[v]);
-            MLAStatus::Success
-        }
-        _ => MLAStatus::MlaKeyParserError,
+    let private_keys = match parse_mlakey_privkeys_pem_many(private_keys) {
+        Ok(private_keys) => private_keys,
+        Err(_) => return MLAStatus::MlaKeyParserError,
     };
 
-    Box::leak(config);
-    res
+    let config = f(&private_keys);
+
+    let ptr = Box::into_raw(Box::new(config));
+    unsafe {
+        *handle_out = ptr as MLAConfigHandle;
+    }
+    MLAStatus::Success
 }
 
 /// Open a new MLA archive using the given configuration, which is consumed and freed

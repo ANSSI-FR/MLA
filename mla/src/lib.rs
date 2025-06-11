@@ -162,8 +162,7 @@
 //!     let private_key = parse_mlakey_privkey_der(PRIV_KEY).unwrap();
 //!
 //!     // Specify the key for the Reader
-//!     let mut config = ArchiveReaderConfig::new();
-//!     config.add_private_keys(&[private_key]);
+//!     let config = ArchiveReaderConfig::with_private_keys(&[private_key]);
 //!
 //!     // Read from buf, which needs Read + Seek
 //!     let buf = io::Cursor::new(DATA);
@@ -1039,6 +1038,7 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
         // Make sure we read the archive header from the start
         src.rewind()?;
         let header = ArchiveHeader::from(&mut src)?;
+        let layers_enabled = header.config.layers_enabled;
         config.load_persistent(header.config)?;
 
         // Pin the current position (after header) as the new 0
@@ -1047,10 +1047,12 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
 
         // Enable layers depending on user option. Order is relevant
         let mut src: Box<dyn 'b + LayerReader<'b, R>> = raw_src;
-        if config.layers_enabled.contains(Layers::ENCRYPT) {
+        if layers_enabled.contains(Layers::ENCRYPT) {
             src = Box::new(EncryptionLayerReader::new(src, &config.encrypt)?);
+        } else if !config.accept_unencrypted {
+            return Err(Error::EncryptionAskedButNotMarkedPresent);
         }
-        if config.layers_enabled.contains(Layers::COMPRESS) {
+        if layers_enabled.contains(Layers::COMPRESS) {
             src = Box::new(CompressionLayerReader::new(src)?);
         }
         src.initialize()?;
@@ -1168,23 +1170,22 @@ macro_rules! update_error {
 impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
     pub fn from_config(mut src: R, mut config: ArchiveReaderConfig) -> Result<Self, Error> {
         let header = ArchiveHeader::from(&mut src)?;
+        let layers_enabled = header.config.layers_enabled;
         config.load_persistent(header.config)?;
 
         // Enable layers depending on user option. Order is relevant
         let mut src: Box<dyn 'b + LayerFailSafeReader<'b, R>> =
             Box::new(RawLayerFailSafeReader::new(src));
-        if config.layers_enabled.contains(Layers::ENCRYPT) {
+        if layers_enabled.contains(Layers::ENCRYPT) {
             src = Box::new(EncryptionLayerFailSafeReader::new(src, &config.encrypt)?);
+        } else if !config.accept_unencrypted {
+            return Err(Error::EncryptionAskedButNotMarkedPresent);
         }
-        if config.layers_enabled.contains(Layers::COMPRESS) {
+        if layers_enabled.contains(Layers::COMPRESS) {
             src = Box::new(CompressionLayerFailSafeReader::new(src)?);
         }
 
         Ok(Self { config, src })
-    }
-
-    pub fn new(src: R) -> Result<Self, Error> {
-        Self::from_config(src, ArchiveReaderConfig::new())
     }
 
     /// Fail-safe / best-effort conversion of the current archive to a correct
@@ -1549,17 +1550,10 @@ pub(crate) mod tests {
             .unwrap();
         mla.end_entry(id).unwrap();
 
-        let mla_key = mla.internal_config.encrypt.as_ref().unwrap().key;
-        let mla_nonce = mla.internal_config.encrypt.as_ref().unwrap().nonce;
         let dest = mla.finalize().unwrap();
         let buf = Cursor::new(dest.as_slice());
-        let mut config = ArchiveReaderConfig::new();
-        config.add_private_keys(std::slice::from_ref(&private_key));
+        let config = ArchiveReaderConfig::with_private_keys(&[private_key]);
         let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
-        assert_eq!(
-            (mla_key, mla_nonce),
-            mla_read.config.get_encrypt_parameters().unwrap()
-        );
 
         let mut file = mla_read.get_entry("my_file".to_string()).unwrap().unwrap();
         let mut rez = Vec::new();
@@ -1695,8 +1689,7 @@ pub(crate) mod tests {
         let (mla, key, _pubkey, files) = build_archive(true, true, true);
 
         let buf = Cursor::new(mla.as_slice());
-        let mut config = ArchiveReaderConfig::new();
-        config.add_private_keys(std::slice::from_ref(&key));
+        let config = ArchiveReaderConfig::with_private_keys(&[key]);
         let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
 
         for (fname, content) in files {
@@ -1743,8 +1736,7 @@ pub(crate) mod tests {
 
             // Read the obtained stream
             let buf = Cursor::new(dest.as_slice());
-            let mut config = ArchiveReaderConfig::new();
-            config.add_private_keys(std::slice::from_ref(&private_key));
+            let config = ArchiveReaderConfig::with_private_keys(&[private_key.clone()]);
             let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
 
             let mut file = mla_read.get_entry("my_file".to_string()).unwrap().unwrap();
@@ -1775,8 +1767,7 @@ pub(crate) mod tests {
         let (mla, key, _pubkey, files) = build_archive(true, true, false);
 
         let buf = Cursor::new(mla.as_slice());
-        let mut config = ArchiveReaderConfig::new();
-        config.add_private_keys(std::slice::from_ref(&key));
+        let config = ArchiveReaderConfig::with_private_keys(&[key]);
         let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
 
         // Check the list of files is correct
@@ -1806,8 +1797,7 @@ pub(crate) mod tests {
         let (dest, key, pubkey, files) = build_archive(true, true, false);
 
         // Prepare the failsafe reader
-        let mut config = ArchiveReaderConfig::new();
-        config.add_private_keys(std::slice::from_ref(&key));
+        let config = ArchiveReaderConfig::with_private_keys(&[key.clone()]);
         let mut mla_fsread = ArchiveFailSafeReader::from_config(dest.as_slice(), config).unwrap();
 
         // Prepare the writer
@@ -1828,8 +1818,7 @@ pub(crate) mod tests {
 
         // New archive can now be checked
         let buf2 = Cursor::new(dest_w.as_slice());
-        let mut config = ArchiveReaderConfig::new();
-        config.add_private_keys(std::slice::from_ref(&key));
+        let config = ArchiveReaderConfig::with_private_keys(&[key]);
         let mut mla_read = ArchiveReader::from_config(buf2, config).unwrap();
 
         // Check the list of files is correct
@@ -1871,8 +1860,7 @@ pub(crate) mod tests {
                 + 4;
 
             for remove in &[1, 10, 30, 50, 70, 95, 100] {
-                let mut config = ArchiveReaderConfig::new();
-                config.add_private_keys(std::slice::from_ref(&key));
+                let config = ArchiveReaderConfig::with_private_keys(&[key.clone()]);
                 let mut mla_fsread = ArchiveFailSafeReader::from_config(
                     &dest[..dest.len() - footer_size - remove],
                     config,
@@ -1889,8 +1877,7 @@ pub(crate) mod tests {
 
                 // New archive can now be checked
                 let buf2 = Cursor::new(dest_w.as_slice());
-                let mut config = ArchiveReaderConfig::new();
-                config.add_private_keys(std::slice::from_ref(&key));
+                let config = ArchiveReaderConfig::with_private_keys(&[key.clone()]);
                 let mut mla_read = ArchiveReader::from_config(buf2, config).unwrap();
 
                 // Check *the start of* the files list is correct
@@ -1968,8 +1955,7 @@ pub(crate) mod tests {
             }
 
             let buf = Cursor::new(dest.as_slice());
-            let mut config = ArchiveReaderConfig::new();
-            config.add_private_keys(std::slice::from_ref(&key));
+            let config = ArchiveReaderConfig::with_private_keys(&[key]);
             let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
 
             for (fname, data) in &files {
@@ -2000,9 +1986,11 @@ pub(crate) mod tests {
         dest.swap(pos[0], pos[0] + 1);
 
         // Prepare the failsafe reader
-        let mut mla_fsread =
-            ArchiveFailSafeReader::from_config(dest.as_slice(), ArchiveReaderConfig::new())
-                .unwrap();
+        let mut mla_fsread = ArchiveFailSafeReader::from_config(
+            dest.as_slice(),
+            ArchiveReaderConfig::without_encryption(),
+        )
+        .unwrap();
 
         // Prepare the writer
         let dest_w = Vec::new();
@@ -2037,8 +2025,7 @@ pub(crate) mod tests {
 
         // Prepare the reader
         let buf = Cursor::new(dest.as_slice());
-        let mut config = ArchiveReaderConfig::new();
-        config.add_private_keys(std::slice::from_ref(&key));
+        let config = ArchiveReaderConfig::with_private_keys(&[key]);
         let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
 
         // Get hashes and compare
@@ -2209,13 +2196,19 @@ pub(crate) mod tests {
 
         // Build Reader
         let buf = Cursor::new(mla_data);
-        let mut config = ArchiveReaderConfig::new();
-        config.add_private_keys(&[crypto::mlakey::parse_mlakey_privkey_der(der_priv).unwrap()]);
+        let config =
+            ArchiveReaderConfig::with_private_keys(&[crypto::mlakey::parse_mlakey_privkey_der(
+                der_priv,
+            )
+            .unwrap()]);
         let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
 
         // Build FailSafeReader
-        let mut config = ArchiveReaderConfig::new();
-        config.add_private_keys(&[crypto::mlakey::parse_mlakey_privkey_der(der_priv).unwrap()]);
+        let config =
+            ArchiveReaderConfig::with_private_keys(&[crypto::mlakey::parse_mlakey_privkey_der(
+                der_priv,
+            )
+            .unwrap()]);
         let mut mla_fsread = ArchiveFailSafeReader::from_config(mla_data, config).unwrap();
 
         // Repair the archive (without any damage, but trigger the corresponding code)
@@ -2231,7 +2224,12 @@ pub(crate) mod tests {
         }
         // Get a reader on the repaired archive
         let buf2 = Cursor::new(dest_w);
-        let mut mla_repread = ArchiveReader::from_config(buf2, ArchiveReaderConfig::new()).unwrap();
+        let repread_config =
+            ArchiveReaderConfig::with_private_keys(&[crypto::mlakey::parse_mlakey_privkey_der(
+                der_priv,
+            )
+            .unwrap()]);
+        let mut mla_repread = ArchiveReader::from_config(buf2, repread_config).unwrap();
 
         assert_eq!(files.len(), mla_read.list_entries().unwrap().count());
         assert_eq!(files.len(), mla_repread.list_entries().unwrap().count());
@@ -2274,7 +2272,8 @@ pub(crate) mod tests {
 
         let buf = Cursor::new(mla_data);
         let mut mla_read =
-            ArchiveReader::from_config(buf, ArchiveReaderConfig::new()).expect("archive reader");
+            ArchiveReader::from_config(buf, ArchiveReaderConfig::without_encryption())
+                .expect("archive reader");
         let mut out = Vec::new();
         mla_read
             .get_entry(fname)
@@ -2339,8 +2338,7 @@ pub(crate) mod tests {
         // List files and check the list
 
         let buf = Cursor::new(mla_data);
-        let mut config = ArchiveReaderConfig::new();
-        config.add_private_keys(&[private_key]);
+        let config = ArchiveReaderConfig::with_private_keys(&[private_key]);
         let mut mla_read = ArchiveReader::from_config(buf, config).expect("archive reader");
 
         let file_names: Vec<String> = (0..nb_file).map(|nb| format!("file_{:}", nb)).collect();

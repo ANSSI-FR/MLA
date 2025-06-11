@@ -21,7 +21,7 @@ use std::error;
 use std::fmt;
 use std::fs::{self, File, read_dir};
 use std::io::{self, BufRead};
-use std::io::{Read, Seek, Write};
+use std::io::{Read, Write};
 use std::num::NonZeroUsize;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
@@ -32,13 +32,11 @@ use tar::{Builder, Header};
 #[derive(Debug)]
 enum MlarError {
     /// Wrap a MLA error
-    MlaError(Error),
+    Mla(Error),
     /// IO Error (not enough data, etc.)
-    IOError(io::Error),
-    /// A private key has been provided, but it is not required
-    PrivateKeyProvidedButNotUsed,
+    IO(io::Error),
     /// Configuration error
-    ConfigError(mla::errors::ConfigError),
+    Config(mla::errors::ConfigError),
 }
 
 impl fmt::Display for MlarError {
@@ -50,29 +48,28 @@ impl fmt::Display for MlarError {
 
 impl From<Error> for MlarError {
     fn from(error: Error) -> Self {
-        MlarError::MlaError(error)
+        MlarError::Mla(error)
     }
 }
 
 impl From<io::Error> for MlarError {
     fn from(error: io::Error) -> Self {
-        MlarError::IOError(error)
+        MlarError::IO(error)
     }
 }
 
 impl From<mla::errors::ConfigError> for MlarError {
     fn from(error: mla::errors::ConfigError) -> Self {
-        MlarError::ConfigError(error)
+        MlarError::Config(error)
     }
 }
 
 impl error::Error for MlarError {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match &self {
-            MlarError::IOError(err) => Some(err),
-            MlarError::MlaError(err) => Some(err),
-            MlarError::ConfigError(err) => Some(err),
-            _ => None,
+            MlarError::IO(err) => Some(err),
+            MlarError::Mla(err) => Some(err),
+            MlarError::Config(err) => Some(err),
         }
     }
 }
@@ -157,7 +154,7 @@ fn config_from_matches(matches: &ArgMatches) -> Result<ArchiveWriterConfig, Mlar
 
     if layers.contains(&"encrypt") && !matches.contains_id("public_keys") {
         eprintln!("Encryption was asked, but no public key was given");
-        return Err(MlarError::ConfigError(
+        return Err(MlarError::Config(
             mla::errors::ConfigError::EncryptionKeyIsMissing,
         ));
     }
@@ -233,8 +230,6 @@ fn writer_from_matches<'a>(
 /// Return the ArchiveReaderConfig corresponding to provided arguments and set
 /// Layers::ENCRYPT if a key is provided
 fn readerconfig_from_matches(matches: &ArgMatches) -> ArchiveReaderConfig {
-    let mut config = ArchiveReaderConfig::new();
-
     if matches.contains_id("private_keys") {
         let private_keys = match open_private_keys(matches) {
             Ok(private_keys) => private_keys,
@@ -242,11 +237,16 @@ fn readerconfig_from_matches(matches: &ArgMatches) -> ArchiveReaderConfig {
                 panic!("[ERROR] Unable to open private keys: {}", error);
             }
         };
-        config.add_private_keys(&private_keys);
-        config.layers_enabled.insert(Layers::ENCRYPT);
+        if matches.get_flag("accept_unencrypted") {
+            ArchiveReaderConfig::with_private_keys_accept_unencrypted(&private_keys)
+        } else {
+            ArchiveReaderConfig::with_private_keys(&private_keys)
+        }
+    } else if matches.get_flag("accept_unencrypted") {
+        ArchiveReaderConfig::without_encryption()
+    } else {
+        panic!("No private keys given but --accept-unencrypted was not given")
     }
-
-    config
 }
 
 fn open_mla_file<'a>(matches: &ArgMatches) -> Result<ArchiveReader<'a, File>, MlarError> {
@@ -255,19 +255,7 @@ fn open_mla_file<'a>(matches: &ArgMatches) -> Result<ArchiveReader<'a, File>, Ml
     // Safe to use unwrap() because the option is required()
     let mla_file = matches.get_one::<PathBuf>("input").unwrap();
     let path = Path::new(&mla_file);
-    let mut file = File::open(path)?;
-
-    // If a decryption key is provided, assume the user expects the file to be encrypted
-    // If not, avoid opening it
-    file.rewind()?;
-    let header = ArchiveHeader::from(&mut file)?;
-    if config.layers_enabled.contains(Layers::ENCRYPT)
-        && !header.config.layers_enabled.contains(Layers::ENCRYPT)
-    {
-        eprintln!("[-] A private key has been provided, but the archive is not encrypted");
-        return Err(MlarError::PrivateKeyProvidedButNotUsed);
-    }
-    file.rewind()?;
+    let file = File::open(path)?;
 
     // Instantiate reader
     Ok(ArchiveReader::from_config(file, config)?)
@@ -855,7 +843,7 @@ fn keyderive(matches: &ArgMatches) -> Result<(), MlarError> {
     let mut buf = Vec::new();
     file.read_to_end(&mut buf)?;
     let secret =
-        parse_mlakey_privkey_pem(&buf).map_err(|_| MlarError::MlaError(Error::InvalidKeyFormat))?;
+        parse_mlakey_privkey_pem(&buf).map_err(|_| MlarError::Mla(Error::InvalidKeyFormat))?;
 
     // Safe to unwrap, there is at least one derivation path
     let paths = matches
@@ -925,6 +913,10 @@ fn app() -> clap::Command {
             .num_args(1)
             .action(ArgAction::Append)
             .value_parser(value_parser!(PathBuf)),
+        Arg::new("accept_unencrypted")
+            .long("accept-unencrypted")
+            .help("Accept to operate on unencrypted archives")
+            .action(ArgAction::SetTrue),
     ];
     let output_args = vec![
         Arg::new("output")
