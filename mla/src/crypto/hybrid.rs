@@ -217,8 +217,8 @@ impl HybridMultiRecipientEncapsulatedKey {
 /// Support KEM decapsulation
 #[derive(Clone)]
 pub struct HybridPrivateKey {
-    pub private_key_ecc: X25519StaticSecret,
-    pub private_key_ml: MLKEMDecapsulationKey,
+    pub(crate) private_key_ecc: X25519StaticSecret,
+    pub(crate) private_key_ml: MLKEMDecapsulationKey,
 }
 
 impl Zeroize for HybridPrivateKey {
@@ -280,8 +280,8 @@ impl Decapsulate<HybridMultiRecipientEncapsulatedKey, HybridKemSharedSecret> for
 /// - a ML-KEM 1024 key, for post-quantum cryptography
 #[derive(Clone)]
 pub struct HybridPublicKey {
-    pub public_key_ecc: X25519PublicKey,
-    pub public_key_ml: MLKEMEncapsulationKey,
+    pub(crate) public_key_ecc: X25519PublicKey,
+    pub(crate) public_key_ml: MLKEMEncapsulationKey,
 }
 
 /// Public keys for multiple recipients, used for hybrid cryptography

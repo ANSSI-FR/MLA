@@ -3,8 +3,6 @@ use std::{
     io::{self, Read},
     sync::Mutex,
 };
-
-use ml_kem::EncodedSizeUser;
 use mla::crypto::mlakey::{
     parse_mlakey_privkey_der, parse_mlakey_privkey_pem, parse_mlakey_pubkey_der,
     parse_mlakey_pubkey_pem,
@@ -384,12 +382,7 @@ impl PublicKeys {
             .expect("Mutex poisoned")
             .keys
             .iter()
-            .map(|pubkey| {
-                let mut result = Vec::new();
-                result.extend(pubkey.public_key_ecc.to_bytes());
-                result.extend(pubkey.public_key_ml.as_bytes());
-                result
-            })
+            .map(|pubkey| pubkey.to_der().to_vec())
             .collect()
     }
 }
@@ -496,12 +489,7 @@ impl PrivateKeys {
             .expect("Mutex poisoned")
             .keys
             .iter()
-            .map(|privkey| {
-                let mut result = Vec::new();
-                result.extend(privkey.private_key_ecc.to_bytes());
-                result.extend(privkey.private_key_ml.as_bytes());
-                result
-            })
+            .map(|privkey| privkey.to_der().to_vec())
             .collect()
     }
 }
