@@ -124,7 +124,8 @@ int main()
     fclose(kf);
 
     MLAReaderConfigHandle hConfig = NULL;
-    MLAStatus status = create_mla_reader_config_with_private_keys_der(&hConfig, [&keyData], 1);
+    const uint8_t *const keys[] = {(const uint8_t *const) &keyData};
+    MLAStatus status = create_mla_reader_config_with_private_keys_der(&hConfig, keys, 1);
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
     {
         fprintf(stderr, " [!] Private key set failed with code %" PRIX64 "\n", (uint64_t)status);

@@ -419,7 +419,7 @@ pub extern "C" fn create_mla_reader_config_without_encryption(
 #[no_mangle]
 pub extern "C" fn create_mla_reader_config_with_private_keys_der(
     handle_out: *mut MLAReaderConfigHandle,
-    private_keys_pointers: *const u8,
+    private_keys_pointers: *const *const u8,
     number_of_private_keys: usize,
 ) -> MLAStatus {
     create_mla_reader_config_with_private_keys_der_generic(
@@ -435,7 +435,7 @@ pub extern "C" fn create_mla_reader_config_with_private_keys_der(
 #[no_mangle]
 pub extern "C" fn create_mla_reader_config_with_private_keys_der_accept_unencrypted(
     handle_out: *mut MLAReaderConfigHandle,
-    private_keys_pointers: *const u8,
+    private_keys_pointers: *const *const u8,
     number_of_private_keys: usize,
 ) -> MLAStatus {
     create_mla_reader_config_with_private_keys_der_generic(
@@ -448,7 +448,7 @@ pub extern "C" fn create_mla_reader_config_with_private_keys_der_accept_unencryp
 
 fn create_mla_reader_config_with_private_keys_der_generic<F>(
     handle_out: *mut MLAReaderConfigHandle,
-    private_keys_pointers: *const u8,
+    private_keys_pointers: *const *const u8,
     number_of_private_keys: usize,
     f: F,
 ) -> MLAStatus
@@ -462,11 +462,17 @@ where
     let private_keys_pointers =
         unsafe { std::slice::from_raw_parts(private_keys_pointers, number_of_private_keys) };
 
+    for pointer in private_keys_pointers {
+        if pointer.is_null() {
+            return MLAStatus::BadAPIArgument;
+        }
+    }
+
     let private_keys = private_keys_pointers
         .iter()
         .map(|pointer| {
             let private_key_data =
-                unsafe { std::slice::from_raw_parts(pointer, MLAKEY_PRIVKEY_DER_SIZE) };
+                unsafe { std::slice::from_raw_parts(*pointer, MLAKEY_PRIVKEY_DER_SIZE) };
             parse_mlakey_privkey_der(private_key_data)
         })
         .collect::<Result<Vec<HybridPrivateKey>, MLAKeyParserError>>();
