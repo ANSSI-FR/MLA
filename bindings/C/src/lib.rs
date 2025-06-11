@@ -348,29 +348,29 @@ pub extern "C" fn create_mla_writer_config_without_encryption(
     MLAStatus::Success
 }
 
-/// Free `handle_in` and create a handle to same config with given compression level
+/// Change handle to same config with given compression level
 /// Currently this level can only be an integer N with 0 <= N <= 11,
 /// and bigger values cause denser but slower compression.
+/// Previous handle value becomes invalid after this call.
 #[no_mangle]
 pub extern "C" fn mla_writer_config_with_compression_level(
-    handle_in: *mut MLAWriterConfigHandle,
-    handle_out: *mut MLAWriterConfigHandle,
+    handle_inout: *mut MLAWriterConfigHandle,
     level: u32,
 ) -> MLAStatus {
-    if handle_in.is_null() || handle_out.is_null() {
+    if handle_inout.is_null() {
         return MLAStatus::BadAPIArgument;
     }
-    let handle_in_ptr = unsafe { *(handle_in as *mut *mut ArchiveWriterConfig) };
-    // Avoid any use-after-free of this handle by the caller
+    let handle_in_ptr = unsafe { *(handle_inout as *mut *mut ArchiveWriterConfig) };
+    // Avoid any use-after-free of this handle by the caller if with_compression_level fails
     unsafe {
-        *handle_in = null_mut();
+        *handle_inout = null_mut();
     }
     let in_config = unsafe { Box::from_raw(handle_in_ptr) };
     match in_config.with_compression_level(level) {
         Ok(out_config) => {
             let ptr = Box::into_raw(Box::new(out_config));
             unsafe {
-                *handle_out = ptr as MLAWriterConfigHandle;
+                *handle_inout = ptr as MLAWriterConfigHandle;
             }
             MLAStatus::Success
         }
@@ -378,26 +378,22 @@ pub extern "C" fn mla_writer_config_with_compression_level(
     }
 }
 
-/// Free `handle_in` and create a handle to same config without compression
+/// Change handle to same config without compression.
+/// Previous handle value becomes invalid after this call.
 #[no_mangle]
 pub extern "C" fn mla_writer_config_without_compression(
-    handle_in: *mut MLAWriterConfigHandle,
-    handle_out: *mut MLAWriterConfigHandle,
+    handle_inout: *mut MLAWriterConfigHandle,
 ) -> MLAStatus {
-    if handle_in.is_null() || handle_out.is_null() {
+    if handle_inout.is_null() {
         return MLAStatus::BadAPIArgument;
     }
-    let handle_in_ptr = unsafe { *(handle_in as *mut *mut ArchiveWriterConfig) };
-    // Avoid any use-after-free of this handle by the caller
-    unsafe {
-        *handle_in = null_mut();
-    }
+    let handle_in_ptr = unsafe { *(handle_inout as *mut *mut ArchiveWriterConfig) };
     let in_config = unsafe { Box::from_raw(handle_in_ptr) };
     let out_config = in_config.without_compression();
 
     let ptr = Box::into_raw(Box::new(out_config));
     unsafe {
-        *handle_out = ptr as MLAWriterConfigHandle;
+        *handle_inout = ptr as MLAWriterConfigHandle;
     }
     MLAStatus::Success
 }
