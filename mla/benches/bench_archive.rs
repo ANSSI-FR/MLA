@@ -62,8 +62,7 @@ fn build_archive(
     let dest = mla.finalize().unwrap();
 
     // Instantiate the reader
-    let mut config = ArchiveReaderConfig::new();
-    config.add_private_keys(&[private_key]);
+    let config = ArchiveReaderConfig::with_private_keys(&[private_key]);
     (dest, config)
 }
 

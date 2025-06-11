@@ -62,6 +62,8 @@ pub enum Error {
     HPKEError(HpkeError),
     /// Invalid last tag
     InvalidLastTag,
+    /// User asked for encryption but archive was not marked as encrypted
+    EncryptionAskedButNotMarkedPresent,
 }
 
 impl fmt::Display for Error {

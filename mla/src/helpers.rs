@@ -127,8 +127,7 @@ mod tests {
 
         // Prepare the reader
         let dest = Cursor::new(mla);
-        let mut config = ArchiveReaderConfig::new();
-        config.add_private_keys(std::slice::from_ref(&key));
+        let config = ArchiveReaderConfig::with_private_keys(&[key]);
         let mut mla_read = ArchiveReader::from_config(dest, config).unwrap();
 
         // Prepare writers
@@ -154,8 +153,7 @@ mod tests {
 
         // Prepare the reader
         let dest = Cursor::new(mla);
-        let mut config = ArchiveReaderConfig::new();
-        config.add_private_keys(std::slice::from_ref(&key));
+        let config = ArchiveReaderConfig::with_private_keys(&[key]);
         let mut mla_read = ArchiveReader::from_config(dest, config).unwrap();
 
         // Prepare writers
@@ -198,8 +196,7 @@ mod tests {
 
         // Prepare the reader
         let dest = Cursor::new(dest);
-        let mut config = ArchiveReaderConfig::new();
-        config.add_private_keys(std::slice::from_ref(&private_key));
+        let config = ArchiveReaderConfig::with_private_keys(&[private_key]);
         let mut mla_read = ArchiveReader::from_config(dest, config).unwrap();
 
         // Prepare writers
@@ -239,7 +236,8 @@ mod tests {
 
         // Read the obtained stream
         let buf = Cursor::new(dest.as_slice());
-        let mut mla_read = ArchiveReader::from_config(buf, ArchiveReaderConfig::new()).unwrap();
+        let mut mla_read =
+            ArchiveReader::from_config(buf, ArchiveReaderConfig::without_encryption()).unwrap();
         let mut content1 = Vec::new();
         mla_read
             .get_entry("my_file".to_string())

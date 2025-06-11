@@ -239,6 +239,10 @@ pub struct EncryptionReaderConfig {
 }
 
 impl EncryptionReaderConfig {
+    pub(crate) fn set_private_keys(&mut self, private_keys: &[HybridPrivateKey]) {
+        self.private_keys = private_keys.to_vec();
+    }
+
     pub fn load_persistent(
         &mut self,
         config: EncryptionPersistentConfig,
