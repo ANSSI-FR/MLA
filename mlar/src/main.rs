@@ -4,14 +4,12 @@ use humansize::{DECIMAL, FormatSize};
 use lru::LruCache;
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
 use mla::crypto::mlakey::{
-    HybridPrivateKey, HybridPublicKey, derive_keypair_from_path, generate_keypair_from_rng,
-    parse_mlakey_privkey_pem, parse_mlakey_pubkey_pem,
+    HybridPrivateKey, HybridPublicKey, derive_keypair_from_path, generate_keypair,
+    generate_keypair_from_seed, parse_mlakey_privkey_pem, parse_mlakey_pubkey_pem,
 };
 use mla::errors::{Error, TruncatedReadError};
 use mla::helpers::linear_extract;
 use mla::{ArchiveReader, ArchiveWriter, TruncatedArchiveReader, entry::ArchiveEntry};
-use rand::SeedableRng;
-use rand_chacha::ChaChaRng;
 use sha2::{Digest, Sha512};
 use std::collections::{HashMap, HashSet};
 use std::error;
@@ -796,19 +794,17 @@ fn keygen(matches: &ArgMatches) -> Result<(), MlarError> {
     //
     // if set, seed the PRNG with `SHA512(seed bytes as UTF8)[0..32]`
     // if not, seed the PRNG with the dedicated API
-    let mut csprng = match matches.get_one::<String>("seed") {
+    let (privkey, pubkey) = match matches.get_one::<String>("seed") {
         Some(seed) => {
             eprintln!(
                 "[WARNING] A seed-based keygen operation is deterministic. An attacker knowing the seed knows the private key and is able to decrypt associated messages"
             );
             let mut hseed = [0u8; 32];
             hseed.copy_from_slice(&Sha512::digest(seed.as_bytes())[0..32]);
-            ChaChaRng::from_seed(hseed)
+            generate_keypair_from_seed(hseed)
         }
-        None => ChaChaRng::from_entropy(),
+        None => generate_keypair(),
     };
-
-    let (privkey, pubkey) = generate_keypair_from_rng(&mut csprng);
 
     // Output the public key in PEM format, to ease integration in text based
     // configs

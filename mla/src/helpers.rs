@@ -104,7 +104,7 @@ impl<W: InnerWriterTrait> Write for StreamWriter<'_, '_, W> {
 
 #[cfg(test)]
 mod tests {
-    use crypto::hybrid::generate_keypair_from_rng;
+    use crypto::hybrid::generate_keypair_from_seed;
     use rand::SeedableRng;
     use rand::distributions::Standard;
     use rand::prelude::Distribution;
@@ -178,7 +178,7 @@ mod tests {
         let file = Vec::new();
         // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
         let mut rng = ChaChaRng::seed_from_u64(0);
-        let (private_key, public_key) = generate_keypair_from_rng(&mut rng);
+        let (private_key, public_key) = generate_keypair_from_seed([0; 32]);
         let config = ArchiveWriterConfig::with_public_keys(&[public_key]);
         let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
 

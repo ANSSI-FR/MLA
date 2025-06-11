@@ -6,8 +6,6 @@ use der_parser::*;
 use hkdf::Hkdf;
 use nom::IResult;
 use nom::combinator::{complete, eof};
-use rand::SeedableRng;
-use rand_chacha::ChaChaRng;
 
 use core::convert::{From, TryInto};
 
@@ -21,7 +19,7 @@ use x25519_dalek::{PublicKey, StaticSecret};
 use core::fmt;
 
 pub use crate::crypto::hybrid::{HybridPrivateKey, HybridPublicKey};
-pub use crate::crypto::hybrid::{generate_keypair, generate_keypair_from_rng};
+pub use crate::crypto::hybrid::{generate_keypair, generate_keypair_from_seed};
 
 use crate::crypto::hybrid::{MLKEMDecapsulationKey, MLKEMEncapsulationKey};
 
@@ -629,8 +627,8 @@ fn derive_one_path_component(
     path: &[u8],
     privkey: HybridPrivateKey,
 ) -> (HybridPrivateKey, HybridPublicKey) {
-    let mut csprng = ChaChaRng::from_seed(apply_derive(path, privkey));
-    generate_keypair_from_rng(&mut csprng)
+    let seed = apply_derive(path, privkey);
+    generate_keypair_from_seed(seed)
 }
 
 /// Return a KeyPair based on a succession of paths and an hybrid private key.
@@ -654,8 +652,7 @@ pub fn derive_keypair_from_path<'a>(
 mod tests {
     use super::*;
     use kem::{Decapsulate, Encapsulate};
-    use rand::{SeedableRng, rngs::OsRng};
-    use rand_chacha::ChaChaRng;
+    use rand::rngs::OsRng;
     use x25519_dalek::PublicKey;
 
     /// MLA private key, DER, X25519 then MLKEM
@@ -705,8 +702,7 @@ mod tests {
     /// Ensure the generated keypair is coherent and re-readable
     #[test]
     fn keypair_and_export() {
-        let mut csprng = OsRng {};
-        let keypair = generate_keypair_from_rng(&mut csprng);
+        let keypair = generate_keypair();
 
         let priv_key = parse_mlakey_privkey_pem(keypair.0.to_pem().as_bytes()).unwrap();
         let pub_key = parse_mlakey_pubkey_pem(keypair.1.to_pem().as_bytes()).unwrap();
@@ -720,16 +716,13 @@ mod tests {
         // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
 
         // Check the created key is deterministic
-        let mut csprng = ChaChaRng::seed_from_u64(0);
-        let keypair1 = generate_keypair_from_rng(&mut csprng);
-        let mut csprng = ChaChaRng::seed_from_u64(0);
-        let keypair2 = generate_keypair_from_rng(&mut csprng);
+        let keypair1 = generate_keypair_from_seed([0; 32]);
+        let keypair2 = generate_keypair_from_seed([0; 32]);
         assert_eq!(keypair1.0.to_der(), keypair2.0.to_der());
         assert_eq!(keypair1.1.to_der(), keypair2.1.to_der());
 
         // Ensure it is not always the same
-        let mut csprng = ChaChaRng::seed_from_u64(1);
-        let keypair3 = generate_keypair_from_rng(&mut csprng);
+        let keypair3 = generate_keypair_from_seed([1; 32]);
         assert_ne!(keypair1.0.to_der(), keypair3.0.to_der());
     }
 
@@ -737,8 +730,7 @@ mod tests {
     #[test]
     fn keypair_export_pem() {
         // Generate a KeyPair
-        let mut csprng = OsRng {};
-        let keypair = generate_keypair_from_rng(&mut csprng);
+        let keypair = generate_keypair();
 
         // Parse it as DER, then in PEM form
         let priv_der = keypair.0.to_der();
@@ -915,13 +907,11 @@ mod tests {
     /// Naive checks for "apply_derive", to avoid naive erros
     fn check_apply_derive() {
         use crate::crypto::hybrid::MLKEMDecapsulationKey;
-        use crate::crypto::mlakey::generate_keypair_from_rng;
         use std::collections::HashSet;
         use x25519_dalek::StaticSecret;
 
         // Ensure determinism
-        let rng = ChaChaRng::from_seed([0u8; 32]);
-        let (privkey, _pubkey) = generate_keypair_from_rng(rng);
+        let (privkey, _pubkey) = generate_keypair_from_seed([0; 32]);
 
         // Derive along "test"
         let path = b"test";
@@ -929,8 +919,7 @@ mod tests {
         assert_ne!(seed, [0u8; 32]);
 
         // Derive along "test2"
-        let rng = ChaChaRng::from_seed([0u8; 32]);
-        let (privkey, _pubkey) = generate_keypair_from_rng(rng);
+        let (privkey, _pubkey) = generate_keypair_from_seed([0; 32]);
         let path = b"test2";
         let seed2 = apply_derive(path, privkey);
         assert_ne!(seed, seed2);

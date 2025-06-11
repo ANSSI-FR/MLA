@@ -1296,7 +1296,7 @@ pub(crate) mod tests {
     use crate::config::ArchivePersistentConfig;
 
     use super::*;
-    use crypto::hybrid::{HybridPrivateKey, generate_keypair_from_rng};
+    use crypto::hybrid::{HybridPrivateKey, generate_keypair_from_seed};
     // use curve25519_parser::{parse_openssl_25519_privkey, parse_openssl_25519_pubkey};
     use rand::distributions::{Distribution, Standard};
     use rand::{RngCore, SeedableRng};
@@ -1358,8 +1358,7 @@ pub(crate) mod tests {
     fn new_mla() {
         let file = Vec::new();
         // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
-        let rng = ChaChaRng::seed_from_u64(0);
-        let (private_key, public_key) = generate_keypair_from_rng(rng);
+        let (private_key, public_key) = generate_keypair_from_seed([0; 32]);
         let mut mla = ArchiveWriter::new(file, std::slice::from_ref(&public_key))
             .expect("Writer init failed");
 
@@ -1425,8 +1424,7 @@ pub(crate) mod tests {
         // Build an archive with 3 files
         let file = Vec::new();
         // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
-        let rng = ChaChaRng::seed_from_u64(0);
-        let (private_key, public_key) = generate_keypair_from_rng(rng);
+        let (private_key, public_key) = generate_keypair_from_seed([0; 32]);
         let config = if encryption {
             ArchiveWriterConfig::with_public_keys(&[public_key.clone()])
         } else {
@@ -1531,8 +1529,7 @@ pub(crate) mod tests {
         // approach
 
         // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
-        let mut rng = ChaChaRng::seed_from_u64(0);
-        let (private_key, public_key) = generate_keypair_from_rng(&mut rng);
+        let (private_key, public_key) = generate_keypair_from_seed([0; 32]);
         let config_nolayer = ArchiveWriterConfig::without_encryption().without_compression();
         let config_encrypt =
             ArchiveWriterConfig::with_public_keys(&[public_key.clone()]).without_compression();
@@ -2126,7 +2123,7 @@ pub(crate) mod tests {
         const MAX_SIZE: u64 = 5 * 1024 * 1024 * 1024; // 5 GB
         const CHUNK_SIZE: usize = 10 * 1024 * 1024; // 10 MB
 
-        let (private_key, public_key) = generate_keypair_from_rng(&mut rng);
+        let (private_key, public_key) = generate_keypair_from_seed([0; 32]);
         let config = ArchiveWriterConfig::with_public_keys(&[public_key]);
         let file = Vec::new();
         let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
