@@ -9,7 +9,7 @@ use std::io::{self, Cursor, Read, Write};
 
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
 use mla::errors::{Error, FailSafeReadError};
-use mla::{ArchiveEntryId, ArchiveFailSafeReader, ArchiveReader, ArchiveWriter};
+use mla::{ArchiveEntryId, TruncatedArchiveReader, ArchiveReader, ArchiveWriter};
 
 use std::collections::HashMap;
 
@@ -185,7 +185,7 @@ fn run(data: &[u8]) {
     let mut config = ArchiveReaderConfig::new();
     let private_key = parse_mlakey_privkey_pem(PRIV_KEY).unwrap();
     config.add_private_keys(&[private_key]);
-    let mut mla_fsread = ArchiveFailSafeReader::from_config(buf, config).unwrap();
+    let mut mla_fsread = TruncatedArchiveReader::from_config(buf, config).unwrap();
 
     // Repair the archive (without any damage, but trigger the corresponding code)
     let mut dest_w = Vec::new();
@@ -250,7 +250,7 @@ fn run(data: &[u8]) {
     let private_key = parse_mlakey_privkey_pem(PRIV_KEY).unwrap();
     config.add_private_keys(&[private_key]);
     let mut mla_fsread = {
-        if let Ok(mla) = ArchiveFailSafeReader::from_config(buf, config) {
+        if let Ok(mla) = TruncatedArchiveReader::from_config(buf, config) {
             mla
         } else {
             return;

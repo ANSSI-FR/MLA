@@ -3,7 +3,7 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use criterion::BenchmarkId;
 use criterion::Throughput;
 
-use mla::ArchiveFailSafeReader;
+use mla::TruncatedArchiveReader;
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
 use mla::crypto::mlakey::{HybridPublicKey, generate_keypair_from_rng};
 use mla::helpers::linear_extract;
@@ -349,7 +349,7 @@ fn repair_archive(iters: u64, size: u64, compression: bool, encryption: bool) ->
     let dest = Vec::new();
 
     // No need to truncate the data, repair the whole file
-    let mut mla_repair = ArchiveFailSafeReader::from_config(buf, config).unwrap();
+    let mut mla_repair = TruncatedArchiveReader::from_config(buf, config).unwrap();
     // Avoid any layers to speed up writing, as this is not the measurement target
     let writer_config = ArchiveWriterConfig::without_encryption().without_compression();
     let mla_output = ArchiveWriter::from_config(dest, writer_config).unwrap();

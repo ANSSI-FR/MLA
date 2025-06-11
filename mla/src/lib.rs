@@ -1130,7 +1130,7 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
 
 // This code is very similar with MLAArchiveReader
 
-pub struct ArchiveFailSafeReader<'a, R: 'a + Read> {
+pub struct TruncatedArchiveReader<'a, R: 'a + Read> {
     /// MLA Archive format Reader (fail-safe)
     //
     /// User's reading configuration
@@ -1161,7 +1161,7 @@ macro_rules! update_error {
     };
 }
 
-impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
+impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
     pub fn from_config(mut src: R, mut config: ArchiveReaderConfig) -> Result<Self, Error> {
         let header = ArchiveHeader::from(&mut src)?;
         let layers_enabled = header.config.layers_enabled;
@@ -1801,7 +1801,7 @@ pub(crate) mod tests {
 
         // Prepare the failsafe reader
         let config = ArchiveReaderConfig::with_private_keys(&[key.clone()]);
-        let mut mla_fsread = ArchiveFailSafeReader::from_config(dest.as_slice(), config).unwrap();
+        let mut mla_fsread = TruncatedArchiveReader::from_config(dest.as_slice(), config).unwrap();
 
         // Prepare the writer
         let mut dest_w = Vec::new();
@@ -1864,7 +1864,7 @@ pub(crate) mod tests {
 
             for remove in &[1, 10, 30, 50, 70, 95, 100] {
                 let config = ArchiveReaderConfig::with_private_keys(&[key.clone()]);
-                let mut mla_fsread = ArchiveFailSafeReader::from_config(
+                let mut mla_fsread = TruncatedArchiveReader::from_config(
                     &dest[..dest.len() - footer_size - remove],
                     config,
                 )
@@ -1989,7 +1989,7 @@ pub(crate) mod tests {
         dest.swap(pos[0], pos[0] + 1);
 
         // Prepare the failsafe reader
-        let mut mla_fsread = ArchiveFailSafeReader::from_config(
+        let mut mla_fsread = TruncatedArchiveReader::from_config(
             dest.as_slice(),
             ArchiveReaderConfig::without_encryption(),
         )
@@ -2212,7 +2212,7 @@ pub(crate) mod tests {
                 der_priv,
             )
             .unwrap()]);
-        let mut mla_fsread = ArchiveFailSafeReader::from_config(mla_data, config).unwrap();
+        let mut mla_fsread = TruncatedArchiveReader::from_config(mla_data, config).unwrap();
 
         // Repair the archive (without any damage, but trigger the corresponding code)
         let mut dest_w = Vec::new();

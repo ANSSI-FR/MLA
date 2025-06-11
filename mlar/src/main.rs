@@ -9,7 +9,7 @@ use mla::crypto::mlakey::{
 };
 use mla::errors::{Error, FailSafeReadError};
 use mla::helpers::linear_extract;
-use mla::{ArchiveEntry, ArchiveFailSafeReader, ArchiveReader, ArchiveWriter};
+use mla::{ArchiveEntry, TruncatedArchiveReader, ArchiveReader, ArchiveWriter};
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use sha2::{Digest, Sha512};
@@ -261,7 +261,7 @@ fn open_mla_file<'a>(matches: &ArgMatches) -> Result<ArchiveReader<'a, File>, Ml
 // Utils: common code to load a mla_file from arguments, fail-safe mode
 fn open_failsafe_mla_file<'a>(
     matches: &ArgMatches,
-) -> Result<ArchiveFailSafeReader<'a, File>, MlarError> {
+) -> Result<TruncatedArchiveReader<'a, File>, MlarError> {
     let config = readerconfig_from_matches(matches);
 
     // Safe to use unwrap() because the option is required()
@@ -270,7 +270,7 @@ fn open_failsafe_mla_file<'a>(
     let file = File::open(path)?;
 
     // Instantiate reader
-    Ok(ArchiveFailSafeReader::from_config(file, config)?)
+    Ok(TruncatedArchiveReader::from_config(file, config)?)
 }
 
 fn add_file_to_tar<R: Read, W: Write>(
