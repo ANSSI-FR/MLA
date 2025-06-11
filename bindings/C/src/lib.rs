@@ -890,8 +890,8 @@ pub struct ArchiveInfo {
     layers: u8,
 }
 
-const ENCRYPT: u8 = 0b0000_0001;
-const COMPRESS: u8 = 0b0000_0010;
+pub const ENCRYPT: u8 = 0b0000_0001;
+pub const COMPRESS: u8 = 0b0000_0010;
 
 /// Get info on an existing MLA archive
 #[no_mangle]
