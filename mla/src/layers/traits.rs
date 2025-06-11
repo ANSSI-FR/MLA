@@ -12,7 +12,7 @@ pub type InnerWriterType<'a, W> = Box<dyn 'a + LayerWriter<'a, W>>;
 #[cfg(feature = "send")]
 pub type InnerWriterType<'a, W> = Box<dyn 'a + LayerWriter<'a, W> + Send>;
 
-/// Trait alias for Layer Writer writable destination
+/// Trait alias for `Write` or `Write + Send` when feature `send` is enabled
 // Type aliases are not yet stable
 // See https://github.com/rust-lang/rust/issues/41517
 // -> use a dummy trait instead
