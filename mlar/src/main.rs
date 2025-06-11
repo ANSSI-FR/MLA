@@ -6,7 +6,7 @@ use lru::LruCache;
 use ml_kem::EncodedSizeUser;
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
 use mla::crypto::hybrid::{HybridPrivateKey, HybridPublicKey};
-use mla::crypto::mlakey_parser::{
+use mla::crypto::mlakey::{
     generate_keypair, parse_mlakey_privkey_der, parse_mlakey_privkey_pem, parse_mlakey_pubkey_pem,
 };
 use mla::errors::{Error, FailSafeReadError};

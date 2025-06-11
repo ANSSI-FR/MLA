@@ -69,7 +69,7 @@
 //!
 //! * Create an archive, with compression and encryption:
 //! ```rust
-//! use mla::crypto::mlakey_parser::parse_mlakey_pubkey_pem;
+//! use mla::crypto::mlakey::parse_mlakey_pubkey_pem;
 //! use mla::config::ArchiveWriterConfig;
 //! use mla::ArchiveWriter;
 //!
@@ -97,7 +97,7 @@
 //! ```
 //! * Add files part per part, in a "concurrent" fashion:
 //! ```rust
-//! use mla::crypto::mlakey_parser::parse_mlakey_pubkey_pem;
+//! use mla::crypto::mlakey::parse_mlakey_pubkey_pem;
 //! use mla::config::ArchiveWriterConfig;
 //! use mla::ArchiveWriter;
 //!
@@ -153,7 +153,7 @@
 //! ```
 //! * Read files from an archive
 //! ```rust
-//! use mla::crypto::mlakey_parser::parse_mlakey_privkey_der;
+//! use mla::crypto::mlakey::parse_mlakey_privkey_der;
 //! use mla::config::ArchiveReaderConfig;
 //! use mla::ArchiveReader;
 //! use std::io;
@@ -2268,7 +2268,7 @@ pub(crate) mod tests {
 
         // Use committed keys
         let pem_pub: &'static [u8] = include_bytes!("../../samples/test_mlakey_archive_v2_pub.pem");
-        let pub_key = crypto::mlakey_parser::parse_mlakey_pubkey_pem(pem_pub).unwrap();
+        let pub_key = crypto::mlakey::parse_mlakey_pubkey_pem(pem_pub).unwrap();
 
         let mut config = ArchiveWriterConfig::new();
         config.encrypt.rng = crate::layers::encrypt::EncapsulationRNG::Seed([0; 32]);
@@ -2376,16 +2376,12 @@ pub(crate) mod tests {
         // Build Reader
         let buf = Cursor::new(mla_data);
         let mut config = ArchiveReaderConfig::new();
-        config.add_private_keys(&[
-            crypto::mlakey_parser::parse_mlakey_privkey_der(der_priv).unwrap()
-        ]);
+        config.add_private_keys(&[crypto::mlakey::parse_mlakey_privkey_der(der_priv).unwrap()]);
         let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
 
         // Build FailSafeReader
         let mut config = ArchiveReaderConfig::new();
-        config.add_private_keys(&[
-            crypto::mlakey_parser::parse_mlakey_privkey_der(der_priv).unwrap()
-        ]);
+        config.add_private_keys(&[crypto::mlakey::parse_mlakey_privkey_der(der_priv).unwrap()]);
         let mut mla_fsread = ArchiveFailSafeReader::from_config(mla_data, config).unwrap();
 
         // Repair the archive (without any damage, but trigger the corresponding code)

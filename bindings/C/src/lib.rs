@@ -1,7 +1,7 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 use mla::config::ArchiveReaderConfig;
 use mla::config::ArchiveWriterConfig;
-use mla::crypto::mlakey_parser::{
+use mla::crypto::mlakey::{
     parse_mlakey_privkey_der, parse_mlakey_privkey_pem, parse_mlakey_pubkey_der,
     parse_mlakey_pubkeys_pem_many,
 };
