@@ -67,12 +67,4 @@ pub trait LayerReader<'a, R: InnerReaderTrait>: InnerReaderTrait {
 }
 
 /// Trait to be implemented by layer for their fail-safe mode reading
-pub trait LayerFailSafeReader<'a, R: Read>: Read {
-    /// Unwraps the inner reader
-    fn into_inner(self) -> Option<Box<dyn 'a + LayerFailSafeReader<'a, R>>>;
-
-    /// Unwraps the original I/O reader
-    // Use a Box<Self> to be able to move out the inner value; without it, self
-    // is used, which is an unsized 'dyn X' and therefore cannot be moved
-    fn into_raw(self: Box<Self>) -> R;
-}
+pub trait LayerFailSafeReader<'a, R: Read>: Read {}

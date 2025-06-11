@@ -134,15 +134,7 @@ impl<R: Read> Read for RawLayerFailSafeReader<R> {
     }
 }
 
-impl<'a, R: Read> LayerFailSafeReader<'a, R> for RawLayerFailSafeReader<R> {
-    fn into_inner(self) -> Option<Box<dyn 'a + LayerFailSafeReader<'a, R>>> {
-        None
-    }
-
-    fn into_raw(self: Box<Self>) -> R {
-        self.inner
-    }
-}
+impl<'a, R: Read> LayerFailSafeReader<'a, R> for RawLayerFailSafeReader<R> {}
 
 #[cfg(test)]
 mod tests {

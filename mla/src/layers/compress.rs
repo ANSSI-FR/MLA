@@ -683,19 +683,6 @@ enum CompressionLayerFailSafeReaderState<R: Read> {
     Empty,
 }
 
-impl<R: Read> CompressionLayerFailSafeReaderState<R> {
-    fn into_inner(self) -> R {
-        match self {
-            CompressionLayerFailSafeReaderState::Ready(inner) => inner,
-            CompressionLayerFailSafeReaderState::InData { inner, .. } => inner,
-            // `panic!` explicitly called to avoid propagating an error which
-            // must never happens (ie, calling `into_inner` in an inconsistent
-            // internal state)
-            _ => panic!("[Reader] Empty type to inner is impossible"),
-        }
-    }
-}
-
 pub struct CompressionLayerFailSafeReader<'a, R: 'a + Read> {
     state: CompressionLayerFailSafeReaderState<Box<dyn 'a + LayerFailSafeReader<'a, R>>>,
 }
@@ -708,15 +695,7 @@ impl<'a, R: 'a + Read> CompressionLayerFailSafeReader<'a, R> {
     }
 }
 
-impl<'a, R: 'a + Read> LayerFailSafeReader<'a, R> for CompressionLayerFailSafeReader<'a, R> {
-    fn into_inner(self) -> Option<Box<dyn 'a + LayerFailSafeReader<'a, R>>> {
-        Some(self.state.into_inner())
-    }
-
-    fn into_raw(self: Box<Self>) -> R {
-        self.state.into_inner().into_raw()
-    }
-}
+impl<'a, R: 'a + Read> LayerFailSafeReader<'a, R> for CompressionLayerFailSafeReader<'a, R> {}
 
 const FAIL_SAFE_BUFFER_SIZE: usize = 4096;
 

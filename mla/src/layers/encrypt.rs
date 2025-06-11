@@ -696,15 +696,7 @@ impl<'a, R: 'a + Read> EncryptionLayerFailSafeReader<'a, R> {
     }
 }
 
-impl<'a, R: 'a + Read> LayerFailSafeReader<'a, R> for EncryptionLayerFailSafeReader<'a, R> {
-    fn into_inner(self) -> Option<Box<dyn 'a + LayerFailSafeReader<'a, R>>> {
-        Some(self.inner)
-    }
-
-    fn into_raw(self: Box<Self>) -> R {
-        self.inner.into_raw()
-    }
-}
+impl<'a, R: 'a + Read> LayerFailSafeReader<'a, R> for EncryptionLayerFailSafeReader<'a, R> {}
 
 impl<R: Read> Read for EncryptionLayerFailSafeReader<'_, R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
