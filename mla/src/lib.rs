@@ -389,6 +389,10 @@ use sha2::{Digest, Sha256};
 
 pub mod helpers;
 
+#[cfg(test)]
+#[macro_use]
+extern crate hex_literal;
+
 // -------- Constants --------
 
 const MLA_MAGIC: &[u8; 3] = b"MLA";
