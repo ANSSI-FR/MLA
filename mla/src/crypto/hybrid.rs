@@ -221,8 +221,8 @@ pub struct HybridPrivateKey {
     pub(crate) private_key_ml: MLKEMDecapsulationKey,
 }
 
-impl Zeroize for HybridPrivateKey {
-    fn zeroize(&mut self) {
+impl Drop for HybridPrivateKey {
+    fn drop(&mut self) {
         self.private_key_ecc.zeroize();
         // ml-kem zeroization is done natively on drop cf. https://github.com/RustCrypto/KEMs/commit/a75d842b697aa54477d017c0c7c5da661e689be3
     }
