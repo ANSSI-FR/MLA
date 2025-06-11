@@ -14,7 +14,7 @@ use ml_kem::EncodedSizeUser;
 use rand::{CryptoRng, RngCore};
 use sha2::{Digest, Sha512};
 // Re-export x25519_dalek structures for convenience
-pub use x25519_dalek::{PublicKey, StaticSecret};
+use x25519_dalek::{PublicKey, StaticSecret};
 
 use core::fmt;
 
