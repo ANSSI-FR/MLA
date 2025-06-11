@@ -182,6 +182,9 @@ impl AesGcm256 {
 }
 
 #[cfg(test)]
+mod aes_gcm_navs_test_vector;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use aead::Payload;

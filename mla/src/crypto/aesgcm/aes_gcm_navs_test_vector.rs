@@ -1,9 +1,6 @@
 //! AES-256-GCM tests, from "RustCrypto/AEADs/aes-gcm/tests/aes256gcm.rs"
 
-#[macro_use]
-extern crate hex_literal;
-
-use mla::crypto::aesgcm::*;
+use super::{AesGcm256, BLOCK_SIZE, Key, Nonce, TAG_LENGTH};
 
 struct TestVector {
     key: &'static [u8],
