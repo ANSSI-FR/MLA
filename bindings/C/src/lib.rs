@@ -104,7 +104,7 @@ pub struct FileWriter {
 /// Implemented by the developper
 /// Return the desired output path which is expected to be writable.
 /// The callback developper is responsible all security checks and parent path creation.
-pub type MlaFileCalback = Option<
+pub type MLAFileCallBack = Option<
     extern "C" fn(
         context: *mut c_void,
         filename: *const u8,
@@ -113,7 +113,7 @@ pub type MlaFileCalback = Option<
     ) -> i32,
 >;
 // bindgen workaround, as Option<typedef> is gen as an opaque type
-type MlaFileCalbackRaw = extern "C" fn(
+type MLAFileCallBackRaw = extern "C" fn(
     context: *mut c_void,
     filename: *const u8,
     filename_len: usize,
@@ -791,7 +791,7 @@ pub extern "C" fn mla_roarchive_extract(
     config: *mut MLAReaderConfigHandle,
     read_callback: MlaReadCallback,
     seek_callback: MlaSeekCallback,
-    file_callback: MlaFileCalback,
+    file_callback: MLAFileCallBack,
     context: *mut c_void,
 ) -> MLAStatus {
     if config.is_null() {
@@ -823,7 +823,7 @@ pub extern "C" fn mla_roarchive_extract(
 fn _mla_roarchive_extract<'a, R: Read + Seek + 'a>(
     config: *mut MLAReaderConfigHandle,
     src: R,
-    file_callback: MlaFileCalbackRaw,
+    file_callback: MLAFileCallBackRaw,
     context: *mut c_void,
 ) -> MLAStatus {
     let config_ptr = unsafe { *(config as *mut *mut ArchiveReaderConfig) };
