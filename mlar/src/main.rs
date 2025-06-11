@@ -1,13 +1,11 @@
 use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use glob::Pattern;
-use hkdf::Hkdf;
 use humansize::{DECIMAL, FormatSize};
 use lru::LruCache;
-use ml_kem::EncodedSizeUser;
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
 use mla::crypto::mlakey::{
-    HybridPrivateKey, HybridPublicKey, generate_keypair_from_rng, parse_mlakey_privkey_pem,
-    parse_mlakey_pubkey_pem,
+    HybridPrivateKey, HybridPublicKey, derive_keypair_from_path, generate_keypair_from_rng,
+    parse_mlakey_privkey_pem, parse_mlakey_pubkey_pem,
 };
 use mla::errors::{Error, FailSafeReadError};
 use mla::helpers::linear_extract;
@@ -31,7 +29,6 @@ use std::num::NonZeroUsize;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
 use tar::{Builder, Header};
-use zeroize::Zeroize;
 
 // ----- Error ------
 
@@ -846,39 +843,6 @@ fn keygen(matches: &ArgMatches) -> Result<(), MlarError> {
     Ok(())
 }
 
-const DERIVE_PATH_SALT: &[u8; 15] = b"PATH DERIVATION";
-
-/// Return a seed based on a path and an hybrid private key
-///
-/// The derivation scheme is based on the same ideas than `mla::crypto::hybrid::combine`, ie.
-/// 1. a dual-PRF (HKDF-Extract with a uniform random salt \[1\]) to extract entropy from the private key
-/// 2. HKDF-Expand to derive along the given path
-///
-/// seed = HKDF-SHA512(
-///     salt=HKDF-SHA512-Extract(salt=0, ikm=ECC-key),
-///     ikm=MLKEM-key,
-///     info="PATH DERIVATION" . Derivation path
-/// )
-///
-/// Note: the secret is consumed on call
-///
-/// \[1\] <https://eprint.iacr.org/2023/861>
-fn apply_derive(path: &str, mut src: HybridPrivateKey) -> [u8; 32] {
-    // Force uniform-randomness on ECC-key, used as the future HKDF "salt" argument
-    let (dprf_salt, _hkdf) = Hkdf::<Sha512>::extract(None, src.private_key_ecc.as_bytes());
-
-    // `salt` being uniformly random, HKDF can be viewed as a dual-PRF
-    let hkdf: Hkdf<Sha512> = Hkdf::new(Some(&dprf_salt), &src.private_key_ml.as_bytes());
-    let mut seed = [0u8; 32];
-    hkdf.expand_multi_info(&[DERIVE_PATH_SALT, path.as_bytes()], &mut seed)
-        .expect("Unexpected error while derivating along the path");
-
-    // Consume the secret
-    src.zeroize();
-
-    seed
-}
-
 #[allow(clippy::unnecessary_wraps)]
 fn keyderive(matches: &ArgMatches) -> Result<(), MlarError> {
     // Safe to use unwrap() because of the requirement
@@ -895,24 +859,14 @@ fn keyderive(matches: &ArgMatches) -> Result<(), MlarError> {
     // Load the the key in-memory and parse it
     let mut buf = Vec::new();
     file.read_to_end(&mut buf)?;
-    let mut secret =
+    let secret =
         parse_mlakey_privkey_pem(&buf).map_err(|_| MlarError::MlaError(Error::InvalidKeyFormat))?;
 
-    // Derive the key along the path
-    let mut key_pair = None;
-    for path in matches
-        .get_many::<String>("path")
-        .expect("[ERROR] At least one path must be provided")
-    {
-        let mut csprng = ChaChaRng::from_seed(apply_derive(path, secret));
-
-        let (privkey, pubkey) = generate_keypair_from_rng(&mut csprng);
-        secret = privkey.clone();
-        key_pair = Some((privkey, pubkey));
-    }
-
     // Safe to unwrap, there is at least one derivation path
-    let key_pair = key_pair.unwrap();
+    let paths = matches
+        .get_many::<String>("path")
+        .expect("[ERROR] At least one path must be provided");
+    let key_pair = derive_keypair_from_path(paths.map(String::as_bytes), secret).unwrap();
 
     // Output the public key in PEM format, to ease integration in text based
     // configs
@@ -1267,51 +1221,9 @@ fn main() {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use mla::crypto::hybrid::MLKEMDecapsulationKey;
-    use mla::crypto::mlakey::generate_keypair_from_rng;
-    use std::iter::FromIterator;
-    use x25519_dalek::StaticSecret;
 
     #[test]
     fn verify_app() {
         app().debug_assert();
-    }
-
-    #[test]
-    /// Naive checks for "apply_derive", to avoid naive erros
-    fn check_apply_derive() {
-        // Ensure determinism
-        let rng = ChaChaRng::from_seed([0u8; 32]);
-        let (privkey, _pubkey) = generate_keypair_from_rng(rng);
-
-        // Derive along "test"
-        let path = "test";
-        let seed = apply_derive(path, privkey);
-        assert_ne!(seed, [0u8; 32]);
-
-        // Derive along "test2"
-        let rng = ChaChaRng::from_seed([0u8; 32]);
-        let (privkey, _pubkey) = generate_keypair_from_rng(rng);
-        let path = "test2";
-        let seed2 = apply_derive(path, privkey);
-        assert_ne!(seed, seed2);
-
-        // Ensure the secret depends on both keys
-        let mut priv_keys = vec![];
-        for i in 0..1 {
-            for j in 0..1 {
-                priv_keys.push(HybridPrivateKey {
-                    private_key_ecc: StaticSecret::from([i as u8; 32]),
-                    private_key_ml: MLKEMDecapsulationKey::from_bytes(&[j as u8; 3168].into()),
-                });
-            }
-        }
-
-        // Generated seeds for (0, 0), (0, 1), (1, 0) and (1, 1) must be different
-        let seeds: Vec<_> = priv_keys
-            .into_iter()
-            .map(|pkey| apply_derive("test", pkey))
-            .collect();
-        assert_eq!(HashSet::<_>::from_iter(seeds.iter()).len(), seeds.len());
     }
 }
