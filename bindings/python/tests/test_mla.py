@@ -69,9 +69,9 @@ def test_forbidden_in_write_mode():
     with pytest.raises(mla.BadAPIArgument):
         len(archive)
 
-    # list_files
+    # list_entries
     with pytest.raises(mla.BadAPIArgument):
-        archive.list_files()
+        archive.list_entries()
 
 
 def test_forbidden_in_read_mode(basic_archive):
@@ -108,18 +108,18 @@ def test_read_api(basic_archive):
     assert len(archive) == 2
 
 
-def test_list_files(basic_archive):
+def test_list_entries(basic_archive):
     "Test list files possibilities"
     archive = MLAFile(basic_archive)
 
     # Basic
-    assert sorted(archive.list_files()) == sorted(list(FILES.keys()))
+    assert sorted(archive.list_entries()) == sorted(list(FILES.keys()))
 
     # With size
     assert sorted(
         [
             (filename, info.size)
-            for filename, info in archive.list_files(include_size=True).items()
+            for filename, info in archive.list_entries(include_size=True).items()
         ]
     ) == sorted([(filename, len(data)) for filename, data in FILES.items()])
 
@@ -127,7 +127,7 @@ def test_list_files(basic_archive):
     assert sorted(
         [
             (filename, info.hash)
-            for filename, info in archive.list_files(include_hash=True).items()
+            for filename, info in archive.list_entries(include_hash=True).items()
         ]
     ) == sorted(
         [(filename, hashlib.sha256(data).digest()) for filename, data in FILES.items()]
@@ -137,7 +137,7 @@ def test_list_files(basic_archive):
     assert sorted(
         [
             (filename, info.size, info.hash)
-            for filename, info in archive.list_files(
+            for filename, info in archive.list_entries(
                 include_size=True, include_hash=True
             ).items()
         ]
@@ -492,29 +492,29 @@ def test_read_encrypted_archive_bad_key():
             pass
 
 
-def test_write_file_to_str(basic_archive):
-    """Test archive.write_file_to(), using the String output version"""
+def test_write_entry_to_str(basic_archive):
+    """Test archive.write_entry_to(), using the String output version"""
     # Temporary directory for extraction
     tmpdir = tempfile.mkdtemp()
     with MLAFile(basic_archive) as archive:
         # Extract all files using the String output version
         for name in archive.keys():
-            archive.write_file_to(name, os.path.join(tmpdir, name))
+            archive.write_entry_to(name, os.path.join(tmpdir, name))
 
     # Check the files
     for name, data in FILES.items():
         assert open(os.path.join(tmpdir, name), "rb").read() == data
 
 
-def test_write_file_to_file(basic_archive):
-    """Test archive.write_file_to(), using the File output version"""
+def test_write_entry_to_file(basic_archive):
+    """Test archive.write_entry_to(), using the File output version"""
     # Temporary directory for extraction
     tmpdir = tempfile.mkdtemp()
     with MLAFile(basic_archive) as archive:
         # Extract all files using the File output version
         for name in archive.keys():
             with open(os.path.join(tmpdir, name), "wb") as f:
-                archive.write_file_to(name, f)
+                archive.write_entry_to(name, f)
 
     # Check the files
     for name, data in FILES.items():
@@ -540,12 +540,12 @@ class BytesIOCounter(io.BytesIO):
         return super().read(*args, **kwargs)
 
 
-def test_write_file_to_file_chunk_size(basic_archive):
-    """Test archive.write_file_to(), using the File output version"""
+def test_write_entry_to_file_chunk_size(basic_archive):
+    """Test archive.write_entry_to(), using the File output version"""
     with MLAFile(basic_archive) as archive:
         # Chunk size set to 1 -> expect 5 calls
         output = BytesIOCounter()
-        archive.write_file_to("file1", output, chunk_size=1)
+        archive.write_entry_to("file1", output, chunk_size=1)
 
         # Check the number of calls
         assert output.write_count == len(FILES["file1"])
@@ -554,7 +554,7 @@ def test_write_file_to_file_chunk_size(basic_archive):
 
         # Chunk size set to 2 -> expect 3 calls
         output = BytesIOCounter()
-        archive.write_file_to("file1", output, chunk_size=2)
+        archive.write_entry_to("file1", output, chunk_size=2)
 
         # Check the number of calls
         assert output.write_count == len(FILES["file1"]) // 2 + 1
