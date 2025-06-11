@@ -40,8 +40,8 @@ int main()
    }
 
    MLAStatus status;
-   MLAConfigHandle hConfig = NULL;
-   status = create_mla_config_without_encryption(&hConfig);
+   MLAWriterConfigHandle hConfig = NULL;
+   status = create_mla_writer_config_without_encryption(&hConfig);
    if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
    {
       fprintf(stderr, " [!] Config creation failed with code %" PRIX64 "\n", (uint64_t)status);

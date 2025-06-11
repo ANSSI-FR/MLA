@@ -43,8 +43,8 @@ int main()
    }
 
    MLAStatus status;
-   MLAConfigHandle hConfig = NULL;
-   status = create_mla_config_with_public_keys_pem(&hConfig, szPubkey);
+   MLAWriterConfigHandle hConfig = NULL;
+   status = create_mla_writer_config_with_public_keys_pem(&hConfig, szPubkey);
    if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
    {
       fprintf(stderr, " [!] Public key set failed with code %" PRIX64 "\n", (uint64_t)status);

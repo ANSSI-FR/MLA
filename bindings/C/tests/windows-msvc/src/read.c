@@ -166,16 +166,8 @@ int test_reader_extract()
 
     fclose(kf);
 
-    MLAConfigHandle hConfig = NULL;
-    MLAStatus status = mla_reader_config_new(&hConfig);
-    if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
-    {
-        fprintf(stderr, " [!] Config creation failed with code %" PRIX64 "\n", (uint64_t)status);
-        free(keyData);
-        return (int)status;
-    }
-
-    status = mla_reader_config_add_private_key_der(hConfig, keyData, (size_t)keySize);
+    MLAWriterConfigHandle hConfig = NULL;
+    MLAStatus status = create_mla_reader_config_with_private_keys_der(&hConfig, [&keyData], 1);
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
     {
         fprintf(stderr, " [!] Private key set failed with code %" PRIX64 "\n", (uint64_t)status);
