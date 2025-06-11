@@ -1068,10 +1068,6 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
         })
     }
 
-    pub fn new(src: R) -> Result<Self, Error> {
-        Self::from_config(src, ArchiveReaderConfig::new())
-    }
-
     /// Return an iterator on filenames present in the archive
     ///
     /// Order is not relevant, and may change

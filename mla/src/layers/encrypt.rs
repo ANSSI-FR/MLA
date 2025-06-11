@@ -14,7 +14,6 @@ use crate::layers::traits::{
 use std::io;
 use std::io::{BufReader, Cursor, Read, Seek, SeekFrom, Write};
 
-use crate::config::ArchiveReaderConfig;
 use crate::errors::ConfigError;
 use bincode::{
     BorrowDecode, Decode, Encode,
@@ -265,19 +264,6 @@ impl EncryptionReaderConfig {
 
         // A key has been found, check if it is the one expected
         check_key_commitment(key, nonce, &config.key_commitment)
-    }
-}
-
-impl ArchiveReaderConfig {
-    /// Set private key to use
-    pub fn add_private_keys(&mut self, keys: &[HybridPrivateKey]) -> &mut ArchiveReaderConfig {
-        self.encrypt.private_keys.extend_from_slice(keys);
-        self
-    }
-
-    /// Retrieve key and nonce used for encryption
-    pub fn get_encrypt_parameters(&self) -> Option<(Key, Nonce)> {
-        self.encrypt.encrypt_parameters
     }
 }
 
