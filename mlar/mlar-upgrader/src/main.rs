@@ -5,7 +5,7 @@ use std::{
 };
 
 use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
-use mla::config::ArchiveWriterConfig;
+use mla::{config::ArchiveWriterConfig, entry::EntryName};
 
 fn app() -> Command {
     Command::new(env!("CARGO_PKG_NAME"))
@@ -113,8 +113,15 @@ fn upgrade(matches: &ArgMatches) -> Result<(), Error> {
             }
             Ok(Some(mla)) => mla,
         };
+        let new_entry_name = match EntryName::from_arbitrary_bytes(sub_file.filename.as_bytes()) {
+            Ok(name) => name,
+            Err(_) => {
+                eprintln!("Invalid empty name");
+                continue;
+            }
+        };
         mla_out
-            .add_entry(&sub_file.filename, sub_file.size, sub_file.data)
+            .add_entry(new_entry_name, sub_file.size, sub_file.data)
             .unwrap();
     }
     mla_out.finalize().expect("Finalization error");
