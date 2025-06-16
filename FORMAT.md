@@ -184,6 +184,31 @@ The first decompressed bytes are `00 00 00 00 00 00 00 00 00 06 00 00 00 00 00 0
 
 In the next section, `data` is now the decompressed content (as if the compression layer was absent).
 
+Entries names
+-
+
+```rust
+#[bincode]
+struct EntryName {
+    name: Vec<u8>
+}
+````
+
+Each archive Entry as an associated name. An EntryName is a nonempty sequence of bytes (maximum length of 65536). It may be interpreted as arbitrary bytes or as a file path.
+If it is to be interpreted as a file path, the underlying bytes must consist of ASCII slash separated components and not begin with a slash.
+The rules for each component are:
+* must not be empty
+* must not contain any ASCII NUL byte
+* must not be ASCII dot
+* must not be two ASCII dots
+
+If it is to be interpreted as a Windows file path, in addition to previous rules:
+* No byte should be an ASCII backslash (separators are represented by an ASCII slash).
+* The eventual second byte of the whole path should not be an ASCII colon (`:`).
+* Every component must be encoded as UTF-8.
+
+Even if respecting these rules, the OS may see the resulting path as invalid.
+
 Actual archive files data
 -
 
@@ -195,7 +220,7 @@ struct ArchiveContent {
     #[bincode]
     struct ArchiveFooter {
         // Filename -> Corresponding FileInfo
-        files_info: Vec<(String, struct FileInfo {
+        files_info: Vec<(EntryName, struct FileInfo {
             // Offsets of continuous chunks of `ArchiveFileBlock`
             offsets: Vec<u64>,
             // Size of the file, in bytes
@@ -210,7 +235,7 @@ struct ArchiveContent {
 }
 ```
 
-The archive footer information is retrieved by first reading the value of `archive_footer_length` at the end of `data`, then reading `archive_footer_length`-bytes at the end of `data` minus 8 bytes.
+The archive footer information is optionaly retrieved by first reading the value of `archive_footer_length` at the end of `data`, then reading `archive_footer_length`-bytes at the end of `data` minus 8 bytes.
 
 `file_data` is the concatenation of all `ArchiveFileBlock`s. Each block starts with a `u8` corresponding to the block type:
 ```rust
@@ -229,11 +254,8 @@ struct FileStart {
     // File unique ID in the archive
     #[little_endian]
     id: u64,
-    // Length of the filename
-    #[little_endian]
-    length: u64,
-    // UTF-8 encoded filename
-    filename: [u8; length]
+    // entry name
+    filename: EntryName
 }
 
 struct FileContent {
@@ -258,7 +280,8 @@ struct EndOfFile {
 struct EndOfArchiveData {}
 ```
 
-A file `file_i` in the archive always starts with a `FileStart`, giving its filename and unique ID.
+A file `file_i` in the archive always starts with an `EntryStart`, giving its name and unique ID.
+
 Let `content_i` be the content of `file_i`. It starts empty.
 
 Each time a `FileContent` is encountered, the corresponding `block_data` is appended to `content_i`.
@@ -285,7 +308,7 @@ Additionally, for faster `hash` retrieval, `files_info.eof_offset` is the offset
 
 Finally, the `files_info.size` is the size in bytes of the corresponding file content.
 
-For reproducibility, the `files_info` `Vec` is sorted by filename (lexicographically by unicode code points) before being serialized.
+For reproducibility, the `files_info` `Vec` is sorted by entry name (lexicographically by bytes values) before being serialized.
 
 ### Example
 
