@@ -6,7 +6,7 @@ use bincode::{Decode, Encode};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
 use crate::{
-    ArchiveEntryId, ArchiveFileBlockType, BINCODE_CONFIG, FILENAME_MAX_SIZE, MLA_FORMAT_VERSION,
+    ArchiveEntryBlockType, ArchiveEntryId, BINCODE_CONFIG, FILENAME_MAX_SIZE, MLA_FORMAT_VERSION,
     MLA_MAGIC, Sha256Hash, config::ArchivePersistentConfig, entry::EntryName, errors::Error,
 };
 pub struct ArchiveHeader {
@@ -77,25 +77,25 @@ impl std::default::Default for Layers {
 }
 
 #[derive(Debug)]
-pub enum ArchiveFileBlock<T: Read> {
-    /// Usually, a file is made of:
-    /// `[FileStart][FileContent]`...`[FileContent][EndOfFile]`
-    /// The `id` is used to keep track internally of which file a `ArchiveFileBlock` belongs to
+pub enum ArchiveEntryBlock<T: Read> {
+    /// Usually, an entry is made of:
+    /// `[EntryStart][EntryContent]`...`[EntryContent][EndOfEntry]`
+    /// The `id` is used to keep track internally of which file a `ArchiveEntryBlock` belongs to
     ///
-    /// Start of a file
-    FileStart { name: EntryName, id: ArchiveEntryId },
-    /// File content.
+    /// Start of an entry
+    EntryStart { name: EntryName, id: ArchiveEntryId },
+    /// Entry content.
     /// (length, data) is used instead of a Vec to avoid having the whole data
     /// in memory. On parsing, the data can be set to None. It indicates to the
     /// caller that the data is just next to it
     /// TODO: use the same trick than ArchiveReader to avoid the Option
-    FileContent {
+    EntryContent {
         length: u64,
         data: Option<T>,
         id: ArchiveEntryId,
     },
     /// End of file (last block) - contains the SHA256 of the whole file
-    EndOfFile {
+    EndOfEntry {
         id: ArchiveEntryId,
         hash: Sha256Hash,
     },
@@ -103,14 +103,14 @@ pub enum ArchiveFileBlock<T: Read> {
     EndOfArchiveData,
 }
 
-impl<T> ArchiveFileBlock<T>
+impl<T> ArchiveEntryBlock<T>
 where
     T: Read,
 {
     pub(crate) fn dump<U: Write>(&mut self, dest: &mut U) -> Result<(), Error> {
         match self {
-            ArchiveFileBlock::FileStart { name: filename, id } => {
-                dest.write_u8(ArchiveFileBlockType::FileStart as u8)?;
+            ArchiveEntryBlock::EntryStart { name: filename, id } => {
+                dest.write_u8(ArchiveEntryBlockType::EntryStart as u8)?;
                 dest.write_u64::<LittleEndian>(*id)?;
                 let bytes = filename.as_arbitrary_bytes();
                 let length = bytes.len() as u64;
@@ -121,8 +121,8 @@ where
                 dest.write_all(bytes)?;
                 Ok(())
             }
-            ArchiveFileBlock::FileContent { length, data, id } => {
-                dest.write_u8(ArchiveFileBlockType::FileContent as u8)?;
+            ArchiveEntryBlock::EntryContent { length, data, id } => {
+                dest.write_u8(ArchiveEntryBlockType::EntryContent as u8)?;
                 dest.write_u64::<LittleEndian>(*id)?;
                 dest.write_u64::<LittleEndian>(*length)?;
                 match data {
@@ -138,14 +138,14 @@ where
                 }
                 Ok(())
             }
-            ArchiveFileBlock::EndOfFile { id, hash } => {
-                dest.write_u8(ArchiveFileBlockType::EndOfFile as u8)?;
+            ArchiveEntryBlock::EndOfEntry { id, hash } => {
+                dest.write_u8(ArchiveEntryBlockType::EndOfEntry as u8)?;
                 dest.write_u64::<LittleEndian>(*id)?;
                 dest.write_all(hash)?;
                 Ok(())
             }
-            ArchiveFileBlock::EndOfArchiveData => {
-                dest.write_u8(ArchiveFileBlockType::EndOfArchiveData as u8)?;
+            ArchiveEntryBlock::EndOfArchiveData => {
+                dest.write_u8(ArchiveEntryBlockType::EndOfArchiveData as u8)?;
                 Ok(())
             }
         }
@@ -153,8 +153,8 @@ where
 
     pub(crate) fn from(src: &mut T) -> Result<Self, Error> {
         let byte = src.read_u8()?;
-        match ArchiveFileBlockType::try_from(byte)? {
-            ArchiveFileBlockType::FileStart => {
+        match ArchiveEntryBlockType::try_from(byte)? {
+            ArchiveEntryBlockType::EntryStart => {
                 let id = src.read_u64::<LittleEndian>()?;
                 let length = src.read_u64::<LittleEndian>()?;
                 if length > FILENAME_MAX_SIZE {
@@ -162,31 +162,31 @@ where
                 }
                 let mut name = vec![0u8; length as usize];
                 src.read_exact(&mut name)?;
-                Ok(ArchiveFileBlock::FileStart {
+                Ok(ArchiveEntryBlock::EntryStart {
                     id,
                     name: EntryName::from_arbitrary_bytes(&name)
                         .map_err(|_| Error::DeserializationError)?,
                 })
             }
-            ArchiveFileBlockType::FileContent => {
+            ArchiveEntryBlockType::EntryContent => {
                 let id = src.read_u64::<LittleEndian>()?;
                 let length = src.read_u64::<LittleEndian>()?;
                 // /!\ WARNING: to avoid loading this entire subfileblock's contents
                 // in-memory, the `data` reader is None; the `src` now starts at the
                 // beginning of the data
-                Ok(ArchiveFileBlock::FileContent {
+                Ok(ArchiveEntryBlock::EntryContent {
                     length,
                     data: None,
                     id,
                 })
             }
-            ArchiveFileBlockType::EndOfFile => {
+            ArchiveEntryBlockType::EndOfEntry => {
                 let id = src.read_u64::<LittleEndian>()?;
                 let mut hash = Sha256Hash::default();
                 src.read_exact(&mut hash)?;
-                Ok(ArchiveFileBlock::EndOfFile { id, hash })
+                Ok(ArchiveEntryBlock::EndOfEntry { id, hash })
             }
-            ArchiveFileBlockType::EndOfArchiveData => Ok(ArchiveFileBlock::EndOfArchiveData),
+            ArchiveEntryBlockType::EndOfArchiveData => Ok(ArchiveEntryBlock::EndOfArchiveData),
         }
     }
 }

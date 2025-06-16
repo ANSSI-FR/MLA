@@ -3,7 +3,7 @@ use crate::entry::EntryName;
 pub use super::layers::traits::{InnerReaderTrait, InnerWriterTrait};
 
 /// Helpers for common operation with MLA Archives
-use super::{ArchiveEntryId, ArchiveFileBlock, ArchiveReader, ArchiveWriter, Error};
+use super::{ArchiveEntryBlock, ArchiveEntryId, ArchiveReader, ArchiveWriter, Error};
 use std::collections::HashMap;
 use std::hash::BuildHasher;
 use std::io::{self, Read, Seek, Write};
@@ -109,19 +109,19 @@ pub fn linear_extract<W1: InnerWriterTrait, R: InnerReaderTrait, S: BuildHasher>
     let mut id2filename: HashMap<ArchiveEntryId, EntryName> = HashMap::new();
 
     'read_block: loop {
-        match ArchiveFileBlock::from(&mut src)? {
-            ArchiveFileBlock::FileStart { name: filename, id } => {
+        match ArchiveEntryBlock::from(&mut src)? {
+            ArchiveEntryBlock::EntryStart { name: filename, id } => {
                 // If the starting file is meant to be extracted, get the
                 // corresponding writer
                 if export.contains_key(&filename) {
                     id2filename.insert(id, filename.clone());
                 }
             }
-            ArchiveFileBlock::EndOfFile { id, .. } => {
+            ArchiveEntryBlock::EndOfEntry { id, .. } => {
                 // Drop the corresponding writer
                 id2filename.remove(&id);
             }
-            ArchiveFileBlock::FileContent { length, id, .. } => {
+            ArchiveEntryBlock::EntryContent { length, id, .. } => {
                 // Write a block to the corresponding output, if any
 
                 let copy_src = &mut (&mut src).take(length);
@@ -138,7 +138,7 @@ pub fn linear_extract<W1: InnerWriterTrait, R: InnerReaderTrait, S: BuildHasher>
                     io::copy(copy_src, &mut io::sink())?;
                 }
             }
-            ArchiveFileBlock::EndOfArchiveData => {
+            ArchiveEntryBlock::EndOfArchiveData => {
                 // Proper termination
                 break 'read_block;
             }
