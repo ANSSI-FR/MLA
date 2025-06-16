@@ -203,7 +203,7 @@ use layers::encrypt::EncryptionConfig;
 use layers::traits::InnerReaderTrait;
 
 pub mod entry;
-use entry::{ArchiveEntry, ArchiveEntryDataReader, ArchiveEntryId};
+use entry::{ArchiveEntry, ArchiveEntryDataReader, ArchiveEntryId, EntryName, EntryNameError};
 
 /// As the name spoils it, an MLA is made of several, independent, layers. The following section introduces the design ideas behind MLA. Please refer to [FORMAT.md](FORMAT.md) for a more formal description.
 ///
@@ -417,7 +417,7 @@ use format::Layers;
 
 struct ArchiveFooter {
     /// Filename -> Corresponding FileInfo
-    files_info: HashMap<String, FileInfo>,
+    files_info: HashMap<EntryName, FileInfo>,
 }
 
 impl ArchiveFooter {
@@ -428,7 +428,7 @@ impl ArchiveFooter {
     /// Performs zero-copy serialization of a footer
     fn serialize_into<W: Write>(
         mut dest: W,
-        files_info: &HashMap<String, ArchiveEntryId>,
+        files_info: &HashMap<EntryName, ArchiveEntryId>,
         ids_info: &HashMap<ArchiveEntryId, FileInfo>,
     ) -> Result<(), Error> {
         // Combine `files_info` and `ids_info` to ArchiveFooter.files_info,
@@ -440,7 +440,7 @@ impl ArchiveFooter {
                     "[ArchiveFooter seriliaze] Unable to find the ID".to_string(),
                 )
             })?;
-            tmp.push((k, v));
+            tmp.push((k.as_arbitrary_bytes(), v));
         }
         tmp.sort_by_key(|(k, _)| *k);
 
@@ -464,13 +464,21 @@ impl ArchiveFooter {
 
         // Read files_info
         // A Vec can be deserialized into a HashMap in bincode 2
-        let files_info: HashMap<String, FileInfo> =
+        let files_info_bytes_names: HashMap<Vec<u8>, FileInfo> =
             match bincode::decode_from_std_read(&mut src.take(len), BINCODE_CONFIG) {
                 Ok(finfo) => finfo,
                 _ => {
                     return Err(Error::DeserializationError);
                 }
             };
+        let files_info = files_info_bytes_names
+            .into_iter()
+            .map(|(k, v)| {
+                let name = EntryName::from_arbitrary_bytes(&k)?;
+                Ok((name, v))
+            })
+            .collect::<Result<HashMap<EntryName, FileInfo>, EntryNameError>>();
+        let files_info = files_info.map_err(|_| Error::SerializationError)?;
         Ok(ArchiveFooter { files_info })
     }
 }
@@ -607,7 +615,7 @@ pub struct ArchiveWriter<'a, W: 'a + InnerWriterTrait> {
     /// Filename -> Corresponding ArchiveFileID
     ///
     /// This is done to keep a quick check for filename existence
-    files_info: HashMap<String, ArchiveEntryId>,
+    files_info: HashMap<EntryName, ArchiveEntryId>,
     /// ID -> Corresponding FileInfo
     ///
     /// File chunks identify their relative file using the `ArchiveFileID`.
@@ -772,10 +780,10 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         Ok(())
     }
 
-    pub fn start_entry(&mut self, name: &str) -> Result<ArchiveEntryId, Error> {
+    pub fn start_entry(&mut self, name: EntryName) -> Result<ArchiveEntryId, Error> {
         check_state!(self.state, OpenedFiles);
 
-        if self.files_info.contains_key(name) {
+        if self.files_info.contains_key(&name) {
             return Err(Error::DuplicateFilename);
         }
 
@@ -783,7 +791,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         let id = self.next_id;
         self.next_id += 1;
         self.current_id = id;
-        self.files_info.insert(name.to_string(), id);
+        self.files_info.insert(name.clone(), id);
 
         // Save the current position
         self.ids_info.insert(
@@ -795,11 +803,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
             },
         );
         // Use std::io::Empty as a readable placeholder type
-        ArchiveFileBlock::FileStart::<std::io::Empty> {
-            filename: name.to_string(),
-            id,
-        }
-        .dump(&mut self.dest)?;
+        ArchiveFileBlock::FileStart::<std::io::Empty> { name, id }.dump(&mut self.dest)?;
 
         match &mut self.state {
             ArchiveWriterState::OpenedFiles { ids, hashes } => {
@@ -868,7 +872,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         Ok(())
     }
 
-    pub fn add_entry<U: Read>(&mut self, name: &str, size: u64, src: U) -> Result<(), Error> {
+    pub fn add_entry<U: Read>(&mut self, name: EntryName, size: u64, src: U) -> Result<(), Error> {
         let id = self.start_entry(name)?;
         self.append_entry_content(id, size, src)?;
         self.end_entry(id)
@@ -942,7 +946,7 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
     /// Return an iterator on filenames present in the archive
     ///
     /// Order is not relevant, and may change
-    pub fn list_entries(&self) -> Result<impl Iterator<Item = &String>, Error> {
+    pub fn list_entries(&self) -> Result<impl Iterator<Item = &EntryName>, Error> {
         if let Some(ArchiveFooter { files_info, .. }) = &self.metadata {
             Ok(files_info.keys())
         } else {
@@ -950,10 +954,10 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
         }
     }
 
-    pub fn get_hash(&mut self, filename: &str) -> Result<Option<Sha256Hash>, Error> {
+    pub fn get_hash(&mut self, name: &EntryName) -> Result<Option<Sha256Hash>, Error> {
         if let Some(ArchiveFooter { files_info }) = &self.metadata {
             // Get file relative information
-            let file_info = match files_info.get(filename) {
+            let file_info = match files_info.get(name) {
                 None => return Ok(None),
                 Some(finfo) => finfo,
             };
@@ -975,12 +979,12 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
     #[allow(clippy::type_complexity)]
     pub fn get_entry(
         &mut self,
-        filename: String,
+        name: EntryName,
     ) -> Result<Option<ArchiveEntry<ArchiveEntryDataReader<Box<dyn 'b + LayerReader<'b, R>>>>>, Error>
     {
         if let Some(ArchiveFooter { files_info }) = &self.metadata {
             // Get file relative information
-            let file_info = match files_info.get(&filename) {
+            let file_info = match files_info.get(&name) {
                 None => return Ok(None),
                 Some(finfo) => finfo,
             };
@@ -993,7 +997,7 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
             // Instantiate the file representation
             let reader = ArchiveEntryDataReader::new(&mut self.src, &file_info.offsets)?;
             Ok(Some(ArchiveEntry {
-                filename,
+                name,
                 data: reader,
                 size: file_info.size,
             }))
@@ -1071,7 +1075,7 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
         // corresponding output file id
         let mut id_failsafe2id_output: HashMap<ArchiveEntryId, ArchiveEntryId> = HashMap::new();
         // Associate an id retrieved from the archive to corresponding filename
-        let mut id_failsafe2filename: HashMap<ArchiveEntryId, String> = HashMap::new();
+        let mut id_failsafe2filename: HashMap<ArchiveEntryId, EntryName> = HashMap::new();
         // List of IDs from the archive already fully added
         let mut id_failsafe_done = Vec::new();
         // Associate an id retrieved from the archive with its ongoing Hash
@@ -1093,7 +1097,7 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
                 }
                 Ok(block) => {
                     match block {
-                        ArchiveFileBlock::FileStart { filename, id } => {
+                        ArchiveFileBlock::FileStart { name: filename, id } => {
                             if let Some(_id_output) = id_failsafe2id_output.get(&id) {
                                 update_error!(error = TruncatedReadError::ArchiveFileIDReuse(id));
                                 break 'read_block;
@@ -1106,10 +1110,12 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
                             }
 
                             id_failsafe2filename.insert(id, filename.clone());
-                            let id_output = match output.start_entry(&filename) {
+                            let id_output = match output.start_entry(filename.clone()) {
                                 Err(Error::DuplicateFilename) => {
                                     update_error!(
-                                        error = TruncatedReadError::FilenameReuse(filename)
+                                        error = TruncatedReadError::FilenameReuse(
+                                            filename.raw_content_to_escaped_string()
+                                        )
                                     );
                                     break 'read_block;
                                 }
@@ -1184,7 +1190,7 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
                                             update_error!(
                                                 error = TruncatedReadError::ErrorInFile(
                                                     err,
-                                                    fname.clone()
+                                                    fname.raw_content_to_escaped_string()
                                                 )
                                             );
                                             break 'read_block;

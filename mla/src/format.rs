@@ -7,7 +7,7 @@ use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
 use crate::{
     ArchiveEntryId, ArchiveFileBlockType, BINCODE_CONFIG, FILENAME_MAX_SIZE, MLA_FORMAT_VERSION,
-    MLA_MAGIC, Sha256Hash, config::ArchivePersistentConfig, errors::Error,
+    MLA_MAGIC, Sha256Hash, config::ArchivePersistentConfig, entry::EntryName, errors::Error,
 };
 pub struct ArchiveHeader {
     pub format_version: u32,
@@ -83,10 +83,7 @@ pub enum ArchiveFileBlock<T: Read> {
     /// The `id` is used to keep track internally of which file a `ArchiveFileBlock` belongs to
     ///
     /// Start of a file
-    FileStart {
-        filename: String,
-        id: ArchiveEntryId,
-    },
+    FileStart { name: EntryName, id: ArchiveEntryId },
     /// File content.
     /// (length, data) is used instead of a Vec to avoid having the whole data
     /// in memory. On parsing, the data can be set to None. It indicates to the
@@ -112,10 +109,10 @@ where
 {
     pub(crate) fn dump<U: Write>(&mut self, dest: &mut U) -> Result<(), Error> {
         match self {
-            ArchiveFileBlock::FileStart { filename, id } => {
+            ArchiveFileBlock::FileStart { name: filename, id } => {
                 dest.write_u8(ArchiveFileBlockType::FileStart as u8)?;
                 dest.write_u64::<LittleEndian>(*id)?;
-                let bytes = filename.as_bytes();
+                let bytes = filename.as_arbitrary_bytes();
                 let length = bytes.len() as u64;
                 if length > FILENAME_MAX_SIZE {
                     return Err(Error::FilenameTooLong);
@@ -163,11 +160,12 @@ where
                 if length > FILENAME_MAX_SIZE {
                     return Err(Error::FilenameTooLong);
                 }
-                let mut filename = vec![0u8; length as usize];
-                src.read_exact(&mut filename)?;
+                let mut name = vec![0u8; length as usize];
+                src.read_exact(&mut name)?;
                 Ok(ArchiveFileBlock::FileStart {
                     id,
-                    filename: String::from_utf8(filename)?,
+                    name: EntryName::from_arbitrary_bytes(&name)
+                        .map_err(|_| Error::DeserializationError)?,
                 })
             }
             ArchiveFileBlockType::FileContent => {
