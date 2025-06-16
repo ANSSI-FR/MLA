@@ -1,3 +1,5 @@
+use crate::entry::EntryName;
+
 pub use super::layers::traits::{InnerReaderTrait, InnerWriterTrait};
 
 /// Helpers for common operation with MLA Archives
@@ -93,7 +95,7 @@ fn hex_char_to_nibble(hex_char: u8) -> Option<u8> {
 /// and by reducing the amount of seeks.
 pub fn linear_extract<W1: InnerWriterTrait, R: InnerReaderTrait, S: BuildHasher>(
     archive: &mut ArchiveReader<R>,
-    export: &mut HashMap<&String, W1, S>,
+    export: &mut HashMap<&EntryName, W1, S>,
 ) -> Result<(), Error> {
     // Seek at the beginning
     archive.src.rewind()?;
@@ -104,11 +106,11 @@ pub fn linear_extract<W1: InnerWriterTrait, R: InnerReaderTrait, S: BuildHasher>
 
     // Associate an ID in the archive to the corresponding filename
     // Do not directly associate to the writer to keep an easier fn API
-    let mut id2filename: HashMap<ArchiveEntryId, String> = HashMap::new();
+    let mut id2filename: HashMap<ArchiveEntryId, EntryName> = HashMap::new();
 
     'read_block: loop {
         match ArchiveFileBlock::from(&mut src)? {
-            ArchiveFileBlock::FileStart { filename, id } => {
+            ArchiveFileBlock::FileStart { name: filename, id } => {
                 // If the starting file is meant to be extracted, get the
                 // corresponding writer
                 if export.contains_key(&filename) {

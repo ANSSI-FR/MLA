@@ -1,4 +1,5 @@
 use crate::ArchiveEntryId;
+use crate::entry::EntryName;
 use std::error;
 use std::fmt;
 use std::io;
@@ -134,7 +135,7 @@ pub enum TruncatedReadError {
     /// Wraps an already existing error and indicates which files are not
     /// finished (a file can be finished but uncompleted)
     UnfinishedFiles {
-        filenames: Vec<String>,
+        filenames: Vec<EntryName>,
         stopping_error: Box<TruncatedReadError>,
     },
     /// End of original archive reached - this is the best case

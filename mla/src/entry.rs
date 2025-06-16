@@ -206,8 +206,8 @@ mod entryname {
     fn osstr_to_bytes_os(os_str: &OsStr) -> Result<&[u8], EntryNameError> {
         os_str
             .to_str()
-            .ok_or(EntryNameError::InvalidPathComponentContent)?
-            .as_bytes();
+            .ok_or(EntryNameError::InvalidPathComponentContent)
+            .map(str::as_bytes)
     }
 
     #[cfg(target_family = "unix")]
@@ -264,8 +264,8 @@ mod entryname {
     #[cfg(target_family = "windows")]
     fn normal_component_osstr_to_bytes(os_str: &OsStr) -> Result<&[u8], EntryNameError> {
         match os_str.to_str() {
-            Ok(s) => Ok(s.into_bytes()),
-            Err(_) => Err(EntryNameError::InvalidPathComponentContent),
+            Some(s) => Ok(s.as_bytes()),
+            None => Err(EntryNameError::InvalidPathComponentContent),
         }
     }
 
@@ -297,7 +297,7 @@ pub use entryname::{
 
 pub struct ArchiveEntry<T: Read> {
     /// File inside a MLA Archive
-    pub filename: String,
+    pub name: EntryName,
     pub data: T,
     pub size: u64,
 }
