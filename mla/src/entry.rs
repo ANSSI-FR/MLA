@@ -1,6 +1,6 @@
 use std::io::{Read, Seek, SeekFrom};
 
-use crate::{errors::Error, format::ArchiveFileBlock};
+use crate::{errors::Error, format::ArchiveEntryBlock};
 
 pub type ArchiveEntryId = u64;
 
@@ -331,8 +331,8 @@ impl<'a, R: Read + Seek> ArchiveEntryDataReader<'a, R> {
         src.seek(SeekFrom::Start(offsets[0]))?;
 
         // Read file information header
-        let id = match ArchiveFileBlock::from(src)? {
-            ArchiveFileBlock::FileStart { id, .. } => id,
+        let id = match ArchiveEntryBlock::from(src)? {
+            ArchiveEntryBlock::EntryStart { id, .. } => id,
             _ => {
                 return Err(Error::WrongReaderState(
                     "[BlocksToFileReader] A file must start with a FileStart".to_string(),
@@ -368,8 +368,8 @@ impl<T: Read + Seek> Read for ArchiveEntryDataReader<'_, T> {
         let (remaining, count) = match self.state {
             ArchiveEntryDataReaderState::Ready => {
                 // Start a new block FileContent
-                match ArchiveFileBlock::from(&mut self.src)? {
-                    ArchiveFileBlock::FileContent { length, id, .. } => {
+                match ArchiveEntryBlock::from(&mut self.src)? {
+                    ArchiveEntryBlock::EntryContent { length, id, .. } => {
                         if id != self.id {
                             self.move_to_next_block()?;
                             return self.read(into);
@@ -378,7 +378,7 @@ impl<T: Read + Seek> Read for ArchiveEntryDataReader<'_, T> {
                         let length_usize = length as usize;
                         (length_usize - count, count)
                     }
-                    ArchiveFileBlock::EndOfFile { id, .. } => {
+                    ArchiveEntryBlock::EndOfEntry { id, .. } => {
                         if id != self.id {
                             self.move_to_next_block()?;
                             return self.read(into);
@@ -386,7 +386,7 @@ impl<T: Read + Seek> Read for ArchiveEntryDataReader<'_, T> {
                         self.state = ArchiveEntryDataReaderState::Finish;
                         return Ok(0);
                     }
-                    ArchiveFileBlock::FileStart { id, .. } => {
+                    ArchiveEntryBlock::EntryStart { id, .. } => {
                         if id != self.id {
                             self.move_to_next_block()?;
                             return self.read(into);
@@ -396,7 +396,7 @@ impl<T: Read + Seek> Read for ArchiveEntryDataReader<'_, T> {
                         )
                         .into());
                     }
-                    ArchiveFileBlock::EndOfArchiveData => {
+                    ArchiveEntryBlock::EndOfArchiveData => {
                         return Err(Error::WrongReaderState(
                             "[BlocksToFileReader] Try to read the end of the archive".to_string(),
                         )
@@ -429,7 +429,7 @@ mod tests {
     use crate::{
         Sha256Hash,
         entry::{ArchiveEntryDataReader, ArchiveEntryDataReaderState, EntryName},
-        format::ArchiveFileBlock,
+        format::ArchiveEntryBlock,
     };
 
     #[test]
@@ -439,20 +439,20 @@ mod tests {
         let id = 0;
         let hash = Sha256Hash::default();
 
-        let mut block = ArchiveFileBlock::FileStart::<&[u8]> {
+        let mut block = ArchiveEntryBlock::EntryStart::<&[u8]> {
             id,
             name: EntryName::from_arbitrary_bytes(b"foobar").unwrap(),
         };
         block.dump(&mut buf).unwrap();
         let fake_content = vec![1, 2, 3, 4];
-        let mut block = ArchiveFileBlock::FileContent {
+        let mut block = ArchiveEntryBlock::EntryContent {
             id,
             length: fake_content.len() as u64,
             data: Some(fake_content.as_slice()),
         };
         block.dump(&mut buf).unwrap();
         let fake_content2 = vec![5, 6, 7, 8];
-        let mut block = ArchiveFileBlock::FileContent {
+        let mut block = ArchiveEntryBlock::EntryContent {
             id,
             length: fake_content2.len() as u64,
             data: Some(fake_content2.as_slice()),
@@ -460,7 +460,7 @@ mod tests {
         block.dump(&mut buf).unwrap();
 
         // std::io::Empty is used because a type with Read is needed
-        ArchiveFileBlock::EndOfFile::<Empty> { id, hash }
+        ArchiveEntryBlock::EndOfEntry::<Empty> { id, hash }
             .dump(&mut buf)
             .unwrap();
 

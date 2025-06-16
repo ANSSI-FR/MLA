@@ -419,8 +419,8 @@ use format::Layers;
 // -------- MLA Format Footer --------
 
 struct ArchiveFooter {
-    /// Filename -> Corresponding FileInfo
-    files_info: HashMap<EntryName, FileInfo>,
+    /// EntryName -> Corresponding EntryInfo
+    entries_info: HashMap<EntryName, EntryInfo>,
 }
 
 impl ArchiveFooter {
@@ -432,7 +432,7 @@ impl ArchiveFooter {
     fn serialize_into<W: Write>(
         mut dest: W,
         files_info: &HashMap<EntryName, ArchiveEntryId>,
-        ids_info: &HashMap<ArchiveEntryId, FileInfo>,
+        ids_info: &HashMap<ArchiveEntryId, EntryInfo>,
     ) -> Result<(), Error> {
         // Combine `files_info` and `ids_info` to ArchiveFooter.files_info,
         // avoiding copies (only references)
@@ -467,7 +467,7 @@ impl ArchiveFooter {
 
         // Read files_info
         // A Vec can be deserialized into a HashMap in bincode 2
-        let files_info_bytes_names: HashMap<Vec<u8>, FileInfo> =
+        let files_info_bytes_names: HashMap<Vec<u8>, EntryInfo> =
             match bincode::decode_from_std_read(&mut src.take(len), BINCODE_CONFIG) {
                 Ok(finfo) => finfo,
                 _ => {
@@ -480,9 +480,11 @@ impl ArchiveFooter {
                 let name = EntryName::from_arbitrary_bytes(&k)?;
                 Ok((name, v))
             })
-            .collect::<Result<HashMap<EntryName, FileInfo>, EntryNameError>>();
+            .collect::<Result<HashMap<EntryName, EntryInfo>, EntryNameError>>();
         let files_info = files_info.map_err(|_| Error::SerializationError)?;
-        Ok(ArchiveFooter { files_info })
+        Ok(ArchiveFooter {
+            entries_info: files_info,
+        })
     }
 }
 
@@ -491,33 +493,33 @@ impl ArchiveFooter {
 /// Tags used in each ArchiveFileBlock to indicate the type of block that follows
 #[derive(Debug)]
 #[repr(u8)]
-enum ArchiveFileBlockType {
-    FileStart = 0x00,
-    FileContent = 0x01,
+enum ArchiveEntryBlockType {
+    EntryStart = 0x00,
+    EntryContent = 0x01,
 
     EndOfArchiveData = 0xFE,
-    EndOfFile = 0xFF,
+    EndOfEntry = 0xFF,
 }
 
-impl TryFrom<u8> for ArchiveFileBlockType {
+impl TryFrom<u8> for ArchiveEntryBlockType {
     type Error = Error;
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
-        if value == ArchiveFileBlockType::FileStart as u8 {
-            Ok(ArchiveFileBlockType::FileStart)
-        } else if value == ArchiveFileBlockType::FileContent as u8 {
-            Ok(ArchiveFileBlockType::FileContent)
-        } else if value == ArchiveFileBlockType::EndOfFile as u8 {
-            Ok(ArchiveFileBlockType::EndOfFile)
-        } else if value == ArchiveFileBlockType::EndOfArchiveData as u8 {
-            Ok(ArchiveFileBlockType::EndOfArchiveData)
+        if value == ArchiveEntryBlockType::EntryStart as u8 {
+            Ok(ArchiveEntryBlockType::EntryStart)
+        } else if value == ArchiveEntryBlockType::EntryContent as u8 {
+            Ok(ArchiveEntryBlockType::EntryContent)
+        } else if value == ArchiveEntryBlockType::EndOfEntry as u8 {
+            Ok(ArchiveEntryBlockType::EndOfEntry)
+        } else if value == ArchiveEntryBlockType::EndOfArchiveData as u8 {
+            Ok(ArchiveEntryBlockType::EndOfArchiveData)
         } else {
             Err(Error::WrongBlockSubFileType)
         }
     }
 }
 
-use format::ArchiveFileBlock;
+use format::ArchiveEntryBlock;
 
 #[derive(Debug, Clone)]
 enum ArchiveWriterState {
@@ -627,7 +629,7 @@ pub struct ArchiveWriter<'a, W: 'a + InnerWriterTrait> {
     /// String, thus increasing memory footprint.
     /// These hashmaps are actually merged at the last moment, on footer
     /// serialization
-    ids_info: HashMap<ArchiveEntryId, FileInfo>,
+    ids_info: HashMap<ArchiveEntryId, EntryInfo>,
     /// Next file id to use
     next_id: ArchiveEntryId,
     /// Current file being written (for continuous block detection)
@@ -730,7 +732,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         // Mark the end of the data
 
         // Use std::io::Empty as a readable placeholder type
-        ArchiveFileBlock::EndOfArchiveData::<std::io::Empty> {}.dump(&mut self.dest)?;
+        ArchiveEntryBlock::EndOfArchiveData::<std::io::Empty> {}.dump(&mut self.dest)?;
 
         ArchiveFooter::serialize_into(&mut self.dest, &self.files_info, &self.ids_info)?;
 
@@ -799,14 +801,14 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         // Save the current position
         self.ids_info.insert(
             id,
-            FileInfo {
+            EntryInfo {
                 offsets: vec![self.dest.position()],
                 size: 0,
                 eof_offset: 0,
             },
         );
         // Use std::io::Empty as a readable placeholder type
-        ArchiveFileBlock::FileStart::<std::io::Empty> { name, id }.dump(&mut self.dest)?;
+        ArchiveEntryBlock::EntryStart::<std::io::Empty> { name, id }.dump(&mut self.dest)?;
 
         match &mut self.state {
             ArchiveWriterState::OpenedFiles { ids, hashes } => {
@@ -840,7 +842,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         self.extend_file_size(id, size)?;
         let src = self.state.wrap_with_hash(id, src)?;
 
-        ArchiveFileBlock::FileContent {
+        ArchiveEntryBlock::EntryContent {
             id,
             length: size,
             data: Some(src),
@@ -870,7 +872,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         self.mark_continuous_block(id)?;
         self.mark_eof(id)?;
         // Use std::io::Empty as a readable placeholder type
-        ArchiveFileBlock::EndOfFile::<std::io::Empty> { id, hash }.dump(&mut self.dest)?;
+        ArchiveEntryBlock::EndOfEntry::<std::io::Empty> { id, hash }.dump(&mut self.dest)?;
 
         Ok(())
     }
@@ -890,16 +892,16 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
 
 #[derive(Encode, Decode)]
 #[cfg_attr(test, derive(PartialEq, Eq, Debug, Clone))]
-pub(crate) struct FileInfo {
-    /// File information to save in the footer
+pub(crate) struct EntryInfo {
+    /// Entry information to save in the footer
     ///
-    /// Offsets of continuous chunks of `ArchiveFileBlock`
+    /// Offsets of continuous chunks of `ArchiveEntryBlock`
     offsets: Vec<u64>,
     /// Size of the file, in bytes
     size: u64,
-    /// Offset of the ArchiveFileBlock::EndOfFile
+    /// Offset of the ArchiveEntryBlock::EndOfEntry
     ///
-    /// This offset is used to retrieve information from the EoF tag, such as
+    /// This offset is used to retrieve information from the EndOfEntry tag, such as
     /// the file hash
     eof_offset: u64,
 }
@@ -950,7 +952,11 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
     ///
     /// Order is not relevant, and may change
     pub fn list_entries(&self) -> Result<impl Iterator<Item = &EntryName>, Error> {
-        if let Some(ArchiveFooter { files_info, .. }) = &self.metadata {
+        if let Some(ArchiveFooter {
+            entries_info: files_info,
+            ..
+        }) = &self.metadata
+        {
             Ok(files_info.keys())
         } else {
             Err(Error::MissingMetadata)
@@ -958,7 +964,10 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
     }
 
     pub fn get_hash(&mut self, name: &EntryName) -> Result<Option<Sha256Hash>, Error> {
-        if let Some(ArchiveFooter { files_info }) = &self.metadata {
+        if let Some(ArchiveFooter {
+            entries_info: files_info,
+        }) = &self.metadata
+        {
             // Get file relative information
             let file_info = match files_info.get(name) {
                 None => return Ok(None),
@@ -968,8 +977,8 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
             self.src.seek(SeekFrom::Start(file_info.eof_offset))?;
 
             // Return the file hash
-            match ArchiveFileBlock::from(&mut self.src)? {
-                ArchiveFileBlock::EndOfFile { hash, .. } => Ok(Some(hash)),
+            match ArchiveEntryBlock::from(&mut self.src)? {
+                ArchiveEntryBlock::EndOfEntry { hash, .. } => Ok(Some(hash)),
                 _ => Err(Error::WrongReaderState(
                     "[ArchiveReader] eof_offset must point to a EoF".to_string(),
                 )),
@@ -985,7 +994,10 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
         name: EntryName,
     ) -> Result<Option<ArchiveEntry<ArchiveEntryDataReader<Box<dyn 'b + LayerReader<'b, R>>>>>, Error>
     {
-        if let Some(ArchiveFooter { files_info }) = &self.metadata {
+        if let Some(ArchiveFooter {
+            entries_info: files_info,
+        }) = &self.metadata
+        {
             // Get file relative information
             let file_info = match files_info.get(&name) {
                 None => return Ok(None),
@@ -1085,7 +1097,7 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
         let mut id_failsafe2hash: HashMap<ArchiveEntryId, Sha256> = HashMap::new();
 
         'read_block: loop {
-            match ArchiveFileBlock::from(&mut self.src) {
+            match ArchiveEntryBlock::from(&mut self.src) {
                 Err(Error::IOError(err)) => {
                     if let std::io::ErrorKind::UnexpectedEof = err.kind() {
                         update_error!(error = TruncatedReadError::UnexpectedEOFOnNextBlock);
@@ -1100,7 +1112,7 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
                 }
                 Ok(block) => {
                     match block {
-                        ArchiveFileBlock::FileStart { name: filename, id } => {
+                        ArchiveEntryBlock::EntryStart { name: filename, id } => {
                             if let Some(_id_output) = id_failsafe2id_output.get(&id) {
                                 update_error!(error = TruncatedReadError::ArchiveFileIDReuse(id));
                                 break 'read_block;
@@ -1130,7 +1142,7 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
                             id_failsafe2id_output.insert(id, id_output);
                             id_failsafe2hash.insert(id, Sha256::default());
                         }
-                        ArchiveFileBlock::FileContent { length, id, .. } => {
+                        ArchiveEntryBlock::EntryContent { length, id, .. } => {
                             let id_output = match id_failsafe2id_output.get(&id) {
                                 Some(id_output) => *id_output,
                                 None => {
@@ -1216,7 +1228,7 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
                                 }
                             }
                         }
-                        ArchiveFileBlock::EndOfFile { id, hash } => {
+                        ArchiveEntryBlock::EndOfEntry { id, hash } => {
                             let id_output = match id_failsafe2id_output.get(&id) {
                                 Some(id_output) => *id_output,
                                 None => {
@@ -1257,7 +1269,7 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
                             output.end_entry(id_output)?;
                             id_failsafe_done.push(id);
                         }
-                        ArchiveFileBlock::EndOfArchiveData => {
+                        ArchiveEntryBlock::EndOfArchiveData => {
                             // Expected end
                             update_error!(error = TruncatedReadError::EndOfOriginalArchiveData);
                             break 'read_block;
@@ -1340,7 +1352,7 @@ pub(crate) mod tests {
         let hash = Sha256Hash::default();
 
         // std::io::Empty is used because a type with Read is needed
-        ArchiveFileBlock::FileStart::<Empty> {
+        ArchiveEntryBlock::EntryStart::<Empty> {
             id,
             name: EntryName::from_path("foobaré.exe").unwrap(),
         }
@@ -1348,7 +1360,7 @@ pub(crate) mod tests {
         .unwrap();
 
         let fake_content = vec![1, 2, 3, 4];
-        let mut block = ArchiveFileBlock::FileContent {
+        let mut block = ArchiveEntryBlock::EntryContent {
             id,
             length: fake_content.len() as u64,
             data: Some(fake_content.as_slice()),
@@ -1356,7 +1368,7 @@ pub(crate) mod tests {
         block.dump(&mut buf).unwrap();
 
         // std::io::Empty is used because a type with Read is needed
-        ArchiveFileBlock::EndOfFile::<Empty> { id, hash }
+        ArchiveEntryBlock::EndOfEntry::<Empty> { id, hash }
             .dump(&mut buf)
             .unwrap();
 
@@ -1440,7 +1452,7 @@ pub(crate) mod tests {
         HybridPublicKey,
         Vec<(EntryName, Vec<u8>)>,
         HashMap<EntryName, ArchiveEntryId>,
-        HashMap<ArchiveEntryId, FileInfo>,
+        HashMap<ArchiveEntryId, EntryInfo>,
     ) {
         // Build an archive with 3 files
         let file = Vec::new();
