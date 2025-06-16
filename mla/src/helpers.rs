@@ -6,6 +6,77 @@ use std::collections::HashMap;
 use std::hash::BuildHasher;
 use std::io::{self, Read, Seek, Write};
 
+/// Escaping function used by MLA, but may be useful for others
+///
+/// For every byte:
+/// * If listed in `bytes_to_preserve` then it will be output without transformation.
+/// * Else, it will be replaced by `%xx` where `xx` is their hexadecimal representation.
+pub fn mla_percent_escape(bytes: &[u8], bytes_to_preserve: &[u8]) -> Vec<u8> {
+    let mut s = Vec::with_capacity(bytes.len() * 3);
+    for byte in bytes {
+        if bytes_to_preserve.contains(byte) {
+            s.push(*byte);
+        } else {
+            let low_nibble = nibble_to_hex_char(*byte & 0x0F);
+            let high_nibble = nibble_to_hex_char((*byte & 0xF0) >> 4);
+            s.push(b'%');
+            s.push(high_nibble);
+            s.push(low_nibble);
+        };
+    }
+    s
+}
+
+/// Inverse of `mla_percent_escape`
+///
+/// This function will return None if feeded with anything else than
+/// ASCII characters, ASCII dots, bytes listed in `other_bytes_to_allow` and `%xx` where `xx` is the
+/// hexadecimal representation of a byte different from the previous characters
+pub fn mla_percent_unescape(input: &[u8], bytes_to_allow: &[u8]) -> Option<Vec<u8>> {
+    let mut result = Vec::with_capacity(input.len());
+    let mut bytes = input.iter();
+    while let Some(b) = bytes.next() {
+        if bytes_to_allow.contains(b) {
+            result.push(*b);
+        } else if *b == b'%' {
+            let high_nibble = bytes.next().and_then(|c| hex_char_to_nibble(*c));
+            let low_nibble = bytes.next().and_then(|c| hex_char_to_nibble(*c));
+            match (high_nibble, low_nibble) {
+                (Some(high_nibble), Some(low_nibble)) => {
+                    let decoded_byte = (high_nibble << 4) | low_nibble;
+                    if bytes_to_allow.contains(&decoded_byte) {
+                        return None;
+                    } else {
+                        result.push(decoded_byte);
+                    }
+                }
+                _ => return None,
+            }
+        }
+    }
+    Some(result)
+}
+
+#[inline(always)]
+fn nibble_to_hex_char(nibble: u8) -> u8 {
+    if nibble <= 0x9 {
+        b'0' + nibble
+    } else {
+        b'a' + (nibble - 0xa)
+    }
+}
+
+#[inline(always)]
+fn hex_char_to_nibble(hex_char: u8) -> Option<u8> {
+    if hex_char.is_ascii_digit() {
+        Some(hex_char - b'0')
+    } else if (b'a'..=b'f').contains(&hex_char) {
+        Some(hex_char - b'a' + 0xa)
+    } else {
+        None
+    }
+}
+
 /// Extract an Archive linearly.
 ///
 /// `export` maps filenames to Write objects, which will receives the
@@ -111,6 +182,7 @@ mod tests {
     use rand_chacha::ChaChaRng;
 
     use super::*;
+    use crate::entry::ENTRY_NAME_RAW_CONTENT_ALLOWED_BYTES;
     use crate::tests::build_archive;
     use crate::*;
     use std::io::Cursor;
@@ -254,5 +326,19 @@ mod tests {
             .read_to_end(&mut content2)
             .unwrap();
         assert_eq!(content2.as_slice(), fake_file.as_slice());
+    }
+
+    #[test]
+    fn test_escape() {
+        assert_eq!(
+            b"%2f".as_slice(),
+            mla_percent_escape(b"/", &ENTRY_NAME_RAW_CONTENT_ALLOWED_BYTES).as_slice()
+        );
+        assert_eq!(
+            b"/".as_slice(),
+            mla_percent_unescape(b"%2f", &ENTRY_NAME_RAW_CONTENT_ALLOWED_BYTES)
+                .unwrap()
+                .as_slice()
+        );
     }
 }
