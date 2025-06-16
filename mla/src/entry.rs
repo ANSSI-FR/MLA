@@ -81,8 +81,9 @@ mod entryname {
             self.name.as_slice()
         }
 
-        /// `path` is first normalized by keeping only `std::path::Component::Normal` components.
-        /// An `Err(EntryNameError::ForbiddenPathTraversalComponent)` is returned if it contains other components .
+        /// `path` is first normalized by keeping only `Normal`
+        /// `std::path::Component`s and popping an eventual previous
+        /// component when a `..` is encountered.
         ///
         /// On Windows, `path` is then converted from UTF-16LE to UTF-8 and backslashes are
         /// converted to slash before being serialized inside archive.
@@ -95,12 +96,23 @@ mod entryname {
         ///
         /// This function returns an `EntryNameError::InvalidPathComponentContent` when the resulting `EntryName` would be empty.
         pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Self, EntryNameError> {
-            type ComponentBytes<'a> = &'a [u8];
-            let components = path
-                .as_ref()
-                .components()
-                .map(normal_component_to_bytes)
-                .collect::<Result<Vec<ComponentBytes>, EntryNameError>>()?;
+            let components = {
+                let mut stack = Vec::new();
+                for component in path.as_ref().components() {
+                    match component {
+                        Component::Prefix(_) => (),
+                        Component::RootDir => (),
+                        Component::CurDir => (),
+                        Component::ParentDir => {
+                            stack.pop();
+                        }
+                        Component::Normal(os_str) => {
+                            stack.push(normal_component_osstr_to_bytes(os_str)?)
+                        }
+                    }
+                }
+                stack
+            };
             let name = components.join(&b'/');
             if name.is_empty() {
                 Err(EntryNameError::InvalidPathComponentContent)
@@ -255,11 +267,6 @@ mod entryname {
             Ok(s) => Ok(s.into_bytes()),
             Err(_) => Err(EntryNameError::InvalidPathComponentContent),
         }
-    }
-
-    fn normal_component_to_bytes(component: Component) -> Result<&[u8], EntryNameError> {
-        let normal_component_osstr = to_normal_component_osstr(component)?;
-        normal_component_osstr_to_bytes(normal_component_osstr)
     }
 
     fn check_os_indep_path_rules(bytes: &[u8]) -> Result<(), EntryNameError> {
