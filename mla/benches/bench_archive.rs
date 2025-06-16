@@ -6,6 +6,7 @@ use criterion::Throughput;
 use mla::TruncatedArchiveReader;
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
 use mla::crypto::mlakey::{HybridPublicKey, generate_keypair_from_seed};
+use mla::entry::EntryName;
 use mla::helpers::linear_extract;
 use mla::{ArchiveReader, ArchiveWriter};
 use rand::SeedableRng;
@@ -54,7 +55,9 @@ fn build_archive(
             .sample_iter(&mut rng)
             .take(size as usize)
             .collect();
-        let id = mla.start_entry(&format!("file_{i}")).unwrap();
+        let id = mla
+            .start_entry(EntryName::from_path(format!("file_{i}")).unwrap())
+            .unwrap();
         mla.append_entry_content(id, data.len() as u64, data.as_slice())
             .unwrap();
         mla.end_entry(id).unwrap();
@@ -126,7 +129,9 @@ pub fn writer_multiple_layers_multiple_block_size(c: &mut Criterion) {
             )
             .expect("Writer init failed");
 
-            let id = mla.start_entry("file").unwrap();
+            let id = mla
+                .start_entry(EntryName::from_path("file").unwrap())
+                .unwrap();
             group.bench_with_input(
                 BenchmarkId::new(
                     format!("compression: {compression}, encryption: {encryption}"),
@@ -169,7 +174,9 @@ pub fn multiple_compression_quality(c: &mut Criterion) {
             .unwrap();
         let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
 
-        let id = mla.start_entry("file").unwrap();
+        let id = mla
+            .start_entry(EntryName::from_path("file").unwrap())
+            .unwrap();
         group.bench_with_input(
             BenchmarkId::new(format!("CompressionLevel {quality}"), size),
             &size,
@@ -191,7 +198,10 @@ fn read_one_file_by_chunk(iters: u64, size: u64, compression: bool, encryption: 
     let mut mla_read = build_archive_reader(1, size * iters, compression, encryption);
 
     // Get the file (costly as `seek` are implied)
-    let subfile = mla_read.get_entry("file_0".to_string()).unwrap().unwrap();
+    let subfile = mla_read
+        .get_entry(EntryName::from_path("file_0").unwrap())
+        .unwrap()
+        .unwrap();
 
     // Read iters * size bytes
     let start = Instant::now();
@@ -246,7 +256,7 @@ fn iter_read_multifiles_random(
     let start = Instant::now();
     for i in sample(&mut rng, iters as usize, iters as usize).iter() {
         let subfile = mla_read
-            .get_entry(format!("file_{i}").to_string())
+            .get_entry(EntryName::from_path(format!("file_{i}")).unwrap())
             .unwrap()
             .unwrap();
         let mut src = subfile.data;
@@ -295,10 +305,10 @@ fn iter_decompress_multifiles_linear(
 ) -> Duration {
     let mut mla_read = build_archive_reader(iters, size, compression, encryption);
 
-    let fnames: Vec<String> = mla_read.list_entries().unwrap().cloned().collect();
+    let fnames: Vec<EntryName> = mla_read.list_entries().unwrap().cloned().collect();
     // Measure the time needed to get and read a file
     // Prepare output
-    let mut export: HashMap<&String, io::Sink> =
+    let mut export: HashMap<&EntryName, io::Sink> =
         fnames.iter().map(|fname| (fname, io::sink())).collect();
     let start = Instant::now();
     linear_extract(&mut mla_read, &mut export).unwrap();
