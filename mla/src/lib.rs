@@ -72,6 +72,7 @@
 //! use mla::crypto::mlakey::parse_mlakey_pubkey_pem;
 //! use mla::config::ArchiveWriterConfig;
 //! use mla::ArchiveWriter;
+//! use mla::entry::EntryName;
 //!
 //! const PUB_KEY: &[u8] = include_bytes!("../../samples/test_mlakey_pub.pem");
 //!
@@ -88,7 +89,7 @@
 //!     let mut mla = ArchiveWriter::from_config(&mut buf, config).unwrap();
 //!
 //!     // Add a file
-//!     mla.add_entry("filename", 4, &[0, 1, 2, 3][..]).unwrap();
+//!     mla.add_entry(EntryName::from_path("filename").unwrap(), 4, &[0, 1, 2, 3][..]).unwrap();
 //!
 //!     // Complete the archive
 //!     mla.finalize().unwrap();
@@ -99,6 +100,7 @@
 //! use mla::crypto::mlakey::parse_mlakey_pubkey_pem;
 //! use mla::config::ArchiveWriterConfig;
 //! use mla::ArchiveWriter;
+//! use mla::entry::EntryName;
 //!
 //! const PUB_KEY: &[u8] = include_bytes!("../../samples/test_mlakey_pub.pem");
 //!
@@ -122,18 +124,18 @@
 //!     // 3. end_entry(id)
 //!
 //!     // Start a file and add content
-//!     let id_entry1 = mla.start_entry("fname1").unwrap();
+//!     let id_entry1 = mla.start_entry(EntryName::from_path("fname1").unwrap()).unwrap();
 //!     let file1_part1 = vec![11, 12, 13, 14];
 //!     mla.append_entry_content(id_entry1, file1_part1.len() as u64, file1_part1.as_slice()).unwrap();
 //!
 //!     // Start a second file and add content
-//!     let id_entry2 = mla.start_entry("fname2").unwrap();
+//!     let id_entry2 = mla.start_entry(EntryName::from_path("fname2").unwrap()).unwrap();
 //!     let file2_part1 = vec![21, 22, 23, 24];
 //!     mla.append_entry_content(id_entry2, file2_part1.len() as u64, file2_part1.as_slice()).unwrap();
 //!
 //!     // Add a file as a whole
 //!     let file3 = vec![31, 32, 33, 34];
-//!     mla.add_entry("fname3", file3.len() as u64, file3.as_slice()).unwrap();
+//!     mla.add_entry(EntryName::from_path("fname3").unwrap(), file3.len() as u64, file3.as_slice()).unwrap();
 //!
 //!     // Add new content to the first file
 //!     let file1_part2 = vec![15, 16, 17, 18];
@@ -153,6 +155,7 @@
 //! use mla::config::ArchiveReaderConfig;
 //! use mla::ArchiveReader;
 //! use std::io;
+//! use mla::entry::EntryName;
 //!
 //! const PRIV_KEY: &[u8] = include_bytes!("../../samples/test_mlakey_archive_v2.der");
 //! const DATA: &[u8] = include_bytes!("../../samples/archive_v2.mla");
@@ -169,19 +172,19 @@
 //!     let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
 //!
 //!     // Get a file
-//!     let mut file = mla_read
-//!         .get_entry("simple".to_string())
+//!     let mut entry = mla_read
+//!         .get_entry(EntryName::from_path("simple").unwrap())
 //!         .unwrap() // An error can be raised (I/O, decryption, etc.)
-//!         .unwrap(); // Option(file), as the file might not exist in the archive
+//!         .unwrap(); // Option(entry), as the entry might not exist in the archive
 //!
-//!     // Get back its filename, size, and data
-//!     println!("{} ({} bytes)", file.filename, file.size);
+//!     // Get back its name, size, and data
+//!     println!("{} ({} bytes)", entry.name.to_pathbuf_escaped_string().unwrap(), entry.size);
 //!     let mut output = Vec::new();
-//!     std::io::copy(&mut file.data, &mut output).unwrap();
+//!     std::io::copy(&mut entry.data, &mut output).unwrap();
 //!
 //!     // Get back the list of files in the archive:
-//!     for fname in mla_read.list_entries().unwrap() {
-//!         println!("{}", fname);
+//!     for entry_name in mla_read.list_entries().unwrap() {
+//!         println!("{}", entry_name.to_pathbuf_escaped_string().unwrap());
 //!     }
 //! }
 //! ```
@@ -1339,7 +1342,7 @@ pub(crate) mod tests {
         // std::io::Empty is used because a type with Read is needed
         ArchiveFileBlock::FileStart::<Empty> {
             id,
-            filename: String::from("foobaré.exe"),
+            name: EntryName::from_path("foobaré.exe").unwrap(),
         }
         .dump(&mut buf)
         .unwrap();
@@ -1369,11 +1372,17 @@ pub(crate) mod tests {
             .expect("Writer init failed");
 
         let fake_file = vec![1, 2, 3, 4];
-        mla.add_entry("my_file", fake_file.len() as u64, fake_file.as_slice())
-            .unwrap();
+        mla.add_entry(
+            EntryName::from_path("my_file").unwrap(),
+            fake_file.len() as u64,
+            fake_file.as_slice(),
+        )
+        .unwrap();
         let fake_file = vec![5, 6, 7, 8];
         let fake_file2 = vec![9, 10, 11, 12];
-        let id = mla.start_entry("my_file2").unwrap();
+        let id = mla
+            .start_entry(EntryName::from_path("my_file2").unwrap())
+            .unwrap();
         mla.append_entry_content(id, fake_file.len() as u64, fake_file.as_slice())
             .unwrap();
         mla.append_entry_content(id, fake_file2.len() as u64, fake_file2.as_slice())
@@ -1385,14 +1394,20 @@ pub(crate) mod tests {
         let config = ArchiveReaderConfig::with_private_keys(&[private_key]);
         let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
 
-        let mut file = mla_read.get_entry("my_file".to_string()).unwrap().unwrap();
+        let mut file = mla_read
+            .get_entry(EntryName::from_path("my_file").unwrap())
+            .unwrap()
+            .unwrap();
         let mut rez = Vec::new();
         file.data.read_to_end(&mut rez).unwrap();
         assert_eq!(rez, vec![1, 2, 3, 4]);
         // Explicit drop here, because otherwise mla_read.get_entry() cannot be
         // recall. It is not detected by the NLL analysis
         drop(file);
-        let mut file2 = mla_read.get_entry("my_file2".to_string()).unwrap().unwrap();
+        let mut file2 = mla_read
+            .get_entry(EntryName::from_path("my_file2").unwrap())
+            .unwrap()
+            .unwrap();
         let mut rez2 = Vec::new();
         file2.data.read_to_end(&mut rez2).unwrap();
         assert_eq!(rez2, vec![5, 6, 7, 8, 9, 10, 11, 12]);
@@ -1407,7 +1422,7 @@ pub(crate) mod tests {
         Vec<u8>,
         HybridPrivateKey,
         HybridPublicKey,
-        Vec<(String, Vec<u8>)>,
+        Vec<(EntryName, Vec<u8>)>,
     ) {
         let (written_archive, privkey, pubkey, files_content, _, _) =
             build_archive2(compression, encryption, interleaved);
@@ -1423,8 +1438,8 @@ pub(crate) mod tests {
         Vec<u8>,
         HybridPrivateKey,
         HybridPublicKey,
-        Vec<(String, Vec<u8>)>,
-        HashMap<String, ArchiveEntryId>,
+        Vec<(EntryName, Vec<u8>)>,
+        HashMap<EntryName, ArchiveEntryId>,
         HashMap<ArchiveEntryId, FileInfo>,
     ) {
         // Build an archive with 3 files
@@ -1443,9 +1458,9 @@ pub(crate) mod tests {
         };
         let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
 
-        let fname1 = "my_file1".to_string();
-        let fname2 = "my_file2".to_string();
-        let fname3 = "my_file3".to_string();
+        let fname1 = EntryName::from_arbitrary_bytes(b"my_file1").unwrap();
+        let fname2 = EntryName::from_arbitrary_bytes(b"my_file2").unwrap();
+        let fname3 = EntryName::from_arbitrary_bytes(b"my_file3").unwrap();
         let fake_file_part1 = vec![1, 2, 3];
         let fake_file_part2 = vec![4, 5, 6, 7, 8];
         let mut fake_file1 = Vec::new();
@@ -1466,18 +1481,22 @@ pub(crate) mod tests {
             // [File1 content 4 5 6 7 8]
             // [File1 end]
             // [File2 end]
-            let id_file1 = mla.start_entry(&fname1).unwrap();
+            let id_file1 = mla.start_entry(fname1.clone()).unwrap();
             mla.append_entry_content(
                 id_file1,
                 fake_file_part1.len() as u64,
                 fake_file_part1.as_slice(),
             )
             .unwrap();
-            let id_file2 = mla.start_entry(&fname2).unwrap();
+            let id_file2 = mla.start_entry(fname2.clone()).unwrap();
             mla.append_entry_content(id_file2, fake_file2.len() as u64, fake_file2.as_slice())
                 .unwrap();
-            mla.add_entry(&fname3, fake_file3.len() as u64, fake_file3.as_slice())
-                .unwrap();
+            mla.add_entry(
+                fname3.clone(),
+                fake_file3.len() as u64,
+                fake_file3.as_slice(),
+            )
+            .unwrap();
             mla.append_entry_content(
                 id_file1,
                 fake_file_part2.len() as u64,
@@ -1487,12 +1506,24 @@ pub(crate) mod tests {
             mla.end_entry(id_file1).unwrap();
             mla.end_entry(id_file2).unwrap();
         } else {
-            mla.add_entry(&fname1, fake_file1.len() as u64, fake_file1.as_slice())
-                .unwrap();
-            mla.add_entry(&fname2, fake_file2.len() as u64, fake_file2.as_slice())
-                .unwrap();
-            mla.add_entry(&fname3, fake_file3.len() as u64, fake_file3.as_slice())
-                .unwrap();
+            mla.add_entry(
+                fname1.clone(),
+                fake_file1.len() as u64,
+                fake_file1.as_slice(),
+            )
+            .unwrap();
+            mla.add_entry(
+                fname2.clone(),
+                fake_file2.len() as u64,
+                fake_file2.as_slice(),
+            )
+            .unwrap();
+            mla.add_entry(
+                fname3.clone(),
+                fake_file3.len() as u64,
+                fake_file3.as_slice(),
+            )
+            .unwrap();
         }
         let files_info = mla.files_info.clone();
         let ids_info = mla.ids_info.clone();
@@ -1554,12 +1585,18 @@ pub(crate) mod tests {
 
             // Write a file in one part
             let fake_file = vec![1, 2, 3, 4];
-            mla.add_entry("my_file", fake_file.len() as u64, fake_file.as_slice())
-                .unwrap();
+            mla.add_entry(
+                EntryName::from_path("my_file").unwrap(),
+                fake_file.len() as u64,
+                fake_file.as_slice(),
+            )
+            .unwrap();
             // Write a file in multiple part
             let fake_file = vec![5, 6, 7, 8];
             let fake_file2 = vec![9, 10, 11, 12];
-            let id = mla.start_entry("my_file2").unwrap();
+            let id = mla
+                .start_entry(EntryName::from_path("my_file2").unwrap())
+                .unwrap();
             mla.append_entry_content(id, fake_file.len() as u64, fake_file.as_slice())
                 .unwrap();
             mla.append_entry_content(id, fake_file2.len() as u64, fake_file2.as_slice())
@@ -1576,14 +1613,20 @@ pub(crate) mod tests {
             };
             let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
 
-            let mut file = mla_read.get_entry("my_file".to_string()).unwrap().unwrap();
+            let mut file = mla_read
+                .get_entry(EntryName::from_path("my_file").unwrap())
+                .unwrap()
+                .unwrap();
             let mut rez = Vec::new();
             file.data.read_to_end(&mut rez).unwrap();
             assert_eq!(rez, vec![1, 2, 3, 4]);
             // Explicit drop here, because otherwise mla_read.get_entry() cannot be
             // recall. It is not detected by the NLL analysis
             drop(file);
-            let mut file2 = mla_read.get_entry("my_file2".to_string()).unwrap().unwrap();
+            let mut file2 = mla_read
+                .get_entry(EntryName::from_path("my_file2").unwrap())
+                .unwrap()
+                .unwrap();
 
             // Read the file in 2 blocks: 6, then 2 bytes (it is made of two 4-bytes block)
             let mut rez2 = [0u8; 6];
@@ -1608,20 +1651,17 @@ pub(crate) mod tests {
         let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
 
         // Check the list of files is correct
-        let mut sorted_list: Vec<String> = mla_read.list_entries().unwrap().cloned().collect();
+        let mut sorted_list: Vec<EntryName> = mla_read.list_entries().unwrap().cloned().collect();
         sorted_list.sort();
         assert_eq!(
             sorted_list,
-            files
-                .iter()
-                .map(|(x, _y)| x.clone())
-                .collect::<Vec<String>>(),
+            files.iter().map(|(x, _y)| x.clone()).collect::<Vec<_>>(),
         );
 
         // Get and check file per file, not in the writing order
         for (fname, content) in files.iter().rev() {
             let mut mla_file = mla_read.get_entry(fname.clone()).unwrap().unwrap();
-            assert_eq!(mla_file.filename, fname.clone());
+            assert_eq!(mla_file.name, fname.clone());
             let mut buf = Vec::new();
             mla_file.data.read_to_end(&mut buf).unwrap();
             assert_eq!(&buf, content);
@@ -1659,20 +1699,17 @@ pub(crate) mod tests {
         let mut mla_read = ArchiveReader::from_config(buf2, config).unwrap();
 
         // Check the list of files is correct
-        let mut sorted_list: Vec<String> = mla_read.list_entries().unwrap().cloned().collect();
+        let mut sorted_list: Vec<EntryName> = mla_read.list_entries().unwrap().cloned().collect();
         sorted_list.sort();
         assert_eq!(
             sorted_list,
-            files
-                .iter()
-                .map(|(x, _y)| x.clone())
-                .collect::<Vec<String>>(),
+            files.iter().map(|(x, _y)| x.clone()).collect::<Vec<_>>(),
         );
 
         // Get and check file per file, not in the writing order
         for (fname, content) in files.iter().rev() {
             let mut mla_file = mla_read.get_entry(fname.clone()).unwrap().unwrap();
-            assert_eq!(mla_file.filename, fname.clone());
+            assert_eq!(mla_file.name, fname.clone());
             let mut buf = Vec::new();
             mla_file.data.read_to_end(&mut buf).unwrap();
             assert_eq!(&buf, content);
@@ -1687,8 +1724,12 @@ pub(crate) mod tests {
                 build_archive2(false, true, *interleaved);
             // Truncate the resulting file (before the footer, hopefully after the header), and prepare the failsafe reader
             let mut buffer: &mut [u8] = &mut vec![0; BINCODE_MAX_DECODE];
+            let serializable_files_info = files_info
+                .iter()
+                .map(|(k, v)| (k.as_arbitrary_bytes(), v))
+                .collect::<Vec<_>>();
             let footer_size = bincode::encode_into_std_write::<_, _, &mut [u8]>(
-                &files_info,
+                serializable_files_info,
                 &mut buffer,
                 BINCODE_CONFIG,
             )
@@ -1718,15 +1759,12 @@ pub(crate) mod tests {
                 let mut mla_read = ArchiveReader::from_config(buf2, config).unwrap();
 
                 // Check *the start of* the files list is correct
-                let expected = files
-                    .iter()
-                    .map(|(x, _y)| x.clone())
-                    .collect::<Vec<String>>();
+                let expected = files.iter().map(|(x, _y)| x.clone()).collect::<Vec<_>>();
                 let mut file_list = mla_read
                     .list_entries()
                     .unwrap()
                     .cloned()
-                    .collect::<Vec<String>>();
+                    .collect::<Vec<_>>();
                 file_list.sort();
                 assert_eq!(
                     file_list[..],
@@ -1745,14 +1783,14 @@ pub(crate) mod tests {
                     };
                     // If the file is present, ensure there are bytes and the first
                     // bytes are the same
-                    assert_eq!(mla_file.filename, fname.clone());
+                    assert_eq!(mla_file.name, fname.clone());
                     let mut buf = Vec::new();
                     mla_file.data.read_to_end(&mut buf).unwrap();
                     assert_ne!(
                         buf.len(),
                         0,
                         "Read 0 bytes from subfile {} {} interleaving and {} bytes removed",
-                        mla_file.filename,
+                        mla_file.name.raw_content_to_escaped_string(),
                         if *interleaved { "with" } else { "without" },
                         remove
                     );
@@ -1768,13 +1806,24 @@ pub(crate) mod tests {
         let buf = Vec::new();
         let config = ArchiveWriterConfig::without_encryption().without_compression();
         let mut mla = ArchiveWriter::from_config(buf, config).unwrap();
-        mla.add_entry("Test", 4, vec![1, 2, 3, 4].as_slice())
-            .unwrap();
+        mla.add_entry(
+            EntryName::from_path("Test").unwrap(),
+            4,
+            vec![1, 2, 3, 4].as_slice(),
+        )
+        .unwrap();
         assert!(
-            mla.add_entry("Test", 4, vec![1, 2, 3, 4].as_slice())
+            mla.add_entry(
+                EntryName::from_path("Test").unwrap(),
+                4,
+                vec![1, 2, 3, 4].as_slice()
+            )
+            .is_err()
+        );
+        assert!(
+            mla.start_entry(EntryName::from_path("Test").unwrap())
                 .is_err()
         );
-        assert!(mla.start_entry("Test").is_err());
     }
 
     #[test]
@@ -1796,7 +1845,7 @@ pub(crate) mod tests {
             let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
 
             for (fname, data) in &files {
-                let mla_file = mla_read.get_entry(fname.to_string()).unwrap().unwrap();
+                let mla_file = mla_read.get_entry(fname.clone()).unwrap().unwrap();
                 assert_eq!(mla_file.size, data.len() as u64);
             }
         }
@@ -1841,7 +1890,7 @@ pub(crate) mod tests {
                 stopping_error,
             } => {
                 // We expect to ends with a HashDiffers on first file
-                assert_eq!(filenames, vec![files[0].0.to_string()]);
+                assert_eq!(filenames, vec![files[0].0.clone()]);
                 match *stopping_error {
                     TruncatedReadError::HashDiffers { .. } => {}
                     _ => {
@@ -1876,9 +1925,9 @@ pub(crate) mod tests {
         }
     }
 
-    fn make_format_regression_files() -> HashMap<String, Vec<u8>> {
+    fn make_format_regression_files() -> HashMap<EntryName, Vec<u8>> {
         // Build files easily scriptables and checkable
-        let mut files: HashMap<String, Vec<u8>> = HashMap::new();
+        let mut files: HashMap<EntryName, Vec<u8>> = HashMap::new();
 
         // One simple file
         let mut simple: Vec<u8> = Vec::new();
@@ -1886,7 +1935,7 @@ pub(crate) mod tests {
             simple.push(i);
         }
         let pattern = simple.clone();
-        files.insert("simple".to_string(), simple);
+        files.insert(EntryName::from_path("simple").unwrap(), simple);
 
         // One big file (10 MB)
         let big: Vec<u8> = pattern
@@ -1895,29 +1944,29 @@ pub(crate) mod tests {
             .take(10 * 1024 * 1024)
             .cloned()
             .collect();
-        files.insert("big".to_string(), big);
+        files.insert(EntryName::from_path("big").unwrap(), big);
 
         // Some constant files
         for i in 0..=255 {
             files.insert(
-                format!("file_{}", i).to_string(),
+                EntryName::from_path(format!("file_{}", i)).unwrap(),
                 std::iter::repeat_n(i, 0x1000).collect::<Vec<u8>>(),
             );
         }
 
         // sha256 sum of them
         let mut sha256sum: Vec<u8> = Vec::new();
-        let mut info: Vec<(&String, &Vec<_>)> = files.iter().collect();
+        let mut info: Vec<(&EntryName, &Vec<_>)> = files.iter().collect();
         info.sort_by(|i1, i2| Ord::cmp(&i1.0, &i2.0));
         for (fname, content) in info.iter() {
             let h = Sha256::digest(content);
             sha256sum.extend_from_slice(hex::encode(h).as_bytes());
             sha256sum.push(0x20);
             sha256sum.push(0x20);
-            sha256sum.extend(fname.as_bytes());
+            sha256sum.extend(fname.as_arbitrary_bytes());
             sha256sum.push(0x0a);
         }
-        files.insert("sha256sum".to_string(), sha256sum);
+        files.insert(EntryName::from_path("sha256sum").unwrap(), sha256sum);
         files
     }
 
@@ -1938,22 +1987,25 @@ pub(crate) mod tests {
 
         let files = make_format_regression_files();
         // First, add a simple file
-        let fname_simple = "simple".to_string();
+        let fname_simple = EntryName::from_path("simple").unwrap();
         mla.add_entry(
-            &fname_simple,
+            fname_simple.clone(),
             files.get(&fname_simple).unwrap().len() as u64,
             files.get(&fname_simple).unwrap().as_slice(),
         )
         .unwrap();
 
         // Second, add interleaved files
-        let fnames: Vec<String> = (0..=255).map(|i| format!("file_{}", i)).collect();
+        let fnames: Vec<EntryName> = (0..=255)
+            .map(|i| format!("file_{}", i))
+            .map(|s| EntryName::from_path(&s).unwrap())
+            .collect();
         let mut name2id: HashMap<_, _> = HashMap::new();
 
         // Start files in normal order
         (0..=255)
             .map(|i| {
-                let id = mla.start_entry(&fnames[i]).unwrap();
+                let id = mla.start_entry(fnames[i].clone()).unwrap();
                 name2id.insert(&fnames[i], id);
             })
             .for_each(drop);
@@ -1988,18 +2040,18 @@ pub(crate) mod tests {
             .for_each(drop);
 
         // Add a big file
-        let fname_big = "big".to_string();
+        let fname_big = EntryName::from_path("big").unwrap();
         mla.add_entry(
-            &fname_big,
+            fname_big.clone(),
             files.get(&fname_big).unwrap().len() as u64,
             files.get(&fname_big).unwrap().as_slice(),
         )
         .unwrap();
 
         // Add sha256sum file
-        let fname_sha256sum = "sha256sum".to_string();
+        let fname_sha256sum = EntryName::from_path("sha256sum").unwrap();
         mla.add_entry(
-            &fname_sha256sum,
+            fname_sha256sum.clone(),
             files.get(&fname_sha256sum).unwrap().len() as u64,
             files.get(&fname_sha256sum).unwrap().as_slice(),
         )
@@ -2071,8 +2123,8 @@ pub(crate) mod tests {
         for (fname, content) in files.iter() {
             let mut mla_file = mla_read.get_entry(fname.clone()).unwrap().unwrap();
             let mut mla_rep_file = mla_repread.get_entry(fname.clone()).unwrap().unwrap();
-            assert_eq!(mla_file.filename, fname.clone());
-            assert_eq!(mla_rep_file.filename, fname.clone());
+            assert_eq!(mla_file.name, fname.clone());
+            assert_eq!(mla_rep_file.name, fname.clone());
             let mut buf = Vec::new();
             mla_file.data.read_to_end(&mut buf).unwrap();
             assert_eq!(buf.as_slice(), content.as_slice());
@@ -2089,10 +2141,10 @@ pub(crate) mod tests {
         let config = ArchiveWriterConfig::without_encryption().without_compression();
         let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
 
-        let fname = "my_file".to_string();
+        let fname = EntryName::from_path("my_file").unwrap();
         let fake_file = vec![1, 2, 3, 4, 5, 6, 7, 8];
 
-        let id = mla.start_entry(&fname).expect("start_file");
+        let id = mla.start_entry(fname.clone()).expect("start_file");
         mla.append_entry_content(id, 4, &fake_file[..4])
             .expect("add content");
         mla.append_entry_content(id, 0, &fake_file[..1])
@@ -2135,7 +2187,9 @@ pub(crate) mod tests {
         let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
 
         // At least one file will be bigger than 32bits
-        let id1 = mla.start_entry("file_0").unwrap();
+        let id1 = mla
+            .start_entry(EntryName::from_path("file_0").unwrap())
+            .unwrap();
         let mut cur_size = 0;
         while cur_size < MORE_THAN_U32 {
             let size = std::cmp::min(rng.next_u32() as u64, MORE_THAN_U32 - cur_size);
@@ -2154,7 +2208,7 @@ pub(crate) mod tests {
         // Complete up to MAX_SIZE
         while cur_size < MAX_SIZE {
             let id = mla
-                .start_entry(format!("file_{:}", nb_file).as_str())
+                .start_entry(EntryName::from_path(format!("file_{:}", nb_file)).unwrap())
                 .unwrap();
             let size = std::cmp::min(rng.next_u32() as u64, MAX_SIZE - cur_size);
             let data: Vec<u8> = Standard
@@ -2174,12 +2228,14 @@ pub(crate) mod tests {
         let config = ArchiveReaderConfig::with_private_keys(&[private_key]);
         let mut mla_read = ArchiveReader::from_config(buf, config).expect("archive reader");
 
-        let file_names: Vec<String> = (0..nb_file).map(|nb| format!("file_{:}", nb)).collect();
+        let file_names: Vec<EntryName> = (0..nb_file)
+            .map(|nb| EntryName::from_path(format!("file_{:}", nb)).unwrap())
+            .collect();
         let mut file_list = mla_read
             .list_entries()
             .unwrap()
             .cloned()
-            .collect::<Vec<String>>();
+            .collect::<Vec<_>>();
         file_list.sort();
         assert_eq!(file_list, file_names);
 
