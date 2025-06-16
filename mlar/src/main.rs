@@ -7,8 +7,9 @@ use mla::crypto::mlakey::{
     HybridPrivateKey, HybridPublicKey, derive_keypair_from_path, generate_keypair,
     generate_keypair_from_seed, parse_mlakey_privkey_pem, parse_mlakey_pubkey_pem,
 };
+use mla::entry::{ENTRY_NAME_RAW_CONTENT_ALLOWED_BYTES, EntryName, EntryNameError};
 use mla::errors::{Error, TruncatedReadError};
-use mla::helpers::linear_extract;
+use mla::helpers::{linear_extract, mla_percent_escape, mla_percent_unescape};
 use mla::{ArchiveReader, ArchiveWriter, TruncatedArchiveReader, entry::ArchiveEntry};
 use sha2::{Digest, Sha512};
 use std::collections::{HashMap, HashSet};
@@ -18,7 +19,7 @@ use std::fs::{self, File, read_dir};
 use std::io::{self, BufRead};
 use std::io::{Read, Write};
 use std::num::NonZeroUsize;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tar::{Builder, Header};
 
@@ -32,12 +33,22 @@ enum MlarError {
     IO(io::Error),
     /// Configuration error
     Config(mla::errors::ConfigError),
+    InvalidEntryNameToPath,
+    InvalidGlobPattern,
 }
 
 impl fmt::Display for MlarError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // For now, use the debug derived version
-        write!(f, "{self:?}")
+        match self {
+            MlarError::InvalidEntryNameToPath => write!(
+                f,
+                "An MLA entry name cannot be interpreted as a valid MLA path encoding, try listing with --raw-escaped-names to debug"
+            ),
+            _ => {
+                // For now, use the debug derived version
+                write!(f, "{self:?}")
+            }
+        }
     }
 }
 
@@ -65,11 +76,24 @@ impl error::Error for MlarError {
             MlarError::IO(err) => Some(err),
             MlarError::Mla(err) => Some(err),
             MlarError::Config(err) => Some(err),
+            MlarError::InvalidEntryNameToPath => None,
+            MlarError::InvalidGlobPattern => None,
         }
     }
 }
 
 // ----- Utils ------
+
+const PATH_ESCAPED_STRING_ALLOWED_BYTES: [u8; 65] =
+    *b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789./\\";
+
+fn escaped_path_to_string(path: &Path) -> String {
+    String::from_utf8(mla_percent_escape(
+        path.display().to_string().as_bytes(),
+        PATH_ESCAPED_STRING_ALLOWED_BYTES.as_slice(),
+    ))
+    .unwrap()
+}
 
 /// Allow for different kind of output. As ArchiveWriter is parametrized over
 /// a Writable type, `ArchiveWriter<File>` and `ArchiveWriter<io::stdout>`
@@ -273,149 +297,114 @@ fn open_failsafe_mla_file<'a>(
 
 fn add_file_to_tar<R: Read, W: Write>(
     tar_file: &mut Builder<W>,
-    sub_file: ArchiveEntry<R>,
-) -> io::Result<()> {
+    entry: ArchiveEntry<R>,
+) -> Result<(), MlarError> {
     // Use indexes to avoid in-memory copy
     let mut header = Header::new_gnu();
-    header.set_size(sub_file.size);
+    header.set_size(entry.size);
     header.set_mode(0o444); // Create files as read-only
     header.set_cksum();
 
-    // Force relative path, the trivial way (does not support Windows paths)
-    let filename = {
-        if Path::new(&sub_file.filename).is_absolute() {
-            format!("./{}", sub_file.filename)
-        } else {
-            sub_file.filename
-        }
-    };
+    let in_tar_path = entry
+        .name
+        .to_pathbuf()
+        .map_err(|_| MlarError::InvalidEntryNameToPath)?;
 
-    tar_file.append_data(&mut header, &filename, sub_file.data)
+    tar_file
+        .append_data(&mut header, in_tar_path, entry.data)
+        .map_err(MlarError::IO)
 }
 
 /// Arguments for action 'extract' to match file names in the archive
 enum ExtractFileNameMatcher {
     /// Match a list of files, where the order does not matter
-    Files(HashSet<String>),
+    Files(HashSet<PathBuf>),
     /// Match a list of glob patterns
     GlobPatterns(Vec<Pattern>),
     /// No matching argument has been provided, so match all files
     Anything,
 }
 impl ExtractFileNameMatcher {
-    fn from_matches(matches: &ArgMatches) -> Self {
-        let files = match matches.get_many::<String>("files") {
+    fn from_matches(matches: &ArgMatches) -> Result<Self, MlarError> {
+        let files_paths = match matches.get_many::<PathBuf>("files") {
             Some(values) => values,
-            None => return ExtractFileNameMatcher::Anything,
+            None => return Ok(ExtractFileNameMatcher::Anything),
         };
         if matches.get_flag("glob") {
             // Use glob patterns
-            ExtractFileNameMatcher::GlobPatterns(
-                files
-                    .map(|pat| {
-                        Pattern::new(pat)
-                            .map_err(|err| {
-                                eprintln!("[!] Invalid glob pattern {pat:?} ({err:?})");
-                            })
-                            .expect("Invalid glob pattern")
+            Ok(ExtractFileNameMatcher::GlobPatterns(
+                files_paths
+                    .map(|path| {
+                        let pattern = path.to_str().ok_or(MlarError::InvalidGlobPattern)?;
+                        Pattern::new(pattern).map_err(|_| MlarError::InvalidGlobPattern)
                     })
-                    .collect(),
-            )
+                    .collect::<Result<Vec<Pattern>, MlarError>>()?,
+            ))
         } else {
             // Use file names
-            ExtractFileNameMatcher::Files(files.map(|s| s.to_string()).collect())
+            Ok(ExtractFileNameMatcher::Files(
+                files_paths.cloned().collect(),
+            ))
         }
     }
-    fn match_file_name(&self, file_name: &str) -> bool {
+
+    fn match_file_name(&self, file_name: &Path) -> bool {
         match self {
             ExtractFileNameMatcher::Files(files) => files.is_empty() || files.contains(file_name),
             ExtractFileNameMatcher::GlobPatterns(patterns) => {
-                patterns.is_empty() || patterns.iter().any(|pat| pat.matches(file_name))
+                patterns.is_empty() || patterns.iter().any(|pat| pat.matches_path(file_name))
             }
             ExtractFileNameMatcher::Anything => true,
         }
     }
 }
 
-/// Compute the full path of the final file, using defensive measures
-/// similar as what tar-rs does for `Entry::unpack_in`:
-/// <https://github.com/alexcrichton/tar-rs/blob/0.4.26/src/entry.rs#L344>
-fn get_extracted_path(output_dir: &Path, file_name: &str) -> Option<PathBuf> {
-    let mut file_dst = output_dir.to_path_buf();
-    for part in Path::new(&file_name).components() {
-        match part {
-            // Leading '/' characters, root paths, and '.'
-            // components are just ignored and treated as "empty
-            // components"
-            Component::Prefix(..) | Component::RootDir | Component::CurDir => continue,
-
-            // If any part of the filename is '..', then skip over
-            // unpacking the file to prevent directory traversal
-            // security issues.  See, e.g.: CVE-2001-1267,
-            // CVE-2002-0399, CVE-2005-1918, CVE-2007-4131
-            Component::ParentDir => {
-                eprintln!("[!] Skipping file \"{file_name}\" because it contains \"..\"");
-                return None;
-            }
-
-            Component::Normal(part) => file_dst.push(part),
-        }
-    }
-    Some(file_dst)
-}
-
 /// Create a file and associate parent directories in a given output directory
 fn create_file<P1: AsRef<Path>>(
     output_dir: P1,
-    fname: &str,
+    entry_name: &EntryName,
 ) -> Result<Option<(File, PathBuf)>, MlarError> {
-    let extracted_path = match get_extracted_path(output_dir.as_ref(), fname) {
-        Some(p) => p,
-        None => return Ok(None),
-    };
+    let output_dir_path = output_dir.as_ref();
+    let entry_name_pathbuf = entry_name
+        .to_pathbuf()
+        .map_err(|_| MlarError::InvalidEntryNameToPath)?;
+    let extracted_path = output_dir_path.join(&entry_name_pathbuf);
     // Create all directories leading to the file
-    let containing_directory = match extracted_path.parent() {
-        Some(p) => p,
-        None => {
-            eprintln!(
-                "[!] Skipping file \"{}\" because it does not have a parent (from {})",
-                &fname,
-                extracted_path.display()
-            );
-            return Ok(None);
+    if let Some(containing_directory) = extracted_path.parent() {
+        if !containing_directory.exists() {
+            fs::create_dir_all(containing_directory).map_err(|err| {
+                eprintln!(
+                    " [!] Error while creating output directory path for \"{}\" ({:?})",
+                    escaped_path_to_string(output_dir_path),
+                    err
+                );
+                err
+            })?;
         }
-    };
-    if !containing_directory.exists() {
-        fs::create_dir_all(containing_directory).map_err(|err| {
+        // Try to verify that the containing directory is in the output dir, but output dir may have been hijacked since the beginning
+        let containing_directory = fs::canonicalize(containing_directory).map_err(|err| {
             eprintln!(
-                " [!] Error while creating output directory path for \"{}\" ({:?})",
-                output_dir.as_ref().display(),
+                " [!] Error while canonicalizing extracted file output directory path \"{}\" ({:?})",
+                escaped_path_to_string(containing_directory),
                 err
             );
             err
         })?;
-    }
-
-    // Ensure that the containing directory is in the output dir
-    let containing_directory = fs::canonicalize(containing_directory).map_err(|err| {
-        eprintln!(
-            " [!] Error while canonicalizing extracted file output directory path \"{}\" ({:?})",
-            containing_directory.display(),
-            err
-        );
-        err
-    })?;
-    if !containing_directory.starts_with(output_dir) {
-        eprintln!(
-            " [!] Skipping file \"{}\" because it would be extracted outside of the output directory, in {}",
-            fname,
-            containing_directory.display()
-        );
-        return Ok(None);
+        if !containing_directory.starts_with(output_dir) {
+            eprintln!(
+                " [!] Skipping file \"{}\" because it would be extracted outside of the output directory, in {}",
+                escaped_path_to_string(&entry_name_pathbuf),
+                escaped_path_to_string(&containing_directory)
+            );
+            return Ok(None);
+        }
     }
     Ok(Some((
         File::create(&extracted_path).map_err(|err| {
-            eprintln!(" [!] Unable to create \"{fname}\" ({err:?})");
+            eprintln!(
+                " [!] Unable to create \"{}\" ({err:?})",
+                escaped_path_to_string(&entry_name_pathbuf)
+            );
             err
         })?,
         extracted_path,
@@ -436,8 +425,8 @@ struct FileWriter<'a> {
     cache: &'a Mutex<LruCache<PathBuf, File>>,
     /// Is verbose mode enabled
     verbose: bool,
-    /// Filename in the archive
-    fname: &'a str,
+    /// entry_name
+    entry_name: EntryName,
 }
 
 /// Max number of fd simultaneously opened
@@ -451,7 +440,12 @@ impl Write for FileWriter<'_> {
             let file = fs::OpenOptions::new().append(true).open(&self.path)?;
             cache.put(self.path.clone(), file);
             if self.verbose {
-                println!("{}", self.fname);
+                println!(
+                    "{}",
+                    self.entry_name
+                        .to_pathbuf_escaped_string()
+                        .map_err(|_| io::Error::other(MlarError::InvalidEntryNameToPath))?
+                );
             }
         }
         // Safe to `unwrap` here cause we ensure the element is in the cache (mono-threaded)
@@ -471,14 +465,15 @@ fn add_file_or_dir(mla: &mut ArchiveWriter<OutputTypes>, path: &Path) -> Result<
     if path.is_dir() {
         add_dir(mla, path)?;
     } else {
-        // This can lead to some non-obvious DuplicateFilename error (files
-        // that appear with different file names in the filesystem
-        // but mlar raising DuplicateFilename)
-        let filename = path.to_string_lossy();
+        let name = EntryName::from_path(path).map_err(|_| MlarError::InvalidEntryNameToPath)?;
         let file = File::open(path)?;
         let length = file.metadata()?.len();
-        eprintln!("{filename}");
-        mla.add_entry(&filename, length, file)?;
+        eprintln!(
+            "{}",
+            name.to_pathbuf_escaped_string()
+                .map_err(|_| MlarError::InvalidEntryNameToPath)?
+        );
+        mla.add_entry(name, length, file)?;
     }
     Ok(())
 }
@@ -523,20 +518,27 @@ fn create(matches: &ArgMatches) -> Result<(), MlarError> {
 fn list(matches: &ArgMatches) -> Result<(), MlarError> {
     let mut mla = open_mla_file(matches)?;
 
-    let mut iter: Vec<String> = mla.list_entries()?.cloned().collect();
+    let mut iter: Vec<EntryName> = mla.list_entries()?.cloned().collect();
     iter.sort();
     for fname in iter {
+        let name_to_display = if matches.get_flag("raw-escaped-names") {
+            fname.raw_content_to_escaped_string()
+        } else {
+            fname
+                .to_pathbuf_escaped_string()
+                .map_err(|_| MlarError::InvalidEntryNameToPath)?
+        };
         if matches.get_count("verbose") == 0 {
-            println!("{fname}");
+            println!("{}", name_to_display);
         } else {
             let mla_file = mla.get_entry(fname)?.expect("Unable to get the file");
-            let filename = mla_file.filename;
+            let filename = mla_file.name;
             let size = mla_file.size.format_size(DECIMAL);
             if matches.get_count("verbose") == 1 {
-                println!("{filename} - {size}");
+                println!("{name_to_display} - {size}");
             } else if matches.get_count("verbose") >= 2 {
                 let hash = mla.get_hash(&filename)?.expect("Unable to get the hash");
-                println!("{} - {} ({})", filename, size, hex::encode(hash),);
+                println!("{} - {} ({})", name_to_display, size, hex::encode(hash),);
             }
         }
     }
@@ -544,7 +546,7 @@ fn list(matches: &ArgMatches) -> Result<(), MlarError> {
 }
 
 fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
-    let file_name_matcher = ExtractFileNameMatcher::from_matches(matches);
+    let file_name_matcher = ExtractFileNameMatcher::from_matches(matches)?;
     let output_dir = Path::new(matches.get_one::<PathBuf>("outputdir").unwrap());
     let verbose = matches.get_flag("verbose");
 
@@ -555,7 +557,7 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
         fs::create_dir(output_dir).map_err(|err| {
             eprintln!(
                 " [!] Error while creating output directory \"{}\" ({:?})",
-                output_dir.display(),
+                escaped_path_to_string(output_dir),
                 err
             );
             err
@@ -564,14 +566,14 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
     let output_dir = fs::canonicalize(output_dir).map_err(|err| {
         eprintln!(
             " [!] Error while canonicalizing output directory path \"{}\" ({:?})",
-            output_dir.display(),
+            escaped_path_to_string(output_dir),
             err
         );
         err
     })?;
 
-    let mut iter: Vec<String> = mla.list_entries()?.cloned().collect();
-    iter.sort();
+    let mut entries_names: Vec<EntryName> = mla.list_entries()?.cloned().collect();
+    entries_names.sort();
 
     if let ExtractFileNameMatcher::Anything = file_name_matcher {
         // Optimisation: use linear extraction
@@ -581,17 +583,17 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
         let cache = Mutex::new(LruCache::new(
             NonZeroUsize::new(FILE_WRITER_POOL_SIZE).unwrap(),
         ));
-        let mut export: HashMap<&String, FileWriter> = HashMap::new();
-        for fname in &iter {
-            match create_file(&output_dir, fname)? {
+        let mut export: HashMap<&EntryName, FileWriter> = HashMap::new();
+        for entry_name in &entries_names {
+            match create_file(&output_dir, entry_name)? {
                 Some((_file, path)) => {
                     export.insert(
-                        fname,
+                        entry_name,
                         FileWriter {
                             path,
                             cache: &cache,
                             verbose,
-                            fname,
+                            entry_name: entry_name.clone(),
                         },
                     );
                 }
@@ -601,99 +603,166 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
         return Ok(linear_extract(&mut mla, &mut export)?);
     }
 
-    for fname in iter {
+    for entry_name in entries_names {
         // Filter files according to glob patterns or files given as parameters
-        if !file_name_matcher.match_file_name(&fname) {
+        if !file_name_matcher.match_file_name(
+            &entry_name
+                .to_pathbuf()
+                .map_err(|_| MlarError::InvalidEntryNameToPath)?,
+        ) {
             continue;
         }
 
         // Look for the file in the archive
-        let mut sub_file = match mla.get_entry(fname.clone()) {
+        let mut sub_file = match mla.get_entry(entry_name.clone()) {
             Err(err) => {
-                eprintln!(" [!] Error while looking up subfile \"{fname}\" ({err:?})");
+                eprintln!(
+                    " [!] Error while looking up subfile \"{}\" ({err:?})",
+                    entry_name
+                        .to_pathbuf_escaped_string()
+                        .map_err(|_| MlarError::InvalidEntryNameToPath)?
+                );
                 continue;
             }
             Ok(None) => {
-                eprintln!(" [!] Subfile \"{fname}\" indexed in metadata could not be found");
+                eprintln!(
+                    " [!] Subfile \"{}\" indexed in metadata could not be found",
+                    entry_name
+                        .to_pathbuf_escaped_string()
+                        .map_err(|_| MlarError::InvalidEntryNameToPath)?
+                );
                 continue;
             }
             Ok(Some(subfile)) => subfile,
         };
-        let (mut extracted_file, _path) = match create_file(&output_dir, &fname)? {
+        let (mut extracted_file, _path) = match create_file(&output_dir, &entry_name)? {
             Some(file) => file,
             None => continue,
         };
 
         if verbose {
-            println!("{fname}");
+            println!(
+                "{}",
+                entry_name
+                    .to_pathbuf_escaped_string()
+                    .map_err(|_| MlarError::InvalidEntryNameToPath)?
+            );
         }
-        io::copy(&mut sub_file.data, &mut extracted_file).map_err(|err| {
-            eprintln!(" [!] Unable to extract \"{fname}\" ({err:?})");
-            err
-        })?;
+        if let Err(err) = io::copy(&mut sub_file.data, &mut extracted_file) {
+            eprintln!(
+                " [!] Unable to extract \"{}\" ({err:?})",
+                entry_name
+                    .to_pathbuf_escaped_string()
+                    .map_err(|_| MlarError::InvalidEntryNameToPath)?
+            );
+        }
     }
     Ok(())
 }
 
 fn cat(matches: &ArgMatches) -> Result<(), MlarError> {
-    let files_values = matches.get_many::<String>("files").unwrap();
     let output = matches.get_one::<PathBuf>("output").unwrap();
     let mut destination = destination_from_output_argument(output)?;
 
     let mut mla = open_mla_file(matches)?;
     if matches.get_flag("glob") {
+        let files_values = matches.get_many::<PathBuf>("files").unwrap();
         // For each glob patterns, enumerate matching files and display them
-        let mut archive_files: Vec<String> = mla.list_entries()?.cloned().collect();
-        archive_files.sort();
+        let mut archive_entries_names: Vec<EntryName> = mla.list_entries()?.cloned().collect();
+        archive_entries_names.sort();
         for arg_pattern in files_values {
-            let pat = match Pattern::new(arg_pattern) {
-                Ok(pat) => pat,
-                Err(err) => {
-                    eprintln!(" [!] Invalid glob pattern {arg_pattern:?} ({err:?})");
+            let arg_pattern_str = arg_pattern.to_str().ok_or(MlarError::InvalidGlobPattern)?;
+            let pat = Pattern::new(arg_pattern_str).map_err(|_| MlarError::InvalidGlobPattern)?;
+            for archive_entry_name in &archive_entries_names {
+                if !pat.matches_path(
+                    &archive_entry_name
+                        .to_pathbuf()
+                        .map_err(|_| MlarError::InvalidEntryNameToPath)?,
+                ) {
                     continue;
                 }
-            };
-            for fname in archive_files.iter() {
-                if !pat.matches(fname) {
-                    continue;
-                }
-                match mla.get_entry(fname.to_string()) {
+                let displayable_entry_name = archive_entry_name
+                    .to_pathbuf_escaped_string()
+                    .map_err(|_| MlarError::InvalidEntryNameToPath)?;
+                match mla.get_entry(archive_entry_name.clone()) {
                     Err(err) => {
-                        eprintln!(" [!] Error while looking up file \"{fname}\" ({err:?})");
+                        eprintln!(
+                            " [!] Error while looking up file \"{}\" ({err:?})",
+                            displayable_entry_name
+                        );
                         continue;
                     }
                     Ok(None) => {
                         eprintln!(
-                            " [!] Subfile \"{fname}\" indexed in metadata could not be found"
+                            " [!] Subfile \"{}\" indexed in metadata could not be found",
+                            displayable_entry_name
                         );
                         continue;
                     }
                     Ok(Some(mut subfile)) => {
-                        io::copy(&mut subfile.data, &mut destination).map_err(|err| {
-                            eprintln!(" [!] Unable to extract \"{fname}\" ({err:?})");
-                            err
-                        })?;
+                        if let Err(err) = io::copy(&mut subfile.data, &mut destination) {
+                            eprintln!(
+                                " [!] Unable to extract \"{}\" ({err:?})",
+                                displayable_entry_name
+                            );
+                        }
                     }
                 }
             }
         }
     } else {
+        let files_values = if matches.get_flag("raw-escaped-names") {
+            matches
+                .get_many::<String>("files")
+                .unwrap()
+                .map(|name| {
+                    let bytes = mla_percent_unescape(
+                        name.as_bytes(),
+                        ENTRY_NAME_RAW_CONTENT_ALLOWED_BYTES.as_slice(),
+                    )
+                    .ok_or(EntryNameError::InvalidPathComponentContent)?;
+                    EntryName::from_arbitrary_bytes(&bytes)
+                })
+                .collect::<Result<Vec<EntryName>, EntryNameError>>()
+                .map_err(|_| MlarError::InvalidEntryNameToPath)?
+        } else {
+            matches
+                .get_many::<PathBuf>("files")
+                .unwrap()
+                .map(EntryName::from_path)
+                .collect::<Result<Vec<EntryName>, EntryNameError>>()
+                .map_err(|_| MlarError::InvalidEntryNameToPath)?
+        };
         // Retrieve all the files that are specified
         for fname in files_values {
-            match mla.get_entry(fname.to_string()) {
+            match mla.get_entry(fname.clone()) {
                 Err(err) => {
-                    eprintln!(" [!] Error while looking up file \"{fname}\" ({err:?})");
+                    eprintln!(
+                        " [!] Error while looking up file \"{}\" ({err:?})",
+                        fname
+                            .to_pathbuf_escaped_string()
+                            .map_err(|_| MlarError::InvalidEntryNameToPath)?
+                    );
                     continue;
                 }
                 Ok(None) => {
-                    eprintln!(" [!] File not found: \"{fname}\"");
+                    eprintln!(
+                        " [!] File not found: \"{}\"",
+                        fname
+                            .to_pathbuf_escaped_string()
+                            .map_err(|_| MlarError::InvalidEntryNameToPath)?
+                    );
                     continue;
                 }
                 Ok(Some(mut subfile)) => {
-                    io::copy(&mut subfile.data, &mut destination).map_err(|err| {
-                        eprintln!(" [!] Unable to extract \"{fname}\" ({err:?})");
-                        err
-                    })?;
+                    if let Err(err) = io::copy(&mut subfile.data, &mut destination) {
+                        eprintln!(
+                            " [!] Unable to extract \"{}\" ({err:?})",
+                            fname
+                                .to_pathbuf_escaped_string()
+                                .map_err(|_| MlarError::InvalidEntryNameToPath)?
+                        );
+                    }
                 }
             }
         }
@@ -709,22 +778,37 @@ fn to_tar(matches: &ArgMatches) -> Result<(), MlarError> {
     let destination = destination_from_output_argument(output)?;
     let mut tar_file = Builder::new(destination);
 
-    let mut archive_files: Vec<String> = mla.list_entries()?.cloned().collect();
+    let mut archive_files: Vec<EntryName> = mla.list_entries()?.cloned().collect();
     archive_files.sort();
     for fname in archive_files {
         let sub_file = match mla.get_entry(fname.clone()) {
             Err(err) => {
-                eprintln!(" [!] Error while looking up subfile \"{fname}\" ({err:?})");
+                eprintln!(
+                    " [!] Error while looking up subfile \"{}\" ({err:?})",
+                    &fname
+                        .to_pathbuf_escaped_string()
+                        .map_err(|_| MlarError::InvalidEntryNameToPath)?
+                );
                 continue;
             }
             Ok(None) => {
-                eprintln!(" [!] Subfile \"{fname}\" indexed in metadata could not be found");
+                eprintln!(
+                    " [!] Subfile \"{}\" indexed in metadata could not be found",
+                    &fname
+                        .to_pathbuf_escaped_string()
+                        .map_err(|_| MlarError::InvalidEntryNameToPath)?
+                );
                 continue;
             }
             Ok(Some(subfile)) => subfile,
         };
         if let Err(err) = add_file_to_tar(&mut tar_file, sub_file) {
-            eprintln!(" [!] Unable to add subfile \"{fname}\" to tarball ({err:?})");
+            eprintln!(
+                " [!] Unable to add subfile \"{}\" to tarball ({err:?})",
+                &fname
+                    .to_pathbuf_escaped_string()
+                    .map_err(|_| MlarError::InvalidEntryNameToPath)?
+            );
         }
     }
     Ok(())
@@ -750,7 +834,7 @@ fn repair(matches: &ArgMatches) -> Result<(), MlarError> {
 
 fn convert(matches: &ArgMatches) -> Result<(), MlarError> {
     let mut mla = open_mla_file(matches)?;
-    let mut fnames: Vec<String> = if let Ok(iter) = mla.list_entries() {
+    let mut fnames: Vec<EntryName> = if let Ok(iter) = mla.list_entries() {
         // Read the file list using metadata
         iter.cloned().collect()
     } else {
@@ -762,19 +846,22 @@ fn convert(matches: &ArgMatches) -> Result<(), MlarError> {
 
     // Convert
     for fname in fnames {
-        eprintln!("{fname}");
+        eprintln!("{}", fname.raw_content_to_escaped_string());
         let sub_file = match mla.get_entry(fname.clone()) {
             Err(err) => {
-                eprintln!("Error while adding {fname} ({err:?})");
+                eprintln!(
+                    "Error while adding {} ({err:?})",
+                    fname.raw_content_to_escaped_string()
+                );
                 continue;
             }
             Ok(None) => {
-                eprintln!("Unable to find {fname}");
+                eprintln!("Unable to find {}", fname.raw_content_to_escaped_string());
                 continue;
             }
             Ok(Some(mla)) => mla,
         };
-        mla_out.add_entry(&sub_file.filename, sub_file.size, sub_file.data)?;
+        mla_out.add_entry(sub_file.name, sub_file.size, sub_file.data)?;
     }
     mla_out.finalize().expect("Finalization error");
 
@@ -948,6 +1035,12 @@ fn app() -> clap::Command {
                 .about("List files inside a MLA Archive")
                 .args(&input_args)
                 .arg(
+                    Arg::new("raw-escaped-names")
+                        .long("raw-escaped-names")
+                        .action(ArgAction::SetTrue)
+                        .help("Do not try to reinterpret entry names as paths and encode everything not alphanumeric or dot"),
+                )
+                .arg(
                     Arg::new("verbose")
                         .short('v')
                         .action(ArgAction::Count)
@@ -974,7 +1067,7 @@ fn app() -> clap::Command {
                         .action(ArgAction::SetTrue)
                         .help("Treat specified files as glob patterns"),
                 )
-                .arg(Arg::new("files").help("List of extracted files (all if none given)"))
+                .arg(Arg::new("files").value_parser(value_parser!(PathBuf)).help("List of extracted files (all if none given)"))
                 .arg(
                     Arg::new("verbose")
                         .long("verbose")
@@ -1004,9 +1097,16 @@ fn app() -> clap::Command {
                         .help("Treat given files as glob patterns"),
                 )
                 .arg(
+                    Arg::new("raw-escaped-names")
+                        .long("raw-escaped-names")
+                        .action(ArgAction::SetTrue)
+                        .help("With this option, entries names given as positional arguments should be specified as displayed by mlar list with this same option"),
+                )
+                .arg(
                     Arg::new("files")
                         .required(true)
-                        .help("List of displayed files"),
+                        .value_parser(value_parser!(PathBuf))
+                        .help("List of displayed entries"),
                 ),
         )
         .subcommand(
