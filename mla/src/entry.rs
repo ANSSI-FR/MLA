@@ -428,7 +428,7 @@ mod tests {
 
     use crate::{
         Sha256Hash,
-        entry::{ArchiveEntryDataReader, ArchiveEntryDataReaderState},
+        entry::{ArchiveEntryDataReader, ArchiveEntryDataReaderState, EntryName},
         format::ArchiveFileBlock,
     };
 
@@ -441,7 +441,7 @@ mod tests {
 
         let mut block = ArchiveFileBlock::FileStart::<&[u8]> {
             id,
-            filename: String::from("foobar"),
+            name: EntryName::from_arbitrary_bytes(b"foobar").unwrap(),
         };
         block.dump(&mut buf).unwrap();
         let fake_content = vec![1, 2, 3, 4];

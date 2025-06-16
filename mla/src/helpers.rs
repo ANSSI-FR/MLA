@@ -203,12 +203,12 @@ mod tests {
         let mut mla_read = ArchiveReader::from_config(dest, config).unwrap();
 
         // Prepare writers
-        let file_list: Vec<String> = mla_read
+        let file_list: Vec<EntryName> = mla_read
             .list_entries()
             .expect("reader.list_files")
             .cloned()
             .collect();
-        let mut export: HashMap<&String, Vec<u8>> =
+        let mut export: HashMap<&EntryName, Vec<u8>> =
             file_list.iter().map(|fname| (fname, Vec::new())).collect();
         linear_extract(&mut mla_read, &mut export).expect("Extract error");
 
@@ -229,7 +229,7 @@ mod tests {
         let mut mla_read = ArchiveReader::from_config(dest, config).unwrap();
 
         // Prepare writers
-        let mut export: HashMap<&String, Vec<u8>> = HashMap::new();
+        let mut export: HashMap<&EntryName, Vec<u8>> = HashMap::new();
         export.insert(&files[0].0, Vec::new());
         linear_extract(&mut mla_read, &mut export).expect("Extract error");
 
@@ -256,10 +256,10 @@ mod tests {
         let config = ArchiveWriterConfig::with_public_keys(&[public_key]);
         let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
 
-        let fname = "my_file".to_string();
+        let fname = EntryName::from_arbitrary_bytes(b"my_file").unwrap();
         let data: Vec<u8> = Standard.sample_iter(&mut rng).take(file_length).collect();
         assert_eq!(data.len(), file_length);
-        mla.add_entry(&fname, data.len() as u64, data.as_slice())
+        mla.add_entry(fname.clone(), data.len() as u64, data.as_slice())
             .unwrap();
 
         let dest = mla.finalize().unwrap();
@@ -272,7 +272,7 @@ mod tests {
         let mut mla_read = ArchiveReader::from_config(dest, config).unwrap();
 
         // Prepare writers
-        let mut export: HashMap<&String, Vec<u8>> = HashMap::new();
+        let mut export: HashMap<&EntryName, Vec<u8>> = HashMap::new();
         export.insert(&fname, Vec::new());
         linear_extract(&mut mla_read, &mut export).expect("Extract error");
 
@@ -289,14 +289,18 @@ mod tests {
         let fake_file = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
         // Using write API
-        let id = mla.start_entry("my_file").unwrap();
+        let id = mla
+            .start_entry(EntryName::from_arbitrary_bytes(b"my_file").unwrap())
+            .unwrap();
         let mut sw = StreamWriter::new(&mut mla, id);
         sw.write_all(&fake_file[..5]).unwrap();
         sw.write_all(&fake_file[5..]).unwrap();
         mla.end_entry(id).unwrap();
 
         // Using io::copy
-        let id = mla.start_entry("my_file2").unwrap();
+        let id = mla
+            .start_entry(EntryName::from_arbitrary_bytes(b"my_file2").unwrap())
+            .unwrap();
         let mut sw = StreamWriter::new(&mut mla, id);
         assert_eq!(
             io::copy(&mut fake_file.as_slice(), &mut sw).unwrap(),
@@ -312,7 +316,7 @@ mod tests {
             ArchiveReader::from_config(buf, ArchiveReaderConfig::without_encryption()).unwrap();
         let mut content1 = Vec::new();
         mla_read
-            .get_entry("my_file".to_string())
+            .get_entry(EntryName::from_arbitrary_bytes(b"my_file").unwrap())
             .unwrap()
             .unwrap()
             .data
@@ -321,7 +325,7 @@ mod tests {
         assert_eq!(content1.as_slice(), fake_file.as_slice());
         let mut content2 = Vec::new();
         mla_read
-            .get_entry("my_file2".to_string())
+            .get_entry(EntryName::from_arbitrary_bytes(b"my_file2").unwrap())
             .unwrap()
             .unwrap()
             .data
