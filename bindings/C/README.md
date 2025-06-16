@@ -87,7 +87,7 @@ status = mla_archive_new(&hConfig, &callback_write, &callback_flush, f, &hArchiv
 // Start a new file in the archive
 // hFile will be used to identify this file inside the archive
 MLAArchiveFileHandle hFile = NULL;
-status = mla_archive_file_new(hArchive, "test.txt", &hFile);
+status = mla_archive_start_entry_with_path_as_name(hArchive, "test.txt", &hFile);
 
 // Append some content
 status = mla_archive_file_append(hArchive, hFile, (const uint8_t*)"Hello, World!\n", (uint32_t)strlen("Hello, World!\n"));

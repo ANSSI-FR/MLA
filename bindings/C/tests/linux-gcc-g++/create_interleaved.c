@@ -61,7 +61,7 @@ int main()
    }
 
    MLAArchiveFileHandle hFile1 = NULL;
-   status = mla_archive_file_new(hArchive, "test1.txt", &hFile1);
+   status = mla_archive_start_entry_with_path_as_name(hArchive, "test1.txt", &hFile1);
    if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
    {
       fprintf(stderr, " [!] File creation failed with code %" PRIX64 "\n", (uint64_t)status);
@@ -69,7 +69,7 @@ int main()
    }
    
    MLAArchiveFileHandle hFile2 = NULL;
-   status = mla_archive_file_new(hArchive, "test2.txt", &hFile2);
+   status = mla_archive_start_entry_with_path_as_name(hArchive, "test2.txt", &hFile2);
    if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
    {
       fprintf(stderr, " [!] File creation failed with code %" PRIX64 "\n", (uint64_t)status);
