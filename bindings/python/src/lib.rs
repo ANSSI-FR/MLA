@@ -1,6 +1,8 @@
 use std::{
     collections::HashMap,
+    hash::{DefaultHasher, Hash, Hasher},
     io::{self, Read},
+    path::PathBuf,
     sync::Mutex,
 };
 use mla::crypto::mlakey::{
@@ -12,10 +14,12 @@ use mla::{
     config::{ArchiveReaderConfig, ArchiveWriterConfig},
     crypto::mlakey::{HybridPrivateKey, HybridPublicKey},
 };
+use mla::entry::EntryName as RustEntryName;
 use pyo3::{
     create_exception,
     exceptions::{PyKeyError, PyRuntimeError, PyTypeError},
     prelude::*,
+    pyclass::CompareOp,
     types::{PyBytes, PyString, PyTuple, PyType},
 };
 
@@ -28,6 +32,7 @@ use pyo3::{
 enum WrappedError {
     WrappedMLA(mla::errors::Error),
     WrappedPy(PyErr),
+    EntryNameError
 }
 
 // Add a dedicated MLA Exception (mla.MLAError) and associated sub-Exception
@@ -146,6 +151,7 @@ create_exception!(
 create_exception!(mla, HPKEError, MLAError, "Error during HPKE computation");
 create_exception!(mla, InvalidLastTag, MLAError, "Wrong last block tag");
 create_exception!(mla, EncryptionAskedButNotMarkedPresent, MLAError, "User asked for encryption but archive was not marked as encrypted");
+create_exception!(mla, EntryNameError, MLAError, "An MLA entry name is invalid for the given operation");
 
 // Convert potentials errors to the wrapped type
 
@@ -170,6 +176,12 @@ impl From<std::io::Error> for WrappedError {
 impl From<PyErr> for WrappedError {
     fn from(err: PyErr) -> Self {
         WrappedError::WrappedPy(err)
+    }
+}
+
+impl From<mla::entry::EntryNameError> for WrappedError {
+    fn from(_err: mla::entry::EntryNameError) -> Self {
+        WrappedError::EntryNameError
     }
 }
 
@@ -257,6 +269,7 @@ impl From<WrappedError> for PyErr {
                 }
             },
             WrappedError::WrappedPy(inner_err) => inner_err,
+            WrappedError::EntryNameError => PyErr::new::<EntryNameError, _>("An MLA entry name is invalid for the given operation")
         }
     }
 }
@@ -677,7 +690,7 @@ impl ExplicitWriter {
 
     fn add_entry<R: Read>(
         &mut self,
-        key: &str,
+        key: RustEntryName,
         size: u64,
         reader: &mut R,
     ) -> Result<(), mla::errors::Error> {
@@ -689,7 +702,7 @@ impl ExplicitWriter {
         }
     }
 
-    fn start_entry(&mut self, key: &str) -> Result<u64, mla::errors::Error> {
+    fn start_entry(&mut self, key: RustEntryName) -> Result<u64, mla::errors::Error> {
         match self {
             ExplicitWriter::FileWriter(writer) => writer.start_entry(key),
         }
@@ -722,7 +735,7 @@ enum ExplicitReader {
 
 /// Wrap calls to the inner type
 impl ExplicitReader {
-    fn list_entries(&self) -> Result<impl Iterator<Item = &String>, mla::errors::Error> {
+    fn list_entries(&self) -> Result<impl Iterator<Item = &RustEntryName>, mla::errors::Error> {
         match self {
             ExplicitReader::FileReader(reader) => reader.list_entries(),
         }
@@ -858,30 +871,30 @@ impl MLAFile {
         )
     }
 
-    /// Return the list of files in the archive
-    fn keys(&self) -> Result<Vec<String>, WrappedError> {
-        self.with_reader(|inner| Ok(inner.list_entries()?.cloned().collect()))
+    /// Return the list of entry names in the archive as `EntryName`s
+    fn keys(&self) -> Result<Vec<EntryName>, WrappedError> {
+        self.with_reader(|inner| Ok(inner.list_entries()?.cloned().map(EntryName::from_rust_entry_name).collect()))
     }
 
-    /// Return the list of the files in the archive, along with metadata
+    /// Return the list of the entries in the archive, along with metadata
     /// If `include_size` is set, the size will be included in the metadata
     /// If `include_hash` is set, the hash (SHA256) will be included in the metadata
     ///
     /// Example:
     /// ```python
     /// metadatas = archive.list_entries(include_size=True, include_hash=True)
-    /// for fname, metadata in metadatas.items():
-    ///    print(f"File {fname} has size {metadata.size} and hash {metadata.hash}")
+    /// for entry_name, metadata in metadatas.items():
+    ///    print(f"File {entry_name.to_pathbuf_escaped_string()} has size {metadata.size} and hash {metadata.hash}")
     /// ```
     #[pyo3(signature = (include_size=false, include_hash=false))]
     fn list_entries(
         &mut self,
         include_size: bool,
         include_hash: bool,
-    ) -> Result<HashMap<String, FileMetadata>, WrappedError> {
+    ) -> Result<HashMap<EntryName, FileMetadata>, WrappedError> {
         self.with_reader(|inner| {
             let mut output = HashMap::new();
-            let iter: Vec<String> = inner.list_entries()?.cloned().collect();
+            let iter: Vec<RustEntryName> = inner.list_entries()?.cloned().collect();
             for fname in iter {
                 let mut metadata = FileMetadata {
                     size: None,
@@ -894,52 +907,53 @@ impl MLAFile {
                                 reader
                                     .get_entry(fname.clone())?
                                     .ok_or(PyRuntimeError::new_err(format!(
-                                        "File {} not found",
-                                        fname
+                                        "EntryNot found (escaped name): {}",
+                                        fname.raw_content_to_escaped_string()
                                     )))?
                                     .size,
                             );
                         }
                         if include_hash {
                             metadata.hash = Some(reader.get_hash(&fname)?.ok_or(
-                                PyRuntimeError::new_err(format!("File {} not found", fname)),
+                                PyRuntimeError::new_err(format!("EntryNot found (escaped name): {}", fname.raw_content_to_escaped_string())),
                             )?);
                         }
                     }
                 }
-                output.insert(fname.to_owned(), metadata);
+                output.insert(EntryName::from_rust_entry_name(fname), metadata);
             }
             Ok(output)
         })
     }
 
-    /// Return whether the file is in the archive
-    fn __contains__(&self, key: &str) -> Result<bool, WrappedError> {
-        self.with_reader(|inner| Ok(inner.list_entries()?.any(|x| x == key)))
+    /// Return whether the given `EntryName` is in the archive
+    fn __contains__(&self, key: &EntryName) -> Result<bool, WrappedError> {
+        let rust_entry_name = key.to_rust_entry_name();
+        self.with_reader(|inner| Ok(inner.list_entries()?.any(|x| x == &rust_entry_name)))
     }
 
-    /// Return the content of a file as bytes
-    fn __getitem__(&mut self, key: &str) -> Result<Vec<u8>, WrappedError> {
+    /// Return the content of an entry indexed by its `EntryName` as bytes
+    fn __getitem__(&mut self, key: &EntryName) -> Result<Vec<u8>, WrappedError> {
         self.with_reader(|inner| match inner {
             ExplicitReader::FileReader(reader) => {
-                let file = reader.get_entry(key.to_owned())?;
+                let file = reader.get_entry(key.to_rust_entry_name())?;
                 if let Some(mut archive_entry) = file {
                     let mut buf = Vec::new();
                     archive_entry.data.read_to_end(&mut buf)?;
                     Ok(buf)
                 } else {
-                    Err(PyKeyError::new_err(format!("File {} not found", key)).into())
+                    Err(PyKeyError::new_err(format!("EntryNot found (escaped name): {}", key.raw_content_to_escaped_string())).into())
                 }
             }
         })
     }
 
-    /// Add a file to the archive
-    fn __setitem__(&mut self, key: &str, value: &[u8]) -> Result<(), WrappedError> {
+    /// Add an entry to the archive indexed by its `EntryName`
+    fn __setitem__(&mut self, key: &EntryName, value: &[u8]) -> Result<(), WrappedError> {
         self.with_writer(|writer| match writer {
             ExplicitWriter::FileWriter(writer) => {
                 let mut reader = std::io::Cursor::new(value);
-                writer.add_entry(key, value.len() as u64, &mut reader)?;
+                writer.add_entry(key.to_rust_entry_name(), value.len() as u64, &mut reader)?;
                 Ok(())
             }
         })
@@ -994,7 +1008,7 @@ impl MLAFile {
         py.import("io")?.getattr("BufferedIOBase")?.extract()
     }
 
-    /// Write an archive file to @dest, which can be:
+    /// Write an archive entry given by its `EntryName` to @dest, which can be:
     /// - a string, corresponding to the output path
     /// - a writable BufferedIOBase object (file-object like)
     /// If a BufferedIOBase object is provided, the size of the chunck passed to `.write` can be adjusted
@@ -1003,23 +1017,23 @@ impl MLAFile {
     /// Example:
     /// ```python
     /// with open("/path/to/extract/file1", "wb") as f:
-    ///     archive.write_entry_to("file1", f)
+    ///     archive.write_entry_to(EntryName("file1"), f)
     /// ```
     /// Or
     /// ```python
-    /// archive.write_entry_to("file1", "/path/to/extract/file1")
+    /// archive.write_entry_to(EntryName("file1"), "/path/to/extract/file1")
     /// ```
     #[pyo3(signature = (key, dest, chunk_size=4194304))]
     fn write_entry_to(
         &mut self,
         py: Python,
-        key: &str,
+        key: &EntryName,
         dest: &Bound<PyAny>,
         chunk_size: usize,
     ) -> Result<(), WrappedError> {
         self.with_reader(|reader| {
             let archive_entry = match reader {
-                ExplicitReader::FileReader(reader) => reader.get_entry(key.to_owned())?,
+                ExplicitReader::FileReader(reader) => reader.get_entry(key.to_rust_entry_name())?,
             };
 
             if let Ok(dest) = dest.downcast::<PyString>() {
@@ -1044,7 +1058,7 @@ impl MLAFile {
         })
     }
 
-    /// Add a file to an archive from @src, which can be:
+    /// Add an entry named by @src `EntryName` to an archive from @src, which can be:
     /// - a string, corresponding to the input path
     /// - a readable BufferedIOBase object (file-object like)
     /// If a BufferedIOBase object is provided, the size of the chunck passed to `.read` can be adjusted
@@ -1052,21 +1066,22 @@ impl MLAFile {
     ///
     /// Example:
     /// ```python
-    /// archive.add_entry_from("file1", "/path/to/file1")
+    /// archive.add_entry_from(EntryName("file1"), "/path/to/file1")
     /// ```
     /// Or
     /// ```python
     /// with open("/path/to/file1", "rb") as f:
-    ///    archive.add_entry_from("file1", f)
+    ///    archive.add_entry_from(EntryName("file1"), f)
     /// ```
     #[pyo3(signature = (key, src, chunk_size=4194304))]
     fn add_entry_from(
         &mut self,
         py: Python,
-        key: &str,
+        key: &EntryName,
         src: &Bound<PyAny>,
         chunk_size: usize,
     ) -> Result<(), WrappedError> {
+        let key = key.to_rust_entry_name();
         self.with_writer(|writer| {
             if let Ok(src) = src.downcast::<PyString>() {
                 let mut input = std::fs::File::open(src.to_string())?;
@@ -1095,6 +1110,106 @@ impl MLAFile {
     }
 }
 
+#[pyclass]
+struct EntryName {
+    inner: Mutex<RustEntryName>,
+}
+
+impl PartialEq for EntryName {
+    fn eq(&self, other: &EntryName) -> bool {
+        let lhs = self.inner.lock().expect("Mutex poisonned");
+        let rhs = other.inner.lock().expect("Mutex poisonned");
+        lhs.eq(&rhs)
+    }
+}
+
+impl Eq for EntryName {}
+
+impl Hash for EntryName {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.inner.lock().expect("Mutex poisonned").hash(state);
+    }
+}
+
+impl EntryName {
+    fn from_rust_entry_name(entry_name: RustEntryName) -> Self {
+        Self {
+            inner: Mutex::new(entry_name)
+        }
+    }
+
+    fn to_rust_entry_name(&self) -> RustEntryName {
+        self.inner.lock().expect("Mutex poisonned").clone()
+    }
+}
+
+#[pymethods]
+impl EntryName {
+    #[new]
+    #[pyo3(signature = (str_path))]
+    /// Builds an EntryName from a str interpreted like a path
+    /// 
+    /// See Rust `EntryName::from_path` doc to read what this function does
+    fn new(str_path: &str) -> Result<Self, WrappedError> {
+        Ok(Self {
+            inner: Mutex::new(RustEntryName::from_path(str_path)?)
+        })
+    }
+
+    #[staticmethod]
+    #[pyo3(signature = (path))]
+    /// Builds an EntryName from an os.PathLike
+    /// 
+    /// See Rust `EntryName::from_path` doc to read what this function does
+    fn from_path(path: PathBuf) -> Result<Self, WrappedError> {
+        Ok(Self {
+            inner: Mutex::new(RustEntryName::from_path(path)?)
+        })
+    }
+
+    #[staticmethod]
+    #[pyo3(signature = (bytes))]
+    /// Builds an EntryName from an os.PathLike
+    /// 
+    /// See Rust `EntryName::from_arbitrary_bytes` doc to read what this function does
+    fn from_arbitrary_bytes(bytes: &[u8]) -> Result<Self, WrappedError> {
+        Ok(Self {
+            inner: Mutex::new(RustEntryName::from_arbitrary_bytes(bytes)?)
+        })
+    }
+
+    #[getter]
+    /// SECURITY WARNING: See Rust `EntryName::as_arbitrary_bytes` doc to read what this returns
+    fn arbitrary_bytes(&self) -> Vec<u8> {
+        self.inner.lock().expect("Mutex poisonned").as_arbitrary_bytes().to_vec()
+    }
+
+    /// See Rust `EntryName::raw_content_to_escaped_string` doc to read what this function does
+    fn raw_content_to_escaped_string(&self) -> String {
+        self.inner.lock().expect("Mutex poisonned").raw_content_to_escaped_string()
+    }
+
+    /// SECURITY WARNING: See Rust `EntryName::to_pathbuf` doc to read what this function does
+    fn to_pathbuf(&self) -> Result<PathBuf, WrappedError> {
+        self.inner.lock().expect("Mutex poisonned").to_pathbuf().map_err(|_| WrappedError::EntryNameError)
+    }
+
+    /// See Rust `EntryName::to_pathbuf_escaped_string` doc to read what this function does
+    fn to_pathbuf_escaped_string(&self) -> Result<String, WrappedError> {
+        self.inner.lock().expect("Mutex poisonned").to_pathbuf_escaped_string().map_err(|_| WrappedError::EntryNameError)
+    }
+
+    fn __richcmp__(&self, other: &EntryName, op: CompareOp) -> bool {
+        op.matches(self.inner.lock().expect("Mutex poisonned").cmp(&other.inner.lock().expect("Mutex poisonned")))
+    }
+
+    fn __hash__(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        self.hash(&mut hasher);
+        hasher.finish()
+    }
+}
+
 // -------- Python module instanciation --------
 
 /// Instanciate the Python module
@@ -1103,6 +1218,7 @@ impl MLAFile {
 fn pymla(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Classes
     m.add_class::<MLAFile>()?;
+    m.add_class::<EntryName>()?;
     m.add_class::<FileMetadata>()?;
     m.add_class::<WriterConfig>()?;
     m.add_class::<PublicKeys>()?;
