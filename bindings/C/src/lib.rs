@@ -11,6 +11,7 @@ use mla::crypto::mlakey::{
     parse_mlakey_pubkeys_pem_many,
 };
 use mla::entry::ArchiveEntryId;
+use mla::entry::EntryName;
 use mla::errors::ConfigError;
 use mla::errors::Error as MLAError;
 use mla::helpers::linear_extract;
@@ -22,7 +23,9 @@ use std::ffi::{c_void, CStr};
 use std::io::{Read, Seek, Write};
 use std::mem::MaybeUninit;
 use std::os::raw::c_char;
+use std::path::Path;
 use std::ptr::null_mut;
+use std::slice;
 
 // Types the caller must understand for error handling and I/O
 
@@ -103,12 +106,13 @@ pub struct FileWriter {
 }
 /// Implemented by the developper
 /// Return the desired output path which is expected to be writable.
-/// The callback developper is responsible all security checks and parent path creation.
+/// WARNING, The callback developper is responsible all security checks and parent path creation.
+/// See `mla_roarchive_extract` documentation for how to interpret `entry_name`.
 pub type MLAFileCallBack = Option<
     extern "C" fn(
         context: *mut c_void,
-        filename: *const u8,
-        filename_len: usize,
+        entry_name: *const u8,
+        entry_name_len: usize,
         file_writer: *mut FileWriter,
     ) -> i32,
 >;
@@ -599,22 +603,43 @@ pub extern "C" fn mla_archive_new(
     MLAStatus::Success
 }
 
-/// Open a new file in the archive identified by the handle returned by
-/// mla_archive_new(). The given name must be a unique NULL-terminated string.
+/// You probably want to use `mla_archive_start_entry_with_path_as_name`.
+///
+/// Starts a new entry in the archive identified by the handle returned by
+/// mla_archive_new(). The given name must be a non empty array of
+/// bytes of `name_size` length.
+/// See documentation of rust function `EntryName::from_arbitrary_bytes`.
 /// Returns MLA_STATUS_SUCCESS on success, or an error code.
 #[no_mangle]
-pub extern "C" fn mla_archive_file_new(
+pub extern "C" fn mla_archive_start_entry_with_arbitrary_bytes_name(
     archive: MLAArchiveHandle,
-    file_name: *const c_char,
+    entry_name_arbitrary_bytes: *const u8,
+    name_size: usize,
     handle_out: *mut MLAArchiveFileHandle,
 ) -> MLAStatus {
-    if archive.is_null() || file_name.is_null() || handle_out.is_null() {
+    if archive.is_null()
+        || entry_name_arbitrary_bytes.is_null()
+        || name_size < 1
+        || handle_out.is_null()
+    {
         return MLAStatus::BadAPIArgument;
     }
-    let file_name = unsafe { CStr::from_ptr(file_name) }.to_string_lossy();
+    let name_bytes: &[u8] = unsafe { slice::from_raw_parts(entry_name_arbitrary_bytes, name_size) };
+    let entry_name = match EntryName::from_arbitrary_bytes(name_bytes) {
+        Ok(entry_name) => entry_name,
+        Err(_) => return MLAStatus::BadAPIArgument,
+    };
 
+    start_entry(archive, entry_name, handle_out)
+}
+
+fn start_entry(
+    archive: MLAArchiveHandle,
+    entry_name: EntryName,
+    handle_out: *mut MLAArchiveFileHandle,
+) -> MLAStatus {
     let mut archive = unsafe { Box::from_raw(archive as *mut ArchiveWriter<CallbackOutput>) };
-    let res = match archive.start_entry(&file_name) {
+    let res = match archive.start_entry(entry_name) {
         Ok(fileid) => {
             let ptr = Box::into_raw(Box::new(fileid));
             unsafe {
@@ -628,8 +653,59 @@ pub extern "C" fn mla_archive_file_new(
     res
 }
 
+/// Starts a new entry in the archive identified by the handle returned by
+/// mla_archive_new(). The given name must be a unique non-empty
+/// NULL-terminated string.
+/// The given `entry_name` is meant to represent a path and must
+/// respect rules documented in `Entries names` section of FORMAT.md.
+/// Notably, on Windows, given `entry_name` must be valid slash separated UTF-8.
+/// See documentation of rust function `EntryName::from_path`.
+/// Returns MLA_STATUS_SUCCESS on success, or an error code.
+#[no_mangle]
+pub extern "C" fn mla_archive_start_entry_with_path_as_name(
+    archive: MLAArchiveHandle,
+    entry_name: *const c_char,
+    handle_out: *mut MLAArchiveFileHandle,
+) -> MLAStatus {
+    if archive.is_null() || entry_name.is_null() || handle_out.is_null() {
+        return MLAStatus::BadAPIArgument;
+    }
+
+    let name_cstr = unsafe { CStr::from_ptr(entry_name) };
+    let real_entry_name =
+        match cstr_to_path_os(name_cstr).and_then(|p| EntryName::from_path(p).ok()) {
+            Some(path) => path,
+            None => return MLAStatus::BadAPIArgument,
+        };
+    start_entry(archive, real_entry_name, handle_out)
+}
+
+#[cfg(target_family = "unix")]
+fn cstr_to_path_os(cstr: &CStr) -> Option<&Path> {
+    use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+
+    Some(Path::new(OsStr::from_bytes(cstr.to_bytes())))
+}
+
+#[cfg(target_family = "windows")]
+fn cstr_to_path_os(cstr: &CStr) -> Option<&Path> {
+    cstr.to_str().ok().map(Path::new)
+}
+
+#[cfg(target_family = "unix")]
+fn path_to_bytes_os(p: &Path) -> Option<&[u8]> {
+    use std::os::unix::ffi::OsStrExt;
+
+    Some(p.as_os_str().as_bytes())
+}
+
+#[cfg(target_family = "windows")]
+fn path_to_bytes_os(p: &Path) -> Option<&[u8]> {
+    p.to_str().map(str::as_bytes)
+}
+
 /// Append data to the end of an already opened file identified by the
-/// handle returned by mla_archive_file_new(). Returns MLA_STATUS_SUCCESS on
+/// handle returned by mla_archive_start_entry_with_path_as_name(). Returns MLA_STATUS_SUCCESS on
 /// success, or an error code.
 #[no_mangle]
 pub extern "C" fn mla_archive_file_append(
@@ -779,15 +855,20 @@ impl Seek for CallbackInputRead {
 }
 
 /// Open and extract an existing MLA archive, using the given configuration.
-/// read_callback and seek_callback are used to read the archive data
-/// file_callback is used to convert each archive file's name to pathes where extract the data
-/// The caller is responsible of all security checks related to callback provided paths
+/// `read_callback` and `seek_callback` are used to read the archive data.
+/// `file_callback` is used to convert each archive entry's name to `FileWriter`s.
+/// WARNING, The caller is responsible of all security checks related to callback provided paths.
+/// If `give_raw_name_as_arbitrary_bytes_to_file_callback` is true, then entry name's raw content (arbitrary bytes)
+/// are given as argument to `file_callback`. This is dangerous, see Rust lib `EntryName::raw_content_as_bytes` documentation.
+/// Else, it is given the almost arbitraty bytes (still some dangers) of `EntryName::to_pathbuf` (encoded as UTF-8 on Windows).
+/// See Rust lib `EntryName::to_pathbuf` documentation.
 #[no_mangle]
 pub extern "C" fn mla_roarchive_extract(
     config: *mut MLAReaderConfigHandle,
     read_callback: MlaReadCallback,
     seek_callback: MlaSeekCallback,
     file_callback: MLAFileCallBack,
+    give_raw_name_as_arbitrary_bytes_to_file_callback: bool,
     context: *mut c_void,
 ) -> MLAStatus {
     if config.is_null() {
@@ -812,7 +893,13 @@ pub extern "C" fn mla_roarchive_extract(
         seek_callback: Some(seek_callback),
         context,
     };
-    _mla_roarchive_extract(config, reader, file_callback, context)
+    _mla_roarchive_extract(
+        config,
+        reader,
+        file_callback,
+        give_raw_name_as_arbitrary_bytes_to_file_callback,
+        context,
+    )
 }
 
 #[allow(clippy::extra_unused_lifetimes)]
@@ -820,6 +907,7 @@ fn _mla_roarchive_extract<'a, R: Read + Seek + 'a>(
     config: *mut MLAReaderConfigHandle,
     src: R,
     file_callback: MLAFileCallBackRaw,
+    give_raw_name_as_arbitrary_bytes_to_file_callback: bool,
     context: *mut c_void,
 ) -> MLAStatus {
     let config_ptr = unsafe { *(config as *mut *mut ArchiveReaderConfig) };
@@ -836,25 +924,35 @@ fn _mla_roarchive_extract<'a, R: Read + Seek + 'a>(
         }
     };
 
-    let mut iter: Vec<String> = match mla.list_entries() {
+    let mut iter: Vec<EntryName> = match mla.list_entries() {
         Ok(v) => v.cloned().collect(),
         Err(_) => return MLAStatus::BadAPIArgument,
     };
     iter.sort();
 
-    let mut export: HashMap<&String, CallbackOutput> = HashMap::new();
-    for fname in &iter {
+    let mut export: HashMap<&EntryName, CallbackOutput> = HashMap::new();
+    for entry_name in &iter {
         let mut file_writer: MaybeUninit<FileWriter> = MaybeUninit::uninit();
+        let name_for_callback = if give_raw_name_as_arbitrary_bytes_to_file_callback {
+            entry_name.as_arbitrary_bytes().to_vec()
+        } else {
+            let path = entry_name.to_pathbuf();
+            match path.ok().as_deref().and_then(path_to_bytes_os) {
+                Some(bytes) => bytes.to_vec(),
+                None => return MLAStatus::BadAPIArgument,
+            }
+        };
+
         match (file_callback)(
             context,
-            fname.as_ptr(),
-            fname.len(),
+            name_for_callback.as_ptr(),
+            name_for_callback.len(),
             file_writer.as_mut_ptr(),
         ) {
             0 => {
                 let file_writer = unsafe { file_writer.assume_init() };
                 export.insert(
-                    fname,
+                    entry_name,
                     CallbackOutput {
                         write_callback: match file_writer.write_callback {
                             // Rust FFI garantees Option<x> as equal to x

@@ -94,10 +94,11 @@ struct FileWriter {
 
 /// Implemented by the developper
 /// Return the desired output path which is expected to be writable.
-/// The callback developper is responsible all security checks and parent path creation.
+/// WARNING, The callback developper is responsible all security checks and parent path creation.
+/// See `mla_roarchive_extract` documentation for how to interpret `entry_name`.
 using MLAFileCallBack = int32_t(*)(void *context,
-                                   const uint8_t *filename,
-                                   uintptr_t filename_len,
+                                   const uint8_t *entry_name,
+                                   uintptr_t entry_name_len,
                                    FileWriter *file_writer);
 
 /// Structure for MLA archive info
@@ -168,15 +169,32 @@ MLAStatus mla_archive_new(MLAWriterConfigHandle *config,
                           void *context,
                           MLAArchiveHandle *handle_out);
 
-/// Open a new file in the archive identified by the handle returned by
-/// mla_archive_new(). The given name must be a unique NULL-terminated string.
+/// You probably want to use `mla_archive_start_entry_with_path_as_name`.
+///
+/// Starts a new entry in the archive identified by the handle returned by
+/// mla_archive_new(). The given name must be a non empty array of
+/// bytes of `name_size` length.
+/// See documentation of rust function `EntryName::from_arbitrary_bytes`.
 /// Returns MLA_STATUS_SUCCESS on success, or an error code.
-MLAStatus mla_archive_file_new(MLAArchiveHandle archive,
-                               const char *file_name,
-                               MLAArchiveFileHandle *handle_out);
+MLAStatus mla_archive_start_entry_with_arbitrary_bytes_name(MLAArchiveHandle archive,
+                                                            const uint8_t *entry_name_arbitrary_bytes,
+                                                            uintptr_t name_size,
+                                                            MLAArchiveFileHandle *handle_out);
+
+/// Starts a new entry in the archive identified by the handle returned by
+/// mla_archive_new(). The given name must be a unique non-empty
+/// NULL-terminated string.
+/// The given `entry_name` is meant to represent a path and must
+/// respect rules documented in `Entries names` section of FORMAT.md.
+/// Notably, on Windows, given `entry_name` must be valid slash separated UTF-8.
+/// See documentation of rust function `EntryName::from_path`.
+/// Returns MLA_STATUS_SUCCESS on success, or an error code.
+MLAStatus mla_archive_start_entry_with_path_as_name(MLAArchiveHandle archive,
+                                                    const char *entry_name,
+                                                    MLAArchiveFileHandle *handle_out);
 
 /// Append data to the end of an already opened file identified by the
-/// handle returned by mla_archive_file_new(). Returns MLA_STATUS_SUCCESS on
+/// handle returned by mla_archive_start_entry_with_path_as_name(). Returns MLA_STATUS_SUCCESS on
 /// success, or an error code.
 MLAStatus mla_archive_file_append(MLAArchiveHandle archive,
                                   MLAArchiveFileHandle file,
@@ -203,13 +221,18 @@ MLAStatus mla_archive_file_close(MLAArchiveHandle archive, MLAArchiveFileHandle 
 MLAStatus mla_archive_close(MLAArchiveHandle *archive);
 
 /// Open and extract an existing MLA archive, using the given configuration.
-/// read_callback and seek_callback are used to read the archive data
-/// file_callback is used to convert each archive file's name to pathes where extract the data
-/// The caller is responsible of all security checks related to callback provided paths
+/// `read_callback` and `seek_callback` are used to read the archive data.
+/// `file_callback` is used to convert each archive entry's name to `FileWriter`s.
+/// WARNING, The caller is responsible of all security checks related to callback provided paths.
+/// If `give_raw_name_as_arbitrary_bytes_to_file_callback` is true, then entry name's raw content (arbitrary bytes)
+/// are given as argument to `file_callback`. This is dangerous, see Rust lib `EntryName::raw_content_as_bytes` documentation.
+/// Else, it is given the almost arbitraty bytes (still some dangers) of `EntryName::to_pathbuf` (encoded as UTF-8 on Windows).
+/// See Rust lib `EntryName::to_pathbuf` documentation.
 MLAStatus mla_roarchive_extract(MLAReaderConfigHandle *config,
                                 MlaReadCallback read_callback,
                                 MlaSeekCallback seek_callback,
                                 MLAFileCallBack file_callback,
+                                bool give_raw_name_as_arbitrary_bytes_to_file_callback,
                                 void *context);
 
 /// Get info on an existing MLA archive

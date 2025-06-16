@@ -60,7 +60,7 @@ int main()
    }
 
    MLAArchiveFileHandle hFile = NULL;
-   status = mla_archive_file_new(hArchive, "test\xE2\x98\xA0.txt", &hFile);
+   status = mla_archive_start_entry_with_path_as_name(hArchive, "test\xE2\x98\xA0.txt", &hFile);
    if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
    {
       fprintf(stderr, " [!] File creation failed with code %" PRIX64 "\n", (uint64_t)status);
