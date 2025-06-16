@@ -5,12 +5,12 @@ import os
 import io
 
 import mla
-from mla import MLAFile, MLAError
+from mla import MLAFile, MLAError, EntryName
 
 # Test data
 FILES = {
-    "file1": b"DATA1",
-    "file2": b"DATA_2",
+    EntryName("file1"): b"DATA1",
+    EntryName("file2"): b"DATA_2",
 }
 
 
@@ -52,11 +52,11 @@ def test_forbidden_in_write_mode():
 
     # __contains__
     with pytest.raises(mla.BadAPIArgument):
-        "name" in archive
+        EntryName("name") in archive
 
     # __getitem__
     with pytest.raises(mla.BadAPIArgument):
-        archive["name"]
+        archive[EntryName("name")]
 
     # __len__
     with pytest.raises(mla.BadAPIArgument):
@@ -73,7 +73,7 @@ def test_forbidden_in_read_mode(basic_archive):
 
     # __setitem__
     with pytest.raises(mla.BadAPIArgument):
-        archive["file"] = b"data"
+        archive[EntryName("file")] = b"data"
 
     # .finalize
     with pytest.raises(mla.BadAPIArgument):
@@ -88,14 +88,17 @@ def test_read_api(basic_archive):
     assert sorted(archive.keys()) == sorted(list(FILES.keys()))
 
     # __contains__
-    assert "file1" in archive
-    assert "file3" not in archive
+    assert EntryName("file1") in archive
+    assert EntryName("file3") not in archive
 
     # __getitem__
-    assert archive["file1"] == FILES["file1"]
-    assert archive["file2"] == FILES["file2"]
+    assert archive[EntryName("file1")] == FILES[EntryName("file1")]
+    assert archive[EntryName("file2")] == FILES[EntryName("file2")]
     with pytest.raises(KeyError):
-        archive["file3"]
+        archive[EntryName("file3")]
+
+    with pytest.raises(KeyError):
+        archive[EntryName("file3")]
 
     # __len__
     assert len(archive) == 2
@@ -157,17 +160,17 @@ def test_write_api():
     # Check the resulting archive
     archive = MLAFile(path, "r", config=mla.ReaderConfig.without_encryption())
     assert sorted(archive.keys()) == sorted(list(FILES.keys()))
-    assert archive["file1"] == FILES["file1"]
-    assert archive["file2"] == FILES["file2"]
+    assert archive[EntryName("file1")] == FILES[EntryName("file1")]
+    assert archive[EntryName("file2")] == FILES[EntryName("file2")]
 
 
 def test_double_write():
     "Rewriting the file must raise an MLA error"
     archive = MLAFile(tempfile.mkstemp(suffix=".mla")[1], "w", config=mla.WriterConfig.without_encryption())
-    archive["file1"] = FILES["file1"]
+    archive[EntryName("file1")] = FILES[EntryName("file1")]
 
     with pytest.raises(mla.DuplicateFilename):
-        archive["file1"] = FILES["file1"]
+        archive[EntryName("file1")] = FILES[EntryName("file1")]
 
 
 def test_context_read(basic_archive):
@@ -423,11 +426,11 @@ def test_write_entry_to_str(basic_archive):
     with MLAFile(basic_archive, "r", config=mla.ReaderConfig.without_encryption()) as archive:
         # Extract all files using the String output version
         for name in archive.keys():
-            archive.write_entry_to(name, os.path.join(tmpdir, name))
+            archive.write_entry_to(name, os.path.join(tmpdir, name.to_pathbuf()))
 
     # Check the files
     for name, data in FILES.items():
-        assert open(os.path.join(tmpdir, name), "rb").read() == data
+        assert open(os.path.join(tmpdir, name.to_pathbuf()), "rb").read() == data
 
 
 def test_write_entry_to_file(basic_archive):
@@ -437,12 +440,12 @@ def test_write_entry_to_file(basic_archive):
     with MLAFile(basic_archive, "r", config=mla.ReaderConfig.without_encryption()) as archive:
         # Extract all files using the File output version
         for name in archive.keys():
-            with open(os.path.join(tmpdir, name), "wb") as f:
+            with open(os.path.join(tmpdir, name.to_pathbuf()), "wb") as f:
                 archive.write_entry_to(name, f)
 
     # Check the files
     for name, data in FILES.items():
-        assert open(os.path.join(tmpdir, name), "rb").read() == data
+        assert open(os.path.join(tmpdir, name.to_pathbuf()), "rb").read() == data
 
 
 class BytesIOCounter(io.BytesIO):
@@ -469,21 +472,21 @@ def test_write_entry_to_file_chunk_size(basic_archive):
     with MLAFile(basic_archive, "r", config=mla.ReaderConfig.without_encryption()) as archive:
         # Chunk size set to 1 -> expect 5 calls
         output = BytesIOCounter()
-        archive.write_entry_to("file1", output, chunk_size=1)
+        archive.write_entry_to(EntryName("file1"), output, chunk_size=1)
 
         # Check the number of calls
-        assert output.write_count == len(FILES["file1"])
+        assert output.write_count == len(FILES[EntryName("file1")])
         output.seek(0)
-        assert output.read() == FILES["file1"]
+        assert output.read() == FILES[EntryName("file1")]
 
         # Chunk size set to 2 -> expect 3 calls
         output = BytesIOCounter()
-        archive.write_entry_to("file1", output, chunk_size=2)
+        archive.write_entry_to(EntryName("file1"), output, chunk_size=2)
 
         # Check the number of calls
-        assert output.write_count == len(FILES["file1"]) // 2 + 1
+        assert output.write_count == len(FILES[EntryName("file1")]) // 2 + 1
         output.seek(0)
-        assert output.read() == FILES["file1"]
+        assert output.read() == FILES[EntryName("file1")]
 
 
 def test_add_entry_from_str():
@@ -529,10 +532,10 @@ def test_add_entry_from_io_chunk_size():
     for chunk_size in [1, 2]:
         # Create the archive
         path = tempfile.mkstemp(suffix=".mla")[1]
-        data = FILES["file1"]
+        data = FILES[EntryName("file1")]
         with MLAFile(path, "w", config=mla.WriterConfig.without_encryption()) as archive:
             src = BytesIOCounter(data)
-            archive.add_entry_from("file1", src, chunk_size=chunk_size)
+            archive.add_entry_from(EntryName("file1"), src, chunk_size=chunk_size)
 
             # Check the number of calls
             if chunk_size == 1:
@@ -544,4 +547,4 @@ def test_add_entry_from_io_chunk_size():
 
         # Read the archive
         with MLAFile(path, "r", config=mla.ReaderConfig.without_encryption()) as archive:
-            assert archive["file1"] == data
+            assert archive[EntryName("file1")] == data
