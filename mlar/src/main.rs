@@ -326,14 +326,14 @@ enum ExtractFileNameMatcher {
 }
 impl ExtractFileNameMatcher {
     fn from_matches(matches: &ArgMatches) -> Result<Self, MlarError> {
-        let files_paths = match matches.get_many::<PathBuf>("files") {
+        let entries = match matches.get_many::<PathBuf>("entries") {
             Some(values) => values,
             None => return Ok(ExtractFileNameMatcher::Anything),
         };
         if matches.get_flag("glob") {
             // Use glob patterns
             Ok(ExtractFileNameMatcher::GlobPatterns(
-                files_paths
+                entries
                     .map(|path| {
                         let pattern = path.to_str().ok_or(MlarError::InvalidGlobPattern)?;
                         Pattern::new(pattern).map_err(|_| MlarError::InvalidGlobPattern)
@@ -342,9 +342,7 @@ impl ExtractFileNameMatcher {
             ))
         } else {
             // Use file names
-            Ok(ExtractFileNameMatcher::Files(
-                files_paths.cloned().collect(),
-            ))
+            Ok(ExtractFileNameMatcher::Files(entries.cloned().collect()))
         }
     }
 
@@ -666,11 +664,11 @@ fn cat(matches: &ArgMatches) -> Result<(), MlarError> {
 
     let mut mla = open_mla_file(matches)?;
     if matches.get_flag("glob") {
-        let files_values = matches.get_many::<PathBuf>("files").unwrap();
+        let entries_values = matches.get_many::<PathBuf>("entries").unwrap();
         // For each glob patterns, enumerate matching files and display them
         let mut archive_entries_names: Vec<EntryName> = mla.list_entries()?.cloned().collect();
         archive_entries_names.sort();
-        for arg_pattern in files_values {
+        for arg_pattern in entries_values {
             let arg_pattern_str = arg_pattern.to_str().ok_or(MlarError::InvalidGlobPattern)?;
             let pat = Pattern::new(arg_pattern_str).map_err(|_| MlarError::InvalidGlobPattern)?;
             for archive_entry_name in &archive_entries_names {
@@ -727,7 +725,7 @@ fn cat(matches: &ArgMatches) -> Result<(), MlarError> {
                 .map_err(|_| MlarError::InvalidEntryNameToPath)?
         } else {
             matches
-                .get_many::<PathBuf>("files")
+                .get_many::<PathBuf>("entries")
                 .unwrap()
                 .map(EntryName::from_path)
                 .collect::<Result<Vec<EntryName>, EntryNameError>>()
@@ -927,7 +925,7 @@ fn keyderive(matches: &ArgMatches) -> Result<(), MlarError> {
 
     // Safe to unwrap, there is at least one derivation path
     let paths = matches
-        .get_many::<String>("path")
+        .get_many::<String>("path-component")
         .expect("[ERROR] At least one path must be provided");
     let key_pair = derive_keypair_from_path(paths.map(String::as_bytes), secret).unwrap();
 
@@ -975,9 +973,9 @@ fn app() -> clap::Command {
             .value_parser(value_parser!(PathBuf))
             .required(true),
         Arg::new("private_keys")
-            .long("private_keys")
+            .long("private-key")
             .short('k')
-            .help("Candidates ED25519 private key paths (PEM format)")
+            .help("MLA private key file to try (PEM format), can be specified multiple times")
             .num_args(1)
             .action(ArgAction::Append)
             .value_parser(value_parser!(PathBuf)),
@@ -994,8 +992,8 @@ fn app() -> clap::Command {
             .value_parser(value_parser!(PathBuf))
             .required(true),
         Arg::new("public_keys")
-            .help("ED25519 Public key paths (PEM format)")
-            .long("pubkey")
+            .help("MLA public key file (PEM format), can be specified multiple times")
+            .long("public-key")
             .short('p')
             .num_args(1)
             .action(ArgAction::Append)
@@ -1003,7 +1001,7 @@ fn app() -> clap::Command {
         Arg::new("layers")
             .long("layers")
             .short('l')
-            .help("Layers to use. Default is 'compress,encrypt'")
+            .help("Layers to use. Default is '-l compress -l encrypt'")
             .value_parser(["compress", "encrypt"])
             .num_args(0..=1)
             .action(ArgAction::Append),
@@ -1032,13 +1030,14 @@ fn app() -> clap::Command {
         )
         .subcommand(
             Command::new("list")
-                .about("List files inside a MLA Archive")
+                .about("List entries inside a MLA Archive")
+                .before_help("Outputs a list of MLA entries. By default, names are interpreted as paths and encoded like described in `doc/ENTRY_NAME.md`")
                 .args(&input_args)
                 .arg(
                     Arg::new("raw-escaped-names")
                         .long("raw-escaped-names")
                         .action(ArgAction::SetTrue)
-                        .help("Do not try to reinterpret entry names as paths and encode everything not alphanumeric or dot"),
+                        .help("Do not try to interpret entry names as paths and encode everything not alphanumeric or dot"),
                 )
                 .arg(
                     Arg::new("verbose")
@@ -1049,7 +1048,7 @@ fn app() -> clap::Command {
         )
         .subcommand(
             Command::new("extract")
-                .about("Extract files from a MLA Archive")
+                .about("Extract entries from a MLA Archive to files")
                 .args(&input_args)
                 .arg(
                     Arg::new("outputdir")
@@ -1067,22 +1066,22 @@ fn app() -> clap::Command {
                         .action(ArgAction::SetTrue)
                         .help("Treat specified files as glob patterns"),
                 )
-                .arg(Arg::new("files").value_parser(value_parser!(PathBuf)).help("List of extracted files (all if none given)"))
+                .arg(Arg::new("entries").value_parser(value_parser!(PathBuf)).help("List of entries to extract (all if none given)"))
                 .arg(
                     Arg::new("verbose")
                         .long("verbose")
                         .short('v')
                         .action(ArgAction::SetTrue)
-                        .help("List files as they are extracted"),
+                        .help("List entries as they are extracted"),
                 ),
         )
         .subcommand(
             Command::new("cat")
-                .about("Display files from a MLA Archive, like 'cat'")
+                .about("Display entries from a MLA Archive, like 'cat'")
                 .args(&input_args)
                 .arg(
                     Arg::new("output")
-                        .help("Output file where files are displayed")
+                        .help("Output file")
                         .long("output")
                         .short('o')
                         .num_args(1)
@@ -1094,19 +1093,19 @@ fn app() -> clap::Command {
                         .long("glob")
                         .short('g')
                         .action(ArgAction::SetTrue)
-                        .help("Treat given files as glob patterns"),
+                        .help("Treat given entries names as glob patterns"),
                 )
                 .arg(
                     Arg::new("raw-escaped-names")
                         .long("raw-escaped-names")
                         .action(ArgAction::SetTrue)
-                        .help("With this option, entries names given as positional arguments should be specified as displayed by mlar list with this same option"),
+                        .help("With this option, entries names given as positional arguments should be specified as displayed by mlar list with this same option. This lets you see entries that cannot be interpreted as valid path."),
                 )
                 .arg(
-                    Arg::new("files")
+                    Arg::new("entries")
                         .required(true)
                         .value_parser(value_parser!(PathBuf))
-                        .help("List of displayed entries"),
+                        .help("List of entries to output"),
                 ),
         )
         .subcommand(
@@ -1125,7 +1124,7 @@ fn app() -> clap::Command {
         )
         .subcommand(
             Command::new("repair")
-                .about("Try to repair a MLA Archive into a fresh MLA Archive")
+                .about("Create a fresh MLA from what can be read from a truncated one")
                 .args(&input_args)
                 .args(&output_args),
         )
@@ -1140,11 +1139,11 @@ fn app() -> clap::Command {
         .subcommand(
             Command::new("keygen")
                 .about(
-                    "Generate a public/private keypair, in OpenSSL Ed25519 format, to be used by mlar",
+                    "Generate a public/private MLA keypair",
                 )
                 .arg(
                     Arg::new("output")
-                        .help("Output file for the private key. The public key is in {output}.pub")
+                        .help("Output file for the private key. The public key will be in {output}.pub")
                         .num_args(1)
                         .value_parser(value_parser!(PathBuf))
                         .required(true)
@@ -1161,7 +1160,7 @@ fn app() -> clap::Command {
         .subcommand(
             Command::new("keyderive")
                 .about(
-                    "Derive a new public/private keypair from an existing one and a public path, in OpenSSL Ed25519 format, to be used by mlar",
+                    "Advanced: Derive a new public/private keypair from an existing one and a public path, see `doc/KEYDERIVATION.md`",
                 )
                 .arg(
                     Arg::new("input")
@@ -1172,15 +1171,15 @@ fn app() -> clap::Command {
                 )
                 .arg(
                     Arg::new("output")
-                        .help("Output file for the private key. The public key is in {output}.pub")
+                        .help("Output file for the private key. The public key will be in {output}.pub")
                         .num_args(1)
                         .value_parser(value_parser!(PathBuf))
                         .required(true)
                 )
                 .arg(
-                    Arg::new("path")
-                    .help("Public derivation path")
-                    .long("path")
+                    Arg::new("path-component")
+                    .help("Public derivation path, can be specified multiple times")
+                    .long("path-component")
                     .short('p')
                     .num_args(1)
                     .action(ArgAction::Append)
