@@ -16,7 +16,7 @@ use std::collections::{HashMap, HashSet};
 use std::error;
 use std::fmt;
 use std::fs::{self, File, read_dir};
-use std::io::{self, BufRead};
+use std::io::{self, BufRead, Seek};
 use std::io::{Read, Write};
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
@@ -295,7 +295,7 @@ fn open_failsafe_mla_file<'a>(
     Ok(TruncatedArchiveReader::from_config(file, config)?)
 }
 
-fn add_file_to_tar<R: Read, W: Write>(
+fn add_file_to_tar<R: Read + Seek, W: Write>(
     tar_file: &mut Builder<W>,
     entry: ArchiveEntry<R>,
 ) -> Result<(), MlarError> {
