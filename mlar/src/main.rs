@@ -711,9 +711,12 @@ fn cat(matches: &ArgMatches) -> Result<(), MlarError> {
     } else {
         let files_values = if matches.get_flag("raw-escaped-names") {
             matches
-                .get_many::<String>("files")
+                .get_many::<PathBuf>("entries")
                 .unwrap()
                 .map(|name| {
+                    let name = name
+                        .to_str()
+                        .ok_or(EntryNameError::InvalidPathComponentContent)?;
                     let bytes = mla_percent_unescape(
                         name.as_bytes(),
                         ENTRY_NAME_RAW_CONTENT_ALLOWED_BYTES.as_slice(),
