@@ -1,4 +1,4 @@
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{ErrorKind, Read, Seek, SeekFrom};
 
 use crate::{errors::Error, format::ArchiveEntryBlock};
 
@@ -305,21 +305,21 @@ pub struct ArchiveEntry<T: Read> {
 #[derive(PartialEq, Debug)]
 enum ArchiveEntryDataReaderState {
     // Remaining size
-    InFile(usize),
+    InEntryContent(u64),
     Ready,
     Finish,
 }
 
-pub struct ArchiveEntryDataReader<'a, R: Read + Seek> {
+pub struct ArchiveEntryDataReader<'a, R> {
     /// This structure wraps the internals to get back a file's content
     src: &'a mut R,
     state: ArchiveEntryDataReaderState,
     /// id of the File being read
     id: ArchiveEntryId,
     /// position in `offsets` of the last offset used
-    current_offset: usize,
+    current_offsets_index: usize,
     /// List of offsets of continuous blocks corresponding to where the file can be read
-    offsets: &'a [u64],
+    offsets_in_src: &'a [u64],
 }
 
 impl<'a, R: Read + Seek> ArchiveEntryDataReader<'a, R> {
@@ -328,7 +328,8 @@ impl<'a, R: Read + Seek> ArchiveEntryDataReader<'a, R> {
         offsets: &'a [u64],
     ) -> Result<ArchiveEntryDataReader<'a, R>, Error> {
         // Set the inner layer at the start of the file
-        src.seek(SeekFrom::Start(offsets[0]))?;
+        let start_offset = get_start_offset_in_src(offsets)?;
+        src.seek(SeekFrom::Start(start_offset))?;
 
         // Read file information header
         let id = match ArchiveEntryBlock::from(src)? {
@@ -344,22 +345,70 @@ impl<'a, R: Read + Seek> ArchiveEntryDataReader<'a, R> {
             src,
             state: ArchiveEntryDataReaderState::Ready,
             id,
-            current_offset: 0,
-            offsets,
+            current_offsets_index: 0,
+            offsets_in_src: offsets,
         })
     }
 
     /// Move `self.src` to the next continuous block
-    fn move_to_next_block(&mut self) -> Result<(), Error> {
-        self.current_offset += 1;
-        if self.current_offset >= self.offsets.len() {
+    fn move_to_next_block_in_entry(&mut self) -> Result<(), Error> {
+        self.current_offsets_index += 1;
+        if self.current_offsets_index >= self.offsets_in_src.len() {
             return Err(Error::WrongReaderState(
                 "[BlocksToFileReader] No more continuous blocks".to_string(),
             ));
         }
-        self.src
-            .seek(SeekFrom::Start(self.offsets[self.current_offset]))?;
+        self.src.seek(SeekFrom::Start(
+            self.offsets_in_src[self.current_offsets_index],
+        ))?;
         Ok(())
+    }
+
+    // inefficient, we walk from start of entry
+    fn get_current_position_in_entry(&mut self) -> Result<u64, Error> {
+        let offsets_index_at_function_entry = self.current_offsets_index;
+        let start_offset = get_start_offset_in_src(self.offsets_in_src)?;
+        self.src.seek(SeekFrom::Start(start_offset))?;
+        self.current_offsets_index = 0;
+        let mut total = 0;
+        while self.current_offsets_index < offsets_index_at_function_entry {
+            let current_src_offset = self.offsets_in_src[self.current_offsets_index];
+            self.src.seek(SeekFrom::Start(current_src_offset))?;
+            let content_len = match ArchiveEntryBlock::from(&mut self.src)? {
+                ArchiveEntryBlock::EntryStart { .. } => Ok(0),
+                ArchiveEntryBlock::EntryContent { length, .. } => Ok(length),
+                ArchiveEntryBlock::EndOfEntry { .. } => Err(Error::WrongReaderState(
+                    "We shouldn't be at EndOfEntry".to_owned(),
+                )),
+                ArchiveEntryBlock::EndOfArchiveData => Err(Error::WrongReaderState(
+                    "We shouldn't be at EndOfArchiveData".to_owned(),
+                )),
+            }?;
+            total += content_len;
+            self.move_to_next_block_in_entry()?;
+        }
+        let offset_in_content_chunk_at_function_entry = match self.state {
+            ArchiveEntryDataReaderState::InEntryContent(remaining) => {
+                if let ArchiveEntryBlock::EntryContent { length, .. } =
+                    ArchiveEntryBlock::from(&mut self.src)?
+                {
+                    let offset_in_content_chunk_at_function_entry = length - remaining;
+                    // restore position
+                    self.src.seek(SeekFrom::Current(u64_as_i64(
+                        offset_in_content_chunk_at_function_entry,
+                    )?))?;
+                    offset_in_content_chunk_at_function_entry
+                } else {
+                    return Err(Error::WrongReaderState(
+                        "We should be in an EntryContent".to_owned(),
+                    ));
+                }
+            }
+            ArchiveEntryDataReaderState::Ready => 0,
+            ArchiveEntryDataReaderState::Finish => 0,
+        };
+        total += offset_in_content_chunk_at_function_entry;
+        Ok(total)
     }
 }
 
@@ -371,16 +420,16 @@ impl<T: Read + Seek> Read for ArchiveEntryDataReader<'_, T> {
                 match ArchiveEntryBlock::from(&mut self.src)? {
                     ArchiveEntryBlock::EntryContent { length, id, .. } => {
                         if id != self.id {
-                            self.move_to_next_block()?;
+                            self.move_to_next_block_in_entry()?;
                             return self.read(into);
                         }
                         let count = self.src.by_ref().take(length).read(into)?;
-                        let length_usize = length as usize;
-                        (length_usize - count, count)
+                        let count_as_u64 = usize_as_u64(count)?;
+                        (length - count_as_u64, count)
                     }
                     ArchiveEntryBlock::EndOfEntry { id, .. } => {
                         if id != self.id {
-                            self.move_to_next_block()?;
+                            self.move_to_next_block_in_entry()?;
                             return self.read(into);
                         }
                         self.state = ArchiveEntryDataReaderState::Finish;
@@ -388,7 +437,7 @@ impl<T: Read + Seek> Read for ArchiveEntryDataReader<'_, T> {
                     }
                     ArchiveEntryBlock::EntryStart { id, .. } => {
                         if id != self.id {
-                            self.move_to_next_block()?;
+                            self.move_to_next_block_in_entry()?;
                             return self.read(into);
                         }
                         return Err(Error::WrongReaderState(
@@ -404,16 +453,17 @@ impl<T: Read + Seek> Read for ArchiveEntryDataReader<'_, T> {
                     }
                 }
             }
-            ArchiveEntryDataReaderState::InFile(remaining) => {
-                let count = self.src.by_ref().take(remaining as u64).read(into)?;
-                (remaining - count, count)
+            ArchiveEntryDataReaderState::InEntryContent(remaining) => {
+                let count = self.src.by_ref().take(remaining).read(into)?;
+                let count_as_u64 = usize_as_u64(count)?;
+                (remaining - count_as_u64, count)
             }
             ArchiveEntryDataReaderState::Finish => {
                 return Ok(0);
             }
         };
         if remaining > 0 {
-            self.state = ArchiveEntryDataReaderState::InFile(remaining);
+            self.state = ArchiveEntryDataReaderState::InEntryContent(remaining);
         } else {
             // remaining is 0 (> never happens thanks to take)
             self.state = ArchiveEntryDataReaderState::Ready;
@@ -422,9 +472,147 @@ impl<T: Read + Seek> Read for ArchiveEntryDataReader<'_, T> {
     }
 }
 
+impl<T: Read + Seek> Seek for ArchiveEntryDataReader<'_, T> {
+    /// Not really efficient implementation because we don't maintain an index of each entry chunk size. If seeked beyond end of content, places cursor at the end.
+    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+        match pos {
+            SeekFrom::Start(asked_seek_offset) => {
+                // walk each block of our entry from start and get its content length
+                let start_offset_in_src = get_start_offset_in_src(self.offsets_in_src)?;
+                self.src.seek(SeekFrom::Start(start_offset_in_src))?;
+                self.current_offsets_index = 0;
+                let mut total_skipped = 0;
+                let number_of_chunks = self.offsets_in_src.len();
+                // -2 because we don't want the last chunk (EndOfEntry)
+                let last_content_chunk_index =
+                    number_of_chunks.checked_sub(2).ok_or_else(|| {
+                        Error::WrongReaderState(
+                            "An entry should have at least 2 offsets in footer".to_owned(),
+                        )
+                    })?;
+                loop {
+                    if self.current_offsets_index > last_content_chunk_index {
+                        // we don't want to get to the point of reading EndOfEntry
+                        self.state = ArchiveEntryDataReaderState::Finish;
+                        break;
+                    } else {
+                        let current_src_offset = self.offsets_in_src[self.current_offsets_index];
+                        self.src.seek(SeekFrom::Start(current_src_offset))?;
+                        match ArchiveEntryBlock::from(&mut self.src)? {
+                            ArchiveEntryBlock::EntryStart { .. } => {
+                                self.move_to_next_block_in_entry()?;
+                            }
+                            ArchiveEntryBlock::EntryContent { length, .. } => {
+                                if asked_seek_offset > total_skipped + length {
+                                    self.move_to_next_block_in_entry()?;
+                                    total_skipped += length;
+                                } else {
+                                    let remaining_to_skip = asked_seek_offset - total_skipped;
+                                    self.src
+                                        .seek(SeekFrom::Current(u64_as_i64(remaining_to_skip)?))?;
+                                    total_skipped += remaining_to_skip;
+                                    let remaining_readable = length - remaining_to_skip;
+                                    self.state = if remaining_readable == 0 {
+                                        ArchiveEntryDataReaderState::Finish
+                                    } else {
+                                        ArchiveEntryDataReaderState::InEntryContent(
+                                            remaining_readable,
+                                        )
+                                    };
+                                    break;
+                                }
+                            }
+                            ArchiveEntryBlock::EndOfEntry { .. } => {
+                                return Err(Error::WrongReaderState(
+                                    "We shouldn't be at EndOfEntry".to_owned(),
+                                )
+                                .into());
+                            }
+                            ArchiveEntryBlock::EndOfArchiveData => {
+                                return Err(Error::WrongReaderState(
+                                    "We shouldn't be at EndOfArchiveData".to_owned(),
+                                )
+                                .into());
+                            }
+                        }
+                    }
+                }
+                Ok(total_skipped)
+            }
+            SeekFrom::End(asked_seek_offset) => {
+                // manually position ourself at end and call self.seek(SeekFrom::Current(asked_seek_offset))
+                let number_of_chunks = self.offsets_in_src.len();
+                // -2 because we don't want the last chunk (EndOfEntry)
+                let last_content_chunk_index =
+                    number_of_chunks.checked_sub(2).ok_or_else(|| {
+                        Error::WrongReaderState(
+                            "An entry should have at least 2 offsets in footer".to_owned(),
+                        )
+                    })?;
+                let last_content_chunk_offset = self
+                    .offsets_in_src
+                    .get(last_content_chunk_index)
+                    .ok_or_else(|| {
+                    Error::WrongReaderState(
+                        "An entry should have at least 2 offsets in footer".to_owned(),
+                    )
+                })?;
+                self.src.seek(SeekFrom::Start(*last_content_chunk_offset))?;
+                match ArchiveEntryBlock::from(&mut self.src)? {
+                    ArchiveEntryBlock::EntryStart { .. } => {
+                        assert_eq!(number_of_chunks, 2);
+                        if asked_seek_offset > 0 {
+                            self.seek(SeekFrom::Start(0))
+                        } else {
+                            Err(ErrorKind::InvalidInput.into())
+                        }
+                    }
+                    ArchiveEntryBlock::EntryContent { length, .. } => {
+                        self.src.seek(SeekFrom::Current(u64_as_i64(length)?))?;
+                        self.state = ArchiveEntryDataReaderState::InEntryContent(0);
+                        self.current_offsets_index = last_content_chunk_index;
+                        self.seek(SeekFrom::Current(asked_seek_offset))
+                    }
+                    ArchiveEntryBlock::EndOfEntry { .. } => Err(Error::WrongReaderState(
+                        "We shouldn't be at EndOfEntry".to_owned(),
+                    )
+                    .into()),
+                    ArchiveEntryBlock::EndOfArchiveData => Err(Error::WrongReaderState(
+                        "We shouldn't be at EndOfArchiveData".to_owned(),
+                    )
+                    .into()),
+                }
+            }
+            SeekFrom::Current(asked_seek_offset) => {
+                // inefficient
+                let current_position_in_entry = self.get_current_position_in_entry()?;
+                // inefficient too, we walk again from start
+                let new_position_in_entry = current_position_in_entry
+                    .checked_add_signed(asked_seek_offset)
+                    .ok_or(ErrorKind::InvalidInput)?;
+                self.seek(SeekFrom::Start(new_position_in_entry))
+            }
+        }
+    }
+}
+
+fn get_start_offset_in_src(offsets: &[u64]) -> Result<u64, Error> {
+    offsets.first().copied().ok_or_else(|| {
+        Error::WrongReaderState("An entry should have at least 2 offsets in footer".to_owned())
+    })
+}
+
+fn usize_as_u64(n: usize) -> Result<u64, Error> {
+    u64::try_from(n).map_err(|_| Error::WrongWriterState("Unsupported arch".into()))
+}
+
+fn u64_as_i64(n: u64) -> Result<i64, Error> {
+    i64::try_from(n).map_err(|_| Error::WrongReaderState("Too big offset asked".into()))
+}
+
 #[cfg(test)]
 mod tests {
-    use std::io::{Empty, Read};
+    use std::io::{Empty, Read, Seek, SeekFrom};
 
     use crate::{
         Sha256Hash,
@@ -432,8 +620,9 @@ mod tests {
         format::ArchiveEntryBlock,
     };
 
-    #[test]
-    fn blocks_to_file() {
+    const FAKE_CONTENT1: [u8; 4] = [1, 2, 3, 4];
+    const FAKE_CONTENT2: [u8; 4] = [5, 6, 7, 8];
+    fn create_normal_entry() -> (std::io::Cursor<Vec<u8>>, &'static [u64]) {
         // Create several blocks
         let mut buf = Vec::new();
         let id = 0;
@@ -444,18 +633,16 @@ mod tests {
             name: EntryName::from_arbitrary_bytes(b"foobar").unwrap(),
         };
         block.dump(&mut buf).unwrap();
-        let fake_content = vec![1, 2, 3, 4];
         let mut block = ArchiveEntryBlock::EntryContent {
             id,
-            length: fake_content.len() as u64,
-            data: Some(fake_content.as_slice()),
+            length: FAKE_CONTENT1.len() as u64,
+            data: Some(FAKE_CONTENT1.as_slice()),
         };
         block.dump(&mut buf).unwrap();
-        let fake_content2 = vec![5, 6, 7, 8];
         let mut block = ArchiveEntryBlock::EntryContent {
             id,
-            length: fake_content2.len() as u64,
-            data: Some(fake_content2.as_slice()),
+            length: FAKE_CONTENT2.len() as u64,
+            data: Some(FAKE_CONTENT2.as_slice()),
         };
         block.dump(&mut buf).unwrap();
 
@@ -464,17 +651,75 @@ mod tests {
             .dump(&mut buf)
             .unwrap();
 
-        let mut data_source = std::io::Cursor::new(buf);
-        let offsets = [0];
-        let mut reader = ArchiveEntryDataReader::new(&mut data_source, &offsets)
+        let offsets = [0, 23, 44, 65].as_slice();
+
+        (std::io::Cursor::new(buf), offsets)
+    }
+
+    #[test]
+    fn blocks_to_file() {
+        let (mut data_source, offsets) = create_normal_entry();
+        let mut reader = ArchiveEntryDataReader::new(&mut data_source, offsets)
             .expect("BlockToFileReader failed");
         let mut output = Vec::new();
         reader.read_to_end(&mut output).unwrap();
-        assert_eq!(output.len(), fake_content.len() + fake_content2.len());
+        assert_eq!(output.len(), FAKE_CONTENT1.len() + FAKE_CONTENT2.len());
         let mut expected_output = Vec::new();
-        expected_output.extend(fake_content);
-        expected_output.extend(fake_content2);
+        expected_output.extend(FAKE_CONTENT1);
+        expected_output.extend(FAKE_CONTENT2);
         assert_eq!(output, expected_output);
         assert_eq!(reader.state, ArchiveEntryDataReaderState::Finish);
+    }
+
+    #[test]
+    fn test_seek() {
+        let (mut data_source, offsets) = create_normal_entry();
+        let mut reader = ArchiveEntryDataReader::new(&mut data_source, offsets)
+            .expect("BlockToFileReader failed");
+        let mut output = Vec::new();
+        reader.seek(SeekFrom::Start(0)).unwrap();
+        reader.read_to_end(&mut output).unwrap();
+        assert_eq!(output, &[1, 2, 3, 4, 5, 6, 7, 8]);
+        output.clear();
+        reader.seek(SeekFrom::Start(1)).unwrap();
+        reader.read_to_end(&mut output).unwrap();
+        assert_eq!(output, &[2, 3, 4, 5, 6, 7, 8]);
+        output.clear();
+        reader.seek(SeekFrom::Start(1)).unwrap();
+        #[allow(clippy::seek_from_current)]
+        reader.seek(SeekFrom::Current(0)).unwrap();
+        reader.read_to_end(&mut output).unwrap();
+        assert_eq!(output, &[2, 3, 4, 5, 6, 7, 8]);
+        output.clear();
+        reader.seek(SeekFrom::Start(1)).unwrap();
+        reader.seek(SeekFrom::Current(-1)).unwrap();
+        reader.read_to_end(&mut output).unwrap();
+        assert_eq!(output, &[1, 2, 3, 4, 5, 6, 7, 8]);
+        output.clear();
+        reader.seek(SeekFrom::Start(1)).unwrap();
+        reader.seek(SeekFrom::Current(1)).unwrap();
+        reader.read_to_end(&mut output).unwrap();
+        assert_eq!(output, &[3, 4, 5, 6, 7, 8]);
+        output.clear();
+        reader.seek(SeekFrom::End(0)).unwrap();
+        reader.read_to_end(&mut output).unwrap();
+        assert_eq!(output, &[]);
+        output.clear();
+        reader.seek(SeekFrom::End(1)).unwrap();
+        reader.read_to_end(&mut output).unwrap();
+        assert_eq!(output, &[]);
+        output.clear();
+        reader.seek(SeekFrom::End(-1)).unwrap();
+        reader.read_to_end(&mut output).unwrap();
+        assert_eq!(output, &[8]);
+        output.clear();
+        reader.seek(SeekFrom::End(-2)).unwrap();
+        reader.read_to_end(&mut output).unwrap();
+        assert_eq!(output, &[7, 8]);
+        output.clear();
+        reader.seek(SeekFrom::End(-5)).unwrap();
+        reader.read_to_end(&mut output).unwrap();
+        assert_eq!(output, &[4, 5, 6, 7, 8]);
+        output.clear();
     }
 }
