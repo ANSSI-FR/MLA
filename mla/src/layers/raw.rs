@@ -63,10 +63,6 @@ impl<R: InnerReaderTrait> RawLayerReader<R> {
 }
 
 impl<'a, R: InnerReaderTrait> LayerReader<'a, R> for RawLayerReader<R> {
-    fn into_inner(self) -> Option<Box<dyn 'a + LayerReader<'a, R>>> {
-        None
-    }
-
     fn into_raw(self: Box<Self>) -> R {
         self.inner
     }
