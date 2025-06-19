@@ -93,7 +93,7 @@ struct FileWriter {
 };
 
 /// Implemented by the developper
-/// Return the desired output path which is expected to be writable.
+/// Return the desired `FileWriter` which is expected to be writable.
 /// WARNING, The callback developper is responsible all security checks and parent path creation.
 /// See `mla_roarchive_extract` documentation for how to interpret `entry_name`.
 using MLAFileCallBack = int32_t(*)(void *context,
@@ -185,7 +185,7 @@ MLAStatus mla_archive_start_entry_with_arbitrary_bytes_name(MLAArchiveHandle arc
 /// mla_archive_new(). The given name must be a unique non-empty
 /// NULL-terminated string.
 /// The given `entry_name` is meant to represent a path and must
-/// respect rules documented in `Entries names` section of FORMAT.md.
+/// respect rules documented in `doc/ENTRY_NAME.md`.
 /// Notably, on Windows, given `entry_name` must be valid slash separated UTF-8.
 /// See documentation of rust function `EntryName::from_path`.
 /// Returns MLA_STATUS_SUCCESS on success, or an error code.

@@ -35,7 +35,7 @@ pub trait LayerWriter<'a, W: InnerWriterTrait>: Write {
     fn finalize(self: Box<Self>) -> Result<W, Error>;
 }
 
-/// Trait alias for Layer Reader readable source
+/// Trait alias for `Read + Seek` or `Read + Seek + Send` when feature `send` is enabled
 // Type aliases are not yet stable
 // See https://github.com/rust-lang/rust/issues/41517
 // -> use a dummy trait instead

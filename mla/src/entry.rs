@@ -2,6 +2,8 @@ use std::io::{ErrorKind, Read, Seek, SeekFrom};
 
 use crate::{errors::Error, format::ArchiveEntryBlock};
 
+/// Represents a unique identifier for an entry in the archive.
+/// Used to maintain references to entries while writing an archive.
 pub type ArchiveEntryId = u64;
 
 mod entryname {
@@ -13,8 +15,10 @@ mod entryname {
 
     use crate::helpers::mla_percent_escape;
 
+    /// Allowed bytes in `EntryName::to_pathbuf_escaped_string` output. Documented there.
     pub static ENTRY_NAME_PATHBUF_ESCAPED_STRING_ALLOWED_BYTES: [u8; 64] =
         *b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789./";
+    /// Allowed bytes in `EntryName::raw_content_to_escaped_string` output. Documented there.
     pub static ENTRY_NAME_RAW_CONTENT_ALLOWED_BYTES: [u8; 63] =
         *b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.";
 
@@ -40,9 +44,11 @@ mod entryname {
 
     impl std::error::Error for EntryNameError {}
 
-    /// Arbitrary bytes representing an archive entry name
+    /// Arbitrary bytes representing an archive entry name. WARNING, see rest of its documentation.
     ///
-    /// Every constructor ensures it is not empty
+    /// Every constructor ensures it is not empty.
+    ///
+    /// See `doc/ENTRY_NAME.md` for more details.
     #[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
     pub struct EntryName {
         name: Vec<u8>,
@@ -75,8 +81,8 @@ mod entryname {
 
         /// WARNING: you are given bytes controlled by the one who made the entry name.
         /// It may contain arbitrary bytes like slash, backslash, `..`,
-        /// `C:\\{}...]`, newline, carriage return, terminal escape sequences,
-        /// Unicode chars like U+0085 or RTLO, etc.
+        /// `C:\\{}...]`, newline, spaces, carriage return, terminal escape sequences,
+        /// Unicode chars like U+0085 or RTLO, HTML, SQL, semicolons, homoglyphs, etc.
         pub fn as_arbitrary_bytes(&self) -> &[u8] {
             self.name.as_slice()
         }
@@ -121,11 +127,13 @@ mod entryname {
             }
         }
 
-        /// `EntryName` raw content as bytes escaped with `helpers::mla_percent_escape` with
-        /// ASCII alphanumeric chars and ASCII dot as preserved bytes.
+        /// Escaped String representation of an `EntryName` raw content bytes
         ///
-        /// You may want to use `EntryName::to_pathbuf_escaped_string` which has a different encoding than this function.
-        /// This function is used by `mlar list --raw-escaped-names`.
+        /// See `doc/ENTRY_NAME.md`
+        ///
+        /// You may want to use `EntryName::to_pathbuf_escaped_string` which has
+        /// a different encoding than this function but cannot represent arbitrary bytes.
+        ///
         /// You may prefer another encoding tailored to where the name will be used.
         /// See `EntryName::as_arbitrary_bytes` documentation.
         pub fn raw_content_to_escaped_string(&self) -> String {
@@ -140,26 +148,25 @@ mod entryname {
         /// The resulting `PathBuf` may contain almost arbitrary bytes like
         /// slash, backslash, newline, carriage return, terminal escape sequences,
         /// Unicode chars like U+0085 or RTLO, etc.
+        ///
         /// Please also keep in mind that two different `EntryName` or returned
         /// `PathBuf` may map to same path on OS (eg. Windows case insensitivity).
         ///
         /// The OS may not allow creating files with the returned `PathBuf` if
         /// it contains some forbidden characters (eg. Windows).
         ///
-        /// The only OS independent checks performed by this function are
-        /// for NUL bytes and for path traversal:
-        /// the returned `PathBuf` will only contain `std::path::Component::Normal` components.
+        /// This function returns the path interpretation of an entry name.
+        /// This function checks for validity against rules described in
+        /// `doc/ENTRY_NAME.md` and only them.
+        /// For example, the returned `PathBuf` will only contain
+        /// `std::path::Component::Normal` components.
         /// Otherwise an `EntryNameError` is returned.
         ///
         /// You may want to perform other checks on the resulting `PathBuf` depending on how it will be used.
         ///
         /// For display or other purpose, you may want to use `EntryName::to_pathbuf_escaped_string`.
         ///
-        /// On Windows, this function ensures the underlying `EntryName` bytes are
-        /// slash separated properly encoded UTF-8 components containing no backslash.
-        /// Otherwise an `Err(EntryNameError::InvalidPathComponentContent)` is returned.
-        ///
-        /// Details are in `Entries names` section of the `FORMAT.md` specification.
+        /// Details are documented in `doc/ENTRY_NAME.md`.
         ///
         /// See `EntryName::from_path`.
         pub fn to_pathbuf(&self) -> Result<PathBuf, EntryNameError> {
@@ -168,14 +175,15 @@ mod entryname {
 
         /// Escaped String representation of an `EntryName` as a path
         ///
+        /// See `doc/ENTRY_NAME.md`
+        ///
         /// Computed with `self::to_pathbuf()?`, followed by enforcement of
         /// slash as a separator, encoded as UTF-8 bytes and
         /// escaped with `helpers::mla_percent_escape` preserving
         /// ASCII slash, ASCII alphanumeric chars and ASCII dot.
         ///
-        /// This differs from `EntryName::raw_content_to_escaped_string` with regards to path restrictions and separator encoding.
-        ///
-        /// This function is used by `mlar list` by default.
+        /// This differs from `EntryName::raw_content_to_escaped_string` with
+        /// regards to path restrictions and separator representation.
         ///
         /// You may prefer another encoding tailored to where the name will be used.
         /// See `EntryName::to_pathbuf` documentation.
@@ -295,8 +303,8 @@ pub use entryname::{
     EntryName, EntryNameError,
 };
 
+/// Represents an entry in the archive.
 pub struct ArchiveEntry<'a, T> {
-    /// File inside a MLA Archive
     pub name: EntryName,
     pub data: ArchiveEntryDataReader<'a, T>,
     pub size: u64,
@@ -310,6 +318,7 @@ enum ArchiveEntryDataReaderState {
     Finish,
 }
 
+/// Structure available in an `ArchiveEntry` `data` field, enabling one to `Read` and `Seek` inside an archive entry.
 pub struct ArchiveEntryDataReader<'a, R> {
     /// This structure wraps the internals to get back a file's content
     src: &'a mut R,

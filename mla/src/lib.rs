@@ -3,66 +3,30 @@
 //! MLA is an archive file format with the following features:
 //!
 //! * Support for compression (based on [`rust-brotli`](https://github.com/dropbox/rust-brotli/))
-//! * Support for authenticated encryption with asymmetric keys (AES256-GCM with an ECIES schema over Curve25519, based on [Rust-Crypto](https://github.com/RustCrypto) `aes-ctr` and [DalekCryptography](https://github.com/dalek-cryptography) `x25519-dalek`)
-//! * Effective, architecture agnostic and portable (written entirely in Rust)
-//! * Small memory footprint during archive creation
+//! * Support for hybrid pre/post-quantum encryption with asymmetric keys (HPKE with AES256-GCM and a KEM based on an hybridation of X25519 and post-quantum ML-KEM 1024)
+//! * Architecture agnostic and portable to some extent (written entirely in Rust)
 //! * Streamable archive creation:
 //!   * An archive can be built even over a data-diode
-//!   * A file can be added through chunks of data, without initially knowing the final size
-//!   * File chunks can be interleaved (one can add the beginning of a file, start a second one, and then continue adding the first file's parts)
-//! * Archive files are seekable, even if compressed or encrypted. A file can be accessed in the middle of the archive without reading from the beginning
+//!   * An entry can be added through chunks of data, without initially knowing the final size
+//!   * Entry chunks can be interleaved (one can add the beginning of an entry, start a second one, and then continue adding the first entry's parts)
+//! * Archive files are seekable, even if compressed or encrypted. An entry can be accessed in the middle of the archive without reading from the beginning
 //! * If truncated, archives can be repaired to some extent. Two modes are available:
 //!   * Authenticated repair (default): only authenticated encrypted chunks of data are retrieved
-//!   * Unauthenticated repair: authenticated and unauthenticated encrypted chunks of data are retrieved. Use at your own risk
+//!   * Unauthenticated repair: authenticated and unauthenticated encrypted chunks of data are retrieved. Use at your own risk.
 //! * Arguably less prone to bugs, especially while parsing an untrusted archive (Rust safety)
 //!
 //! Repository
 //! =
 //!
-//! This repository contains:
+//! The MLA repository contains:
 //!
 //! * `mla`: the Rust library implementing MLA reader and writer
-//! * `mlar`: a Rust utility wrapping `mla` for common actions (create, list, extract, ...)
-//! * `mla-fuzz-afl` : a Rust utility to fuzz `mla`
+//! * `mlar`: a Rust cli utility wrapping `mla` for common actions (create, list, extract, ...)
+//! * `doc` : documentation of things related to MLA (eg. format specification)
 //! * `bindings` : bindings for other languages
+//! * `samples` : test assets
+//! * `mla-fuzz-afl` : a Rust utility to fuzz `mla`
 //! * `.github`: Continuous Integration needs
-//!
-//! Quick command-line usage
-//! =
-//!
-//! Here are some commands to use ``mlar`` in order to work with archives in MLA format.
-//!
-//! ```sh
-//! # Generate an X25519 key pair {key, key.pub} (OpenSSL could also be used)
-//! mlar keygen key
-//!
-//! # Create an archive with some files, using the public key
-//! mlar create -p key.pub -o my_archive.mla /etc/os-release /etc/issue
-//!
-//! # List the content of the archive, using the private key
-//! mlar list -k key -i my_archive.mla
-//!
-//! # Extract the content of the archive into a new directory
-//! # In this example, this creates two files:
-//! # extracted_content/etc/issue and extracted_content/etc/os-release
-//! mlar extract -k key -i my_archive.mla -o extracted_content
-//!
-//! # Display the content of a file in the archive
-//! mlar cat -k key -i my_archive.mla /etc/os-release
-//!
-//! # Convert the archive to a long-term one, removing encryption and using the best
-//! # and slower compression level
-//! mlar convert -k key -i my_archive.mla -o longterm.mla -l compress -q 11
-//!
-//! # Create an archive with multiple recipient
-//! mlar create -p archive.pub -p client1.pub -o my_archive.mla ...
-//! ```
-//!
-//! `mlar` can be obtained:
-//!
-//! * through Cargo: `cargo install mlar`
-//! * using the [latest release](https://github.com/ANSSI-FR/MLA/releases) for supported operating systems
-//!
 //!
 //! Quick API usage
 //! =
@@ -80,7 +44,8 @@
 //!     // Load the needed public key
 //!     let public_key = parse_mlakey_pubkey_pem(PUB_KEY).unwrap();
 //!
-//!     // Create an MLA Archive - Output only needs the Write trait
+//!     // Create an MLA Archive - Output only needs the Write trait.
+//!     // Here, a Vec is used but it would tipically be a `File` or a network socket.
 //!     let mut buf = Vec::new();
 //!     // Default is Compression + Encryption, to avoid mistakes
 //!     let config = ArchiveWriterConfig::with_public_keys(&[public_key]);
@@ -89,13 +54,14 @@
 //!     let mut mla = ArchiveWriter::from_config(&mut buf, config).unwrap();
 //!
 //!     // Add a file
-//!     mla.add_entry(EntryName::from_path("filename").unwrap(), 4, &[0, 1, 2, 3][..]).unwrap();
+//!     // This creates an entry named "a/filename" (without first "/"), See `EntryName::from_path`
+//!     mla.add_entry(EntryName::from_path("/a/filename").unwrap(), 4, &[0, 1, 2, 3][..]).unwrap();
 //!
 //!     // Complete the archive
 //!     mla.finalize().unwrap();
 //! }
 //! ```
-//! * Add files part per part, in a "concurrent" fashion:
+//! * Add entries part per part, in a "concurrent" fashion:
 //! ```rust
 //! use mla::crypto::mlakey::parse_mlakey_pubkey_pem;
 //! use mla::config::ArchiveWriterConfig;
@@ -117,31 +83,31 @@
 //!     // Create the Writer
 //!     let mut mla = ArchiveWriter::from_config(&mut buf, config).unwrap();
 //!
-//!     // A file is tracked by an id, and follows this API's call order:
-//!     // 1. id = start_entry(filename);
+//!     // An entry is tracked by an id, and follows this API's call order:
+//!     // 1. id = start_entry(entry_name);
 //!     // 2. append_entry_content(id, content length, content (impl Read))
 //!     // 2-bis. repeat 2.
 //!     // 3. end_entry(id)
 //!
-//!     // Start a file and add content
-//!     let id_entry1 = mla.start_entry(EntryName::from_path("fname1").unwrap()).unwrap();
-//!     let file1_part1 = vec![11, 12, 13, 14];
-//!     mla.append_entry_content(id_entry1, file1_part1.len() as u64, file1_part1.as_slice()).unwrap();
+//!     // Start an entry and add content
+//!     let id_entry1 = mla.start_entry(EntryName::from_path("name1").unwrap()).unwrap();
+//!     let entry1_part1 = vec![11, 12, 13, 14];
+//!     mla.append_entry_content(id_entry1, entry1_part1.len() as u64, entry1_part1.as_slice()).unwrap();
 //!
-//!     // Start a second file and add content
-//!     let id_entry2 = mla.start_entry(EntryName::from_path("fname2").unwrap()).unwrap();
-//!     let file2_part1 = vec![21, 22, 23, 24];
-//!     mla.append_entry_content(id_entry2, file2_part1.len() as u64, file2_part1.as_slice()).unwrap();
+//!     // Start a second entry and add content
+//!     let id_entry2 = mla.start_entry(EntryName::from_path("name2").unwrap()).unwrap();
+//!     let entry2_part1 = vec![21, 22, 23, 24];
+//!     mla.append_entry_content(id_entry2, entry2_part1.len() as u64, entry2_part1.as_slice()).unwrap();
 //!
-//!     // Add a file as a whole
-//!     let file3 = vec![31, 32, 33, 34];
-//!     mla.add_entry(EntryName::from_path("fname3").unwrap(), file3.len() as u64, file3.as_slice()).unwrap();
+//!     // Add an entry as a whole
+//!     let entry3 = vec![31, 32, 33, 34];
+//!     mla.add_entry(EntryName::from_path("name3").unwrap(), entry3.len() as u64, entry3.as_slice()).unwrap();
 //!
-//!     // Add new content to the first file
-//!     let file1_part2 = vec![15, 16, 17, 18];
-//!     mla.append_entry_content(id_entry1, file1_part2.len() as u64, file1_part2.as_slice()).unwrap();
+//!     // Add new content to the first entry
+//!     let entry1_part2 = vec![15, 16, 17, 18];
+//!     mla.append_entry_content(id_entry1, entry1_part2.len() as u64, entry1_part2.as_slice()).unwrap();
 //!
-//!     // Mark still opened files as finished
+//!     // Mark still opened entries as finished
 //!     mla.end_entry(id_entry1).unwrap();
 //!     mla.end_entry(id_entry2).unwrap();
 //!
@@ -149,7 +115,7 @@
 //!     mla.finalize().unwrap();
 //! }
 //! ```
-//! * Read files from an archive
+//! * Read entries from an archive
 //! ```rust
 //! use mla::crypto::mlakey::parse_mlakey_privkey_der;
 //! use mla::config::ArchiveReaderConfig;
@@ -173,23 +139,25 @@
 //!
 //!     // Get a file
 //!     let mut entry = mla_read
-//!         .get_entry(EntryName::from_path("simple").unwrap())
+//!         .get_entry(EntryName::from_path("simple").unwrap()) // or EntryName::from_arbitrary_bytes if name is not representing a file path
 //!         .unwrap() // An error can be raised (I/O, decryption, etc.)
 //!         .unwrap(); // Option(entry), as the entry might not exist in the archive
 //!
 //!     // Get back its name, size, and data
+//!     // display name interpreted as file path and escape to avoid
+//!     // issues with terminal escape sequences for example
 //!     println!("{} ({} bytes)", entry.name.to_pathbuf_escaped_string().unwrap(), entry.size);
 //!     let mut output = Vec::new();
 //!     std::io::copy(&mut entry.data, &mut output).unwrap();
 //!
-//!     // Get back the list of files in the archive:
+//!     // Get back the list of entries names in the archive without
+//!     // interpreting them as file paths, so no need to unwrap as
+//!     // it cannot fail. ASCII slash is encoded too.
 //!     for entry_name in mla_read.list_entries().unwrap() {
-//!         println!("{}", entry_name.to_pathbuf_escaped_string().unwrap());
+//!         println!("{}", entry_name.raw_content_to_escaped_string());
 //!     }
 //! }
 //! ```
-//!
-//! :warning: Filenames are `String`s, which may contain path separator (`/`, `\`, `..`, etc.). Please consider this while using the API, to avoid path traversal issues.
 
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -602,6 +570,11 @@ macro_rules! check_state_file_opened {
     }};
 }
 
+/// Use this to write an archive
+///
+/// See crate root documentation for example usage.
+///
+/// Don't forget to call `ArchiveWriter::finalize`
 pub struct ArchiveWriter<'a, W: 'a + InnerWriterTrait> {
     /// MLA Archive format writer
     ///
@@ -644,6 +617,7 @@ fn vec_remove_item<T: std::cmp::PartialEq>(vec: &mut Vec<T>, item: &T) -> Option
 }
 
 impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
+    /// Create an `ArchiveWriter` from config.
     pub fn from_config(dest: W, config: ArchiveWriterConfig) -> Result<Self, Error> {
         let mut dest: InnerWriterType<W> = Box::new(RawLayerWriter::new(dest));
         let ArchiveWriterConfig {
@@ -704,11 +678,15 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         })
     }
 
+    /// Create an `ArchiveWriter` with a default config (encryption and compression with default level).
     pub fn new(dest: W, public_keys: &[HybridPublicKey]) -> Result<Self, Error> {
         let config = ArchiveWriterConfig::with_public_keys(public_keys);
         Self::from_config(dest, config)
     }
 
+    /// Finalize an archive (appends footer, finalize compression, truncation protection, etc.).
+    ///
+    /// Must be done to use `ArchiveReader` then.
     pub fn finalize(mut self) -> Result<W, Error> {
         // Check final state (empty ids, empty hashes)
         check_state!(self.state, OpenedFiles);
@@ -785,6 +763,11 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         Ok(())
     }
 
+    /// Start a new entry in archive without giving content for the moment.
+    ///
+    /// Returns an Id that must be kept to be able to append data to this entry.
+    ///
+    /// See `ArchiveWriter::append_entry_content` and `ArchiveWriter::end_entry`.
     pub fn start_entry(&mut self, name: EntryName) -> Result<ArchiveEntryId, Error> {
         check_state!(self.state, OpenedFiles);
 
@@ -825,6 +808,10 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         Ok(id)
     }
 
+    /// Appends data to an entry started with `ArchiveWriter::start_entry`.
+    ///
+    /// Can be called multiple times to append data to the same entry.
+    /// Can be interleaved with other calls writing data for other entries.
     pub fn append_entry_content<U: Read>(
         &mut self,
         id: ArchiveEntryId,
@@ -850,6 +837,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         .dump(&mut self.dest)
     }
 
+    /// Mark an entry as terminated and record its Sha256 hash.
     pub fn end_entry(&mut self, id: ArchiveEntryId) -> Result<(), Error> {
         check_state_file_opened!(&self.state, &id);
 
@@ -877,12 +865,15 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         Ok(())
     }
 
+    /// Helper calling `start_entry`, `append_entry_content` and `end_entry` one after the other.
     pub fn add_entry<U: Read>(&mut self, name: EntryName, size: u64, src: U) -> Result<(), Error> {
         let id = self.start_entry(name)?;
         self.append_entry_content(id, size, src)?;
         self.end_entry(id)
     }
 
+    /// Flushes data to the destination `Writer` `W`.
+    /// Calls flush on the destination too.
     pub fn flush(&mut self) -> io::Result<()> {
         self.dest.flush()
     }
@@ -906,6 +897,7 @@ pub(crate) struct EntryInfo {
     eof_offset: u64,
 }
 
+/// Use this to read an archive
 pub struct ArchiveReader<'a, R: 'a + InnerReaderTrait> {
     /// MLA Archive format Reader
     //
@@ -916,6 +908,7 @@ pub struct ArchiveReader<'a, R: 'a + InnerReaderTrait> {
 }
 
 impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
+    /// Create an `ArchiveReader`.
     pub fn from_config(mut src: R, mut config: ArchiveReaderConfig) -> Result<Self, Error> {
         // Make sure we read the archive header from the start
         src.rewind()?;
@@ -948,9 +941,9 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
         Ok(ArchiveReader { src, metadata })
     }
 
-    /// Return an iterator on filenames present in the archive
+    /// Return an iterator on the name of each entry in the archive.
     ///
-    /// Order is not relevant, and may change
+    /// Order is not relevant, and may change.
     pub fn list_entries(&self) -> Result<impl Iterator<Item = &EntryName>, Error> {
         if let Some(ArchiveFooter {
             entries_info: files_info,
@@ -963,6 +956,7 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
         }
     }
 
+    /// Get the hash recorded in the archive footer for an entry content.
     pub fn get_hash(&mut self, name: &EntryName) -> Result<Option<Sha256Hash>, Error> {
         if let Some(ArchiveFooter {
             entries_info: files_info,
@@ -992,7 +986,7 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
     ///
     /// If no entry is found with given `name`, returns `Ok(None)`.
     /// If found, return `Ok(Some(e))` where e is an `ArchiveEntry`, letting you read its content and size.
-    /// Returns and `Err` on error...
+    /// Returns an `Err` on error...
     pub fn get_entry(
         &mut self,
         name: EntryName,
@@ -1027,6 +1021,7 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
 
 // This code is very similar with MLAArchiveReader
 
+/// Use this to convert a truncated archive to one that can be opened with `ArchiveReader`, eventually loosing some content and security or performance properties.
 pub struct TruncatedArchiveReader<'a, R: 'a + Read> {
     /// MLA Archive format Reader (fail-safe)
     //
@@ -1059,6 +1054,7 @@ macro_rules! update_error {
 }
 
 impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
+    /// Create a `TruncatedArchiveReader` with given config.
     pub fn from_config(mut src: R, mut config: ArchiveReaderConfig) -> Result<Self, Error> {
         let header = ArchiveHeader::from(&mut src)?;
         let layers_enabled = header.config.layers_enabled;
@@ -1079,7 +1075,7 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
         Ok(Self { config, src })
     }
 
-    /// Fail-safe / best-effort conversion of the current archive to a correct
+    /// Best-effort conversion of the current archive to a correct
     /// one. On success, returns the reason conversion terminates (ideally,
     /// EndOfOriginalArchiveData)
     #[allow(clippy::cognitive_complexity)]

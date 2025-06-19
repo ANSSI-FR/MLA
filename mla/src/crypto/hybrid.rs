@@ -67,7 +67,7 @@ const HYBRIDKEM_ASSOCIATED_DATA: &[u8; 0] = b"";
 ///   used instead of the "Dual-PRF Combiner" (also from [6]). Indeed, this combiner force the "salt" part of HKDF
 ///   to be uniformly random using an additional PRF use, ensuring the following HKDF is indeed a Dual-PRF
 ///
-/// uniformly_random_ss1 = HKDF-SHA256-Extract(
+/// uniformly_random_ss1 = HKDF-SHA512-Extract(
 ///     salt=0,
 ///     ikm=ss1
 /// )
@@ -211,11 +211,13 @@ impl HybridMultiRecipientEncapsulatedKey {
     }
 }
 
-/// Private key for hybrid cryptography, made of
-/// - a X25519 key, for ECC (pre-quantum) cryptography
-/// - a ML-KEM 1024 key, for post-quantum cryptography
+/// Private key for hybrid cryptography.
 ///
-/// Support KEM decapsulation
+/// Made of:
+/// - an X25519 key, for ECC (pre-quantum) cryptography
+/// - an ML-KEM 1024 key, for post-quantum cryptography
+///
+/// Supports KEM decapsulation
 #[derive(Clone)]
 pub struct HybridPrivateKey {
     pub(crate) private_key_ecc: X25519StaticSecret,
@@ -276,9 +278,11 @@ impl Decapsulate<HybridMultiRecipientEncapsulatedKey, HybridKemSharedSecret> for
     }
 }
 
-/// Public key for hybrid cryptography, made of
-/// - a X25519 key, for ECC (pre-quantum) cryptography
-/// - a ML-KEM 1024 key, for post-quantum cryptography
+/// Public key for hybrid cryptography
+///
+/// Made of:
+/// - an X25519 key, for ECC (pre-quantum) cryptography
+/// - an ML-KEM 1024 key, for post-quantum cryptography
 #[derive(Clone)]
 pub struct HybridPublicKey {
     pub(crate) public_key_ecc: X25519PublicKey,
@@ -351,7 +355,11 @@ impl Encapsulate<HybridMultiRecipientEncapsulatedKey, HybridKemSharedSecret>
     }
 }
 
-/// Generate an Hybrid key pair using the provided csprng
+/// WARNING: the seed is thus as secret as the private key.
+/// If provided, it should be a cryptographically secure random.
+/// You should probably rather use the `generate_keypair` function.
+///
+/// Generate an Hybrid key pair using the provided seed
 pub fn generate_keypair_from_seed(seed: [u8; 32]) -> (HybridPrivateKey, HybridPublicKey) {
     let mut csprng = ChaCha20Rng::from_seed(seed);
     generate_keypair_from_rng(&mut csprng)

@@ -8,12 +8,14 @@ use crate::layers::encrypt::{
     EncryptionConfig, EncryptionPersistentConfig, EncryptionReaderConfig, InternalEncryptionConfig,
 };
 
+/// Configuration to write an archive.
 pub struct ArchiveWriterConfig {
     pub(crate) compression_config: Option<CompressionConfig>,
     pub(crate) encryption_config: Option<EncryptionConfig>,
 }
 
 impl ArchiveWriterConfig {
+    /// Will encrypt content with given public keys.
     pub fn with_public_keys(keys: &[HybridPublicKey]) -> Self {
         let mut encryption_config = EncryptionConfig::default();
         encryption_config.add_public_keys(keys);
@@ -23,6 +25,7 @@ impl ArchiveWriterConfig {
         }
     }
 
+    /// WARNING: Won't encrypt content.
     pub fn without_encryption() -> ArchiveWriterConfig {
         ArchiveWriterConfig {
             compression_config: Some(CompressionConfig::default()),
@@ -45,6 +48,7 @@ impl ArchiveWriterConfig {
         })
     }
 
+    /// Disable compression
     pub fn without_compression(mut self) -> ArchiveWriterConfig {
         self.compression_config = None;
         self
@@ -68,7 +72,7 @@ pub(crate) struct InternalConfig {
     pub encrypt: Option<InternalEncryptionConfig>,
 }
 
-/// User's configuration used to read an archive
+/// Configuration used to read an archive.
 pub struct ArchiveReaderConfig {
     pub(crate) accept_unencrypted: bool,
     // Layers specifics
@@ -76,6 +80,7 @@ pub struct ArchiveReaderConfig {
 }
 
 impl ArchiveReaderConfig {
+    /// Will refuse to open an archive without encryption.
     pub fn with_private_keys(keys: &[HybridPrivateKey]) -> Self {
         let mut encrypt = EncryptionReaderConfig::default();
         encrypt.set_private_keys(keys);
@@ -85,6 +90,7 @@ impl ArchiveReaderConfig {
         }
     }
 
+    /// Will accept to open encrypted and unencrypted archives.
     pub fn with_private_keys_accept_unencrypted(keys: &[HybridPrivateKey]) -> Self {
         let mut encrypt = EncryptionReaderConfig::default();
         encrypt.set_private_keys(keys);
@@ -94,6 +100,7 @@ impl ArchiveReaderConfig {
         }
     }
 
+    /// Won't accept encrypted archives.
     pub fn without_encryption() -> Self {
         let encrypt = EncryptionReaderConfig::default();
         Self {
