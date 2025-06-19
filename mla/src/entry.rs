@@ -295,10 +295,10 @@ pub use entryname::{
     EntryName, EntryNameError,
 };
 
-pub struct ArchiveEntry<T: Read> {
+pub struct ArchiveEntry<'a, T> {
     /// File inside a MLA Archive
     pub name: EntryName,
-    pub data: T,
+    pub data: ArchiveEntryDataReader<'a, T>,
     pub size: u64,
 }
 

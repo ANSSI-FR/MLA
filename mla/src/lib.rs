@@ -988,12 +988,15 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
         }
     }
 
-    #[allow(clippy::type_complexity)]
+    /// Get an archive entry.
+    ///
+    /// If no entry is found with given `name`, returns `Ok(None)`.
+    /// If found, return `Ok(Some(e))` where e is an `ArchiveEntry`, letting you read its content and size.
+    /// Returns and `Err` on error...
     pub fn get_entry(
         &mut self,
         name: EntryName,
-    ) -> Result<Option<ArchiveEntry<ArchiveEntryDataReader<Box<dyn 'b + LayerReader<'b, R>>>>>, Error>
-    {
+    ) -> Result<Option<ArchiveEntry<impl InnerReaderTrait>>, Error> {
         if let Some(ArchiveFooter {
             entries_info: files_info,
         }) = &self.metadata
