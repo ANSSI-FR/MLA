@@ -193,20 +193,7 @@ struct EntryName {
 }
 ````
 
-Each archive Entry as an associated name. An EntryName is a nonempty sequence of bytes (maximum length of 65536). It may be interpreted as arbitrary bytes or as a file path.
-If it is to be interpreted as a file path, the underlying bytes must consist of ASCII slash separated components and not begin with a slash.
-The rules for each component are:
-* must not be empty
-* must not contain any ASCII NUL byte
-* must not be ASCII dot
-* must not be two ASCII dots
-
-If it is to be interpreted as a Windows file path, in addition to previous rules:
-* No byte should be an ASCII backslash (separators are represented by an ASCII slash).
-* The eventual second byte of the whole path should not be an ASCII colon (`:`).
-* Every component must be encoded as UTF-8.
-
-Even if respecting these rules, the OS may see the resulting path as invalid.
+These names are described in `doc/ENTRY_NAME.md`
 
 Actual archive entries data
 -
