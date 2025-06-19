@@ -2147,8 +2147,43 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn not_path_entry_name() {
+        let mut file: Vec<u8> = Vec::new();
+        let pem_pub: &'static [u8] = include_bytes!("../../samples/test_mlakey_pub.pem");
+        let pub_key = crypto::mlakey::parse_mlakey_pubkey_pem(pem_pub).unwrap();
+
+        let mut config = ArchiveWriterConfig::with_public_keys(&[pub_key]).without_compression();
+        if let Some(cfg) = config.encryption_config.as_mut() {
+            cfg.rng = crate::layers::encrypt::EncapsulationRNG::Seed([0; 32]);
+        }
+        let mut mla = ArchiveWriter::from_config(&mut file, config).expect("Writer init failed");
+
+        let name = EntryName::from_arbitrary_bytes(
+            b"c:/\0;\xe2\x80\xae\nc\rd\x1b[1;31ma<script>evil\\../\xd8\x01\xc2\x85\xe2\x88\x95",
+        )
+        .unwrap();
+
+        mla.add_entry(name.clone(), 8, b"' OR 1=1".as_slice())
+            .expect("start_file");
+        mla.finalize().unwrap();
+
+        std::fs::File::create(std::path::Path::new("../samples/archive_weird.mla"))
+            .unwrap()
+            .write_all(&file)
+            .unwrap();
+
+        assert_eq!(
+            Sha256::digest(&file).as_slice(),
+            [
+                115, 247, 179, 135, 231, 123, 5, 70, 220, 151, 55, 4, 141, 174, 226, 206, 16, 143,
+                47, 138, 97, 5, 12, 171, 82, 24, 102, 169, 207, 22, 244, 19
+            ]
+        )
+    }
+
+    #[test]
     fn empty_blocks() {
-        // Add a file with containning an empty block - it should works
+        // Add a file with containning an empty block - it should work
         let file = Vec::new();
         let config = ArchiveWriterConfig::without_encryption().without_compression();
         let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
