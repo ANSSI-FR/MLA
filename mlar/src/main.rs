@@ -1034,7 +1034,7 @@ fn app() -> clap::Command {
         .subcommand(
             Command::new("list")
                 .about("List entries inside a MLA Archive")
-                .before_help("Outputs a list of MLA entries. By default, names are interpreted as paths and encoded like described in `doc/ENTRY_NAME.md`")
+                .before_help("Outputs a list of MLA entries. By default, names are interpreted as paths and escaped like described in `doc/ENTRY_NAME.md`")
                 .args(&input_args)
                 .arg(
                     Arg::new("raw-escaped-names")
@@ -1163,7 +1163,7 @@ fn app() -> clap::Command {
         .subcommand(
             Command::new("keyderive")
                 .about(
-                    "Advanced: Derive a new public/private keypair from an existing one and a public path, see `doc/KEYDERIVATION.md`",
+                    "Advanced: Derive a new public/private keypair from an existing one and a public path, see `doc/KEY_DERIVATION.md`",
                 )
                 .arg(
                     Arg::new("input")
