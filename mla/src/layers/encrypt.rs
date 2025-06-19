@@ -536,10 +536,6 @@ impl<'a, R: 'a + Read + Seek> EncryptionLayerReader<'a, R> {
 }
 
 impl<'a, R: 'a + InnerReaderTrait> LayerReader<'a, R> for EncryptionLayerReader<'a, R> {
-    fn into_inner(self) -> Option<Box<dyn 'a + LayerReader<'a, R>>> {
-        Some(self.inner)
-    }
-
     fn into_raw(self: Box<Self>) -> R {
         self.inner.into_raw()
     }

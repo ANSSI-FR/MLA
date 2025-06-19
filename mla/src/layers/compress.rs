@@ -291,10 +291,6 @@ impl<'a, R: 'a + Read> CompressionLayerReader<'a, R> {
 }
 
 impl<'a, R: 'a + InnerReaderTrait> LayerReader<'a, R> for CompressionLayerReader<'a, R> {
-    fn into_inner(self) -> Option<Box<dyn 'a + LayerReader<'a, R>>> {
-        Some(self.state.into_inner())
-    }
-
     fn into_raw(self: Box<Self>) -> R {
         self.state.into_inner().into_raw()
     }
