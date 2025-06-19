@@ -214,6 +214,8 @@ fn parse_mlkem_decapkey_internal(
     ))
 }
 
+/// Parse given DER data as an MLA private key
+///
 /// Expected structure:
 ///
 /// - ASN1:
@@ -404,6 +406,8 @@ fn parse_mlkem_encapkey_internal(
     ))
 }
 
+/// Parse given DER data as an MLA private key
+///
 /// Expected structure:
 ///
 /// - ASN1:
@@ -631,20 +635,22 @@ fn derive_one_path_component(
     generate_keypair_from_seed(seed)
 }
 
-/// Return a KeyPair based on a succession of paths and an hybrid private key.
-/// Return None if paths is empty.
+/// Return a KeyPair based on a succession of path components and an hybrid private key.
+/// Return None if `path_components` is empty.
+///
+/// See `doc/KEY_DERIVATION.md`.
 pub fn derive_keypair_from_path<'a>(
     path_components: impl Iterator<Item = &'a [u8]>,
     src: HybridPrivateKey,
 ) -> Option<(HybridPrivateKey, HybridPublicKey)> {
     // None for public key: we do not have one at the beginning
     let initial_keypair = (src, None);
-    // Use a fold to feed each newly generated keypair into next derive_one_path
+    // Use a fold to feed each newly generated keypair into next derive_one_path_component
     let (privkey, opt_pubkey) = path_components.fold(initial_keypair, |keypair, path| {
         let (privkey, pubkey) = derive_one_path_component(path, keypair.0);
         (privkey, Some(pubkey))
     });
-    // opt_pubkey will be None iff paths is empty
+    // opt_pubkey will be None iff path_components is empty
     opt_pubkey.map(|pubkey| (privkey, pubkey))
 }
 

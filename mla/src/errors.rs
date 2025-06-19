@@ -10,7 +10,7 @@ pub enum Error {
     IOError(io::Error),
     /// Wrong magic, must be "MLA"
     WrongMagic,
-    /// Unsupported version, must be 1
+    /// Unsupported version, must be 2
     UnsupportedVersion,
     /// Supplied key is not in the expected format
     InvalidKeyFormat,

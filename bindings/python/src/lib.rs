@@ -43,7 +43,7 @@ create_exception!(
     mla,
     UnsupportedVersion,
     MLAError,
-    "Unsupported version, must be 1"
+    "Unsupported version, must be 2"
 );
 create_exception!(
     mla,
@@ -300,7 +300,7 @@ impl FileMetadata {
 
 // -------- mla.PublicKeys --------
 
-/// Represents multiple ECC and MLKEM Public Keys
+/// Represents multiple MLA Public Keys
 ///
 /// Instanciate with path (as string) or data (as bytes)
 /// PEM and DER format are supported
@@ -406,7 +406,7 @@ impl PublicKeys {
 
 // -------- mla.PrivateKeys --------
 
-/// Represents multiple ECC and MLKEM Private Keys
+/// Represents multiple MLA Private Keys
 ///
 /// Instanciate with path (as string) or data (as bytes)
 /// PEM and DER format are supported

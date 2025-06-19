@@ -10,9 +10,7 @@ use std::io::{self, Read, Seek, Write};
 
 /// Escaping function used by MLA, but may be useful for others
 ///
-/// For every byte:
-/// * If listed in `bytes_to_preserve` then it will be output without transformation.
-/// * Else, it will be replaced by `%xx` where `xx` is their hexadecimal representation.
+/// This generic escaping is described in `doc/ENTRY_NAME.md`
 pub fn mla_percent_escape(bytes: &[u8], bytes_to_preserve: &[u8]) -> Vec<u8> {
     let mut s = Vec::with_capacity(bytes.len() * 3);
     for byte in bytes {
@@ -31,9 +29,7 @@ pub fn mla_percent_escape(bytes: &[u8], bytes_to_preserve: &[u8]) -> Vec<u8> {
 
 /// Inverse of `mla_percent_escape`
 ///
-/// This function will return None if feeded with anything else than
-/// ASCII characters, ASCII dots, bytes listed in `other_bytes_to_allow` and `%xx` where `xx` is the
-/// hexadecimal representation of a byte different from the previous characters
+/// This generic unescaping is described in `doc/ENTRY_NAME.md`
 pub fn mla_percent_unescape(input: &[u8], bytes_to_allow: &[u8]) -> Option<Vec<u8>> {
     let mut result = Vec::with_capacity(input.len());
     let mut bytes = input.iter();
@@ -81,17 +77,17 @@ fn hex_char_to_nibble(hex_char: u8) -> Option<u8> {
 
 /// Extract an Archive linearly.
 ///
-/// `export` maps filenames to Write objects, which will receives the
-/// corresponding file's content. If a file is in the archive but not in
-/// `export`, this file will be silently ignored.
+/// `export` maps entry names to Write objects, which will receive the
+/// corresponding entry's content. If an entry is in the archive but not in
+/// `export`, this entry will be silently ignored.
 ///
-/// This is an effective way to extract all elements from an MLA Archive. It
-/// avoids seeking for each files, and for each files parts if files are
+/// This is an performant way to extract all elements from an MLA Archive. It
+/// avoids seeking for each entry, and for each entry part if entries are
 /// interleaved. For an MLA Archive, seeking could be a costly operation, and might
-/// involve reading data to `Sink` (seeking in decompression), or involves
-/// additional computation (getting a whole encrypted block to check its
+/// involve additional computation and reading a lot of structure around to enable
+/// decompression and decryption (eg. getting a whole encrypted block to check its
 /// encryption tag).
-/// Linear extraction avoids these costs by reading once and only once each byte,
+/// Linear extraction avoids these costs by approximately reading once and only once each byte,
 /// and by reducing the amount of seeks.
 pub fn linear_extract<W1: InnerWriterTrait, R: InnerReaderTrait, S: BuildHasher>(
     archive: &mut ArchiveReader<R>,
