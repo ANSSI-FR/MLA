@@ -30,7 +30,7 @@ pub fn read_header_info<R: Read>(src: &mut R) -> Result<ArchiveHeaderInfo, Error
     let header = ArchiveHeader::from(src)?;
     Ok(ArchiveHeaderInfo {
         format_version: header.format_version,
-        compression_enabled: header.config.layers_enabled.contains(Layers::ENCRYPT),
+        compression_enabled: header.config.layers_enabled.contains(Layers::COMPRESS),
         encryption_enabled: header.config.layers_enabled.contains(Layers::ENCRYPT),
     })
 }
