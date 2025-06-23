@@ -1,3 +1,8 @@
+Key derivation
+-
+
+This feature can help setup a hierarchical key infrastructure.
+
 `mlar` provides a subcommand `keyderive` to deterministically derive sub-keys from a given key along a derivation path (a bit like [BIP-32](https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki), except children public keys can't be derived from the parent one).
 
 For instance, if one wants to derive the following scheme:
