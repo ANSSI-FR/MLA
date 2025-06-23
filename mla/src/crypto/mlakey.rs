@@ -13,7 +13,6 @@ use curve25519_dalek::edwards::CompressedEdwardsY;
 use curve25519_dalek::montgomery::MontgomeryPoint;
 use ml_kem::EncodedSizeUser;
 use sha2::{Digest, Sha512};
-// Re-export x25519_dalek structures for convenience
 use x25519_dalek::{PublicKey, StaticSecret};
 
 use core::fmt;
