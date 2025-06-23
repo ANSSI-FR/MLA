@@ -345,7 +345,7 @@ impl<'a, R: Read + Seek> ArchiveEntryDataReader<'a, R> {
             ArchiveEntryBlock::EntryStart { id, .. } => id,
             _ => {
                 return Err(Error::WrongReaderState(
-                    "[BlocksToFileReader] A file must start with a FileStart".to_string(),
+                    "[BlocksToFileReader] A file must start with an EntryStart".to_string(),
                 ));
             }
         };
@@ -425,7 +425,7 @@ impl<T: Read + Seek> Read for ArchiveEntryDataReader<'_, T> {
     fn read(&mut self, into: &mut [u8]) -> std::io::Result<usize> {
         let (remaining, count) = match self.state {
             ArchiveEntryDataReaderState::Ready => {
-                // Start a new block FileContent
+                // Start a new block EntryContent
                 match ArchiveEntryBlock::from(&mut self.src)? {
                     ArchiveEntryBlock::EntryContent { length, id, .. } => {
                         if id != self.id {

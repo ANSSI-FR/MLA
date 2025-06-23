@@ -97,7 +97,7 @@ pub fn linear_extract<W1: InnerWriterTrait, R: InnerReaderTrait, S: BuildHasher>
     archive.src.rewind()?;
 
     // Use a BufReader to cache, by merging them into one bigger read, small
-    // read calls (like the ones on ArchiveFileBlock reading)
+    // read calls (like the ones on ArchiveEntryBlock reading)
     let mut src = io::BufReader::new(&mut archive.src);
 
     // Associate an ID in the archive to the corresponding filename
