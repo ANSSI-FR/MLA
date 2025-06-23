@@ -458,7 +458,7 @@ impl ArchiveFooter {
 
 // -------- Writer --------
 
-/// Tags used in each ArchiveFileBlock to indicate the type of block that follows
+/// Tags used in each ArchiveEntryBlock to indicate the type of block that follows
 #[derive(Debug)]
 #[repr(u8)]
 enum ArchiveEntryBlockType {
@@ -594,11 +594,11 @@ pub struct ArchiveWriter<'a, W: 'a + InnerWriterTrait> {
     ///
     /// This is done to keep a quick check for filename existence
     files_info: HashMap<EntryName, ArchiveEntryId>,
-    /// ID -> Corresponding FileInfo
+    /// ID -> Corresponding EntryInfo
     ///
     /// File chunks identify their relative file using the `ArchiveFileID`.
     /// `files_info` and `ids_info` could have been merged into a single HashMap
-    /// String -> FileInfo, at the cost of an additional HashMap ArchiveFileID ->
+    /// String -> EntryInfo, at the cost of an additional HashMap ArchiveFileID ->
     /// String, thus increasing memory footprint.
     /// These hashmaps are actually merged at the last moment, on footer
     /// serialization
