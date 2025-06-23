@@ -201,7 +201,7 @@ mod tests {
         // Prepare writers
         let file_list: Vec<EntryName> = mla_read
             .list_entries()
-            .expect("reader.list_files")
+            .expect("reader.list_entries")
             .cloned()
             .collect();
         let mut export: HashMap<&EntryName, Vec<u8>> =
