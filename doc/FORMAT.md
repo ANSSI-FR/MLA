@@ -221,7 +221,7 @@ struct ArchiveContent {
 }
 ```
 
-The archive footer information is optionaly retrieved by first reading the value of `archive_footer_length` at the end of `data`, then reading `archive_footer_length`-bytes at the end of `data` minus 8 bytes.
+The archive footer information is optionally retrieved by first reading the value of `archive_footer_length` at the end of `data`, then reading `archive_footer_length`-bytes at the end of `data` minus 8 bytes.
 
 `entry_data` is the concatenation of all `ArchiveEntryBlock`s. Each block starts with a `u8` corresponding to the block type:
 ```rust
@@ -289,7 +289,7 @@ Off5: [EndOfEntry ID 1]
 ...
 ```
 
-The `offsets` for the entry with ID 1 will be ̀`Off0`, `Off2`, `Off5`.
+The `offsets` for the entry with ID 1 will be `Off0`, `Off2`, `Off5`.
 Additionally, for faster `hash` retrieval, `entries_info.eof_offset` is the offset of the `EndOfEntry` block for the corresponding entry. In this example, `eof_offset = Off5` for ID 1.
 
 Finally, the `entries_info.size` is the size in bytes of the corresponding entry content.
