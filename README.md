@@ -11,7 +11,7 @@ Multi Layer Archive (MLA)
 
 MLA is an archive file format with the following features:
 
-* Support for hybrid traditional and post-quantum encryption with asymmetric keys (HPKE with AES256-GCM and a KEM based on an hybridation of X25519 and post-quantum ML-KEM 1024)
+* Support for traditional and post-quantum encryption hybridation with asymmetric keys (HPKE with AES256-GCM and a KEM based on an hybridation of X25519 and post-quantum ML-KEM 1024)
 * Support for compression (based on [`rust-brotli`](https://github.com/dropbox/rust-brotli/))
 * Streamable archive creation:
   * An archive can be built even over a data-diode
@@ -30,8 +30,8 @@ Repository
 This repository contains:
 
 * `mla`: the Rust library implementing MLA reader and writer
-* `mlar`: a Rust cli utility wrapping `mla` for common actions (create, list, extract, ...)
-* `doc` : documentation of things related to MLA (eg. format specification)
+* `mlar`: a Rust cli utility wrapping `mla` for common actions (create, list, extract...)
+* `doc` : advanced documentation related to MLA (e.g. format specification)
 * `bindings` : bindings for other languages
 * `samples` : test assets
 * `mla-fuzz-afl` : a Rust utility to fuzz `mla`
@@ -110,14 +110,14 @@ Bindings are available for:
 * [C/CPP](bindings/C/README.md)
 * [Python](bindings/python/README.md)
 
-SECURITY
+Security
 -
 
-* There is currently no signature mechanism implemented : an encrypted archive may have been crafted by anyone haviing your public key and thus can contain arbitrary data.
-* Please keep in mind, it is generally not safe to extract in a place where at least one ancestor is writable by others (symlink attacks).
-* Read API documentation and mlar help before using their functionnalities. They sometime provide important security warnings. `doc/ENTRY_NAME.md` is also of particular interest.
+* There is currently no signature mechanism implemented: an encrypted archive may have been crafted by anyone having your public key and thus can contain arbitrary data.
+* Please keep in mind, it is generally not safe to extract in a place where at least one ancestor is writable by others (symbolic link attacks).
+* Read API documentation and mlar help before using their functionnalities. They sometimes provide important security warnings. `doc/ENTRY_NAME.md` is also of particular interest.
 * mlar escapes entry names on output to avoid security issues.
-* Except for symlink attacks, mlar will not extract outside given output directory.
+* Except for symbolic link attacks, mlar will not extract outside given output directory.
 
 FAQ
 -
