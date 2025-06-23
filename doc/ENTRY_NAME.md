@@ -32,11 +32,11 @@ These rules are checked by the accompanying Rust implmentation (`EntryName::to_p
 Even if respecting these rules, the OS may see the resulting path as invalid.
 
 Please keep in mind that two different names, may map to same path on OS
-(eg. Windows case insensitivity).
+(e.g. Windows case insensitivity).
 
 When given a path as input, before being converted to an entry name by
 `EntryName::from_path` and `mlar` the path is normalized by keeping only
-`Normal` `std::path::Component`s and popping an eventual previous component whe
+`Normal` `std::path::Component`s and popping an eventual previous component when
 a `..` is encountered.
 
 ## String representation of entry names
@@ -60,22 +60,22 @@ This is used by default by `mlar list`.
 
 ### Generic escaping, implemented by `helpers::mla_percent_escape`
 
-A `bytes_to_preserve` parameter tells wich bytes are not escaped.
+A `bytes_to_preserve` parameter tells which bytes are not escaped.
 For every input byte:
 * If listed in `bytes_to_preserve` then it will be output without transformation.
 * Else, it will be replaced by `%xx` where `xx` is their hexadecimal representation.
 
 ### Generic unescaping, implemented by `helpers::mla_percent_unescape`
 
-A `bytes_to_allow` parameter tells wich bytes are not escaped.
+A `bytes_to_allow` parameter tells which bytes are not escaped.
 Unescaping fails if feeded with anything else than bytes listed in
 `bytes_to_allow` and `%xx` where `xx` is the hexadecimal representation of a
-byte not listed in `bytes_to_allow`. Otherwiseit reverses the process described
+byte not listed in `bytes_to_allow`. Otherwise it reverses the process described
 in `Generic escaping`.
 
 ### Examples
 
-For each following entry name found serialized in an archive, here is how they are represented as strings when interpreted as path.
+For each following entry name found serialized in an archive, here is how they are represented as strings when interpreted as path:
 * empty bytes -> invalid (even interpreted as arbitrary bytes)
 * /a -> invalid path (root directory)
 * a/b/../d -> invalid path (path traversal)

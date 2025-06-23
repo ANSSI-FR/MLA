@@ -2,8 +2,8 @@
 //!
 //! MLA is an archive file format with the following features:
 //!
+//! * Support for traditional and post-quantum encryption hybridation with asymmetric keys (HPKE with AES256-GCM and a KEM based on an hybridation of X25519 and post-quantum ML-KEM 1024)
 //! * Support for compression (based on [`rust-brotli`](https://github.com/dropbox/rust-brotli/))
-//! * Support for hybrid pre/post-quantum encryption with asymmetric keys (HPKE with AES256-GCM and a KEM based on an hybridation of X25519 and post-quantum ML-KEM 1024)
 //! * Architecture agnostic and portable to some extent (written entirely in Rust)
 //! * Streamable archive creation:
 //!   * An archive can be built even over a data-diode
@@ -12,7 +12,7 @@
 //! * Archive files are seekable, even if compressed or encrypted. An entry can be accessed in the middle of the archive without reading from the beginning
 //! * If truncated, archives can be repaired to some extent. Two modes are available:
 //!   * Authenticated repair (default): only authenticated encrypted chunks of data are retrieved
-//!   * Unauthenticated repair: authenticated and unauthenticated encrypted chunks of data are retrieved. Use at your own risk.
+//!   * Unauthenticated repair: authenticated and unauthenticated encrypted chunks of data are retrieved. Use at your own risk
 //! * Arguably less prone to bugs, especially while parsing an untrusted archive (Rust safety)
 //!
 //! Repository
@@ -21,8 +21,8 @@
 //! The MLA repository contains:
 //!
 //! * `mla`: the Rust library implementing MLA reader and writer
-//! * `mlar`: a Rust cli utility wrapping `mla` for common actions (create, list, extract, ...)
-//! * `doc` : documentation of things related to MLA (eg. format specification)
+//! * `mlar`: a Rust cli utility wrapping `mla` for common actions (create, list, extract...)
+//! * `doc` : advanced documentation related to MLA (e.g. format specification)
 //! * `bindings` : bindings for other languages
 //! * `samples` : test assets
 //! * `mla-fuzz-afl` : a Rust utility to fuzz `mla`
