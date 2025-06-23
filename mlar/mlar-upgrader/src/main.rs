@@ -91,6 +91,7 @@ fn upgrade(matches: &ArgMatches) -> Result<(), Error> {
     let mut mla_in = reader_from_matches(matches);
 
     // Read the file list using metadata
+    // v1 archive still uses files, not entries
     let fnames: Vec<String> = mla_in.list_files().map_or_else(
         |_| {
             panic!("Files is malformed. Please consider repairing the file");
