@@ -1,38 +1,63 @@
 use bincode::{Decode, Encode};
 
-use crate::Layers;
+use crate::crypto::hybrid::{HybridPrivateKey, HybridPublicKey};
 use crate::errors::ConfigError;
+use crate::format::Layers;
 use crate::layers::compress::CompressionConfig;
 use crate::layers::encrypt::{
     EncryptionConfig, EncryptionPersistentConfig, EncryptionReaderConfig, InternalEncryptionConfig,
 };
 
-/// This module implements the configuration capabilities of MLA Archive
-///
-/// Workflow:
-/// ```asciiart
-///                      `ArchiveWriterConfig`  <--> User, add recipients, set the compression level, etc.
-///                              |
-///                              v
-///                      -------------- MLA ---
-///                              |
-///                       .to_persistent()
-///                           /       \
-/// MLA specifics <= InternalConfig  PersistentConfig => to be stored in the header,
-///                                                      for futur reloaded by the Reader
-/// ```
-/// User's configuration used to prepare an archive
+/// Configuration to write an archive.
 pub struct ArchiveWriterConfig {
-    layers_enabled: Layers,
+    pub(crate) compression_config: Option<CompressionConfig>,
+    pub(crate) encryption_config: Option<EncryptionConfig>,
+}
 
-    // Layers specifics
-    pub(crate) compress: CompressionConfig,
-    pub(crate) encrypt: EncryptionConfig,
+impl ArchiveWriterConfig {
+    /// Will encrypt content with given public keys.
+    pub fn with_public_keys(keys: &[HybridPublicKey]) -> Self {
+        let mut encryption_config = EncryptionConfig::default();
+        encryption_config.add_public_keys(keys);
+        ArchiveWriterConfig {
+            compression_config: Some(CompressionConfig::default()),
+            encryption_config: Some(encryption_config),
+        }
+    }
+
+    /// WARNING: Won't encrypt content.
+    pub fn without_encryption() -> ArchiveWriterConfig {
+        ArchiveWriterConfig {
+            compression_config: Some(CompressionConfig::default()),
+            encryption_config: None,
+        }
+    }
+
+    /// Set the compression level
+    /// compression level (0-11); bigger values cause denser, but slower compression
+    pub fn with_compression_level(self, compression_level: u32) -> Result<Self, ConfigError> {
+        let ArchiveWriterConfig {
+            compression_config,
+            encryption_config,
+        } = self;
+        let mut compression_config = compression_config.unwrap_or_default();
+        compression_config.set_compression_level(compression_level)?;
+        Ok(ArchiveWriterConfig {
+            compression_config: Some(compression_config),
+            encryption_config,
+        })
+    }
+
+    /// Disable compression
+    pub fn without_compression(mut self) -> ArchiveWriterConfig {
+        self.compression_config = None;
+        self
+    }
 }
 
 /// Configuration stored in the header, to be reloaded
 #[derive(Encode, Decode)]
-pub struct ArchivePersistentConfig {
+pub(crate) struct ArchivePersistentConfig {
     pub layers_enabled: Layers,
 
     // Layers specifics
@@ -43,111 +68,52 @@ pub struct ArchivePersistentConfig {
 #[derive(Default)]
 pub(crate) struct InternalConfig {
     // Layers specifics
-    pub(crate) encrypt: Option<InternalEncryptionConfig>,
+    #[allow(dead_code)]
+    pub encrypt: Option<InternalEncryptionConfig>,
 }
 
-pub type ConfigResult<'a> = Result<&'a mut ArchiveWriterConfig, ConfigError>;
-
-impl ArchiveWriterConfig {
-    /// Start a builder without any layers configured
-    pub fn new() -> ArchiveWriterConfig {
-        ArchiveWriterConfig {
-            layers_enabled: Layers::EMPTY,
-            compress: CompressionConfig::default(),
-            encrypt: EncryptionConfig::default(),
-        }
-    }
-
-    /// Enable a layer
-    pub fn enable_layer(&mut self, layer: Layers) -> &mut ArchiveWriterConfig {
-        self.layers_enabled |= layer;
-        self
-    }
-
-    /// Disable a layer
-    pub fn disable_layer(&mut self, layer: Layers) -> &mut ArchiveWriterConfig {
-        self.layers_enabled &= !layer;
-        self
-    }
-
-    /// Set several layers at once
-    pub fn set_layers(&mut self, layers: Layers) -> &mut ArchiveWriterConfig {
-        self.layers_enabled = layers;
-        self
-    }
-
-    /// Get the persistent version, to be stored in the header
-    pub(crate) fn to_persistent(
-        &self,
-    ) -> Result<(ArchivePersistentConfig, InternalConfig), ConfigError> {
-        let (encrypt_persistent, encrypt_internal) = if self.is_layers_enabled(Layers::ENCRYPT) {
-            let (persistent, internal) = self.encrypt.to_persistent()?;
-            (Some(persistent), Some(internal))
-        } else {
-            (None, None)
-        };
-        Ok((
-            ArchivePersistentConfig {
-                layers_enabled: self.layers_enabled,
-                encrypt: encrypt_persistent,
-            },
-            InternalConfig {
-                encrypt: encrypt_internal,
-            },
-        ))
-    }
-
-    /// Check if layers are enabled
-    pub fn is_layers_enabled(&self, layer: Layers) -> bool {
-        self.layers_enabled.contains(layer)
-    }
-
-    /// Consistency check
-    pub fn check(&self) -> Result<(), ConfigError> {
-        if self.is_layers_enabled(Layers::ENCRYPT) {
-            self.encrypt.check()?;
-        }
-        Ok(())
-    }
-}
-
-impl std::default::Default for ArchiveWriterConfig {
-    /// The default version is missing some parameters to work properly; this is intended
-    /// Missing parameters:
-    /// - ecc_encryption_key
-    fn default() -> Self {
-        ArchiveWriterConfig {
-            layers_enabled: Layers::default(),
-            compress: CompressionConfig::default(),
-            encrypt: EncryptionConfig::default(),
-        }
-    }
-}
-
-/// User's configuration used to read an archive
-#[derive(Default)]
+/// Configuration used to read an archive.
 pub struct ArchiveReaderConfig {
-    pub layers_enabled: Layers,
-
+    pub(crate) accept_unencrypted: bool,
     // Layers specifics
-    pub encrypt: EncryptionReaderConfig,
+    pub(crate) encrypt: EncryptionReaderConfig,
 }
 
 impl ArchiveReaderConfig {
-    /// Start a builder, without any specific option
-    pub fn new() -> Self {
+    /// Will refuse to open an archive without encryption.
+    pub fn with_private_keys(keys: &[HybridPrivateKey]) -> Self {
+        let mut encrypt = EncryptionReaderConfig::default();
+        encrypt.set_private_keys(keys);
         Self {
-            layers_enabled: Layers::EMPTY,
-            encrypt: EncryptionReaderConfig::default(),
+            accept_unencrypted: false,
+            encrypt,
         }
     }
 
-    pub fn load_persistent(
+    /// Will accept to open encrypted and unencrypted archives.
+    pub fn with_private_keys_accept_unencrypted(keys: &[HybridPrivateKey]) -> Self {
+        let mut encrypt = EncryptionReaderConfig::default();
+        encrypt.set_private_keys(keys);
+        Self {
+            accept_unencrypted: true,
+            encrypt,
+        }
+    }
+
+    /// Won't accept encrypted archives.
+    pub fn without_encryption() -> Self {
+        let encrypt = EncryptionReaderConfig::default();
+        Self {
+            accept_unencrypted: true,
+            encrypt,
+        }
+    }
+
+    pub(crate) fn load_persistent(
         &mut self,
         config: ArchivePersistentConfig,
     ) -> Result<&mut ArchiveReaderConfig, ConfigError> {
-        self.layers_enabled = config.layers_enabled;
-        if self.layers_enabled.contains(Layers::ENCRYPT) {
+        if config.layers_enabled.contains(Layers::ENCRYPT) {
             match config.encrypt {
                 Some(to_load) => {
                     self.encrypt.load_persistent(to_load)?;
@@ -158,20 +124,5 @@ impl ArchiveReaderConfig {
             }
         }
         Ok(self)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn archive_building() {
-        let mut builder = ArchiveWriterConfig::new();
-        builder
-            .enable_layer(Layers::ENCRYPT)
-            .enable_layer(Layers::COMPRESS)
-            .disable_layer(Layers::ENCRYPT);
-        assert_eq!(builder.layers_enabled, Layers::COMPRESS);
     }
 }

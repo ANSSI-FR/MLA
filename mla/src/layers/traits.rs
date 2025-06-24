@@ -12,7 +12,7 @@ pub type InnerWriterType<'a, W> = Box<dyn 'a + LayerWriter<'a, W>>;
 #[cfg(feature = "send")]
 pub type InnerWriterType<'a, W> = Box<dyn 'a + LayerWriter<'a, W> + Send>;
 
-/// Trait alias for Layer Writer writable destination
+/// Trait alias for `Write` or `Write + Send` when feature `send` is enabled
 // Type aliases are not yet stable
 // See https://github.com/rust-lang/rust/issues/41517
 // -> use a dummy trait instead
@@ -28,22 +28,14 @@ impl<T: Write + Send> InnerWriterTrait for T {}
 
 /// Trait to be implemented by layer writers
 pub trait LayerWriter<'a, W: InnerWriterTrait>: Write {
-    /// Unwraps the inner writer
-    fn into_inner(self) -> Option<InnerWriterType<'a, W>>;
-
-    /// Unwraps the original I/O writer
-    // Use a Box<Self> to be able to move out the inner value; without it, self
-    // is used, which is an unsized 'dyn X' and therefore cannot be moved
-    fn into_raw(self: Box<Self>) -> W;
-
     /// Finalize the current layer, like adding the footer.
     ///
     /// This method is responsible of recursively calling (postfix) `finalize`
     /// on inner layer if any
-    fn finalize(&mut self) -> Result<(), Error>;
+    fn finalize(self: Box<Self>) -> Result<W, Error>;
 }
 
-/// Trait alias for Layer Reader readable source
+/// Trait alias for `Read + Seek` or `Read + Seek + Send` when feature `send` is enabled
 // Type aliases are not yet stable
 // See https://github.com/rust-lang/rust/issues/41517
 // -> use a dummy trait instead
@@ -59,9 +51,6 @@ impl<T: Read + Seek + Send> InnerReaderTrait for T {}
 
 /// Trait to be implemented by layer readers
 pub trait LayerReader<'a, R: InnerReaderTrait>: InnerReaderTrait {
-    /// Unwraps the inner reader
-    fn into_inner(self) -> Option<Box<dyn 'a + LayerReader<'a, R>>>;
-
     /// Unwraps the original I/O reader
     // Use a Box<Self> to be able to move out the inner value; without it, self
     // is used, which is an unsized 'dyn X' and therefore cannot be moved
@@ -75,12 +64,4 @@ pub trait LayerReader<'a, R: InnerReaderTrait>: InnerReaderTrait {
 }
 
 /// Trait to be implemented by layer for their fail-safe mode reading
-pub trait LayerFailSafeReader<'a, R: Read>: Read {
-    /// Unwraps the inner reader
-    fn into_inner(self) -> Option<Box<dyn 'a + LayerFailSafeReader<'a, R>>>;
-
-    /// Unwraps the original I/O reader
-    // Use a Box<Self> to be able to move out the inner value; without it, self
-    // is used, which is an unsized 'dyn X' and therefore cannot be moved
-    fn into_raw(self: Box<Self>) -> R;
-}
+pub trait LayerFailSafeReader<'a, R: Read>: Read {}

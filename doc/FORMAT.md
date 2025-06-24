@@ -13,7 +13,6 @@ MLA file format v2
 This document introduces the MLA file format in its current version, v2.
 For a more comprehensive introduction of the ideas behind it, please refer to [README.md](README.md).
 
-Please refer to the code for the detail of structures.
 Structures marked with #[bincode] below are encoded with [bincode](https://docs.rs/bincode/2.0.0/bincode/index.html) in version 2 with fixed-size integer encoding in little endian.
 
 MLA Header
@@ -61,7 +60,7 @@ struct MLA {
 The content of the `data` field then depend on what layers are enabled, in the following order:
 1. Encryption layer
 2. Compression layer
-3. Actual archive files data
+3. Actual archive entries
 
 ### Example
 
@@ -184,23 +183,35 @@ The first decompressed bytes are `00 00 00 00 00 00 00 00 00 06 00 00 00 00 00 0
 
 In the next section, `data` is now the decompressed content (as if the compression layer was absent).
 
-Actual archive files data
+Entries names
+-
+
+```rust
+#[bincode]
+struct EntryName {
+    name: Vec<u8>
+}
+````
+
+These names are described in `doc/ENTRY_NAME.md`
+
+Actual archive entries data
 -
 
 ```rust
 struct ArchiveContent {
     // Data content, explained below
-    file_data: [u8]
+    entry_data: [u8]
     // Footer
     #[bincode]
     struct ArchiveFooter {
-        // Filename -> Corresponding FileInfo
-        files_info: Vec<(String, struct FileInfo {
-            // Offsets of continuous chunks of `ArchiveFileBlock`
+        // EntryName -> Corresponding EntryInfo
+        entries_info: Vec<(EntryName, struct EntryInfo {
+            // Offsets of continuous chunks of `ArchiveEntryBlock`
             offsets: Vec<u64>,
-            // Size of the file, in bytes
+            // Size of the `entry_data`, in bytes
             size: u64,
-            // Offset of the ArchiveFileBlock::EndOfFile
+            // Offset of the ArchiveEntryBlock::EndOfEntry
             eof_offset: u64,
         })>,
     },
@@ -210,34 +221,31 @@ struct ArchiveContent {
 }
 ```
 
-The archive footer information is retrieved by first reading the value of `archive_footer_length` at the end of `data`, then reading `archive_footer_length`-bytes at the end of `data` minus 8 bytes.
+The archive footer information is optionally retrieved by first reading the value of `archive_footer_length` at the end of `data`, then reading `archive_footer_length`-bytes at the end of `data` minus 8 bytes.
 
-`file_data` is the concatenation of all `ArchiveFileBlock`s. Each block starts with a `u8` corresponding to the block type:
+`entry_data` is the concatenation of all `ArchiveEntryBlock`s. Each block starts with a `u8` corresponding to the block type:
 ```rust
-enum ArchiveFileBlockType {
-    FileStart = 0x00,
-    FileContent = 0x01,
+enum ArchiveEntryBlockType {
+    EntryStart = 0x00,
+    EntryContent = 0x01,
 
     EndOfArchiveData = 0xFE,
-    EndOfFile = 0xFF,
+    EndOfEntry = 0xFF,
 }
 ```
 
 Then, depending on the block type:
 ```rust
-struct FileStart {
-    // File unique ID in the archive
+struct EntryStart {
+    // entry unique ID in the archive
     #[little_endian]
     id: u64,
-    // Length of the filename
-    #[little_endian]
-    length: u64,
-    // UTF-8 encoded filename
-    filename: [u8; length]
+    // entry name
+    name: EntryName
 }
 
-struct FileContent {
-    // File unique ID in the archive
+struct EntryContent {
+    // entry unique ID in the archive
     #[little_endian]
     id: u64,
     // Length of the block_data
@@ -247,45 +255,46 @@ struct FileContent {
     block_data: [u8; length]
 }
 
-struct EndOfFile {
-    // File unique ID in the archive
+struct EndOfEntry {
+    // Entry unique ID in the archive
     #[little_endian]
     id: u64,
-    // SHA-256 of the file content
+    // SHA-256 of the entry content
     hash: [u8; 32]
 }
 
 struct EndOfArchiveData {}
 ```
 
-A file `file_i` in the archive always starts with a `FileStart`, giving its filename and unique ID.
-Let `content_i` be the content of `file_i`. It starts empty.
+An entry `entry_i` in the archive always starts with an `EntryStart`, giving its name and unique ID.
 
-Each time a `FileContent` is encountered, the corresponding `block_data` is appended to `content_i`.
+Let `content_i` be the content of `entry_i`. It starts empty.
 
-Once the `EndOfFile` for `file_i` is reached, the file is completely read. Its content SHA-256 hash can be verified with the `EndOfFile.hash`.
+Each time a `EntryContent` is encountered, the corresponding `block_data` is appended to `content_i`.
 
-Between the last `EndOfFile` block and the beginning of the `ArchiveFooter`, there is the only `EndOfArchiveData` block. It is used in the repair process, to correctly separate the actual archive data from the footer.
+Once the `EndOfEntry` for `entry_i` is reached, the entry is completely read. Its content SHA-256 hash can be verified with the `EndOfEntry.hash`.
 
-As blocks from different files can be interleaved, the `files_info.offsets` are the offsets in `file_data` of blocks for the same file.
+Between the last `EndOfEntry` block and the beginning of the `ArchiveFooter`, there is the only `EndOfArchiveData` block. It is used in the repair process, to correctly separate the actual archive data from the footer.
+
+As blocks from different entries can be interleaved, the `entries_info.offsets` are the offsets in `entry_data` of blocks for the same entry.
 
 For instance, if the blocks are:
 ```
-Off0: [FileStart ID 1]
-Off1: [FileStart ID 2]
-Off2: [FileContent ID 1]
-Off3: [FileContent ID 1]
-Off4: [FileContent ID 2]
-Off5: [EndOfFile ID 1]
+Off0: [EntryStart ID 1]
+Off1: [EntryStart ID 2]
+Off2: [EntryContent ID 1]
+Off3: [EntryContent ID 1]
+Off4: [EntryContent ID 2]
+Off5: [EndOfEntry ID 1]
 ...
 ```
 
-The `offsets` for the file with ID 1 will be ̀`Off0`, `Off2`, `Off5`.
-Additionally, for faster `hash` retrieval, `files_info.eof_offset` is the offset of the `EndOfFile` block for the corresponding file. In this example, `eof_offset = Off5` for ID 1.
+The `offsets` for the entry with ID 1 will be `Off0`, `Off2`, `Off5`.
+Additionally, for faster `hash` retrieval, `entries_info.eof_offset` is the offset of the `EndOfEntry` block for the corresponding entry. In this example, `eof_offset = Off5` for ID 1.
 
-Finally, the `files_info.size` is the size in bytes of the corresponding file content.
+Finally, the `entries_info.size` is the size in bytes of the corresponding entry content.
 
-For reproducibility, the `files_info` `Vec` is sorted by filename (lexicographically by unicode code points) before being serialized.
+For reproducibility, the `entries_info` `Vec` is sorted by entry name (lexicographically by bytes values) before being serialized.
 
 ### Example
 
@@ -294,15 +303,15 @@ For example, on [samples/archive_v2.mla](samples/archive_v2.mla), after decrypti
 * The corresponding `ArchiveFooter` is (observed order may be different if deserialized into a HashMap):
 ```rust
 ArchiveFooter {
-    files_info: {
-        "big": FileInfo {
+    entries_info: {
+        "big": EntryInfo {
             offsets: [
                 1074403,
             ],
             size: 10485760,
             eof_offset: 11560200,
         },
-        "file_0": FileInfo {
+        "file_0": EntryInfo {
             offsets: [
                 337,
                 19122,
@@ -312,7 +321,7 @@ ArchiveFooter {
             eof_offset: 1074362,
         },
         ...
-        "simple": FileInfo {
+        "simple": EntryInfo {
                         offsets: [
                             0,
                         ],
@@ -323,7 +332,7 @@ ArchiveFooter {
 }
 ```
 
-Let's start reading the first file of the archive. For easier reading, here is an excerpt of the first 400 bytes of `data`:
+Let's start reading the first entry of the archive. For easier reading, here is an excerpt of the first 400 bytes of `data`:
 ```
 0000  00 00 00 00 00 00 00 00 00 06 00 00 00 00 00 00   ................
 0010  00 73 69 6d 70 6c 65 01 00 00 00 00 00 00 00 00   .simple.........
@@ -352,19 +361,19 @@ Let's start reading the first file of the archive. For easier reading, here is a
 0180  03 00 00 00 00 00 00 00 06 00 00 00 00 00 00 00   ................
 ```
 
-* `00`: mark a `FileStart` block
-* `00 00 00 00 00 00 00 00`: file ID is 0
-* `06 00 00 00 00 00 00 00`: filename length, in bytes, is 6
-* `73 69 6d 70 6c 65`: the filename is "simple"
-* `01`: mark a `FileContent` block
-* `00 00 00 00 00 00 00 00`: corresponding file ID is 0 (ie, the file "simple")
+* `00`: mark a `EntryStart` block
+* `00 00 00 00 00 00 00 00`: entry ID is 0
+* `06 00 00 00 00 00 00 00`: name length, in bytes, is 6
+* `73 69 6d 70 6c 65`: the name is "simple"
+* `01`: mark a `EntryContent` block
+* `00 00 00 00 00 00 00 00`: corresponding entry ID is 0 (ie, the entry "simple")
 * `00 01 00 00 00 00 00 00`: this block contains 0x100 bytes of data
 * `00 .. (256-bytes long) .. ff`: actual 256 first bytes of "simple"
-* `ff`: mark a `EndOfFile` block
-* `00 00 00 00 00 00 00 00`: file ID is 0. The file "simple" has been fully recovered
-* `40 .. (32-bytes long) .. 80`: SHA256 hash of the file "simple" content, ie `SHA256(00 01 02 .. FE FF)`
+* `ff`: mark a `EndOfEntry` block
+* `00 00 00 00 00 00 00 00`: entry ID is 0. The entry "simple" has been fully recovered
+* `40 .. (32-bytes long) .. 80`: SHA256 hash of the entry "simple" content, ie `SHA256(00 01 02 .. FE FF)`
 
-Here, the file "simple" has been fully recovered. If one continues, there are:
-* A `FileStart` block for the file "file_0" with ID 1
-* A `FileStart` block for the file "file_1" with ID 2
-* A `FileStart` block with ID 3 for a filename of length 6, incomplete in the excerpt
+Here, the entry "simple" has been fully recovered. If one continues, there are:
+* A `EntryStart` block for the entry "file_0" with ID 1
+* A `EntryStart` block for the entry "file_1" with ID 2
+* A `EntryStart` block with ID 3 for a name of length 6, incomplete in the excerpt

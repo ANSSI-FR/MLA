@@ -20,15 +20,15 @@ int main()
    }
 
    MLAStatus status;
-   MLAConfigHandle hConfig = NULL;
-   status = mla_config_default_new(&hConfig);
+   MLAWriterConfigHandle hConfig = NULL;
+   status = create_mla_writer_config_without_encryption(&hConfig);
    if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
    {
       fprintf(stderr, " [!] Config creation failed with code %" PRIX64 "\n", (uint64_t)status);
       return (int)status;
    }
 
-   status = mla_config_set_compression_level(hConfig, 42);
+   status = mla_writer_config_with_compression_level(&hConfig, 42);
    if (status != MLA_STATUS(MLA_STATUS_CONFIG_ERROR_COMPRESSION_LEVEL_OUT_OF_RANGE))
    {
       fprintf(stderr, " [!] Compression level set failed with code %" PRIX64 "\n", (uint64_t)status);

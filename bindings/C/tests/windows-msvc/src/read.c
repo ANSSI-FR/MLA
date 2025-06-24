@@ -73,7 +73,7 @@ static int32_t file_cb(void *context, const uint8_t *filename, uintptr_t filenam
     free(szFilename);
 
     FILE *ofile;
-    if (fopen_s(&ofile, szOutput, "w") != 0)
+    if (fopen_s(&ofile, szOutput, "wb") != 0)
         return -2;
 
     free(szOutput);
@@ -127,7 +127,7 @@ int test_reader_extract()
 {
     FILE *kf;
 
-    if (fopen_s(&kf, "../../../../samples/test_mlakey_archive_v2.der", "r") != 0)
+    if (fopen_s(&kf, "../../../../samples/test_mlakey_archive_v2.der", "rb") != 0)
     {
         fprintf(stderr, " [!] Could not open private key file\n");
         return errno;
@@ -150,7 +150,7 @@ int test_reader_extract()
 
     rewind(kf);
 
-    uint8_t *keyData = (char *)malloc((size_t)keySize);
+    uint8_t *keyData = malloc((size_t)keySize);
     if (!keyData) {
         fprintf(stderr, " [!] Memory allocation failed\n");
         fclose(kf);
@@ -166,16 +166,9 @@ int test_reader_extract()
 
     fclose(kf);
 
-    MLAConfigHandle hConfig = NULL;
-    MLAStatus status = mla_reader_config_new(&hConfig);
-    if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
-    {
-        fprintf(stderr, " [!] Config creation failed with code %" PRIX64 "\n", (uint64_t)status);
-        free(keyData);
-        return (int)status;
-    }
-
-    status = mla_reader_config_add_private_key_der(hConfig, keyData, (size_t)keySize);
+    MLAReaderConfigHandle hConfig = NULL;
+    const uint8_t *const keys[] = {(const uint8_t *const) keyData};
+    MLAStatus status = create_mla_reader_config_with_private_keys_der(&hConfig, keys, 1);
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
     {
         fprintf(stderr, " [!] Private key set failed with code %" PRIX64 "\n", (uint64_t)status);
@@ -184,14 +177,14 @@ int test_reader_extract()
     }
 
     FILE *f;
-    if (fopen_s(&f, "../../../../samples/archive_v2.mla", "r"))
+    if (fopen_s(&f, "../../../../samples/archive_v2.mla", "rb"))
     {
         fprintf(stderr, " [!] Cannot open file: %d\n", errno);
         free(keyData);
         return 1;
     }
 
-    status = mla_roarchive_extract(&hConfig, read_cb, seek_cb, file_cb, f);
+    status = mla_roarchive_extract(&hConfig, read_cb, seek_cb, file_cb, 0, f);
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
     {
         fprintf(stderr, " [!] Archive read failed with code %" PRIX64 "\n", (uint64_t)status);

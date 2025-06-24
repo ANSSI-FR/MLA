@@ -5,6 +5,7 @@ use std::{
 };
 
 use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
+use mla::{config::ArchiveWriterConfig, entry::EntryName};
 
 fn app() -> Command {
     Command::new(env!("CARGO_PKG_NAME"))
@@ -48,21 +49,20 @@ fn app() -> Command {
 }
 
 fn writer_from_matches(matches: &ArgMatches) -> mla::ArchiveWriter<'static, File> {
-    let mut config = mla::config::ArchiveWriterConfig::new();
-    config.enable_layer(mla::Layers::COMPRESS);
-    if let Some(public_key_args) = matches.get_many::<PathBuf>("public_keys") {
+    let config = if let Some(public_key_args) = matches.get_many::<PathBuf>("public_keys") {
         let mut public_keys = Vec::new();
         for public_key_arg in public_key_args {
             let key_bytes = fs::read(public_key_arg).expect("Failed to read public key");
-            let public_key = mla::crypto::mlakey_parser::parse_mlakey_pubkey_pem(&key_bytes)
+            let parsed = mla::crypto::mlakey::parse_mlakey_pubkeys_pem_many(&key_bytes)
                 .map_err(|err| format!("Failed to parse public key as PEM: {err}"))
                 .unwrap();
 
-            public_keys.push(public_key);
+            public_keys.extend(parsed);
         }
-        config.enable_layer(mla::Layers::ENCRYPT);
-        config.add_public_keys(&public_keys);
-    }
+        ArchiveWriterConfig::with_public_keys(&public_keys)
+    } else {
+        ArchiveWriterConfig::without_encryption()
+    };
     let out_file_path = matches.get_one::<PathBuf>("output").unwrap();
     let out_file = File::create(out_file_path).unwrap();
     mla::ArchiveWriter::from_config(out_file, config).unwrap()
@@ -91,6 +91,7 @@ fn upgrade(matches: &ArgMatches) -> Result<(), Error> {
     let mut mla_in = reader_from_matches(matches);
 
     // Read the file list using metadata
+    // v1 archive still uses files, not entries
     let fnames: Vec<String> = mla_in.list_files().map_or_else(
         |_| {
             panic!("Files is malformed. Please consider repairing the file");
@@ -113,8 +114,15 @@ fn upgrade(matches: &ArgMatches) -> Result<(), Error> {
             }
             Ok(Some(mla)) => mla,
         };
+        let new_entry_name = match EntryName::from_arbitrary_bytes(sub_file.filename.as_bytes()) {
+            Ok(name) => name,
+            Err(_) => {
+                eprintln!("Invalid empty name");
+                continue;
+            }
+        };
         mla_out
-            .add_file(&sub_file.filename, sub_file.size, sub_file.data)
+            .add_entry(new_entry_name, sub_file.size, sub_file.data)
             .unwrap();
     }
     mla_out.finalize().expect("Finalization error");

@@ -2,15 +2,14 @@
 //!
 //! MLA is an archive file format with the following features:
 //!
+//! * Support for traditional and post-quantum encryption hybridation with asymmetric keys (HPKE with AES256-GCM and a KEM based on an hybridation of X25519 and post-quantum ML-KEM 1024)
 //! * Support for compression (based on [`rust-brotli`](https://github.com/dropbox/rust-brotli/))
-//! * Support for authenticated encryption with asymmetric keys (AES256-GCM with an ECIES schema over Curve25519, based on [Rust-Crypto](https://github.com/RustCrypto) `aes-ctr` and [DalekCryptography](https://github.com/dalek-cryptography) `x25519-dalek`)
-//! * Effective, architecture agnostic and portable (written entirely in Rust)
-//! * Small memory footprint during archive creation
+//! * Architecture agnostic and portable to some extent (written entirely in Rust)
 //! * Streamable archive creation:
 //!   * An archive can be built even over a data-diode
-//!   * A file can be added through chunks of data, without initially knowing the final size
-//!   * File chunks can be interleaved (one can add the beginning of a file, start a second one, and then continue adding the first file's parts)
-//! * Archive files are seekable, even if compressed or encrypted. A file can be accessed in the middle of the archive without reading from the beginning
+//!   * An entry can be added through chunks of data, without initially knowing the final size
+//!   * Entry chunks can be interleaved (one can add the beginning of an entry, start a second one, and then continue adding the first entry's parts)
+//! * Archive files are seekable, even if compressed or encrypted. An entry can be accessed in the middle of the archive without reading from the beginning
 //! * If truncated, archives can be repaired to some extent. Two modes are available:
 //!   * Authenticated repair (default): only authenticated encrypted chunks of data are retrieved
 //!   * Unauthenticated repair: authenticated and unauthenticated encrypted chunks of data are retrieved. Use at your own risk
@@ -19,59 +18,25 @@
 //! Repository
 //! =
 //!
-//! This repository contains:
+//! The MLA repository contains:
 //!
 //! * `mla`: the Rust library implementing MLA reader and writer
-//! * `mlar`: a Rust utility wrapping `mla` for common actions (create, list, extract, ...)
-//! * `mla-fuzz-afl` : a Rust utility to fuzz `mla`
+//! * `mlar`: a Rust cli utility wrapping `mla` for common actions (create, list, extract...)
+//! * `doc` : advanced documentation related to MLA (e.g. format specification)
 //! * `bindings` : bindings for other languages
+//! * `samples` : test assets
+//! * `mla-fuzz-afl` : a Rust utility to fuzz `mla`
 //! * `.github`: Continuous Integration needs
-//!
-//! Quick command-line usage
-//! =
-//!
-//! Here are some commands to use ``mlar`` in order to work with archives in MLA format.
-//!
-//! ```sh
-//! # Generate an X25519 key pair {key, key.pub} (OpenSSL could also be used)
-//! mlar keygen key
-//!
-//! # Create an archive with some files, using the public key
-//! mlar create -p key.pub -o my_archive.mla /etc/os-release /etc/issue
-//!
-//! # List the content of the archive, using the private key
-//! mlar list -k key -i my_archive.mla
-//!
-//! # Extract the content of the archive into a new directory
-//! # In this example, this creates two files:
-//! # extracted_content/etc/issue and extracted_content/etc/os-release
-//! mlar extract -k key -i my_archive.mla -o extracted_content
-//!
-//! # Display the content of a file in the archive
-//! mlar cat -k key -i my_archive.mla /etc/os-release
-//!
-//! # Convert the archive to a long-term one, removing encryption and using the best
-//! # and slower compression level
-//! mlar convert -k key -i my_archive.mla -o longterm.mla -l compress -q 11
-//!
-//! # Create an archive with multiple recipient
-//! mlar create -p archive.pub -p client1.pub -o my_archive.mla ...
-//! ```
-//!
-//! `mlar` can be obtained:
-//!
-//! * through Cargo: `cargo install mlar`
-//! * using the [latest release](https://github.com/ANSSI-FR/MLA/releases) for supported operating systems
-//!
 //!
 //! Quick API usage
 //! =
 //!
 //! * Create an archive, with compression and encryption:
 //! ```rust
-//! use mla::crypto::mlakey_parser::parse_mlakey_pubkey_pem;
+//! use mla::crypto::mlakey::parse_mlakey_pubkey_pem;
 //! use mla::config::ArchiveWriterConfig;
 //! use mla::ArchiveWriter;
+//! use mla::entry::EntryName;
 //!
 //! const PUB_KEY: &[u8] = include_bytes!("../../samples/test_mlakey_pub.pem");
 //!
@@ -79,27 +44,29 @@
 //!     // Load the needed public key
 //!     let public_key = parse_mlakey_pubkey_pem(PUB_KEY).unwrap();
 //!
-//!     // Create an MLA Archive - Output only needs the Write trait
+//!     // Create an MLA Archive - Output only needs the Write trait.
+//!     // Here, a Vec is used but it would tipically be a `File` or a network socket.
 //!     let mut buf = Vec::new();
 //!     // Default is Compression + Encryption, to avoid mistakes
-//!     let mut config = ArchiveWriterConfig::default();
+//!     let config = ArchiveWriterConfig::with_public_keys(&[public_key]);
 //!     // The use of multiple public keys is supported
-//!     config.add_public_keys(&vec![public_key]);
 //!     // Create the Writer
 //!     let mut mla = ArchiveWriter::from_config(&mut buf, config).unwrap();
 //!
 //!     // Add a file
-//!     mla.add_file("filename", 4, &[0, 1, 2, 3][..]).unwrap();
+//!     // This creates an entry named "a/filename" (without first "/"), See `EntryName::from_path`
+//!     mla.add_entry(EntryName::from_path("/a/filename").unwrap(), 4, &[0, 1, 2, 3][..]).unwrap();
 //!
 //!     // Complete the archive
 //!     mla.finalize().unwrap();
 //! }
 //! ```
-//! * Add files part per part, in a "concurrent" fashion:
+//! * Add entries part per part, in a "concurrent" fashion:
 //! ```rust
-//! use mla::crypto::mlakey_parser::parse_mlakey_pubkey_pem;
+//! use mla::crypto::mlakey::parse_mlakey_pubkey_pem;
 //! use mla::config::ArchiveWriterConfig;
 //! use mla::ArchiveWriter;
+//! use mla::entry::EntryName;
 //!
 //! const PUB_KEY: &[u8] = include_bytes!("../../samples/test_mlakey_pub.pem");
 //!
@@ -111,52 +78,50 @@
 //!     let mut buf = Vec::new();
 //!
 //!     // Default is Compression + Encryption, to avoid mistakes
-//!     let mut config = ArchiveWriterConfig::default();
-//!
-//!     // The use of multiple public keys is supported
-//!     config.add_public_keys(&vec![public_key]);
+//!     let config = ArchiveWriterConfig::with_public_keys(&[public_key]);
 //!
 //!     // Create the Writer
 //!     let mut mla = ArchiveWriter::from_config(&mut buf, config).unwrap();
 //!
-//!     // A file is tracked by an id, and follows this API's call order:
-//!     // 1. id = start_file(filename);
-//!     // 2. append_file_content(id, content length, content (impl Read))
+//!     // An entry is tracked by an id, and follows this API's call order:
+//!     // 1. id = start_entry(entry_name);
+//!     // 2. append_entry_content(id, content length, content (impl Read))
 //!     // 2-bis. repeat 2.
-//!     // 3. end_file(id)
+//!     // 3. end_entry(id)
 //!
-//!     // Start a file and add content
-//!     let id_file1 = mla.start_file("fname1").unwrap();
-//!     let file1_part1 = vec![11, 12, 13, 14];
-//!     mla.append_file_content(id_file1, file1_part1.len() as u64, file1_part1.as_slice()).unwrap();
+//!     // Start an entry and add content
+//!     let id_entry1 = mla.start_entry(EntryName::from_path("name1").unwrap()).unwrap();
+//!     let entry1_part1 = vec![11, 12, 13, 14];
+//!     mla.append_entry_content(id_entry1, entry1_part1.len() as u64, entry1_part1.as_slice()).unwrap();
 //!
-//!     // Start a second file and add content
-//!     let id_file2 = mla.start_file("fname2").unwrap();
-//!     let file2_part1 = vec![21, 22, 23, 24];
-//!     mla.append_file_content(id_file2, file2_part1.len() as u64, file2_part1.as_slice()).unwrap();
+//!     // Start a second entry and add content
+//!     let id_entry2 = mla.start_entry(EntryName::from_path("name2").unwrap()).unwrap();
+//!     let entry2_part1 = vec![21, 22, 23, 24];
+//!     mla.append_entry_content(id_entry2, entry2_part1.len() as u64, entry2_part1.as_slice()).unwrap();
 //!
-//!     // Add a file as a whole
-//!     let file3 = vec![31, 32, 33, 34];
-//!     mla.add_file("fname3", file3.len() as u64, file3.as_slice()).unwrap();
+//!     // Add an entry as a whole
+//!     let entry3 = vec![31, 32, 33, 34];
+//!     mla.add_entry(EntryName::from_path("name3").unwrap(), entry3.len() as u64, entry3.as_slice()).unwrap();
 //!
-//!     // Add new content to the first file
-//!     let file1_part2 = vec![15, 16, 17, 18];
-//!     mla.append_file_content(id_file1, file1_part2.len() as u64, file1_part2.as_slice()).unwrap();
+//!     // Add new content to the first entry
+//!     let entry1_part2 = vec![15, 16, 17, 18];
+//!     mla.append_entry_content(id_entry1, entry1_part2.len() as u64, entry1_part2.as_slice()).unwrap();
 //!
-//!     // Mark still opened files as finished
-//!     mla.end_file(id_file1).unwrap();
-//!     mla.end_file(id_file2).unwrap();
+//!     // Mark still opened entries as finished
+//!     mla.end_entry(id_entry1).unwrap();
+//!     mla.end_entry(id_entry2).unwrap();
 //!
 //!     // Complete the archive
 //!     mla.finalize().unwrap();
 //! }
 //! ```
-//! * Read files from an archive
+//! * Read entries from an archive
 //! ```rust
-//! use mla::crypto::mlakey_parser::parse_mlakey_privkey_der;
+//! use mla::crypto::mlakey::parse_mlakey_privkey_der;
 //! use mla::config::ArchiveReaderConfig;
 //! use mla::ArchiveReader;
 //! use std::io;
+//! use mla::entry::EntryName;
 //!
 //! const PRIV_KEY: &[u8] = include_bytes!("../../samples/test_mlakey_archive_v2.der");
 //! const DATA: &[u8] = include_bytes!("../../samples/archive_v2.mla");
@@ -166,32 +131,33 @@
 //!     let private_key = parse_mlakey_privkey_der(PRIV_KEY).unwrap();
 //!
 //!     // Specify the key for the Reader
-//!     let mut config = ArchiveReaderConfig::new();
-//!     config.add_private_keys(&[private_key]);
+//!     let config = ArchiveReaderConfig::with_private_keys(&[private_key]);
 //!
 //!     // Read from buf, which needs Read + Seek
 //!     let buf = io::Cursor::new(DATA);
 //!     let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
 //!
 //!     // Get a file
-//!     let mut file = mla_read
-//!         .get_file("simple".to_string())
+//!     let mut entry = mla_read
+//!         .get_entry(EntryName::from_path("simple").unwrap()) // or EntryName::from_arbitrary_bytes if name is not representing a file path
 //!         .unwrap() // An error can be raised (I/O, decryption, etc.)
-//!         .unwrap(); // Option(file), as the file might not exist in the archive
+//!         .unwrap(); // Option(entry), as the entry might not exist in the archive
 //!
-//!     // Get back its filename, size, and data
-//!     println!("{} ({} bytes)", file.filename, file.size);
+//!     // Get back its name, size, and data
+//!     // display name interpreted as file path and escape to avoid
+//!     // issues with terminal escape sequences for example
+//!     println!("{} ({} bytes)", entry.name.to_pathbuf_escaped_string().unwrap(), entry.size);
 //!     let mut output = Vec::new();
-//!     std::io::copy(&mut file.data, &mut output).unwrap();
+//!     std::io::copy(&mut entry.data, &mut output).unwrap();
 //!
-//!     // Get back the list of files in the archive:
-//!     for fname in mla_read.list_files().unwrap() {
-//!         println!("{}", fname);
+//!     // Get back the list of entries names in the archive without
+//!     // interpreting them as file paths, so no need to unwrap as
+//!     // it cannot fail. ASCII slash is encoded too.
+//!     for entry_name in mla_read.list_entries().unwrap() {
+//!         println!("{}", entry_name.raw_content_to_escaped_string());
 //!     }
 //! }
 //! ```
-//!
-//! :warning: Filenames are `String`s, which may contain path separator (`/`, `\`, `..`, etc.). Please consider this while using the API, to avoid path traversal issues.
 
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -202,10 +168,13 @@ extern crate bitflags;
 use bincode::config::{Fixint, Limit};
 use bincode::{Decode, Encode};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
-use config::InternalConfig;
+use config::{ArchivePersistentConfig, InternalConfig};
 use crypto::hybrid::HybridPublicKey;
-use errors::ConfigError;
+use layers::encrypt::EncryptionConfig;
 use layers::traits::InnerReaderTrait;
+
+pub mod entry;
+use entry::{ArchiveEntry, ArchiveEntryDataReader, ArchiveEntryId, EntryName, EntryNameError};
 
 /// As the name spoils it, an MLA is made of several, independent, layers. The following section introduces the design ideas behind MLA. Please refer to [FORMAT.md](FORMAT.md) for a more formal description.
 ///
@@ -364,7 +333,7 @@ use layers::traits::InnerReaderTrait;
 ///
 /// If this footer is unavailable, the archive is read from the beginning to recover
 /// file information.
-pub mod layers;
+pub(crate) mod layers;
 use crate::layers::compress::{
     CompressionLayerFailSafeReader, CompressionLayerReader, CompressionLayerWriter,
 };
@@ -377,17 +346,22 @@ use crate::layers::traits::{
     InnerWriterTrait, InnerWriterType, LayerFailSafeReader, LayerReader, LayerWriter,
 };
 pub mod errors;
-use crate::errors::{Error, FailSafeReadError};
+use crate::errors::{Error, TruncatedReadError};
 
 pub mod config;
-use crate::config::{ArchivePersistentConfig, ArchiveReaderConfig, ArchiveWriterConfig};
+use crate::config::{ArchiveReaderConfig, ArchiveWriterConfig};
 
-#[doc(hidden)]
 pub mod crypto;
 use crate::crypto::hash::{HashWrapperReader, Sha256Hash};
 use sha2::{Digest, Sha256};
 
+mod format;
 pub mod helpers;
+use format::ArchiveHeader;
+
+#[cfg(test)]
+#[macro_use]
+extern crate hex_literal;
 
 // -------- Constants --------
 
@@ -408,82 +382,13 @@ pub(crate) const BINCODE_CONFIG: bincode::config::Configuration<
     .with_limit::<{ BINCODE_MAX_DECODE }>()
     .with_fixed_int_encoding();
 
-#[derive(Debug, Clone, Copy, PartialEq, Encode, Decode)]
-pub struct Layers(u8);
-
-bitflags! {
-    /// Available layers. Order is relevant:
-    /// ```ascii-art
-    /// [File to blocks decomposition]
-    /// [Compression (COMPRESS)]
-    /// [Encryption (ENCRYPT)]
-    /// [Raw File I/O]
-    /// ```
-    impl Layers: u8 {
-        const ENCRYPT = 0b0000_0001;
-        const COMPRESS = 0b0000_0010;
-        /// Recommended layering
-        const DEFAULT = Self::ENCRYPT.bits() | Self::COMPRESS.bits();
-        /// No additional layer (ie, for debugging purpose)
-        const DEBUG = 0;
-        const EMPTY = 0;
-    }
-}
-
-impl std::default::Default for Layers {
-    fn default() -> Self {
-        Layers::DEFAULT
-    }
-}
-
-pub type ArchiveFileID = u64;
-
-// -------- MLA Format Header --------
-
-pub struct ArchiveHeader {
-    pub format_version: u32,
-    pub config: ArchivePersistentConfig,
-}
-
-impl ArchiveHeader {
-    pub fn from<T: Read>(src: &mut T) -> Result<Self, Error> {
-        let mut buf = vec![00u8; MLA_MAGIC.len()];
-        src.read_exact(buf.as_mut_slice())?;
-        if buf != MLA_MAGIC {
-            return Err(Error::WrongMagic);
-        }
-        let format_version = src.read_u32::<LittleEndian>()?;
-        if format_version != MLA_FORMAT_VERSION {
-            return Err(Error::UnsupportedVersion);
-        }
-        let config: ArchivePersistentConfig =
-            match bincode::decode_from_std_read(src, BINCODE_CONFIG) {
-                Ok(config) => config,
-                _ => {
-                    return Err(Error::DeserializationError);
-                }
-            };
-        Ok(ArchiveHeader {
-            format_version,
-            config,
-        })
-    }
-
-    fn dump<T: Write>(&self, dest: &mut T) -> Result<(), Error> {
-        dest.write_all(MLA_MAGIC)?;
-        dest.write_u32::<LittleEndian>(self.format_version)?;
-        if bincode::encode_into_std_write(&self.config, dest, BINCODE_CONFIG).is_err() {
-            return Err(Error::SerializationError);
-        }
-        Ok(())
-    }
-}
+use format::Layers;
 
 // -------- MLA Format Footer --------
 
-pub struct ArchiveFooter {
-    /// Filename -> Corresponding FileInfo
-    pub files_info: HashMap<String, FileInfo>,
+struct ArchiveFooter {
+    /// EntryName -> Corresponding EntryInfo
+    entries_info: HashMap<EntryName, EntryInfo>,
 }
 
 impl ArchiveFooter {
@@ -494,8 +399,8 @@ impl ArchiveFooter {
     /// Performs zero-copy serialization of a footer
     fn serialize_into<W: Write>(
         mut dest: W,
-        files_info: &HashMap<String, ArchiveFileID>,
-        ids_info: &HashMap<ArchiveFileID, FileInfo>,
+        files_info: &HashMap<EntryName, ArchiveEntryId>,
+        ids_info: &HashMap<ArchiveEntryId, EntryInfo>,
     ) -> Result<(), Error> {
         // Combine `files_info` and `ids_info` to ArchiveFooter.files_info,
         // avoiding copies (only references)
@@ -506,7 +411,7 @@ impl ArchiveFooter {
                     "[ArchiveFooter seriliaze] Unable to find the ID".to_string(),
                 )
             })?;
-            tmp.push((k, v));
+            tmp.push((k.as_arbitrary_bytes(), v));
         }
         tmp.sort_by_key(|(k, _)| *k);
 
@@ -530,165 +435,66 @@ impl ArchiveFooter {
 
         // Read files_info
         // A Vec can be deserialized into a HashMap in bincode 2
-        let files_info: HashMap<String, FileInfo> =
+        let files_info_bytes_names: HashMap<Vec<u8>, EntryInfo> =
             match bincode::decode_from_std_read(&mut src.take(len), BINCODE_CONFIG) {
                 Ok(finfo) => finfo,
                 _ => {
                     return Err(Error::DeserializationError);
                 }
             };
-        Ok(ArchiveFooter { files_info })
+        let files_info = files_info_bytes_names
+            .into_iter()
+            .map(|(k, v)| {
+                let name = EntryName::from_arbitrary_bytes(&k)?;
+                Ok((name, v))
+            })
+            .collect::<Result<HashMap<EntryName, EntryInfo>, EntryNameError>>();
+        let files_info = files_info.map_err(|_| Error::SerializationError)?;
+        Ok(ArchiveFooter {
+            entries_info: files_info,
+        })
     }
 }
 
 // -------- Writer --------
 
-/// Tags used in each ArchiveFileBlock to indicate the type of block that follows
+/// Tags used in each ArchiveEntryBlock to indicate the type of block that follows
 #[derive(Debug)]
 #[repr(u8)]
-enum ArchiveFileBlockType {
-    FileStart = 0x00,
-    FileContent = 0x01,
+enum ArchiveEntryBlockType {
+    EntryStart = 0x00,
+    EntryContent = 0x01,
 
     EndOfArchiveData = 0xFE,
-    EndOfFile = 0xFF,
+    EndOfEntry = 0xFF,
 }
 
-impl TryFrom<u8> for ArchiveFileBlockType {
+impl TryFrom<u8> for ArchiveEntryBlockType {
     type Error = Error;
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
-        if value == ArchiveFileBlockType::FileStart as u8 {
-            Ok(ArchiveFileBlockType::FileStart)
-        } else if value == ArchiveFileBlockType::FileContent as u8 {
-            Ok(ArchiveFileBlockType::FileContent)
-        } else if value == ArchiveFileBlockType::EndOfFile as u8 {
-            Ok(ArchiveFileBlockType::EndOfFile)
-        } else if value == ArchiveFileBlockType::EndOfArchiveData as u8 {
-            Ok(ArchiveFileBlockType::EndOfArchiveData)
+        if value == ArchiveEntryBlockType::EntryStart as u8 {
+            Ok(ArchiveEntryBlockType::EntryStart)
+        } else if value == ArchiveEntryBlockType::EntryContent as u8 {
+            Ok(ArchiveEntryBlockType::EntryContent)
+        } else if value == ArchiveEntryBlockType::EndOfEntry as u8 {
+            Ok(ArchiveEntryBlockType::EndOfEntry)
+        } else if value == ArchiveEntryBlockType::EndOfArchiveData as u8 {
+            Ok(ArchiveEntryBlockType::EndOfArchiveData)
         } else {
             Err(Error::WrongBlockSubFileType)
         }
     }
 }
 
-#[derive(Debug)]
-pub enum ArchiveFileBlock<T: Read> {
-    /// Usually, a file is made of:
-    /// `[FileStart][FileContent]`...`[FileContent][EndOfFile]`
-    /// The `id` is used to keep track internally of which file a `ArchiveFileBlock` belongs to
-    ///
-    /// Start of a file
-    FileStart { filename: String, id: ArchiveFileID },
-    /// File content.
-    /// (length, data) is used instead of a Vec to avoid having the whole data
-    /// in memory. On parsing, the data can be set to None. It indicates to the
-    /// caller that the data is just next to it
-    /// TODO: use the same trick than ArchiveReader to avoid the Option
-    FileContent {
-        length: u64,
-        data: Option<T>,
-        id: ArchiveFileID,
-    },
-    /// End of file (last block) - contains the SHA256 of the whole file
-    EndOfFile { id: ArchiveFileID, hash: Sha256Hash },
-    /// End of archive data (no more files after that)
-    EndOfArchiveData,
-}
-
-impl<T> ArchiveFileBlock<T>
-where
-    T: Read,
-{
-    fn dump<U: Write>(&mut self, dest: &mut U) -> Result<(), Error> {
-        match self {
-            ArchiveFileBlock::FileStart { filename, id } => {
-                dest.write_u8(ArchiveFileBlockType::FileStart as u8)?;
-                dest.write_u64::<LittleEndian>(*id)?;
-                let bytes = filename.as_bytes();
-                let length = bytes.len() as u64;
-                if length > FILENAME_MAX_SIZE {
-                    return Err(Error::FilenameTooLong);
-                }
-                dest.write_u64::<LittleEndian>(length)?;
-                dest.write_all(bytes)?;
-                Ok(())
-            }
-            ArchiveFileBlock::FileContent { length, data, id } => {
-                dest.write_u8(ArchiveFileBlockType::FileContent as u8)?;
-                dest.write_u64::<LittleEndian>(*id)?;
-                dest.write_u64::<LittleEndian>(*length)?;
-                match data {
-                    None => {
-                        return Err(Error::AssertionError(String::from(
-                            "Data missing in file content",
-                        )));
-                    }
-                    Some(content) => {
-                        // TODO check length
-                        io::copy(&mut content.take(*length), dest)?;
-                    }
-                }
-                Ok(())
-            }
-            ArchiveFileBlock::EndOfFile { id, hash } => {
-                dest.write_u8(ArchiveFileBlockType::EndOfFile as u8)?;
-                dest.write_u64::<LittleEndian>(*id)?;
-                dest.write_all(hash)?;
-                Ok(())
-            }
-            ArchiveFileBlock::EndOfArchiveData => {
-                dest.write_u8(ArchiveFileBlockType::EndOfArchiveData as u8)?;
-                Ok(())
-            }
-        }
-    }
-
-    fn from(src: &mut T) -> Result<Self, Error> {
-        let byte = src.read_u8()?;
-        match ArchiveFileBlockType::try_from(byte)? {
-            ArchiveFileBlockType::FileStart => {
-                let id = src.read_u64::<LittleEndian>()?;
-                let length = src.read_u64::<LittleEndian>()?;
-                if length > FILENAME_MAX_SIZE {
-                    return Err(Error::FilenameTooLong);
-                }
-                let mut filename = vec![0u8; length as usize];
-                src.read_exact(&mut filename)?;
-                Ok(ArchiveFileBlock::FileStart {
-                    id,
-                    filename: String::from_utf8(filename)?,
-                })
-            }
-            ArchiveFileBlockType::FileContent => {
-                let id = src.read_u64::<LittleEndian>()?;
-                let length = src.read_u64::<LittleEndian>()?;
-                // /!\ WARNING: to avoid loading this entire subfileblock's contents
-                // in-memory, the `data` reader is None; the `src` now starts at the
-                // beginning of the data
-                Ok(ArchiveFileBlock::FileContent {
-                    length,
-                    data: None,
-                    id,
-                })
-            }
-            ArchiveFileBlockType::EndOfFile => {
-                let id = src.read_u64::<LittleEndian>()?;
-                let mut hash = Sha256Hash::default();
-                src.read_exact(&mut hash)?;
-                Ok(ArchiveFileBlock::EndOfFile { id, hash })
-            }
-            ArchiveFileBlockType::EndOfArchiveData => Ok(ArchiveFileBlock::EndOfArchiveData),
-        }
-    }
-}
+use format::ArchiveEntryBlock;
 
 #[derive(Debug, Clone)]
-pub enum ArchiveWriterState {
+enum ArchiveWriterState {
     /// Initialized, with files opened
     OpenedFiles {
-        ids: Vec<ArchiveFileID>,
-        hashes: HashMap<ArchiveFileID, Sha256>,
+        ids: Vec<ArchiveEntryId>,
+        hashes: HashMap<ArchiveEntryId, Sha256>,
     },
     /// File finalized, no more change allowed
     Finalized,
@@ -698,7 +504,7 @@ impl ArchiveWriterState {
     /// Wrap a `impl Read` with hash updating, corresponding to the file identified by `id`
     fn wrap_with_hash<R: Read>(
         &mut self,
-        id: ArchiveFileID,
+        id: ArchiveEntryId,
         src: R,
     ) -> Result<HashWrapperReader<R>, Error> {
         let hash = match self {
@@ -764,6 +570,11 @@ macro_rules! check_state_file_opened {
     }};
 }
 
+/// Use this to write an archive
+///
+/// See crate root documentation for example usage.
+///
+/// Don't forget to call `ArchiveWriter::finalize`
 pub struct ArchiveWriter<'a, W: 'a + InnerWriterTrait> {
     /// MLA Archive format writer
     ///
@@ -782,58 +593,69 @@ pub struct ArchiveWriter<'a, W: 'a + InnerWriterTrait> {
     /// Filename -> Corresponding ArchiveFileID
     ///
     /// This is done to keep a quick check for filename existence
-    files_info: HashMap<String, ArchiveFileID>,
-    /// ID -> Corresponding FileInfo
+    files_info: HashMap<EntryName, ArchiveEntryId>,
+    /// ID -> Corresponding EntryInfo
     ///
     /// File chunks identify their relative file using the `ArchiveFileID`.
     /// `files_info` and `ids_info` could have been merged into a single HashMap
-    /// String -> FileInfo, at the cost of an additional HashMap ArchiveFileID ->
+    /// String -> EntryInfo, at the cost of an additional HashMap ArchiveFileID ->
     /// String, thus increasing memory footprint.
     /// These hashmaps are actually merged at the last moment, on footer
     /// serialization
-    ids_info: HashMap<ArchiveFileID, FileInfo>,
+    ids_info: HashMap<ArchiveEntryId, EntryInfo>,
     /// Next file id to use
-    next_id: ArchiveFileID,
+    next_id: ArchiveEntryId,
     /// Current file being written (for continuous block detection)
-    current_id: ArchiveFileID,
+    current_id: ArchiveEntryId,
 }
 
 // This is an unstable feature for now (`Vec.remove_item`), use a function
 // instead to keep stable compatibility
-pub fn vec_remove_item<T: std::cmp::PartialEq>(vec: &mut Vec<T>, item: &T) -> Option<T> {
+fn vec_remove_item<T: std::cmp::PartialEq>(vec: &mut Vec<T>, item: &T) -> Option<T> {
     let pos = vec.iter().position(|x| *x == *item)?;
     Some(vec.remove(pos))
 }
 
 impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
+    /// Create an `ArchiveWriter` from config.
     pub fn from_config(dest: W, config: ArchiveWriterConfig) -> Result<Self, Error> {
-        // Ensure config is correct
-        config.check()?;
-
-        // Seperate config into the internal state and the persistent config
-        let (persistent, internal) = config.to_persistent()?;
+        let mut dest: InnerWriterType<W> = Box::new(RawLayerWriter::new(dest));
+        let ArchiveWriterConfig {
+            compression_config,
+            encryption_config,
+        } = config;
+        let (encryption_persistent_config, encryption_internal_config) = match encryption_config {
+            Some(encryption_config) => Some(EncryptionConfig::to_persistent(&encryption_config)?),
+            None => None,
+        }
+        .unzip();
+        let mut layers_enabled = Layers::EMPTY;
+        if compression_config.is_some() {
+            layers_enabled |= Layers::COMPRESS;
+        }
+        if encryption_persistent_config.is_some() {
+            layers_enabled |= Layers::ENCRYPT;
+        }
 
         // Write archive header
-        let mut dest: InnerWriterType<W> = Box::new(RawLayerWriter::new(dest));
         ArchiveHeader {
             format_version: MLA_FORMAT_VERSION,
-            config: persistent,
+            config: ArchivePersistentConfig {
+                layers_enabled,
+                encrypt: encryption_persistent_config,
+            },
         }
         .dump(&mut dest)?;
 
         // Enable layers depending on user option
-        if config.is_layers_enabled(Layers::ENCRYPT) {
-            dest = Box::new(EncryptionLayerWriter::new(
-                dest,
-                internal
-                    .encrypt
-                    .as_ref()
-                    .ok_or(ConfigError::EncryptionKeyIsMissing)?,
-            )?);
-        }
-        if config.is_layers_enabled(Layers::COMPRESS) {
-            dest = Box::new(CompressionLayerWriter::new(dest, &config.compress));
-        }
+        dest = match encryption_internal_config.as_ref() {
+            Some(cfg) => Box::new(EncryptionLayerWriter::new(dest, cfg)?),
+            None => dest,
+        };
+        dest = match compression_config {
+            Some(cfg) => Box::new(CompressionLayerWriter::new(dest, &cfg)),
+            None => dest,
+        };
 
         // Upper layer must be a PositionLayer
         let mut final_dest = Box::new(PositionLayerWriter::new(dest));
@@ -841,7 +663,9 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
 
         // Build initial archive
         Ok(ArchiveWriter {
-            internal_config: internal,
+            internal_config: InternalConfig {
+                encrypt: encryption_internal_config,
+            },
             dest: final_dest,
             state: ArchiveWriterState::OpenedFiles {
                 ids: Vec::new(),
@@ -854,13 +678,16 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         })
     }
 
+    /// Create an `ArchiveWriter` with a default config (encryption and compression with default level).
     pub fn new(dest: W, public_keys: &[HybridPublicKey]) -> Result<Self, Error> {
-        let mut config = ArchiveWriterConfig::default();
-        config.add_public_keys(public_keys);
+        let config = ArchiveWriterConfig::with_public_keys(public_keys);
         Self::from_config(dest, config)
     }
 
-    pub fn finalize(&mut self) -> Result<(), Error> {
+    /// Finalize an archive (appends footer, finalize compression, truncation protection, etc.).
+    ///
+    /// Must be done to use `ArchiveReader` then.
+    pub fn finalize(mut self) -> Result<W, Error> {
         // Check final state (empty ids, empty hashes)
         check_state!(self.state, OpenedFiles);
         match &mut self.state {
@@ -883,18 +710,17 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         // Mark the end of the data
 
         // Use std::io::Empty as a readable placeholder type
-        ArchiveFileBlock::EndOfArchiveData::<std::io::Empty> {}.dump(&mut self.dest)?;
+        ArchiveEntryBlock::EndOfArchiveData::<std::io::Empty> {}.dump(&mut self.dest)?;
 
         ArchiveFooter::serialize_into(&mut self.dest, &self.files_info, &self.ids_info)?;
 
         // Recursive call
-        self.dest.finalize()?;
-        Ok(())
+        self.dest.finalize()
     }
 
     /// Add the current offset to the corresponding list if the file id is not
     /// the current one, ie. if blocks are not continuous
-    fn mark_continuous_block(&mut self, id: ArchiveFileID) -> Result<(), Error> {
+    fn mark_continuous_block(&mut self, id: ArchiveEntryId) -> Result<(), Error> {
         if id != self.current_id {
             let offset = self.dest.position();
             match self.ids_info.get_mut(&id) {
@@ -911,7 +737,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
     }
 
     /// Set the EoF offset to the current offset for the corresponding file id
-    fn mark_eof(&mut self, id: ArchiveFileID) -> Result<(), Error> {
+    fn mark_eof(&mut self, id: ArchiveEntryId) -> Result<(), Error> {
         let offset = self.dest.position();
         match self.ids_info.get_mut(&id) {
             Some(file_info) => file_info.eof_offset = offset,
@@ -925,7 +751,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
     }
 
     /// Add the current block size to the total size of the corresponding file id
-    fn extend_file_size(&mut self, id: ArchiveFileID, block_size: u64) -> Result<(), Error> {
+    fn extend_file_size(&mut self, id: ArchiveEntryId, block_size: u64) -> Result<(), Error> {
         match self.ids_info.get_mut(&id) {
             Some(file_info) => file_info.size += block_size,
             None => {
@@ -937,10 +763,15 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         Ok(())
     }
 
-    pub fn start_file(&mut self, filename: &str) -> Result<ArchiveFileID, Error> {
+    /// Start a new entry in archive without giving content for the moment.
+    ///
+    /// Returns an Id that must be kept to be able to append data to this entry.
+    ///
+    /// See `ArchiveWriter::append_entry_content` and `ArchiveWriter::end_entry`.
+    pub fn start_entry(&mut self, name: EntryName) -> Result<ArchiveEntryId, Error> {
         check_state!(self.state, OpenedFiles);
 
-        if self.files_info.contains_key(filename) {
+        if self.files_info.contains_key(&name) {
             return Err(Error::DuplicateFilename);
         }
 
@@ -948,23 +779,19 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         let id = self.next_id;
         self.next_id += 1;
         self.current_id = id;
-        self.files_info.insert(filename.to_string(), id);
+        self.files_info.insert(name.clone(), id);
 
         // Save the current position
         self.ids_info.insert(
             id,
-            FileInfo {
+            EntryInfo {
                 offsets: vec![self.dest.position()],
                 size: 0,
                 eof_offset: 0,
             },
         );
         // Use std::io::Empty as a readable placeholder type
-        ArchiveFileBlock::FileStart::<std::io::Empty> {
-            filename: filename.to_string(),
-            id,
-        }
-        .dump(&mut self.dest)?;
+        ArchiveEntryBlock::EntryStart::<std::io::Empty> { name, id }.dump(&mut self.dest)?;
 
         match &mut self.state {
             ArchiveWriterState::OpenedFiles { ids, hashes } => {
@@ -981,9 +808,13 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         Ok(id)
     }
 
-    pub fn append_file_content<U: Read>(
+    /// Appends data to an entry started with `ArchiveWriter::start_entry`.
+    ///
+    /// Can be called multiple times to append data to the same entry.
+    /// Can be interleaved with other calls writing data for other entries.
+    pub fn append_entry_content<U: Read>(
         &mut self,
-        id: ArchiveFileID,
+        id: ArchiveEntryId,
         size: u64,
         src: U,
     ) -> Result<(), Error> {
@@ -998,7 +829,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         self.extend_file_size(id, size)?;
         let src = self.state.wrap_with_hash(id, src)?;
 
-        ArchiveFileBlock::FileContent {
+        ArchiveEntryBlock::EntryContent {
             id,
             length: size,
             data: Some(src),
@@ -1006,7 +837,8 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         .dump(&mut self.dest)
     }
 
-    pub fn end_file(&mut self, id: ArchiveFileID) -> Result<(), Error> {
+    /// Mark an entry as terminated and record its Sha256 hash.
+    pub fn end_entry(&mut self, id: ArchiveEntryId) -> Result<(), Error> {
         check_state_file_opened!(&self.state, &id);
 
         let hash = match &mut self.state {
@@ -1028,22 +860,20 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         self.mark_continuous_block(id)?;
         self.mark_eof(id)?;
         // Use std::io::Empty as a readable placeholder type
-        ArchiveFileBlock::EndOfFile::<std::io::Empty> { id, hash }.dump(&mut self.dest)?;
+        ArchiveEntryBlock::EndOfEntry::<std::io::Empty> { id, hash }.dump(&mut self.dest)?;
 
         Ok(())
     }
 
-    pub fn add_file<U: Read>(&mut self, filename: &str, size: u64, src: U) -> Result<(), Error> {
-        let id = self.start_file(filename)?;
-        self.append_file_content(id, size, src)?;
-        self.end_file(id)
+    /// Helper calling `start_entry`, `append_entry_content` and `end_entry` one after the other.
+    pub fn add_entry<U: Read>(&mut self, name: EntryName, size: u64, src: U) -> Result<(), Error> {
+        let id = self.start_entry(name)?;
+        self.append_entry_content(id, size, src)?;
+        self.end_entry(id)
     }
 
-    /// Unwraps the inner writer
-    pub fn into_raw(self) -> W {
-        self.dest.into_raw()
-    }
-
+    /// Flushes data to the destination `Writer` `W`.
+    /// Calls flush on the destination too.
     pub fn flush(&mut self) -> io::Result<()> {
         self.dest.flush()
     }
@@ -1051,153 +881,26 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
 
 // -------- Reader --------
 
-#[derive(Debug)]
-pub struct ArchiveFile<T: Read> {
-    /// File inside a MLA Archive
-    pub filename: String,
-    pub data: T,
-    pub size: u64,
-}
-
-#[derive(PartialEq, Debug)]
-enum BlocksToFileReaderState {
-    // Remaining size
-    InFile(usize),
-    Ready,
-    Finish,
-}
-
-#[derive(Debug)]
-pub struct BlocksToFileReader<'a, R: Read + Seek> {
-    /// This structure wraps the internals to get back a file's content
-    src: &'a mut R,
-    state: BlocksToFileReaderState,
-    /// id of the File being read
-    id: ArchiveFileID,
-    /// position in `offsets` of the last offset used
-    current_offset: usize,
-    /// List of offsets of continuous blocks corresponding to where the file can be read
-    offsets: &'a [u64],
-}
-
-impl<'a, R: Read + Seek> BlocksToFileReader<'a, R> {
-    fn new(src: &'a mut R, offsets: &'a [u64]) -> Result<BlocksToFileReader<'a, R>, Error> {
-        // Set the inner layer at the start of the file
-        src.seek(SeekFrom::Start(offsets[0]))?;
-
-        // Read file information header
-        let id = match ArchiveFileBlock::from(src)? {
-            ArchiveFileBlock::FileStart { id, .. } => id,
-            _ => {
-                return Err(Error::WrongReaderState(
-                    "[BlocksToFileReader] A file must start with a FileStart".to_string(),
-                ));
-            }
-        };
-
-        Ok(BlocksToFileReader {
-            src,
-            state: BlocksToFileReaderState::Ready,
-            id,
-            current_offset: 0,
-            offsets,
-        })
-    }
-
-    /// Move `self.src` to the next continuous block
-    fn move_to_next_block(&mut self) -> Result<(), Error> {
-        self.current_offset += 1;
-        if self.current_offset >= self.offsets.len() {
-            return Err(Error::WrongReaderState(
-                "[BlocksToFileReader] No more continuous blocks".to_string(),
-            ));
-        }
-        self.src
-            .seek(SeekFrom::Start(self.offsets[self.current_offset]))?;
-        Ok(())
-    }
-}
-
-impl<T: Read + Seek> Read for BlocksToFileReader<'_, T> {
-    fn read(&mut self, into: &mut [u8]) -> io::Result<usize> {
-        let (remaining, count) = match self.state {
-            BlocksToFileReaderState::Ready => {
-                // Start a new block FileContent
-                match ArchiveFileBlock::from(&mut self.src)? {
-                    ArchiveFileBlock::FileContent { length, id, .. } => {
-                        if id != self.id {
-                            self.move_to_next_block()?;
-                            return self.read(into);
-                        }
-                        let count = self.src.by_ref().take(length).read(into)?;
-                        let length_usize = length as usize;
-                        (length_usize - count, count)
-                    }
-                    ArchiveFileBlock::EndOfFile { id, .. } => {
-                        if id != self.id {
-                            self.move_to_next_block()?;
-                            return self.read(into);
-                        }
-                        self.state = BlocksToFileReaderState::Finish;
-                        return Ok(0);
-                    }
-                    ArchiveFileBlock::FileStart { id, .. } => {
-                        if id != self.id {
-                            self.move_to_next_block()?;
-                            return self.read(into);
-                        }
-                        return Err(Error::WrongReaderState(
-                            "[BlocksToFileReader] Start with a wrong block type".to_string(),
-                        )
-                        .into());
-                    }
-                    ArchiveFileBlock::EndOfArchiveData => {
-                        return Err(Error::WrongReaderState(
-                            "[BlocksToFileReader] Try to read the end of the archive".to_string(),
-                        )
-                        .into());
-                    }
-                }
-            }
-            BlocksToFileReaderState::InFile(remaining) => {
-                let count = self.src.by_ref().take(remaining as u64).read(into)?;
-                (remaining - count, count)
-            }
-            BlocksToFileReaderState::Finish => {
-                return Ok(0);
-            }
-        };
-        if remaining > 0 {
-            self.state = BlocksToFileReaderState::InFile(remaining);
-        } else {
-            // remaining is 0 (> never happens thanks to take)
-            self.state = BlocksToFileReaderState::Ready;
-        }
-        Ok(count)
-    }
-}
-
 #[derive(Encode, Decode)]
-#[cfg_attr(test, derive(PartialEq, Eq, Debug))]
-pub struct FileInfo {
-    /// File information to save in the footer
+#[cfg_attr(test, derive(PartialEq, Eq, Debug, Clone))]
+pub(crate) struct EntryInfo {
+    /// Entry information to save in the footer
     ///
-    /// Offsets of continuous chunks of `ArchiveFileBlock`
+    /// Offsets of continuous chunks of `ArchiveEntryBlock`
     offsets: Vec<u64>,
     /// Size of the file, in bytes
-    pub size: u64,
-    /// Offset of the ArchiveFileBlock::EndOfFile
+    size: u64,
+    /// Offset of the ArchiveEntryBlock::EndOfEntry
     ///
-    /// This offset is used to retrieve information from the EoF tag, such as
+    /// This offset is used to retrieve information from the EndOfEntry tag, such as
     /// the file hash
     eof_offset: u64,
 }
 
+/// Use this to read an archive
 pub struct ArchiveReader<'a, R: 'a + InnerReaderTrait> {
     /// MLA Archive format Reader
     //
-    /// User's reading configuration
-    pub config: ArchiveReaderConfig,
     /// Source
     src: Box<dyn 'a + LayerReader<'a, R>>,
     /// Metadata (from footer if any)
@@ -1205,10 +908,12 @@ pub struct ArchiveReader<'a, R: 'a + InnerReaderTrait> {
 }
 
 impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
+    /// Create an `ArchiveReader`.
     pub fn from_config(mut src: R, mut config: ArchiveReaderConfig) -> Result<Self, Error> {
         // Make sure we read the archive header from the start
         src.rewind()?;
         let header = ArchiveHeader::from(&mut src)?;
+        let layers_enabled = header.config.layers_enabled;
         config.load_persistent(header.config)?;
 
         // Pin the current position (after header) as the new 0
@@ -1217,10 +922,12 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
 
         // Enable layers depending on user option. Order is relevant
         let mut src: Box<dyn 'b + LayerReader<'b, R>> = raw_src;
-        if config.layers_enabled.contains(Layers::ENCRYPT) {
+        if layers_enabled.contains(Layers::ENCRYPT) {
             src = Box::new(EncryptionLayerReader::new(src, &config.encrypt)?);
+        } else if !config.accept_unencrypted {
+            return Err(Error::EncryptionAskedButNotMarkedPresent);
         }
-        if config.layers_enabled.contains(Layers::COMPRESS) {
+        if layers_enabled.contains(Layers::COMPRESS) {
             src = Box::new(CompressionLayerReader::new(src)?);
         }
         src.initialize()?;
@@ -1231,32 +938,32 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
         // Reset the position for further uses
         src.rewind()?;
 
-        Ok(ArchiveReader {
-            config,
-            src,
-            metadata,
-        })
+        Ok(ArchiveReader { src, metadata })
     }
 
-    pub fn new(src: R) -> Result<Self, Error> {
-        Self::from_config(src, ArchiveReaderConfig::new())
-    }
-
-    /// Return an iterator on filenames present in the archive
+    /// Return an iterator on the name of each entry in the archive.
     ///
-    /// Order is not relevant, and may change
-    pub fn list_files(&self) -> Result<impl Iterator<Item = &String>, Error> {
-        if let Some(ArchiveFooter { files_info, .. }) = &self.metadata {
+    /// Order is not relevant, and may change.
+    pub fn list_entries(&self) -> Result<impl Iterator<Item = &EntryName>, Error> {
+        if let Some(ArchiveFooter {
+            entries_info: files_info,
+            ..
+        }) = &self.metadata
+        {
             Ok(files_info.keys())
         } else {
             Err(Error::MissingMetadata)
         }
     }
 
-    pub fn get_hash(&mut self, filename: &str) -> Result<Option<Sha256Hash>, Error> {
-        if let Some(ArchiveFooter { files_info }) = &self.metadata {
+    /// Get the hash recorded in the archive footer for an entry content.
+    pub fn get_hash(&mut self, name: &EntryName) -> Result<Option<Sha256Hash>, Error> {
+        if let Some(ArchiveFooter {
+            entries_info: files_info,
+        }) = &self.metadata
+        {
             // Get file relative information
-            let file_info = match files_info.get(filename) {
+            let file_info = match files_info.get(name) {
                 None => return Ok(None),
                 Some(finfo) => finfo,
             };
@@ -1264,8 +971,8 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
             self.src.seek(SeekFrom::Start(file_info.eof_offset))?;
 
             // Return the file hash
-            match ArchiveFileBlock::from(&mut self.src)? {
-                ArchiveFileBlock::EndOfFile { hash, .. } => Ok(Some(hash)),
+            match ArchiveEntryBlock::from(&mut self.src)? {
+                ArchiveEntryBlock::EndOfEntry { hash, .. } => Ok(Some(hash)),
                 _ => Err(Error::WrongReaderState(
                     "[ArchiveReader] eof_offset must point to a EoF".to_string(),
                 )),
@@ -1275,15 +982,21 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
         }
     }
 
-    #[allow(clippy::type_complexity)]
-    pub fn get_file(
+    /// Get an archive entry.
+    ///
+    /// If no entry is found with given `name`, returns `Ok(None)`.
+    /// If found, return `Ok(Some(e))` where e is an `ArchiveEntry`, letting you read its content and size.
+    /// Returns an `Err` on error...
+    pub fn get_entry(
         &mut self,
-        filename: String,
-    ) -> Result<Option<ArchiveFile<BlocksToFileReader<Box<dyn 'b + LayerReader<'b, R>>>>>, Error>
-    {
-        if let Some(ArchiveFooter { files_info }) = &self.metadata {
+        name: EntryName,
+    ) -> Result<Option<ArchiveEntry<impl InnerReaderTrait>>, Error> {
+        if let Some(ArchiveFooter {
+            entries_info: files_info,
+        }) = &self.metadata
+        {
             // Get file relative information
-            let file_info = match files_info.get(&filename) {
+            let file_info = match files_info.get(&name) {
                 None => return Ok(None),
                 Some(finfo) => finfo,
             };
@@ -1294,9 +1007,9 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
             }
 
             // Instantiate the file representation
-            let reader = BlocksToFileReader::new(&mut self.src, &file_info.offsets)?;
-            Ok(Some(ArchiveFile {
-                filename,
+            let reader = ArchiveEntryDataReader::new(&mut self.src, &file_info.offsets)?;
+            Ok(Some(ArchiveEntry {
+                name,
                 data: reader,
                 size: file_info.size,
             }))
@@ -1308,7 +1021,8 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
 
 // This code is very similar with MLAArchiveReader
 
-pub struct ArchiveFailSafeReader<'a, R: 'a + Read> {
+/// Use this to convert a truncated archive to one that can be opened with `ArchiveReader`, eventually loosing some content and security or performance properties.
+pub struct TruncatedArchiveReader<'a, R: 'a + Read> {
     /// MLA Archive format Reader (fail-safe)
     //
     /// User's reading configuration
@@ -1325,13 +1039,13 @@ const CACHE_SIZE: usize = 8 * 1024 * 1024; // 8MB
 
 /// Used to update the error state only if it was NoError
 /// ```text
-/// update_error!(error_var, FailSafeReadError::...)
+/// update_error!(error_var, TruncatedReadError::...)
 /// ```
 macro_rules! update_error {
     ( $x:ident = $y:expr ) => {
         #[allow(clippy::single_match)]
         match $x {
-            FailSafeReadError::NoError => {
+            TruncatedReadError::NoError => {
                 $x = $y;
             }
             _ => {}
@@ -1339,81 +1053,83 @@ macro_rules! update_error {
     };
 }
 
-impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
+impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
+    /// Create a `TruncatedArchiveReader` with given config.
     pub fn from_config(mut src: R, mut config: ArchiveReaderConfig) -> Result<Self, Error> {
         let header = ArchiveHeader::from(&mut src)?;
+        let layers_enabled = header.config.layers_enabled;
         config.load_persistent(header.config)?;
 
         // Enable layers depending on user option. Order is relevant
         let mut src: Box<dyn 'b + LayerFailSafeReader<'b, R>> =
             Box::new(RawLayerFailSafeReader::new(src));
-        if config.layers_enabled.contains(Layers::ENCRYPT) {
+        if layers_enabled.contains(Layers::ENCRYPT) {
             src = Box::new(EncryptionLayerFailSafeReader::new(src, &config.encrypt)?);
+        } else if !config.accept_unencrypted {
+            return Err(Error::EncryptionAskedButNotMarkedPresent);
         }
-        if config.layers_enabled.contains(Layers::COMPRESS) {
+        if layers_enabled.contains(Layers::COMPRESS) {
             src = Box::new(CompressionLayerFailSafeReader::new(src)?);
         }
 
         Ok(Self { config, src })
     }
 
-    pub fn new(src: R) -> Result<Self, Error> {
-        Self::from_config(src, ArchiveReaderConfig::new())
-    }
-
-    /// Fail-safe / best-effort conversion of the current archive to a correct
+    /// Best-effort conversion of the current archive to a correct
     /// one. On success, returns the reason conversion terminates (ideally,
     /// EndOfOriginalArchiveData)
     #[allow(clippy::cognitive_complexity)]
     pub fn convert_to_archive<W: InnerWriterTrait>(
         &mut self,
-        output: &mut ArchiveWriter<W>,
-    ) -> Result<FailSafeReadError, Error> {
-        let mut error = FailSafeReadError::NoError;
+        mut output: ArchiveWriter<W>,
+    ) -> Result<TruncatedReadError, Error> {
+        let mut error = TruncatedReadError::NoError;
 
         // Associate an id retrieved from the archive to repair, to the
         // corresponding output file id
-        let mut id_failsafe2id_output: HashMap<ArchiveFileID, ArchiveFileID> = HashMap::new();
+        let mut id_failsafe2id_output: HashMap<ArchiveEntryId, ArchiveEntryId> = HashMap::new();
         // Associate an id retrieved from the archive to corresponding filename
-        let mut id_failsafe2filename: HashMap<ArchiveFileID, String> = HashMap::new();
+        let mut id_failsafe2filename: HashMap<ArchiveEntryId, EntryName> = HashMap::new();
         // List of IDs from the archive already fully added
         let mut id_failsafe_done = Vec::new();
         // Associate an id retrieved from the archive with its ongoing Hash
-        let mut id_failsafe2hash: HashMap<ArchiveFileID, Sha256> = HashMap::new();
+        let mut id_failsafe2hash: HashMap<ArchiveEntryId, Sha256> = HashMap::new();
 
         'read_block: loop {
-            match ArchiveFileBlock::from(&mut self.src) {
+            match ArchiveEntryBlock::from(&mut self.src) {
                 Err(Error::IOError(err)) => {
                     if let std::io::ErrorKind::UnexpectedEof = err.kind() {
-                        update_error!(error = FailSafeReadError::UnexpectedEOFOnNextBlock);
+                        update_error!(error = TruncatedReadError::UnexpectedEOFOnNextBlock);
                         break;
                     }
-                    update_error!(error = FailSafeReadError::IOErrorOnNextBlock(err));
+                    update_error!(error = TruncatedReadError::IOErrorOnNextBlock(err));
                     break;
                 }
                 Err(err) => {
-                    update_error!(error = FailSafeReadError::ErrorOnNextBlock(err));
+                    update_error!(error = TruncatedReadError::ErrorOnNextBlock(err));
                     break;
                 }
                 Ok(block) => {
                     match block {
-                        ArchiveFileBlock::FileStart { filename, id } => {
+                        ArchiveEntryBlock::EntryStart { name: filename, id } => {
                             if let Some(_id_output) = id_failsafe2id_output.get(&id) {
-                                update_error!(error = FailSafeReadError::ArchiveFileIDReuse(id));
+                                update_error!(error = TruncatedReadError::ArchiveFileIDReuse(id));
                                 break 'read_block;
                             }
                             if id_failsafe_done.contains(&id) {
                                 update_error!(
-                                    error = FailSafeReadError::ArchiveFileIDAlreadyClose(id)
+                                    error = TruncatedReadError::ArchiveFileIDAlreadyClose(id)
                                 );
                                 break 'read_block;
                             }
 
                             id_failsafe2filename.insert(id, filename.clone());
-                            let id_output = match output.start_file(&filename) {
+                            let id_output = match output.start_entry(filename.clone()) {
                                 Err(Error::DuplicateFilename) => {
                                     update_error!(
-                                        error = FailSafeReadError::FilenameReuse(filename)
+                                        error = TruncatedReadError::FilenameReuse(
+                                            filename.raw_content_to_escaped_string()
+                                        )
                                     );
                                     break 'read_block;
                                 }
@@ -1425,19 +1141,19 @@ impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
                             id_failsafe2id_output.insert(id, id_output);
                             id_failsafe2hash.insert(id, Sha256::default());
                         }
-                        ArchiveFileBlock::FileContent { length, id, .. } => {
+                        ArchiveEntryBlock::EntryContent { length, id, .. } => {
                             let id_output = match id_failsafe2id_output.get(&id) {
                                 Some(id_output) => *id_output,
                                 None => {
                                     update_error!(
-                                        error = FailSafeReadError::ContentForUnknownFile(id)
+                                        error = TruncatedReadError::ContentForUnknownFile(id)
                                     );
                                     break 'read_block;
                                 }
                             };
                             if id_failsafe_done.contains(&id) {
                                 update_error!(
-                                    error = FailSafeReadError::ArchiveFileIDAlreadyClose(id)
+                                    error = TruncatedReadError::ArchiveFileIDAlreadyClose(id)
                                 );
                                 break 'read_block;
                             }
@@ -1480,15 +1196,15 @@ impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
                                         }
                                         Err(err) => {
                                             // Stop reconstruction
-                                            output.append_file_content(
+                                            output.append_entry_content(
                                                 id_output,
                                                 next_write_pos as u64,
                                                 &buf[..next_write_pos],
                                             )?;
                                             update_error!(
-                                                error = FailSafeReadError::ErrorInFile(
+                                                error = TruncatedReadError::ErrorInFile(
                                                     err,
-                                                    fname.clone()
+                                                    fname.raw_content_to_escaped_string()
                                                 )
                                             );
                                             break 'read_block;
@@ -1499,7 +1215,7 @@ impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
                                         break 'buf_fill;
                                     }
                                 }
-                                output.append_file_content(
+                                output.append_entry_content(
                                     id_output,
                                     next_write_pos as u64,
                                     &buf[..next_write_pos],
@@ -1511,17 +1227,19 @@ impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
                                 }
                             }
                         }
-                        ArchiveFileBlock::EndOfFile { id, hash } => {
+                        ArchiveEntryBlock::EndOfEntry { id, hash } => {
                             let id_output = match id_failsafe2id_output.get(&id) {
                                 Some(id_output) => *id_output,
                                 None => {
-                                    update_error!(error = FailSafeReadError::EOFForUnknownFile(id));
+                                    update_error!(
+                                        error = TruncatedReadError::EOFForUnknownFile(id)
+                                    );
                                     break 'read_block;
                                 }
                             };
                             if id_failsafe_done.contains(&id) {
                                 update_error!(
-                                    error = FailSafeReadError::ArchiveFileIDAlreadyClose(id)
+                                    error = TruncatedReadError::ArchiveFileIDAlreadyClose(id)
                                 );
                                 break 'read_block;
                             }
@@ -1530,7 +1248,7 @@ impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
                                     let computed_hash = hash_archive.finalize();
                                     if computed_hash.as_slice() != hash {
                                         update_error!(
-                                            error = FailSafeReadError::HashDiffers {
+                                            error = TruncatedReadError::HashDiffers {
                                                 expected: Vec::from(computed_hash.as_slice()),
                                                 obtained: Vec::from(&hash[..]),
                                             }
@@ -1541,18 +1259,18 @@ impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
                                 None => {
                                     // Synchronisation error
                                     update_error!(
-                                        error = FailSafeReadError::FailSafeReadInternalError
+                                        error = TruncatedReadError::FailSafeReadInternalError
                                     );
                                     break 'read_block;
                                 }
                             };
 
-                            output.end_file(id_output)?;
+                            output.end_entry(id_output)?;
                             id_failsafe_done.push(id);
                         }
-                        ArchiveFileBlock::EndOfArchiveData => {
+                        ArchiveEntryBlock::EndOfArchiveData => {
                             // Expected end
-                            update_error!(error = FailSafeReadError::EndOfOriginalArchiveData);
+                            update_error!(error = TruncatedReadError::EndOfOriginalArchiveData);
                             break 'read_block;
                         }
                     }
@@ -1572,14 +1290,14 @@ impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
             let fname = id_failsafe2filename
                 .get(&id_failsafe)
                 .expect("`id_failsafe2filename` not more sync with `id_failsafe2id_output`");
-            output.end_file(id_output)?;
+            output.end_entry(id_output)?;
 
             unfinished_files.push(fname.clone());
         }
 
         // Report which files are not completed, if any
         if !unfinished_files.is_empty() {
-            error = FailSafeReadError::UnfinishedFiles {
+            error = TruncatedReadError::UnfinishedFiles {
                 filenames: unfinished_files,
                 stopping_error: Box::new(error),
             };
@@ -1590,10 +1308,15 @@ impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
     }
 }
 
+/// Extract information from MLA Header
+pub mod info;
+
 #[cfg(test)]
 pub(crate) mod tests {
+    use crate::config::ArchivePersistentConfig;
+
     use super::*;
-    use crypto::hybrid::{HybridPrivateKey, generate_keypair_from_rng};
+    use crypto::hybrid::{HybridPrivateKey, generate_keypair_from_seed};
     // use curve25519_parser::{parse_openssl_25519_privkey, parse_openssl_25519_pubkey};
     use rand::distributions::{Distribution, Standard};
     use rand::{RngCore, SeedableRng};
@@ -1628,15 +1351,15 @@ pub(crate) mod tests {
         let hash = Sha256Hash::default();
 
         // std::io::Empty is used because a type with Read is needed
-        ArchiveFileBlock::FileStart::<Empty> {
+        ArchiveEntryBlock::EntryStart::<Empty> {
             id,
-            filename: String::from("foobaré.exe"),
+            name: EntryName::from_path("foobaré.exe").unwrap(),
         }
         .dump(&mut buf)
         .unwrap();
 
         let fake_content = vec![1, 2, 3, 4];
-        let mut block = ArchiveFileBlock::FileContent {
+        let mut block = ArchiveEntryBlock::EntryContent {
             id,
             length: fake_content.len() as u64,
             data: Some(fake_content.as_slice()),
@@ -1644,7 +1367,7 @@ pub(crate) mod tests {
         block.dump(&mut buf).unwrap();
 
         // std::io::Empty is used because a type with Read is needed
-        ArchiveFileBlock::EndOfFile::<Empty> { id, hash }
+        ArchiveEntryBlock::EndOfEntry::<Empty> { id, hash }
             .dump(&mut buf)
             .unwrap();
 
@@ -1652,93 +1375,50 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn blocks_to_file() {
-        // Create several blocks
-        let mut buf = Vec::new();
-        let id = 0;
-        let hash = Sha256Hash::default();
-
-        let mut block = ArchiveFileBlock::FileStart::<&[u8]> {
-            id,
-            filename: String::from("foobar"),
-        };
-        block.dump(&mut buf).unwrap();
-        let fake_content = vec![1, 2, 3, 4];
-        let mut block = ArchiveFileBlock::FileContent {
-            id,
-            length: fake_content.len() as u64,
-            data: Some(fake_content.as_slice()),
-        };
-        block.dump(&mut buf).unwrap();
-        let fake_content2 = vec![5, 6, 7, 8];
-        let mut block = ArchiveFileBlock::FileContent {
-            id,
-            length: fake_content2.len() as u64,
-            data: Some(fake_content2.as_slice()),
-        };
-        block.dump(&mut buf).unwrap();
-
-        // std::io::Empty is used because a type with Read is needed
-        ArchiveFileBlock::EndOfFile::<Empty> { id, hash }
-            .dump(&mut buf)
-            .unwrap();
-
-        let mut data_source = std::io::Cursor::new(buf);
-        let offsets = [0];
-        let mut reader =
-            BlocksToFileReader::new(&mut data_source, &offsets).expect("BlockToFileReader failed");
-        let mut output = Vec::new();
-        reader.read_to_end(&mut output).unwrap();
-        assert_eq!(output.len(), fake_content.len() + fake_content2.len());
-        let mut expected_output = Vec::new();
-        expected_output.extend(fake_content);
-        expected_output.extend(fake_content2);
-        assert_eq!(output, expected_output);
-        assert_eq!(reader.state, BlocksToFileReaderState::Finish);
-    }
-
-    #[test]
     fn new_mla() {
         let file = Vec::new();
         // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
-        let rng = ChaChaRng::seed_from_u64(0);
-        let (private_key, public_key) = generate_keypair_from_rng(rng);
+        let (private_key, public_key) = generate_keypair_from_seed([0; 32]);
         let mut mla = ArchiveWriter::new(file, std::slice::from_ref(&public_key))
             .expect("Writer init failed");
 
         let fake_file = vec![1, 2, 3, 4];
-        mla.add_file("my_file", fake_file.len() as u64, fake_file.as_slice())
-            .unwrap();
+        mla.add_entry(
+            EntryName::from_path("my_file").unwrap(),
+            fake_file.len() as u64,
+            fake_file.as_slice(),
+        )
+        .unwrap();
         let fake_file = vec![5, 6, 7, 8];
         let fake_file2 = vec![9, 10, 11, 12];
-        let id = mla.start_file("my_file2").unwrap();
-        mla.append_file_content(id, fake_file.len() as u64, fake_file.as_slice())
+        let id = mla
+            .start_entry(EntryName::from_path("my_file2").unwrap())
             .unwrap();
-        mla.append_file_content(id, fake_file2.len() as u64, fake_file2.as_slice())
+        mla.append_entry_content(id, fake_file.len() as u64, fake_file.as_slice())
             .unwrap();
-        mla.end_file(id).unwrap();
-        mla.finalize().unwrap();
+        mla.append_entry_content(id, fake_file2.len() as u64, fake_file2.as_slice())
+            .unwrap();
+        mla.end_entry(id).unwrap();
 
-        let mla_key = mla.internal_config.encrypt.as_ref().unwrap().key;
-        let mla_nonce = mla.internal_config.encrypt.as_ref().unwrap().nonce;
-        let dest = mla.into_raw();
+        let dest = mla.finalize().unwrap();
         let buf = Cursor::new(dest.as_slice());
-        let mut config = ArchiveReaderConfig::new();
-        config.add_private_keys(std::slice::from_ref(&private_key));
+        let config = ArchiveReaderConfig::with_private_keys(&[private_key]);
         let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
-        assert_eq!(
-            (mla_key, mla_nonce),
-            mla_read.config.get_encrypt_parameters().unwrap()
-        );
 
-        let mut file = mla_read.get_file("my_file".to_string()).unwrap().unwrap();
+        let mut file = mla_read
+            .get_entry(EntryName::from_path("my_file").unwrap())
+            .unwrap()
+            .unwrap();
         let mut rez = Vec::new();
         file.data.read_to_end(&mut rez).unwrap();
         assert_eq!(rez, vec![1, 2, 3, 4]);
-        // Explicit drop here, because otherwise mla_read.get_file() cannot be
+        // Explicit drop here, because otherwise mla_read.get_entry() cannot be
         // recall. It is not detected by the NLL analysis
         drop(file);
-        let mut file2 = mla_read.get_file("my_file2".to_string()).unwrap().unwrap();
+        let mut file2 = mla_read
+            .get_entry(EntryName::from_path("my_file2").unwrap())
+            .unwrap()
+            .unwrap();
         let mut rez2 = Vec::new();
         file2.data.read_to_end(&mut rez2).unwrap();
         assert_eq!(rez2, vec![5, 6, 7, 8, 9, 10, 11, 12]);
@@ -1746,28 +1426,52 @@ pub(crate) mod tests {
 
     #[allow(clippy::type_complexity)]
     pub(crate) fn build_archive(
-        layers: Option<Layers>,
+        compression: bool,
+        encryption: bool,
         interleaved: bool,
     ) -> (
-        ArchiveWriter<'static, Vec<u8>>,
+        Vec<u8>,
         HybridPrivateKey,
         HybridPublicKey,
-        Vec<(String, Vec<u8>)>,
+        Vec<(EntryName, Vec<u8>)>,
+    ) {
+        let (written_archive, privkey, pubkey, files_content, _, _) =
+            build_archive2(compression, encryption, interleaved);
+        (written_archive, privkey, pubkey, files_content)
+    }
+
+    #[allow(clippy::type_complexity)]
+    pub(crate) fn build_archive2(
+        compression: bool,
+        encryption: bool,
+        interleaved: bool,
+    ) -> (
+        Vec<u8>,
+        HybridPrivateKey,
+        HybridPublicKey,
+        Vec<(EntryName, Vec<u8>)>,
+        HashMap<EntryName, ArchiveEntryId>,
+        HashMap<ArchiveEntryId, EntryInfo>,
     ) {
         // Build an archive with 3 files
         let file = Vec::new();
         // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
-        let rng = ChaChaRng::seed_from_u64(0);
-        let (private_key, public_key) = generate_keypair_from_rng(rng);
-        let mut config = ArchiveWriterConfig::new();
-        config
-            .set_layers(layers.unwrap_or_default())
-            .add_public_keys(&[public_key.clone()]);
+        let (private_key, public_key) = generate_keypair_from_seed([0; 32]);
+        let config = if encryption {
+            ArchiveWriterConfig::with_public_keys(&[public_key.clone()])
+        } else {
+            ArchiveWriterConfig::without_encryption()
+        };
+        let config = if compression {
+            config
+        } else {
+            config.without_compression()
+        };
         let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
 
-        let fname1 = "my_file1".to_string();
-        let fname2 = "my_file2".to_string();
-        let fname3 = "my_file3".to_string();
+        let fname1 = EntryName::from_arbitrary_bytes(b"my_file1").unwrap();
+        let fname2 = EntryName::from_arbitrary_bytes(b"my_file2").unwrap();
+        let fname3 = EntryName::from_arbitrary_bytes(b"my_file3").unwrap();
         let fake_file_part1 = vec![1, 2, 3];
         let fake_file_part2 = vec![4, 5, 6, 7, 8];
         let mut fake_file1 = Vec::new();
@@ -1788,39 +1492,56 @@ pub(crate) mod tests {
             // [File1 content 4 5 6 7 8]
             // [File1 end]
             // [File2 end]
-            let id_file1 = mla.start_file(&fname1).unwrap();
-            mla.append_file_content(
+            let id_file1 = mla.start_entry(fname1.clone()).unwrap();
+            mla.append_entry_content(
                 id_file1,
                 fake_file_part1.len() as u64,
                 fake_file_part1.as_slice(),
             )
             .unwrap();
-            let id_file2 = mla.start_file(&fname2).unwrap();
-            mla.append_file_content(id_file2, fake_file2.len() as u64, fake_file2.as_slice())
+            let id_file2 = mla.start_entry(fname2.clone()).unwrap();
+            mla.append_entry_content(id_file2, fake_file2.len() as u64, fake_file2.as_slice())
                 .unwrap();
-            mla.add_file(&fname3, fake_file3.len() as u64, fake_file3.as_slice())
-                .unwrap();
-            mla.append_file_content(
+            mla.add_entry(
+                fname3.clone(),
+                fake_file3.len() as u64,
+                fake_file3.as_slice(),
+            )
+            .unwrap();
+            mla.append_entry_content(
                 id_file1,
                 fake_file_part2.len() as u64,
                 fake_file_part2.as_slice(),
             )
             .unwrap();
-            mla.end_file(id_file1).unwrap();
-            mla.end_file(id_file2).unwrap();
+            mla.end_entry(id_file1).unwrap();
+            mla.end_entry(id_file2).unwrap();
         } else {
-            mla.add_file(&fname1, fake_file1.len() as u64, fake_file1.as_slice())
-                .unwrap();
-            mla.add_file(&fname2, fake_file2.len() as u64, fake_file2.as_slice())
-                .unwrap();
-            mla.add_file(&fname3, fake_file3.len() as u64, fake_file3.as_slice())
-                .unwrap();
+            mla.add_entry(
+                fname1.clone(),
+                fake_file1.len() as u64,
+                fake_file1.as_slice(),
+            )
+            .unwrap();
+            mla.add_entry(
+                fname2.clone(),
+                fake_file2.len() as u64,
+                fake_file2.as_slice(),
+            )
+            .unwrap();
+            mla.add_entry(
+                fname3.clone(),
+                fake_file3.len() as u64,
+                fake_file3.as_slice(),
+            )
+            .unwrap();
         }
-
-        mla.finalize().unwrap();
+        let files_info = mla.files_info.clone();
+        let ids_info = mla.ids_info.clone();
+        let written_archive = mla.finalize().unwrap();
 
         (
-            mla,
+            written_archive,
             private_key,
             public_key,
             vec![
@@ -1828,22 +1549,22 @@ pub(crate) mod tests {
                 (fname2, fake_file2),
                 (fname3, fake_file3),
             ],
+            files_info,
+            ids_info,
         )
     }
 
     #[test]
     fn interleaved_files() {
         // Build an archive with 3 interleaved files
-        let (mla, key, _pubkey, files) = build_archive(None, true);
+        let (mla, key, _pubkey, files) = build_archive(true, true, true);
 
-        let dest = mla.into_raw();
-        let buf = Cursor::new(dest.as_slice());
-        let mut config = ArchiveReaderConfig::new();
-        config.add_private_keys(std::slice::from_ref(&key));
+        let buf = Cursor::new(mla.as_slice());
+        let config = ArchiveReaderConfig::with_private_keys(&[key]);
         let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
 
         for (fname, content) in files {
-            let mut file = mla_read.get_file(fname).unwrap().unwrap();
+            let mut file = mla_read.get_entry(fname).unwrap().unwrap();
             let mut rez = Vec::new();
             file.data.read_to_end(&mut rez).unwrap();
             assert_eq!(rez, content);
@@ -1856,55 +1577,67 @@ pub(crate) mod tests {
         // approach
 
         // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
-        let mut rng = ChaChaRng::seed_from_u64(0);
+        let (private_key, public_key) = generate_keypair_from_seed([0; 32]);
+        let config_nolayer = ArchiveWriterConfig::without_encryption().without_compression();
+        let config_encrypt =
+            ArchiveWriterConfig::with_public_keys(&[public_key.clone()]).without_compression();
+        let config_compress = ArchiveWriterConfig::without_encryption();
+        let config_both = ArchiveWriterConfig::with_public_keys(&[public_key.clone()]);
 
-        for layering in &[
-            Layers::DEBUG,
-            Layers::ENCRYPT,
-            Layers::COMPRESS,
-            Layers::default(),
+        for (config, encryption) in [
+            (config_nolayer, false),
+            (config_encrypt, true),
+            (config_compress, false),
+            (config_both, true),
         ] {
-            println!("Layering: {:?}", layering);
-
             // Build initial file in a stream
             let file = Vec::new();
-            let (private_key, public_key) = generate_keypair_from_rng(&mut rng);
-            let mut config = ArchiveWriterConfig::new();
-            config
-                .set_layers(*layering)
-                .add_public_keys(std::slice::from_ref(&public_key));
             let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
 
             // Write a file in one part
             let fake_file = vec![1, 2, 3, 4];
-            mla.add_file("my_file", fake_file.len() as u64, fake_file.as_slice())
-                .unwrap();
+            mla.add_entry(
+                EntryName::from_path("my_file").unwrap(),
+                fake_file.len() as u64,
+                fake_file.as_slice(),
+            )
+            .unwrap();
             // Write a file in multiple part
             let fake_file = vec![5, 6, 7, 8];
             let fake_file2 = vec![9, 10, 11, 12];
-            let id = mla.start_file("my_file2").unwrap();
-            mla.append_file_content(id, fake_file.len() as u64, fake_file.as_slice())
+            let id = mla
+                .start_entry(EntryName::from_path("my_file2").unwrap())
                 .unwrap();
-            mla.append_file_content(id, fake_file2.len() as u64, fake_file2.as_slice())
+            mla.append_entry_content(id, fake_file.len() as u64, fake_file.as_slice())
                 .unwrap();
-            mla.end_file(id).unwrap();
-            mla.finalize().unwrap();
+            mla.append_entry_content(id, fake_file2.len() as u64, fake_file2.as_slice())
+                .unwrap();
+            mla.end_entry(id).unwrap();
+            let dest = mla.finalize().unwrap();
 
             // Read the obtained stream
-            let dest = mla.into_raw();
             let buf = Cursor::new(dest.as_slice());
-            let mut config = ArchiveReaderConfig::new();
-            config.add_private_keys(std::slice::from_ref(&private_key));
+            let config = if encryption {
+                ArchiveReaderConfig::with_private_keys(&[private_key.clone()])
+            } else {
+                ArchiveReaderConfig::without_encryption()
+            };
             let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
 
-            let mut file = mla_read.get_file("my_file".to_string()).unwrap().unwrap();
+            let mut file = mla_read
+                .get_entry(EntryName::from_path("my_file").unwrap())
+                .unwrap()
+                .unwrap();
             let mut rez = Vec::new();
             file.data.read_to_end(&mut rez).unwrap();
             assert_eq!(rez, vec![1, 2, 3, 4]);
-            // Explicit drop here, because otherwise mla_read.get_file() cannot be
+            // Explicit drop here, because otherwise mla_read.get_entry() cannot be
             // recall. It is not detected by the NLL analysis
             drop(file);
-            let mut file2 = mla_read.get_file("my_file2".to_string()).unwrap().unwrap();
+            let mut file2 = mla_read
+                .get_entry(EntryName::from_path("my_file2").unwrap())
+                .unwrap()
+                .unwrap();
 
             // Read the file in 2 blocks: 6, then 2 bytes (it is made of two 4-bytes block)
             let mut rez2 = [0u8; 6];
@@ -1922,29 +1655,24 @@ pub(crate) mod tests {
     #[test]
     fn list_and_read_files() {
         // Build an archive with 3 files
-        let (mla, key, _pubkey, files) = build_archive(None, false);
+        let (mla, key, _pubkey, files) = build_archive(true, true, false);
 
-        let dest = mla.into_raw();
-        let buf = Cursor::new(dest.as_slice());
-        let mut config = ArchiveReaderConfig::new();
-        config.add_private_keys(std::slice::from_ref(&key));
+        let buf = Cursor::new(mla.as_slice());
+        let config = ArchiveReaderConfig::with_private_keys(&[key]);
         let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
 
         // Check the list of files is correct
-        let mut sorted_list: Vec<String> = mla_read.list_files().unwrap().cloned().collect();
+        let mut sorted_list: Vec<EntryName> = mla_read.list_entries().unwrap().cloned().collect();
         sorted_list.sort();
         assert_eq!(
             sorted_list,
-            files
-                .iter()
-                .map(|(x, _y)| x.clone())
-                .collect::<Vec<String>>(),
+            files.iter().map(|(x, _y)| x.clone()).collect::<Vec<_>>(),
         );
 
         // Get and check file per file, not in the writing order
         for (fname, content) in files.iter().rev() {
-            let mut mla_file = mla_read.get_file(fname.clone()).unwrap().unwrap();
-            assert_eq!(mla_file.filename, fname.clone());
+            let mut mla_file = mla_read.get_entry(fname.clone()).unwrap().unwrap();
+            assert_eq!(mla_file.name, fname.clone());
             let mut buf = Vec::new();
             mla_file.data.read_to_end(&mut buf).unwrap();
             assert_eq!(&buf, content);
@@ -1954,27 +1682,21 @@ pub(crate) mod tests {
     #[test]
     fn convert_failsafe() {
         // Build an archive with 3 files
-        let (mla, key, pubkey, files) = build_archive(None, false);
+        let (dest, key, pubkey, files) = build_archive(true, true, false);
 
         // Prepare the failsafe reader
-        let dest = mla.into_raw();
-        let mut config = ArchiveReaderConfig::new();
-        config.add_private_keys(std::slice::from_ref(&key));
-        let mut mla_fsread = ArchiveFailSafeReader::from_config(dest.as_slice(), config).unwrap();
+        let config = ArchiveReaderConfig::with_private_keys(&[key.clone()]);
+        let mut mla_fsread = TruncatedArchiveReader::from_config(dest.as_slice(), config).unwrap();
 
         // Prepare the writer
-        let dest_w = Vec::new();
-        let mut config = ArchiveWriterConfig::new();
-        config
-            .enable_layer(Layers::COMPRESS)
-            .enable_layer(Layers::ENCRYPT)
-            .add_public_keys(&[pubkey]);
-        let mut mla_w = ArchiveWriter::from_config(dest_w, config).expect("Writer init failed");
+        let mut dest_w = Vec::new();
+        let config = ArchiveWriterConfig::with_public_keys(&[pubkey]);
+        let mla_w = ArchiveWriter::from_config(&mut dest_w, config).expect("Writer init failed");
 
         // Conversion
-        match mla_fsread.convert_to_archive(&mut mla_w).unwrap() {
-            FailSafeReadError::EndOfOriginalArchiveData => {
-                // We expect to ends with the final tag - all files have been
+        match mla_fsread.convert_to_archive(mla_w).unwrap() {
+            TruncatedReadError::EndOfOriginalArchiveData => {
+                // We expect to end with the final tag - all files have been
                 // read and we stop on the tag before the footer
             }
             status => {
@@ -1983,27 +1705,22 @@ pub(crate) mod tests {
         };
 
         // New archive can now be checked
-        let dest2 = mla_w.into_raw();
-        let buf2 = Cursor::new(dest2.as_slice());
-        let mut config = ArchiveReaderConfig::new();
-        config.add_private_keys(std::slice::from_ref(&key));
+        let buf2 = Cursor::new(dest_w.as_slice());
+        let config = ArchiveReaderConfig::with_private_keys(&[key]);
         let mut mla_read = ArchiveReader::from_config(buf2, config).unwrap();
 
         // Check the list of files is correct
-        let mut sorted_list: Vec<String> = mla_read.list_files().unwrap().cloned().collect();
+        let mut sorted_list: Vec<EntryName> = mla_read.list_entries().unwrap().cloned().collect();
         sorted_list.sort();
         assert_eq!(
             sorted_list,
-            files
-                .iter()
-                .map(|(x, _y)| x.clone())
-                .collect::<Vec<String>>(),
+            files.iter().map(|(x, _y)| x.clone()).collect::<Vec<_>>(),
         );
 
         // Get and check file per file, not in the writing order
         for (fname, content) in files.iter().rev() {
-            let mut mla_file = mla_read.get_file(fname.clone()).unwrap().unwrap();
-            assert_eq!(mla_file.filename, fname.clone());
+            let mut mla_file = mla_read.get_entry(fname.clone()).unwrap().unwrap();
+            assert_eq!(mla_file.name, fname.clone());
             let mut buf = Vec::new();
             mla_file.data.read_to_end(&mut buf).unwrap();
             assert_eq!(&buf, content);
@@ -2014,54 +1731,51 @@ pub(crate) mod tests {
     fn convert_trunc_failsafe() {
         for interleaved in &[false, true] {
             // Build an archive with 3 files, without compressing to truncate at the correct place
-            let (mla, key, pubkey, files) =
-                build_archive(Some(Layers::default() ^ Layers::COMPRESS), *interleaved);
+            let (dest, key, pubkey, files, files_info, _) =
+                build_archive2(false, true, *interleaved);
             // Truncate the resulting file (before the footer, hopefully after the header), and prepare the failsafe reader
             let mut buffer: &mut [u8] = &mut vec![0; BINCODE_MAX_DECODE];
+            let serializable_files_info = files_info
+                .iter()
+                .map(|(k, v)| (k.as_arbitrary_bytes(), v))
+                .collect::<Vec<_>>();
             let footer_size = bincode::encode_into_std_write::<_, _, &mut [u8]>(
-                &mla.files_info,
+                serializable_files_info,
                 &mut buffer,
                 BINCODE_CONFIG,
             )
             .or(Err(Error::SerializationError))
             .unwrap()
                 + 4;
-            let dest = mla.into_raw();
 
             for remove in &[1, 10, 30, 50, 70, 95, 100] {
-                let mut config = ArchiveReaderConfig::new();
-                config.add_private_keys(std::slice::from_ref(&key));
-                let mut mla_fsread = ArchiveFailSafeReader::from_config(
+                let config = ArchiveReaderConfig::with_private_keys(&[key.clone()]);
+                let mut mla_fsread = TruncatedArchiveReader::from_config(
                     &dest[..dest.len() - footer_size - remove],
                     config,
                 )
                 .expect("Unable to create");
 
                 // Prepare the writer
-                let dest_w = Vec::new();
-                let mut mla_w =
-                    ArchiveWriter::new(dest_w, &[pubkey.clone()]).expect("Writer init failed");
+                let mut dest_w = Vec::new();
+                let mla_w =
+                    ArchiveWriter::new(&mut dest_w, &[pubkey.clone()]).expect("Writer init failed");
 
                 // Conversion
-                let _status = mla_fsread.convert_to_archive(&mut mla_w).unwrap();
+                let _status = mla_fsread.convert_to_archive(mla_w).unwrap();
 
                 // New archive can now be checked
-                let dest2 = mla_w.into_raw();
-                let buf2 = Cursor::new(dest2.as_slice());
-                let mut config = ArchiveReaderConfig::new();
-                config.add_private_keys(std::slice::from_ref(&key));
+                let buf2 = Cursor::new(dest_w.as_slice());
+                let config = ArchiveReaderConfig::with_private_keys(&[key.clone()]);
                 let mut mla_read = ArchiveReader::from_config(buf2, config).unwrap();
 
                 // Check *the start of* the files list is correct
-                let expected = files
-                    .iter()
-                    .map(|(x, _y)| x.clone())
-                    .collect::<Vec<String>>();
+                let expected = files.iter().map(|(x, _y)| x.clone()).collect::<Vec<_>>();
                 let mut file_list = mla_read
-                    .list_files()
+                    .list_entries()
                     .unwrap()
                     .cloned()
-                    .collect::<Vec<String>>();
+                    .collect::<Vec<_>>();
                 file_list.sort();
                 assert_eq!(
                     file_list[..],
@@ -2074,20 +1788,20 @@ pub(crate) mod tests {
                 // Get and check file per file, not in the writing order
                 for (fname, content) in files.iter().rev() {
                     // The file may be missing
-                    let mut mla_file = match mla_read.get_file(fname.clone()).unwrap() {
+                    let mut mla_file = match mla_read.get_entry(fname.clone()).unwrap() {
                         Some(mla_file) => mla_file,
                         None => continue,
                     };
                     // If the file is present, ensure there are bytes and the first
                     // bytes are the same
-                    assert_eq!(mla_file.filename, fname.clone());
+                    assert_eq!(mla_file.name, fname.clone());
                     let mut buf = Vec::new();
                     mla_file.data.read_to_end(&mut buf).unwrap();
                     assert_ne!(
                         buf.len(),
                         0,
                         "Read 0 bytes from subfile {} {} interleaving and {} bytes removed",
-                        mla_file.filename,
+                        mla_file.name.raw_content_to_escaped_string(),
                         if *interleaved { "with" } else { "without" },
                         remove
                     );
@@ -2101,15 +1815,26 @@ pub(crate) mod tests {
     #[test]
     fn avoid_duplicate_filename() {
         let buf = Vec::new();
-        let config = ArchiveWriterConfig::new();
+        let config = ArchiveWriterConfig::without_encryption().without_compression();
         let mut mla = ArchiveWriter::from_config(buf, config).unwrap();
-        mla.add_file("Test", 4, vec![1, 2, 3, 4].as_slice())
-            .unwrap();
+        mla.add_entry(
+            EntryName::from_path("Test").unwrap(),
+            4,
+            vec![1, 2, 3, 4].as_slice(),
+        )
+        .unwrap();
         assert!(
-            mla.add_file("Test", 4, vec![1, 2, 3, 4].as_slice())
+            mla.add_entry(
+                EntryName::from_path("Test").unwrap(),
+                4,
+                vec![1, 2, 3, 4].as_slice()
+            )
+            .is_err()
+        );
+        assert!(
+            mla.start_entry(EntryName::from_path("Test").unwrap())
                 .is_err()
         );
-        assert!(mla.start_file("Test").is_err());
     }
 
     #[test]
@@ -2117,22 +1842,21 @@ pub(crate) mod tests {
         // Build an archive with 3 non-interleaved files and another with
         // interleaved files
         for interleaved in &[false, true] {
-            let (mla, key, _pubkey, files) = build_archive(None, *interleaved);
+            let (dest, key, _pubkey, files, files_info, ids_info) =
+                build_archive2(true, true, *interleaved);
 
             for (fname, data) in &files {
-                let id = mla.files_info.get(fname).unwrap();
-                let size = mla.ids_info.get(id).unwrap().size;
+                let id = files_info.get(fname).unwrap();
+                let size = ids_info.get(id).unwrap().size;
                 assert_eq!(size, data.len() as u64);
             }
 
-            let dest = mla.into_raw();
             let buf = Cursor::new(dest.as_slice());
-            let mut config = ArchiveReaderConfig::new();
-            config.add_private_keys(std::slice::from_ref(&key));
+            let config = ArchiveReaderConfig::with_private_keys(&[key]);
             let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
 
             for (fname, data) in &files {
-                let mla_file = mla_read.get_file(fname.to_string()).unwrap().unwrap();
+                let mla_file = mla_read.get_entry(fname.clone()).unwrap().unwrap();
                 assert_eq!(mla_file.size, data.len() as u64);
             }
         }
@@ -2141,10 +1865,9 @@ pub(crate) mod tests {
     #[test]
     fn failsafe_detect_integrity() {
         // Build an archive with 3 files
-        let (mla, _key, _pubkey, files) = build_archive(Some(Layers::DEBUG), false);
+        let (mut dest, _key, _pubkey, files) = build_archive(false, false, false);
 
         // Swap the first 2 bytes of file1
-        let mut dest = mla.into_raw();
         let expect = files[0].1.as_slice();
         let pos: Vec<usize> = dest
             .iter()
@@ -2160,25 +1883,27 @@ pub(crate) mod tests {
         dest.swap(pos[0], pos[0] + 1);
 
         // Prepare the failsafe reader
-        let mut mla_fsread =
-            ArchiveFailSafeReader::from_config(dest.as_slice(), ArchiveReaderConfig::new())
-                .unwrap();
+        let mut mla_fsread = TruncatedArchiveReader::from_config(
+            dest.as_slice(),
+            ArchiveReaderConfig::without_encryption(),
+        )
+        .unwrap();
 
         // Prepare the writer
         let dest_w = Vec::new();
-        let mut mla_w = ArchiveWriter::from_config(dest_w, ArchiveWriterConfig::new())
-            .expect("Writer init failed");
+        let config = ArchiveWriterConfig::without_encryption().without_compression();
+        let mla_w = ArchiveWriter::from_config(dest_w, config).expect("Writer init failed");
 
         // Conversion
-        match mla_fsread.convert_to_archive(&mut mla_w).unwrap() {
-            FailSafeReadError::UnfinishedFiles {
+        match mla_fsread.convert_to_archive(mla_w).unwrap() {
+            TruncatedReadError::UnfinishedFiles {
                 filenames,
                 stopping_error,
             } => {
                 // We expect to ends with a HashDiffers on first file
-                assert_eq!(filenames, vec![files[0].0.to_string()]);
+                assert_eq!(filenames, vec![files[0].0.clone()]);
                 match *stopping_error {
-                    FailSafeReadError::HashDiffers { .. } => {}
+                    TruncatedReadError::HashDiffers { .. } => {}
                     _ => {
                         panic!("Unexpected stopping_error: {}", stopping_error);
                     }
@@ -2193,13 +1918,11 @@ pub(crate) mod tests {
     #[test]
     fn get_hash() {
         // Build an archive with 3 files
-        let (mla, key, _pubkey, files) = build_archive(None, false);
+        let (dest, key, _pubkey, files) = build_archive(true, true, false);
 
         // Prepare the reader
-        let dest = mla.into_raw();
         let buf = Cursor::new(dest.as_slice());
-        let mut config = ArchiveReaderConfig::new();
-        config.add_private_keys(std::slice::from_ref(&key));
+        let config = ArchiveReaderConfig::with_private_keys(&[key]);
         let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
 
         // Get hashes and compare
@@ -2213,9 +1936,9 @@ pub(crate) mod tests {
         }
     }
 
-    fn make_format_regression_files() -> HashMap<String, Vec<u8>> {
+    fn make_format_regression_files() -> HashMap<EntryName, Vec<u8>> {
         // Build files easily scriptables and checkable
-        let mut files: HashMap<String, Vec<u8>> = HashMap::new();
+        let mut files: HashMap<EntryName, Vec<u8>> = HashMap::new();
 
         // One simple file
         let mut simple: Vec<u8> = Vec::new();
@@ -2223,7 +1946,7 @@ pub(crate) mod tests {
             simple.push(i);
         }
         let pattern = simple.clone();
-        files.insert("simple".to_string(), simple);
+        files.insert(EntryName::from_path("simple").unwrap(), simple);
 
         // One big file (10 MB)
         let big: Vec<u8> = pattern
@@ -2232,29 +1955,29 @@ pub(crate) mod tests {
             .take(10 * 1024 * 1024)
             .cloned()
             .collect();
-        files.insert("big".to_string(), big);
+        files.insert(EntryName::from_path("big").unwrap(), big);
 
         // Some constant files
         for i in 0..=255 {
             files.insert(
-                format!("file_{}", i).to_string(),
+                EntryName::from_path(format!("file_{}", i)).unwrap(),
                 std::iter::repeat_n(i, 0x1000).collect::<Vec<u8>>(),
             );
         }
 
         // sha256 sum of them
         let mut sha256sum: Vec<u8> = Vec::new();
-        let mut info: Vec<(&String, &Vec<_>)> = files.iter().collect();
+        let mut info: Vec<(&EntryName, &Vec<_>)> = files.iter().collect();
         info.sort_by(|i1, i2| Ord::cmp(&i1.0, &i2.0));
         for (fname, content) in info.iter() {
             let h = Sha256::digest(content);
             sha256sum.extend_from_slice(hex::encode(h).as_bytes());
             sha256sum.push(0x20);
             sha256sum.push(0x20);
-            sha256sum.extend(fname.as_bytes());
+            sha256sum.extend(fname.as_arbitrary_bytes());
             sha256sum.push(0x0a);
         }
-        files.insert("sha256sum".to_string(), sha256sum);
+        files.insert(EntryName::from_path("sha256sum").unwrap(), sha256sum);
         files
     }
 
@@ -2265,33 +1988,35 @@ pub(crate) mod tests {
 
         // Use committed keys
         let pem_pub: &'static [u8] = include_bytes!("../../samples/test_mlakey_archive_v2_pub.pem");
-        let pub_key = crypto::mlakey_parser::parse_mlakey_pubkey_pem(pem_pub).unwrap();
+        let pub_key = crypto::mlakey::parse_mlakey_pubkey_pem(pem_pub).unwrap();
 
-        let mut config = ArchiveWriterConfig::new();
-        config.encrypt.rng = crate::layers::encrypt::EncapsulationRNG::Seed([0; 32]);
-        config
-            .set_layers(Layers::default())
-            .add_public_keys(&[pub_key]);
+        let mut config = ArchiveWriterConfig::with_public_keys(&[pub_key]);
+        if let Some(cfg) = config.encryption_config.as_mut() {
+            cfg.rng = crate::layers::encrypt::EncapsulationRNG::Seed([0; 32]);
+        }
         let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
 
         let files = make_format_regression_files();
         // First, add a simple file
-        let fname_simple = "simple".to_string();
-        mla.add_file(
-            &fname_simple,
+        let fname_simple = EntryName::from_path("simple").unwrap();
+        mla.add_entry(
+            fname_simple.clone(),
             files.get(&fname_simple).unwrap().len() as u64,
             files.get(&fname_simple).unwrap().as_slice(),
         )
         .unwrap();
 
         // Second, add interleaved files
-        let fnames: Vec<String> = (0..=255).map(|i| format!("file_{}", i)).collect();
+        let fnames: Vec<EntryName> = (0..=255)
+            .map(|i| format!("file_{}", i))
+            .map(|s| EntryName::from_path(&s).unwrap())
+            .collect();
         let mut name2id: HashMap<_, _> = HashMap::new();
 
         // Start files in normal order
         (0..=255)
             .map(|i| {
-                let id = mla.start_file(&fnames[i]).unwrap();
+                let id = mla.start_entry(fnames[i].clone()).unwrap();
                 name2id.insert(&fnames[i], id);
             })
             .for_each(drop);
@@ -2301,7 +2026,7 @@ pub(crate) mod tests {
             .rev()
             .map(|i| {
                 let id = name2id.get(&fnames[i]).unwrap();
-                mla.append_file_content(*id, 32, &files.get(&fnames[i]).unwrap()[..32])
+                mla.append_entry_content(*id, 32, &files.get(&fnames[i]).unwrap()[..32])
                     .unwrap();
             })
             .for_each(drop);
@@ -2311,7 +2036,7 @@ pub(crate) mod tests {
             .map(|i| {
                 let id = name2id.get(&fnames[i]).unwrap();
                 let data = &files.get(&fnames[i]).unwrap()[32..];
-                mla.append_file_content(*id, data.len() as u64, data)
+                mla.append_entry_content(*id, data.len() as u64, data)
                     .unwrap();
             })
             .for_each(drop);
@@ -2321,30 +2046,29 @@ pub(crate) mod tests {
             .rev()
             .map(|i| {
                 let id = name2id.get(&fnames[i]).unwrap();
-                mla.end_file(*id).unwrap();
+                mla.end_entry(*id).unwrap();
             })
             .for_each(drop);
 
         // Add a big file
-        let fname_big = "big".to_string();
-        mla.add_file(
-            &fname_big,
+        let fname_big = EntryName::from_path("big").unwrap();
+        mla.add_entry(
+            fname_big.clone(),
             files.get(&fname_big).unwrap().len() as u64,
             files.get(&fname_big).unwrap().as_slice(),
         )
         .unwrap();
 
         // Add sha256sum file
-        let fname_sha256sum = "sha256sum".to_string();
-        mla.add_file(
-            &fname_sha256sum,
+        let fname_sha256sum = EntryName::from_path("sha256sum").unwrap();
+        mla.add_entry(
+            fname_sha256sum.clone(),
             files.get(&fname_sha256sum).unwrap().len() as u64,
             files.get(&fname_sha256sum).unwrap().as_slice(),
         )
         .unwrap();
-        mla.finalize().unwrap();
+        let raw_mla = mla.finalize().unwrap();
 
-        let raw_mla = mla.into_raw();
         std::fs::File::create(std::path::Path::new(&format!(
             "../samples/archive_v{}.mla",
             MLA_FORMAT_VERSION
@@ -2372,43 +2096,46 @@ pub(crate) mod tests {
 
         // Build Reader
         let buf = Cursor::new(mla_data);
-        let mut config = ArchiveReaderConfig::new();
-        config.add_private_keys(&[
-            crypto::mlakey_parser::parse_mlakey_privkey_der(der_priv).unwrap()
-        ]);
+        let config =
+            ArchiveReaderConfig::with_private_keys(&[crypto::mlakey::parse_mlakey_privkey_der(
+                der_priv,
+            )
+            .unwrap()]);
         let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
 
         // Build FailSafeReader
-        let mut config = ArchiveReaderConfig::new();
-        config.add_private_keys(&[
-            crypto::mlakey_parser::parse_mlakey_privkey_der(der_priv).unwrap()
-        ]);
-        let mut mla_fsread = ArchiveFailSafeReader::from_config(mla_data, config).unwrap();
+        let config =
+            ArchiveReaderConfig::with_private_keys(&[crypto::mlakey::parse_mlakey_privkey_der(
+                der_priv,
+            )
+            .unwrap()]);
+        let mut mla_fsread = TruncatedArchiveReader::from_config(mla_data, config).unwrap();
 
         // Repair the archive (without any damage, but trigger the corresponding code)
-        let dest_w = Vec::new();
-        let mut mla_w = ArchiveWriter::from_config(dest_w, ArchiveWriterConfig::new())
-            .expect("Writer init failed");
-        if let FailSafeReadError::EndOfOriginalArchiveData =
-            mla_fsread.convert_to_archive(&mut mla_w).unwrap()
+        let mut dest_w = Vec::new();
+        let config = ArchiveWriterConfig::without_encryption().without_compression();
+        let mla_w = ArchiveWriter::from_config(&mut dest_w, config).expect("Writer init failed");
+        if let TruncatedReadError::EndOfOriginalArchiveData =
+            mla_fsread.convert_to_archive(mla_w).unwrap()
         {
             // Everything runs as expected
         } else {
             panic!();
         }
         // Get a reader on the repaired archive
-        let buf2 = Cursor::new(mla_w.into_raw());
-        let mut mla_repread = ArchiveReader::from_config(buf2, ArchiveReaderConfig::new()).unwrap();
+        let buf2 = Cursor::new(dest_w);
+        let repread_config = ArchiveReaderConfig::without_encryption();
+        let mut mla_repread = ArchiveReader::from_config(buf2, repread_config).unwrap();
 
-        assert_eq!(files.len(), mla_read.list_files().unwrap().count());
-        assert_eq!(files.len(), mla_repread.list_files().unwrap().count());
+        assert_eq!(files.len(), mla_read.list_entries().unwrap().count());
+        assert_eq!(files.len(), mla_repread.list_entries().unwrap().count());
 
         // Get and check file per file
         for (fname, content) in files.iter() {
-            let mut mla_file = mla_read.get_file(fname.clone()).unwrap().unwrap();
-            let mut mla_rep_file = mla_repread.get_file(fname.clone()).unwrap().unwrap();
-            assert_eq!(mla_file.filename, fname.clone());
-            assert_eq!(mla_rep_file.filename, fname.clone());
+            let mut mla_file = mla_read.get_entry(fname.clone()).unwrap().unwrap();
+            let mut mla_rep_file = mla_repread.get_entry(fname.clone()).unwrap().unwrap();
+            assert_eq!(mla_file.name, fname.clone());
+            assert_eq!(mla_rep_file.name, fname.clone());
             let mut buf = Vec::new();
             mla_file.data.read_to_end(&mut buf).unwrap();
             assert_eq!(buf.as_slice(), content.as_slice());
@@ -2419,33 +2146,68 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn empty_blocks() {
-        // Add a file with containning an empty block - it should works
-        let file = Vec::new();
-        let mut mla = ArchiveWriter::from_config(file, ArchiveWriterConfig::new())
-            .expect("Writer init failed");
+    fn not_path_entry_name() {
+        let mut file: Vec<u8> = Vec::new();
+        let pem_pub: &'static [u8] = include_bytes!("../../samples/test_mlakey_pub.pem");
+        let pub_key = crypto::mlakey::parse_mlakey_pubkey_pem(pem_pub).unwrap();
 
-        let fname = "my_file".to_string();
+        let mut config = ArchiveWriterConfig::with_public_keys(&[pub_key]).without_compression();
+        if let Some(cfg) = config.encryption_config.as_mut() {
+            cfg.rng = crate::layers::encrypt::EncapsulationRNG::Seed([0; 32]);
+        }
+        let mut mla = ArchiveWriter::from_config(&mut file, config).expect("Writer init failed");
+
+        let name = EntryName::from_arbitrary_bytes(
+            b"c:/\0;\xe2\x80\xae\nc\rd\x1b[1;31ma<script>evil\\../\xd8\x01\xc2\x85\xe2\x88\x95",
+        )
+        .unwrap();
+
+        mla.add_entry(name.clone(), 8, b"' OR 1=1".as_slice())
+            .expect("start_file");
+        mla.finalize().unwrap();
+
+        std::fs::File::create(std::path::Path::new("../samples/archive_weird.mla"))
+            .unwrap()
+            .write_all(&file)
+            .unwrap();
+
+        assert_eq!(
+            Sha256::digest(&file).as_slice(),
+            [
+                115, 247, 179, 135, 231, 123, 5, 70, 220, 151, 55, 4, 141, 174, 226, 206, 16, 143,
+                47, 138, 97, 5, 12, 171, 82, 24, 102, 169, 207, 22, 244, 19
+            ]
+        )
+    }
+
+    #[test]
+    fn empty_blocks() {
+        // Add a file with containning an empty block - it should work
+        let file = Vec::new();
+        let config = ArchiveWriterConfig::without_encryption().without_compression();
+        let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
+
+        let fname = EntryName::from_path("my_file").unwrap();
         let fake_file = vec![1, 2, 3, 4, 5, 6, 7, 8];
 
-        let id = mla.start_file(&fname).expect("start_file");
-        mla.append_file_content(id, 4, &fake_file[..4])
+        let id = mla.start_entry(fname.clone()).expect("start_file");
+        mla.append_entry_content(id, 4, &fake_file[..4])
             .expect("add content");
-        mla.append_file_content(id, 0, &fake_file[..1])
+        mla.append_entry_content(id, 0, &fake_file[..1])
             .expect("add content empty");
-        mla.append_file_content(id, fake_file.len() as u64 - 4, &fake_file[4..])
+        mla.append_entry_content(id, fake_file.len() as u64 - 4, &fake_file[4..])
             .expect("add rest");
-        mla.end_file(id).unwrap();
+        mla.end_entry(id).unwrap();
 
-        mla.finalize().unwrap();
-        let mla_data = mla.into_raw();
+        let mla_data = mla.finalize().unwrap();
 
         let buf = Cursor::new(mla_data);
         let mut mla_read =
-            ArchiveReader::from_config(buf, ArchiveReaderConfig::new()).expect("archive reader");
+            ArchiveReader::from_config(buf, ArchiveReaderConfig::without_encryption())
+                .expect("archive reader");
         let mut out = Vec::new();
         mla_read
-            .get_file(fname)
+            .get_entry(fname)
             .unwrap()
             .unwrap()
             .data
@@ -2465,14 +2227,15 @@ pub(crate) mod tests {
         const MAX_SIZE: u64 = 5 * 1024 * 1024 * 1024; // 5 GB
         const CHUNK_SIZE: usize = 10 * 1024 * 1024; // 10 MB
 
-        let (private_key, public_key) = generate_keypair_from_rng(&mut rng);
-        let mut config = ArchiveWriterConfig::default();
-        config.add_public_keys(&[public_key]);
+        let (private_key, public_key) = generate_keypair_from_seed([0; 32]);
+        let config = ArchiveWriterConfig::with_public_keys(&[public_key]);
         let file = Vec::new();
         let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
 
         // At least one file will be bigger than 32bits
-        let id1 = mla.start_file("file_0").unwrap();
+        let id1 = mla
+            .start_entry(EntryName::from_path("file_0").unwrap())
+            .unwrap();
         let mut cur_size = 0;
         while cur_size < MORE_THAN_U32 {
             let size = std::cmp::min(rng.next_u32() as u64, MORE_THAN_U32 - cur_size);
@@ -2480,44 +2243,45 @@ pub(crate) mod tests {
                 .sample_iter(&mut rng_data)
                 .take(size as usize)
                 .collect();
-            mla.append_file_content(id1, size, data.as_slice()).unwrap();
+            mla.append_entry_content(id1, size, data.as_slice())
+                .unwrap();
             cur_size += size;
         }
-        mla.end_file(id1).unwrap();
+        mla.end_entry(id1).unwrap();
 
         let mut nb_file = 1;
 
         // Complete up to MAX_SIZE
         while cur_size < MAX_SIZE {
             let id = mla
-                .start_file(format!("file_{:}", nb_file).as_str())
+                .start_entry(EntryName::from_path(format!("file_{:}", nb_file)).unwrap())
                 .unwrap();
             let size = std::cmp::min(rng.next_u32() as u64, MAX_SIZE - cur_size);
             let data: Vec<u8> = Standard
                 .sample_iter(&mut rng_data)
                 .take(size as usize)
                 .collect();
-            mla.append_file_content(id, size, data.as_slice()).unwrap();
+            mla.append_entry_content(id, size, data.as_slice()).unwrap();
             cur_size += size;
-            mla.end_file(id).unwrap();
+            mla.end_entry(id).unwrap();
             nb_file += 1;
         }
-        mla.finalize().unwrap();
+        let mla_data = mla.finalize().unwrap();
 
         // List files and check the list
-        let mla_data = mla.into_raw();
 
         let buf = Cursor::new(mla_data);
-        let mut config = ArchiveReaderConfig::new();
-        config.add_private_keys(&[private_key]);
+        let config = ArchiveReaderConfig::with_private_keys(&[private_key]);
         let mut mla_read = ArchiveReader::from_config(buf, config).expect("archive reader");
 
-        let file_names: Vec<String> = (0..nb_file).map(|nb| format!("file_{:}", nb)).collect();
+        let file_names: Vec<EntryName> = (0..nb_file)
+            .map(|nb| EntryName::from_path(format!("file_{:}", nb)).unwrap())
+            .collect();
         let mut file_list = mla_read
-            .list_files()
+            .list_entries()
             .unwrap()
             .cloned()
-            .collect::<Vec<String>>();
+            .collect::<Vec<_>>();
         file_list.sort();
         assert_eq!(file_list, file_names);
 
@@ -2528,7 +2292,7 @@ pub(crate) mod tests {
 
         let mut chunk = vec![0u8; CHUNK_SIZE];
         for file_name in file_names.into_iter() {
-            let mut file_stream = mla_read.get_file(file_name).unwrap().unwrap().data;
+            let mut file_stream = mla_read.get_entry(file_name).unwrap().unwrap().data;
             loop {
                 let read = file_stream.read(&mut chunk).unwrap();
                 let expect: Vec<u8> = Standard.sample_iter(&mut rng_data).take(read).collect();
