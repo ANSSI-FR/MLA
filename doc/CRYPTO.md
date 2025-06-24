@@ -131,7 +131,7 @@ ss_{recipient}^i = \textrm{combine}(ss_{ecc}^i, ss_{mlkem}^i, ct_{ecc}^i, ct_{ml
 ```math
 \begin{align}
 (key^i, nonce^i) &= \textrm{KeySchedule}_{recipient}(
-        \textrm{shared\ secret}=ss_{recipient}^i,
+        shared\_secret=ss_{recipient}^i,
     \textrm{info}=\mathtt{"MLA\ Recipient"}
 )\\
 ct_{wrap}^i &= \textrm{Encrypt}_{AES\ 256\ GCM}(\textrm{key}=key^i, \textrm{nonce}=nonce^i, \textrm{data}=ss_{recipients})\\
@@ -161,7 +161,7 @@ ss_{recipient}^i &= \textrm{combine}(ss_{ecc}^i, ss_{mlkem}^i, ct_{ecc}^i, ct_{m
 ```math
 \begin{align}
 (key^i, nonce^i) &= \textrm{KeySchedule}_{recipient}(
-        \textrm{shared\ secret}=ss_{recipient}^i,
+        shared\_secret=ss_{recipient}^i,
     \textrm{info}=\mathtt{"MLA\ Recipient"}
 )\\
 ss_{recipients} &= \textrm{Decrypt}_{AES\ 256\ GCM}(\textrm{key}=key^i, \textrm{nonce}=nonce^i, \textrm{data}=ct_{wrap}^i)
@@ -172,7 +172,7 @@ If the decryption is a success, returns $ss_{recipients}$. Otherwise, returns an
 
 #### Arguments
 
-- Using HPKE (RFC 9180 [^hpke]) for both elliptic curve encryption (DHKEM) and encryption offers several benefits[^issuehpke]:
+- Using HPKE (RFC 9180 [^hpke]) for both elliptic curve encryption (DHKEM) and post-quantum encryption (MLKEM) offers several benefits[^issuehpke]:
     - Easier re-implementation of the format MLA, thanks to the availability of HPKE in cryptographic libraries
     - An existing formal analysis [^hpkeanalysis]
     - Easier code and security auditing, thanks to the use of known bricks
@@ -279,7 +279,7 @@ ss_{recipients},\ ct_{recipients} = \mathrm{MultiRecipientHybridKEM.Encapsulate}
 
 ```math
 (key, base\_nonce) = \textrm{KeySchedule}_{hybrid}(
-        \textrm{shared\ secret}=ss_{recipients},
+        shared\_secret=ss_{recipients},
     \textrm{info}=\mathtt{"MLA\ Encrypt\ Layer"}
 )
 ```
@@ -345,7 +345,7 @@ To decrypt the data at position $pos$:
 \begin{align}
 ss_{recipients} &= \mathrm{MultiRecipientHybridKEM.Decapsulate}((sk_{ecc}^i, sk_{mlkem}^i), ct_{recipients})\\
 (key, base\_nonce) &= \textrm{KeySchedule}_{hybrid}(
-        \textrm{shared\ secret}=ss_{recipients},
+        shared\_secret=ss_{recipients},
     \textrm{info}=\mathtt{"MLA\ Encrypt\ Layer"}
 )
 \end{align}
@@ -405,7 +405,7 @@ chunk_j& = \textrm{Decrypt}_{AES\ 256\ GCM}(\\
 
 ### Seed derivation
 
-The asymmetric encryption in MLA, particularly the KEMs, provide deterministic API.
+The asymmetric encryption in MLA, particularly the KEMs, provides deterministic API.
 
 These API are usually fed with cryptographically generated data, except for the regression test and the "seed derivation" feature in `mlar` CLI.
 
