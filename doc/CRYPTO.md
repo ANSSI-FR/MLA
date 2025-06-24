@@ -64,7 +64,7 @@ Since the format `v2`, the `Encrypt` layer is using post-quantum cryptography (P
 
 The algorithms used are:
 
-- Curve 25519 for pre-quantum cryptography, using DHKEM (RFC 9180) [^hpke]
+- X25519 for pre-quantum cryptography, using DHKEM (RFC 9180) [^hpke]
 - FIPS 203[^fips203] (CRYSTALS Kyber) MLKEM-1024 for post-quantum cryptography
 
 The two keys are mixed together (see below) in a manner keeping the IND-CCA2 properties of the two algorithms.
@@ -90,8 +90,8 @@ The implementation also includes tests (including some test vectors) and comment
 
 ##### Notations
 
-- $pk_{ecc}^i$, $sk_{ecc}^i$, $pk_{mlkem}^i$ and $sk_{mlkem}^i$: respectively the curve 25519 public key and secret key, and the MLKEM-1024 (FIPS 203 [^fips203]) encapsulating key and decapsulating key
-- $\textrm{DHKEM.Encapsulate}$ and $\textrm{DHKEM.Decapsulate}$: key encapsulation methods on the curve 25519, as defined in RFC 9180, section 4 [^hpke]
+- $pk_{ecc}^i$, $sk_{ecc}^i$, $pk_{mlkem}^i$ and $sk_{mlkem}^i$: respectively the X25519 public key and secret key, and the MLKEM-1024 (FIPS 203 [^fips203]) encapsulating key and decapsulating key
+- $\textrm{DHKEM.Encapsulate}$ and $\textrm{DHKEM.Decapsulate}$: key encapsulation methods with X25519, as defined in RFC 9180, section 4 [^hpke]
 - $\textrm{MLKEM.Encapsulate}$ and $\textrm{MLKEM.Decapsulate}$: key encapsulation methods on MLKEM-1024, as defined in FIPS 203 [^fips203]
 - $ss_{recipients}$: a 32-bytes secret, produced by a cryptographic RNG. Informally, this is the secret shared among recipients, encapsulated separately for each recipient
 - $\textrm{KeySchedule}_{recipient}$: `KeySchedule` function from RFC 9180 [^hpke], instanciated with:
@@ -497,7 +497,7 @@ For now, it is therefore accepted by the author (as a trade-off) to use a MLKEM 
 
 If a reviewed implementation with acceptable dependency emerges in the future, it can be easily swapped in MLA. Thus, MLA would also satisfy the requirements to get a security visa evaluation in the second and third phases of these guidelines by including its PQC implementation.
 
-## Security consideration
+## Security considerations
 
 ### Absence of signature
 
