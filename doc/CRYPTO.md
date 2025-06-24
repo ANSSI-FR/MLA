@@ -1,14 +1,24 @@
 # Cryptography in MLA
 
-MLA uses cryptographic primitives essentially for the purpose of the `Encrypt` layer.
+MLA uses cryptographic primitives essentially for the purpose of the Encrytion and Signature layers.
 
 This document introduces the primitives used, arguments for the choice made and some security considerations.
 
-## High-level overview
+Keys used for encryption and signature are generated and used separately.
 
-### Objectives
+### Signature
 
-The purpose of the `Encrypt` layer is to provide confidentiality and data integrity of the inner layer.
+As described in `FORMAT.md` an archive can be signed. Implementation must ensure users explicitely choose if signature is made and verified. Two methods are available and must be used together. Method input is called `m`. The SHA-512 hash `h` of `m` may be computed in a first step.
+
+For method `MLAEd25519SigMethod`, `signature_data` is the Ed25519ph (as described in RFC 8032 [^rfc8032]) signature of `m` (not `h` even though it can be used for computing the result). The context given as parameter to Ed25519ph is the ASCII `MLAEd25519SigMethod`. Signature verification and key generation are done as described in RFC 8032. Key storage is described in `KEY_FORMAT.md`.
+
+For method `MLAMLDSA87SigMethod`, `signature_data` is the ML-DSA-87 signature (as described in FIPS 204 [^fips204], not HashMLA-DSA) of `h` (not `m` this time) with the ASCII `MLAMLDSA87SigMethod` as context. Signature verification and key generation are done as described in FIPS 204. Key storage is described in `KEY_FORMAT.md`.
+
+### Encryption high-level overview
+
+#### Objectives
+
+The purpose of the Encryption layer is to provide confidentiality and data integrity of the inner layer.
 
 These objectives are obtained using:
 
@@ -17,7 +27,7 @@ These objectives are obtained using:
 
 This layer **does not provide signature**.
 
-### General design guidelines
+#### General design guidelines
 
 1. The size and the initial computation time used for the encryption needs are not a big issue, if kept reasonable. Indeed, in the author understanding, MLA archives are usually several MB long and the computation time is primarily spent in compression/decompression and encryption/decryption of the data
 
@@ -27,7 +37,7 @@ As a result, some optimization have not been performed -- which help keeping an 
 
 3. When possible, use audited code and test vectors
 
-### Main bricks: Encryption
+#### Main bricks: Encryption
 
 The data is encrypted using AES-256-GCM, an AEAD algorithm.
 To offer a *seekable* layer, data is encrypted using chunks of 128KB each, except for the last one. These encrypted chunks are all present with their associated tag. Tags are checked during decryption before returning data to the upper layer.
@@ -48,7 +58,7 @@ Full details are available below.
 
 Additionally, "key commitment" is included using a method described in [^keycommit] and detailed in [^issuekeycommit].
 
-### Main bricks: Asymmetric encryption
+#### Main bricks: Asymmetric encryption
 
 Since the format `v2`, the `Encrypt` layer is using post-quantum cryptography (PQC) through an hybrid approach, to avoid "Harvest now, decrypt later" attacks.
 
@@ -68,7 +78,7 @@ Sending to multiple recipients is achieved using a two-step process:
 This final secret is the one later used as an input to the encryption layer.
 The whole process can be viewed as a KEM encapsulation for multiple recipients.
 
-## Details
+### Encryption Details
 
 The following sections describe the whole process for data encryption and seed derivation.
 They are meant to ease the understanding of the code and MLA format re-implementation. 
@@ -76,9 +86,9 @@ They are meant to ease the understanding of the code and MLA format re-implement
 The interested reader could also look at the Rust implementation in this repository for more details.
 The implementation also includes tests (including some test vectors) and comments.
 
-### Asymmetric encryption - Per-recipient KEM
+#### Asymmetric encryption - Per-recipient KEM
 
-#### Notations
+##### Notations
 
 - $pk_{ecc}^i$, $sk_{ecc}^i$, $pk_{mlkem}^i$ and $sk_{mlkem}^i$: respectively the curve 25519 public key and secret key, and the MLKEM-1024 (FIPS 203 [^fips203]) encapsulating key and decapsulating key
 - $\textrm{DHKEM.Encapsulate}$ and $\textrm{DHKEM.Decapsulate}$: key encapsulation methods on the curve 25519, as defined in RFC 9180, section 4 [^hpke]
@@ -93,7 +103,7 @@ The implementation also includes tests (including some test vectors) and comment
 - $\textrm{Decrypt}_{AES\ 256\ GCM}$ AES-256-GCM decryption, returning the decrypted data after verifying the tag
 - $\textrm{Serialize}$ and $\textrm{Deserialize}$: respectively produce a byte string encoding the data in argument, and produce the data from the byte string in argument
 
-#### Process
+##### Process
 
 To encrypt to a target recipient $i$, knowing $pk_{ecc}^i$ and $pk_{mlkem}^i$:
 
@@ -170,7 +180,7 @@ ss_{recipients} &= \textrm{Decrypt}_{AES\ 256\ GCM}(\textrm{key}=key^i, \textrm{
 
 If the decryption is a success, returns $ss_{recipients}$. Otherwise, returns an error.
 
-#### Arguments
+##### Arguments
 
 - Using HPKE (RFC 9180 [^hpke]) for both elliptic curve encryption (DHKEM) and post-quantum encryption (MLKEM) offers several benefits[^issuehpke]:
     - Easier re-implementation of the format MLA, thanks to the availability of HPKE in cryptographic libraries
@@ -190,9 +200,9 @@ If the decryption is a success, returns $ss_{recipients}$. Otherwise, returns an
     - HKDF can be considered as a Dual-PRF if both inputs are uniformly random [^combinearg7]. In MLA, the `combine` method is called with a shared secret from ML-KEM, and the resulting ECC key derivation -- both are uniformly random
     - To avoid potential mistake in the future, or a mis-reuse of this method, the "Nested Dual-PRF Combiner" is used instead of the "Dual-PRF Combiner" (also from [^dualnest]). Indeed, this combiner force the "salt" part of HKDF to be uniformly random using an additional PRF use, ensuring the following HKDF is indeed a Dual-PRF
 
-### Asymmetric encryption - Multi-Recipient Hybrid KEM
+#### Asymmetric encryption - Multi-Recipient Hybrid KEM
 
-#### Intuition
+##### Intuition
 
 KEM, such as the one described above, returns a fresh and distinct secret for each recipient.
 
@@ -204,7 +214,7 @@ To avoid marking which per-recipient ciphertext correspond to which recipient pu
 
 Key commitment, to avoid rather unlikely mismatch, is further ensured inside the `Encrypt` layer (see below).
 
-#### Process
+##### Process
 
 The "Per-recipient KEM" process described above is noted:
 - $\mathrm{PerRecipientKEM.Encapsulate}$, taking a couple of public key ($pk_{ecc}^i$ and $pk_{mlkem}^i$), a shared secret $ss_{recipients}$ and returning a recipient ciphertext $ct_{recipient}^i$
@@ -239,16 +249,16 @@ $\hspace{2cm}\mathtt{error:}$\
 $\hspace{3cm}\mathtt{continue}$\
 $\hspace{1cm}\mathtt{throw\ KeyNotFoundError}$
 
-#### Arguments
+##### Arguments
 
 - The shared secret is cryptographically generated, so it can later be used as a shared secret in HPKE encryption
 - This secret is unique per archive, as it is generated on archive creation. Even "converting" or "repairing" an archive in `mlar` CLI will force a newly fresh secret. It is a new secret as there is no edit feature implemented, even if it is doable. Hence, a new random symetric key is used to encrypt its content while "converting" or "repairing" an archive. 
 - Even if the AEAD decryption worked for an non legitimate recipient, for instance following an intentional manipulation, the shared secret obtained will later be checked using Key commitment before decrypting actual data (see below)
 - Optimization would have been possible here, such as sharing a common ephemeral key for the DHKEM. But the size gain is not worth enough regarding the ciphertext size of MLKEM and would move the implementation away from the DHKEM in RFC 9180
 
-### Encryption
+#### Encryption
 
-#### Notation
+##### Notation
 
 The "Multi-Recipient Hybrid KEM" process described above is noted:
 - $\mathrm{MultiRecipientHybridKEM.Encapsulate}$, taking a list of public keys $[(pk_{ecc}^0, pk_{mlkem}^0), ..., (pk_{ecc}^{n-1}, pk_{mlkem}^{n-1})]$ and returing a shared secret $ss_{recipients}$ and a ciphertext $ct_{recipients}$
@@ -265,7 +275,7 @@ $\textrm{KeySchedule}_{hybrid}$: `KeySchedule` function from RFC 9180 [^hpke], i
 
 $\mathrm{ComputeNonce}$: function from RFC 9180 [^hpke].
 
-#### Process
+##### Process
 
 To encrypt n-bytes `data` to a list of public keys $[(pk_{ecc}^0, pk_{mlkem}^0), ..., (pk_{ecc}^{n-1}, pk_{mlkem}^{n-1})]$:
 
@@ -389,7 +399,7 @@ chunk_j& = \textrm{Decrypt}_{AES\ 256\ GCM}(\\
 \end{align*}
 ```
 
-#### Arguments
+##### Arguments
 
 - Key commitment is always checked before returning clear-text data to the caller
 - AEAD tag of a chunk is always checked before returning the corresponding clear-text data to the caller
@@ -403,7 +413,7 @@ chunk_j& = \textrm{Decrypt}_{AES\ 256\ GCM}(\\
     - the tag size is 128-bits (standard one), avoiding attacks described in [^weaknessgcm]
     - 128KiB is lower than the maximum plaintext length for a single message in AES-GCM (64 GiB)[^weaknessgcm]
 
-### Seed derivation
+#### Seed derivation
 
 The asymmetric encryption in MLA, particularly the KEMs, provides deterministic API.
 
@@ -530,10 +540,12 @@ Only the owner of a recipient's private key can determine that they are a recipi
 
 This is an intentional privacy feature.
 
+[^rfc8032]: https://datatracker.ietf.org/doc/html/rfc8032
+[^fips204]: https://doi.org/10.6028/NIST.FIPS.204
 [^keycommit]: ["How to Abuse and Fix Authenticated Encryption Without Key Commitment", Usenix'22](https://www.usenix.org/conference/usenixsecurity22/presentation/albertini)
 [^issuekeycommit]: https://github.com/ANSSI-FR/MLA/issues/206
 [^hpke]: [Hybrid Public Key Encryption, RFC 9180](https://datatracker.ietf.org/doc/rfc9180/)
-[^fips203]: [FIPS 203 - MLKEM Standard](https://csrc.nist.gov/pubs/fips/203/ipd)
+[^fips203]: [FIPS 203 - MLKEM Standard](https://doi.org/10.6028/NIST.FIPS.203)
 [^issuehpke]: https://github.com/ANSSI-FR/MLA/issues/211
 [^hpkeanalysis]: https://eprint.iacr.org/2020/1499.pdf
 [^issuepqc]: https://github.com/ANSSI-FR/MLA/issues/195
