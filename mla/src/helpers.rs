@@ -97,7 +97,7 @@ pub fn linear_extract<W1: InnerWriterTrait, R: InnerReaderTrait, S: BuildHasher>
     archive.src.rewind()?;
 
     // Use a BufReader to cache, by merging them into one bigger read, small
-    // read calls (like the ones on ArchiveFileBlock reading)
+    // read calls (like the ones on ArchiveEntryBlock reading)
     let mut src = io::BufReader::new(&mut archive.src);
 
     // Associate an ID in the archive to the corresponding filename
@@ -201,7 +201,7 @@ mod tests {
         // Prepare writers
         let file_list: Vec<EntryName> = mla_read
             .list_entries()
-            .expect("reader.list_files")
+            .expect("reader.list_entries")
             .cloned()
             .collect();
         let mut export: HashMap<&EntryName, Vec<u8>> =

@@ -345,7 +345,7 @@ impl<'a, R: Read + Seek> ArchiveEntryDataReader<'a, R> {
             ArchiveEntryBlock::EntryStart { id, .. } => id,
             _ => {
                 return Err(Error::WrongReaderState(
-                    "[BlocksToFileReader] A file must start with a FileStart".to_string(),
+                    "[BlocksToFileReader] A file must start with an EntryStart".to_string(),
                 ));
             }
         };
@@ -425,7 +425,7 @@ impl<T: Read + Seek> Read for ArchiveEntryDataReader<'_, T> {
     fn read(&mut self, into: &mut [u8]) -> std::io::Result<usize> {
         let (remaining, count) = match self.state {
             ArchiveEntryDataReaderState::Ready => {
-                // Start a new block FileContent
+                // Start a new block EntryContent
                 match ArchiveEntryBlock::from(&mut self.src)? {
                     ArchiveEntryBlock::EntryContent { length, id, .. } => {
                         if id != self.id {
@@ -621,6 +621,8 @@ fn u64_as_i64(n: u64) -> Result<i64, Error> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use std::path::Path;
     use std::io::{Empty, Read, Seek, SeekFrom};
 
     use crate::{
@@ -730,5 +732,92 @@ mod tests {
         reader.read_to_end(&mut output).unwrap();
         assert_eq!(output, &[4, 5, 6, 7, 8]);
         output.clear();
+    }
+
+    #[test]
+    fn entry_name_from_arbitrary_bytes_empty() {
+        let res = entryname::EntryName::from_arbitrary_bytes(b"");
+        assert!(matches!(res, Err(entryname::EntryNameError::InvalidPathComponentContent)));
+    }
+
+    #[test]
+    fn entry_name_from_arbitrary_bytes_nonempty() {
+        let name = entryname::EntryName::from_arbitrary_bytes(b"abc").unwrap();
+        assert_eq!(name.as_arbitrary_bytes(), b"abc");
+    }
+
+    #[test]
+    fn entry_name_from_path_normalization() {
+        // Should normalize away ParentDir and CurDir
+        let path = Path::new("foo/./bar/../baz");
+        let name = entryname::EntryName::from_path(path).unwrap();
+        assert_eq!(name.as_arbitrary_bytes(), b"foo/baz");
+    }
+
+    #[test]
+    fn entry_name_from_path_empty() {
+        let path = Path::new("");
+        let res = entryname::EntryName::from_path(path);
+        assert!(matches!(res, Err(entryname::EntryNameError::InvalidPathComponentContent)));
+    }
+
+    #[test]
+    fn entry_name_to_pathbuf_roundtrip() {
+        let name = entryname::EntryName::from_path("foo/bar").unwrap();
+        let pathbuf = name.to_pathbuf().unwrap();
+        assert_eq!(pathbuf, Path::new("foo/bar"));
+    }
+
+    #[test]
+    fn entry_name_forbidden_traversal() {
+        // Leading slash is forbidden
+        let name = entryname::EntryName::from_arbitrary_bytes(b"/foo");
+        assert!(name.is_ok());
+        let name = name.unwrap();
+        assert!(matches!(
+            name.to_pathbuf(),
+            Err(entryname::EntryNameError::ForbiddenPathTraversalComponent)
+        ));
+    }
+
+    #[test]
+    fn entry_name_invalid_component() {
+        // Contains null byte
+        let name = entryname::EntryName::from_arbitrary_bytes(b"foo\0bar").unwrap();
+        assert!(matches!(
+            name.to_pathbuf(),
+            Err(entryname::EntryNameError::InvalidPathComponentContent)
+        ));
+    }
+
+    #[test]
+    fn entry_name_raw_content_to_escaped_string() {
+        let name = entryname::EntryName::from_arbitrary_bytes(b"foo/bar%baz").unwrap();
+        let s = name.raw_content_to_escaped_string();
+        // '%' should be escaped
+        assert!(s.contains("%25"));
+    }
+
+    #[test]
+    fn entry_name_to_pathbuf_escaped_string() {
+        let name = entryname::EntryName::from_path("foo/bar.baz").unwrap();
+        let s = name.to_pathbuf_escaped_string().unwrap();
+        // Should not escape allowed chars
+        assert_eq!(s, "foo/bar.baz");
+    }
+
+    #[test]
+    fn entry_name_dot_and_dotdot_components() {
+        // "." and ".." are forbidden as components
+        let name = entryname::EntryName::from_arbitrary_bytes(b"foo/./bar").unwrap();
+        assert!(matches!(
+            name.to_pathbuf(),
+            Err(entryname::EntryNameError::InvalidPathComponentContent)
+        ));
+        let name = entryname::EntryName::from_arbitrary_bytes(b"foo/../bar").unwrap();
+        assert!(matches!(
+            name.to_pathbuf(),
+            Err(entryname::EntryNameError::InvalidPathComponentContent)
+        ));
     }
 }

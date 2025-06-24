@@ -13,7 +13,6 @@ use curve25519_dalek::edwards::CompressedEdwardsY;
 use curve25519_dalek::montgomery::MontgomeryPoint;
 use ml_kem::EncodedSizeUser;
 use sha2::{Digest, Sha512};
-// Re-export x25519_dalek structures for convenience
 use x25519_dalek::{PublicKey, StaticSecret};
 
 use core::fmt;
@@ -658,7 +657,6 @@ pub fn derive_keypair_from_path<'a>(
 mod tests {
     use super::*;
     use kem::{Decapsulate, Encapsulate};
-    use rand::rngs::OsRng;
     use x25519_dalek::PublicKey;
 
     /// MLA private key, DER, X25519 then MLKEM
@@ -699,7 +697,7 @@ mod tests {
             pub_key.public_key_ml.as_bytes().len(),
             MLKEM_1024_PUBKEY_SIZE
         );
-        let mut rng = OsRng {};
+        let mut rng = rand::rngs::OsRng { };
         let (encap, key) = pub_key.public_key_ml.encapsulate(&mut rng).unwrap();
         let key_decap = priv_key.private_key_ml.decapsulate(&encap).unwrap();
         assert_eq!(key, key_decap);
