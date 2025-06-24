@@ -28,9 +28,9 @@ pub(crate) struct DHKEMCiphertext(<Kem as KemTrait>::EncappedKey);
 
 impl DHKEMCiphertext {
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
-        Ok(DHKEMCiphertext(<Kem as KemTrait>::EncappedKey::from_bytes(
-            bytes,
-        )?))
+        Ok(DHKEMCiphertext(
+            <Kem as KemTrait>::EncappedKey::from_bytes(bytes).map_err(|_| Error::HPKEError)?,
+        ))
     }
     pub(crate) fn to_bytes(&self) -> [u8; 32] {
         self.0.to_bytes().into()
@@ -61,8 +61,9 @@ pub(crate) fn dhkem_encap_from_rng(
     pubkey: &X25519PublicKey,
     csprng: &mut (impl CryptoRng + RngCore),
 ) -> Result<(DHKEMSharedSecret, DHKEMCiphertext), Error> {
-    let wrapped = WrappedPublicKey::from_bytes(&pubkey.to_bytes())?;
-    let (shared_secret, ciphertext) = X25519HkdfSha256::encap(&wrapped, None, csprng)?;
+    let wrapped = WrappedPublicKey::from_bytes(&pubkey.to_bytes()).map_err(|_| Error::HPKEError)?;
+    let (shared_secret, ciphertext) =
+        X25519HkdfSha256::encap(&wrapped, None, csprng).map_err(|_| Error::HPKEError)?;
     Ok((shared_secret, DHKEMCiphertext(ciphertext)))
 }
 
@@ -73,8 +74,9 @@ pub(crate) fn dhkem_decap(
     encapped_key: &DHKEMCiphertext,
     private_key: &x25519_dalek::StaticSecret,
 ) -> Result<DHKEMSharedSecret, Error> {
-    let wrapped = WrappedPrivateKey::from_bytes(&private_key.to_bytes())?;
-    Ok(X25519HkdfSha256::decap(&wrapped, None, &encapped_key.0)?)
+    let wrapped =
+        WrappedPrivateKey::from_bytes(&private_key.to_bytes()).map_err(|_| Error::HPKEError)?;
+    X25519HkdfSha256::decap(&wrapped, None, &encapped_key.0).map_err(|_| Error::HPKEError)
 }
 
 // ----- Key scheduling / Encryption context -----
@@ -149,13 +151,17 @@ fn key_schedule_base(
     key_schedule_context.extend_from_slice(&info_hash);
 
     let (_prk, secret_kdf) = labeled_extract::<HpkeKdf>(shared_secret, &suite_id, b"secret", b"");
-    secret_kdf.labeled_expand(&suite_id, b"key", &key_schedule_context, &mut key)?;
-    secret_kdf.labeled_expand(
-        &suite_id,
-        b"base_nonce",
-        &key_schedule_context,
-        &mut base_nonce,
-    )?;
+    secret_kdf
+        .labeled_expand(&suite_id, b"key", &key_schedule_context, &mut key)
+        .map_err(|_| Error::HPKEError)?;
+    secret_kdf
+        .labeled_expand(
+            &suite_id,
+            b"base_nonce",
+            &key_schedule_context,
+            &mut base_nonce,
+        )
+        .map_err(|_| Error::HPKEError)?;
 
     Ok((key, base_nonce))
 }

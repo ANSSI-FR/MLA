@@ -1,6 +1,5 @@
-use crate::ArchiveFileID;
-use hkdf::InvalidLength;
-use hpke::HpkeError;
+use crate::ArchiveEntryId;
+use crate::entry::EntryName;
 use std::error;
 use std::fmt;
 use std::io;
@@ -11,7 +10,7 @@ pub enum Error {
     IOError(io::Error),
     /// Wrong magic, must be "MLA"
     WrongMagic,
-    /// Unsupported version, must be 1
+    /// Unsupported version, must be 2
     UnsupportedVersion,
     /// Supplied key is not in the expected format
     InvalidKeyFormat,
@@ -35,7 +34,7 @@ pub enum Error {
     /// The writer state is not in the expected state for the current operation
     WrongWriterState(String),
     /// Error with the inner random generator
-    RandError(rand::Error),
+    RandError,
     /// A Private Key is required to decrypt the encrypted cipher key
     PrivateKeyNeeded,
     /// Deserialization error. May happens when starting from a wrong offset /
@@ -59,9 +58,11 @@ pub enum Error {
     /// Unable to expand while using the HKDF
     HKDFInvalidKeyLength,
     /// Error during HPKE computation
-    HPKEError(HpkeError),
+    HPKEError,
     /// Invalid last tag
     InvalidLastTag,
+    /// User asked for encryption but archive was not marked as encrypted
+    EncryptionAskedButNotMarkedPresent,
 }
 
 impl fmt::Display for Error {
@@ -83,12 +84,6 @@ impl From<std::string::FromUtf8Error> for Error {
     }
 }
 
-impl From<rand::Error> for Error {
-    fn from(error: rand::Error) -> Self {
-        Error::RandError(error)
-    }
-}
-
 impl From<Error> for io::Error {
     fn from(error: Error) -> Self {
         io::Error::other(format!("{error}"))
@@ -104,24 +99,11 @@ impl From<ConfigError> for Error {
     }
 }
 
-impl From<InvalidLength> for Error {
-    fn from(_error: InvalidLength) -> Self {
-        Error::HKDFInvalidKeyLength
-    }
-}
-
-impl From<HpkeError> for Error {
-    fn from(error: HpkeError) -> Self {
-        Error::HPKEError(error)
-    }
-}
-
 impl error::Error for Error {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match &self {
             Error::IOError(err) => Some(err),
             Error::UTF8ConversionError(err) => Some(err),
-            Error::RandError(err) => Some(err),
             Error::ConfigError(err) => Some(err),
             _ => None,
         }
@@ -129,7 +111,7 @@ impl error::Error for Error {
 }
 
 #[derive(Debug)]
-pub enum FailSafeReadError {
+pub enum TruncatedReadError {
     /// Everything ends correctly
     NoError,
     /// An unexpected EOF occurs while getting the next block
@@ -141,20 +123,20 @@ pub enum FailSafeReadError {
     /// An error occurs in the middle of a file
     ErrorInFile(io::Error, String),
     /// A file ID is being reused
-    ArchiveFileIDReuse(ArchiveFileID),
+    ArchiveFileIDReuse(ArchiveEntryId),
     /// A filename is being reused
     FilenameReuse(String),
     /// Data for a file already closed
-    ArchiveFileIDAlreadyClose(ArchiveFileID),
+    ArchiveFileIDAlreadyClose(ArchiveEntryId),
     /// Content for an unknown file
-    ContentForUnknownFile(ArchiveFileID),
+    ContentForUnknownFile(ArchiveEntryId),
     /// Termination of an unknwown file
-    EOFForUnknownFile(ArchiveFileID),
+    EOFForUnknownFile(ArchiveEntryId),
     /// Wraps an already existing error and indicates which files are not
     /// finished (a file can be finished but uncompleted)
     UnfinishedFiles {
-        filenames: Vec<String>,
-        stopping_error: Box<FailSafeReadError>,
+        filenames: Vec<EntryName>,
+        stopping_error: Box<TruncatedReadError>,
     },
     /// End of original archive reached - this is the best case
     EndOfOriginalArchiveData,
@@ -167,19 +149,19 @@ pub enum FailSafeReadError {
     },
 }
 
-impl fmt::Display for FailSafeReadError {
+impl fmt::Display for TruncatedReadError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // For now, use the debug derived version
         write!(f, "{self:?}")
     }
 }
 
-impl error::Error for FailSafeReadError {
+impl error::Error for TruncatedReadError {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match &self {
-            FailSafeReadError::IOErrorOnNextBlock(err) => Some(err),
-            FailSafeReadError::ErrorOnNextBlock(err) => Some(err),
-            FailSafeReadError::ErrorInFile(err, _path) => Some(err),
+            TruncatedReadError::IOErrorOnNextBlock(err) => Some(err),
+            TruncatedReadError::ErrorOnNextBlock(err) => Some(err),
+            TruncatedReadError::ErrorInFile(err, _path) => Some(err),
             _ => None,
         }
     }

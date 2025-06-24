@@ -123,16 +123,9 @@ int main()
 
     fclose(kf);
 
-    MLAConfigHandle hConfig = NULL;
-    MLAStatus status = mla_reader_config_new(&hConfig);
-    if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
-    {
-        fprintf(stderr, " [!] Config creation failed with code %" PRIX64 "\n", (uint64_t)status);
-        free(keyData);
-        return (int)status;
-    }
-
-    status = mla_reader_config_add_private_key_der(hConfig, keyData, (size_t)keySize);
+    MLAReaderConfigHandle hConfig = NULL;
+    const uint8_t *const keys[] = {(const uint8_t *const) keyData};
+    MLAStatus status = create_mla_reader_config_with_private_keys_der(&hConfig, keys, 1);
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
     {
         fprintf(stderr, " [!] Private key set failed with code %" PRIX64 "\n", (uint64_t)status);
@@ -148,7 +141,7 @@ int main()
         return 1;
     }
 
-    status = mla_roarchive_extract(&hConfig, read_cb, seek_cb, file_cb, f);
+    status = mla_roarchive_extract(&hConfig, read_cb, seek_cb, file_cb, 0, f);
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
     {
         fprintf(stderr, " [!] Archive read failed with code %" PRIX64 "\n", (uint64_t)status);

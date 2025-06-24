@@ -68,15 +68,8 @@ int test_writer()
     }
 
     MLAStatus status;
-    MLAConfigHandle hConfig = NULL;
-    status = mla_config_default_new(&hConfig);
-    if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
-    {
-        fprintf(stderr, " [!] Config creation failed with code %" PRIX64 "\n", (uint64_t)status);
-        return (int)status;
-    }
-
-    status = mla_config_add_public_keys_pem(hConfig, szPubkey);
+    MLAWriterConfigHandle hConfig = NULL;
+    status = create_mla_writer_config_with_public_keys_pem(&hConfig, szPubkey);
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
     {
         fprintf(stderr, " [!] Public key set failed with code %" PRIX64 "\n", (uint64_t)status);
@@ -92,7 +85,7 @@ int test_writer()
     }
 
     MLAArchiveFileHandle hFile = NULL;
-    status = mla_archive_file_new(hArchive, "test.txt", &hFile);
+    status = mla_archive_start_entry_with_path_as_name(hArchive, "test.txt", &hFile);
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
     {
         fprintf(stderr, " [!] File creation failed with code %" PRIX64 "\n", (uint64_t)status);

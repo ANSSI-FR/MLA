@@ -3,6 +3,7 @@ use der_parser::error::BerError;
 
 use der_parser::oid::Oid;
 use der_parser::*;
+use hkdf::Hkdf;
 use nom::IResult;
 use nom::combinator::{complete, eof};
 
@@ -11,16 +12,15 @@ use core::convert::{From, TryInto};
 use curve25519_dalek::edwards::CompressedEdwardsY;
 use curve25519_dalek::montgomery::MontgomeryPoint;
 use ml_kem::EncodedSizeUser;
-use rand::{CryptoRng, RngCore};
 use sha2::{Digest, Sha512};
-// Re-export x25519_dalek structures for convenience
-pub use x25519_dalek::{PublicKey, StaticSecret};
+use x25519_dalek::{PublicKey, StaticSecret};
 
 use core::fmt;
 
-use crate::crypto::hybrid::{
-    HybridPrivateKey, HybridPublicKey, MLKEMDecapsulationKey, MLKEMEncapsulationKey,
-};
+pub use crate::crypto::hybrid::{HybridPrivateKey, HybridPublicKey};
+pub use crate::crypto::hybrid::{generate_keypair, generate_keypair_from_seed};
+
+use crate::crypto::hybrid::{MLKEMDecapsulationKey, MLKEMEncapsulationKey};
 
 const ED_25519_OID: Oid<'static> = oid!(1.3.101.112);
 const X_25519_OID: Oid<'static> = oid!(1.3.101.110);
@@ -35,35 +35,38 @@ const MLKEM_1024_OID: Oid<'static> = oid!(1.2.250.1.223.201);
 const MLKEM_1024_PUBKEY_SIZE: usize = 1568;
 const MLKEM_1024_PRIVKEY_SIZE: usize = 3168;
 
+pub const MLAKEY_PRIVKEY_DER_SIZE: usize = 3243;
+pub const MLAKEY_PUBKEY_DER_SIZE: usize = 1636;
+
 // ---- Error handling ----
 
 #[derive(Debug)]
 pub enum MLAKeyParserError {
     /// BER Parsing error (wrong tag, not enough DER elements, etc.)
-    BerError(der_parser::error::BerError),
+    BerError,
     /// PEM Parsing error
-    PemError(pem::PemError),
+    PemError,
     /// Nom parsing error (wrong format, unexpected elements, etc.)
-    NomError(nom::Err<der_parser::error::BerError>),
+    NomError,
     UnknownOid,
     InvalidData,
     InvalidPEMTag,
 }
 impl From<der_parser::error::BerError> for MLAKeyParserError {
-    fn from(error: der_parser::error::BerError) -> Self {
-        MLAKeyParserError::BerError(error)
+    fn from(_error: der_parser::error::BerError) -> Self {
+        MLAKeyParserError::BerError
     }
 }
 
 impl From<pem::PemError> for MLAKeyParserError {
-    fn from(error: pem::PemError) -> Self {
-        MLAKeyParserError::PemError(error)
+    fn from(_error: pem::PemError) -> Self {
+        MLAKeyParserError::PemError
     }
 }
 
 impl From<nom::Err<der_parser::error::BerError>> for MLAKeyParserError {
-    fn from(error: nom::Err<der_parser::error::BerError>) -> Self {
-        MLAKeyParserError::NomError(error)
+    fn from(_error: nom::Err<der_parser::error::BerError>) -> Self {
+        MLAKeyParserError::NomError
     }
 }
 
@@ -210,6 +213,8 @@ fn parse_mlkem_decapkey_internal(
     ))
 }
 
+/// Parse given DER data as an MLA private key
+///
 /// Expected structure:
 ///
 /// - ASN1:
@@ -281,13 +286,6 @@ pub fn parse_mlakey_privkey_der(data: &[u8]) -> Result<HybridPrivateKey, MLAKeyP
         private_key_ecc,
         private_key_ml,
     })
-}
-
-/// Parse a DER ED25519 or X25519 private key, and return the corresponding
-/// `x25519_dalek::StaticSecret`
-pub fn parse_openssl_25519_privkey_der(data: &[u8]) -> Result<StaticSecret, MLAKeyParserError> {
-    let (_remain, private) = parse_seq_int_tag_octetstring(data)?;
-    parse_openssl_25519_privkey_internal(private)
 }
 
 // ---- Public key ----
@@ -380,13 +378,6 @@ fn parse_openssl_25519_pubkey_internal(
     }
 }
 
-/// Parse a DER Ed25519 or X25519 public key, and return the corresponding
-/// `x25519_dalek::PublicKey`
-pub fn parse_openssl_25519_pubkey_der(data: &[u8]) -> Result<PublicKey, MLAKeyParserError> {
-    let (_remain, ed25519_public) = parse_seq_tag_bitstring(data)?;
-    parse_openssl_25519_pubkey_internal(ed25519_public)
-}
-
 /// Parse a DER MLA public key, and return the corresponding
 /// `mla::crypto::hybrid::MLKEMEncapsulationKey`
 ///
@@ -414,6 +405,8 @@ fn parse_mlkem_encapkey_internal(
     ))
 }
 
+/// Parse given DER data as an MLA private key
+///
 /// Expected structure:
 ///
 /// - ASN1:
@@ -486,48 +479,6 @@ pub fn parse_mlakey_pubkey_der(data: &[u8]) -> Result<HybridPublicKey, MLAKeyPar
 const PUBLIC_TAG: &[u8] = b"PUBLIC KEY";
 const PRIVATE_TAG: &[u8] = b"PRIVATE KEY";
 
-/// Parse an OpenSSL Ed25519 or X25519 public key, either in PEM or DER format
-pub fn parse_openssl_25519_pubkey(data: &[u8]) -> Result<PublicKey, MLAKeyParserError> {
-    if let Ok(pem_data) = pem::parse(data) {
-        // First, try as a PEM
-        if pem_data.tag().as_bytes() != PUBLIC_TAG {
-            return Err(MLAKeyParserError::InvalidPEMTag);
-        }
-        parse_openssl_25519_pubkey_der(pem_data.contents())
-    } else {
-        // Fallback to DER format
-        parse_openssl_25519_pubkey_der(data)
-    }
-}
-
-/// Parse an OpenSSL Ed25519 or X25519 private key, either in PEM or DER format
-pub fn parse_openssl_25519_privkey(data: &[u8]) -> Result<StaticSecret, MLAKeyParserError> {
-    if let Ok(pem_data) = pem::parse(data) {
-        // First, try as a PEM
-        if pem_data.tag().as_bytes() != PRIVATE_TAG {
-            return Err(MLAKeyParserError::InvalidPEMTag);
-        }
-        parse_openssl_25519_privkey_der(pem_data.contents())
-    } else {
-        // Fallback to DER format
-        parse_openssl_25519_privkey_der(data)
-    }
-}
-
-/// Parse several contiguous OpenSSL Ed25519 org X25519 public keys in PEM format
-pub fn parse_openssl_25519_pubkeys_pem_many(
-    data: &[u8],
-) -> Result<Vec<PublicKey>, MLAKeyParserError> {
-    let mut output = Vec::new();
-    for pem_data in pem::parse_many(data)? {
-        if pem_data.tag().as_bytes() != PUBLIC_TAG {
-            return Err(MLAKeyParserError::InvalidPEMTag);
-        }
-        output.push(parse_openssl_25519_pubkey_der(pem_data.contents())?);
-    }
-    Ok(output)
-}
-
 /// Parse an MLA private key in PEM format
 pub fn parse_mlakey_privkey_pem(data: &[u8]) -> Result<HybridPrivateKey, MLAKeyParserError> {
     if let Ok(pem_data) = pem::parse(data) {
@@ -539,6 +490,20 @@ pub fn parse_mlakey_privkey_pem(data: &[u8]) -> Result<HybridPrivateKey, MLAKeyP
     } else {
         Err(MLAKeyParserError::InvalidData)
     }
+}
+
+/// Parse several contiguous MLA public keys in PEM format
+pub fn parse_mlakey_privkeys_pem_many(
+    data: &[u8],
+) -> Result<Vec<HybridPrivateKey>, MLAKeyParserError> {
+    let mut output = Vec::new();
+    for pem_data in pem::parse_many(data)? {
+        if pem_data.tag().as_bytes() != PRIVATE_TAG {
+            return Err(MLAKeyParserError::InvalidPEMTag);
+        }
+        output.push(parse_mlakey_privkey_der(pem_data.contents())?);
+    }
+    Ok(output)
 }
 
 /// Parse an MLA public key in PEM format
@@ -591,66 +556,107 @@ const PUB_DER_LEN: usize =
 const PRIV_KEY_TAG: &str = "PRIVATE KEY";
 const PUB_KEY_TAG: &str = "PUBLIC KEY";
 
-pub struct KeyPair {
-    pub public_der: [u8; PUB_DER_LEN],
-    pub private_der: [u8; PRIV_DER_LEN],
-}
+impl HybridPublicKey {
+    pub fn to_der(&self) -> [u8; PUB_DER_LEN] {
+        let mut public_der = [0u8; PUB_DER_LEN];
+        public_der[..PUB_KEY_PREFIX1.len()].copy_from_slice(PUB_KEY_PREFIX1);
+        public_der[PUB_KEY_PREFIX1.len()..PUB_KEY_PREFIX1.len() + ECC_PUBKEY_SIZE]
+            .copy_from_slice(&self.public_key_ecc.to_bytes());
+        public_der[PUB_KEY_PREFIX1.len() + ECC_PUBKEY_SIZE
+            ..PUB_KEY_PREFIX1.len() + ECC_PUBKEY_SIZE + PUB_KEY_PREFIX2.len()]
+            .copy_from_slice(PUB_KEY_PREFIX2);
+        public_der[PUB_KEY_PREFIX1.len() + ECC_PUBKEY_SIZE + PUB_KEY_PREFIX2.len()..]
+            .copy_from_slice(&self.public_key_ml.as_bytes());
 
-impl KeyPair {
-    pub fn public_as_pem(&self) -> String {
-        let out = pem::Pem::new(PUB_KEY_TAG, self.public_der.to_vec());
-        pem::encode(&out)
+        public_der
     }
 
-    pub fn private_as_pem(&self) -> String {
-        let out = pem::Pem::new(PRIV_KEY_TAG, self.private_der.to_vec());
-        pem::encode(&out)
+    pub fn to_pem(&self) -> String {
+        pem::encode(&pem::Pem::new(PUB_KEY_TAG, self.to_der()))
     }
 }
 
-/// Generate a keypair, in DER format, using the provided CSPRNG
+impl HybridPrivateKey {
+    pub fn to_der(&self) -> [u8; PRIV_DER_LEN] {
+        let mut private_der = [0u8; PRIV_DER_LEN];
+        private_der[..PRIV_KEY_PREFIX1.len()].copy_from_slice(PRIV_KEY_PREFIX1);
+        private_der[PRIV_KEY_PREFIX1.len()..PRIV_KEY_PREFIX1.len() + ECC_PRIVKEY_SIZE]
+            .copy_from_slice(&self.private_key_ecc.to_bytes());
+        private_der[PRIV_KEY_PREFIX1.len() + ECC_PRIVKEY_SIZE
+            ..PRIV_KEY_PREFIX1.len() + ECC_PRIVKEY_SIZE + PRIV_KEY_PREFIX2.len()]
+            .copy_from_slice(PRIV_KEY_PREFIX2);
+        private_der[PRIV_KEY_PREFIX1.len() + ECC_PRIVKEY_SIZE + PRIV_KEY_PREFIX2.len()..]
+            .copy_from_slice(&self.private_key_ml.as_bytes());
+
+        private_der
+    }
+
+    pub fn to_pem(&self) -> String {
+        pem::encode(&pem::Pem::new(PRIV_KEY_TAG, self.to_der()))
+    }
+}
+
+const DERIVE_PATH_SALT: &[u8; 15] = b"PATH DERIVATION";
+
+/// Return a seed based on a path and an hybrid private key
 ///
-/// Keypairs can later be converted to PEM using `public_as_pem`, `private_as_pem`
-pub fn generate_keypair<T>(csprng: &mut T) -> Option<KeyPair>
-where
-    T: RngCore + CryptoRng,
-{
-    let (priv_key, public_key) = crate::crypto::hybrid::generate_keypair_from_rng(csprng);
+/// The derivation scheme is based on the same ideas than `mla::crypto::hybrid::combine`, ie.
+/// 1. a dual-PRF (HKDF-Extract with a uniform random salt \[1\]) to extract entropy from the private key
+/// 2. HKDF-Expand to derive along the given path
+///
+/// seed = HKDF-SHA512(
+///     salt=HKDF-SHA512-Extract(salt=0, ikm=ECC-key),
+///     ikm=MLKEM-key,
+///     info="PATH DERIVATION" . Derivation path
+/// )
+///
+/// Note: the secret is consumed on call
+///
+/// \[1\] <https://eprint.iacr.org/2023/861>
+fn apply_derive(path: &[u8], src: HybridPrivateKey) -> [u8; 32] {
+    // Force uniform-randomness on ECC-key, used as the future HKDF "salt" argument
+    let (dprf_salt, _hkdf) = Hkdf::<Sha512>::extract(None, src.private_key_ecc.as_bytes());
 
-    // Build the private data bytes
-    let mut private_der = [0u8; PRIV_DER_LEN];
-    private_der[..PRIV_KEY_PREFIX1.len()].copy_from_slice(PRIV_KEY_PREFIX1);
-    private_der[PRIV_KEY_PREFIX1.len()..PRIV_KEY_PREFIX1.len() + ECC_PRIVKEY_SIZE]
-        .copy_from_slice(&priv_key.private_key_ecc.to_bytes());
-    private_der[PRIV_KEY_PREFIX1.len() + ECC_PRIVKEY_SIZE
-        ..PRIV_KEY_PREFIX1.len() + ECC_PRIVKEY_SIZE + PRIV_KEY_PREFIX2.len()]
-        .copy_from_slice(PRIV_KEY_PREFIX2);
-    private_der[PRIV_KEY_PREFIX1.len() + ECC_PRIVKEY_SIZE + PRIV_KEY_PREFIX2.len()..]
-        .copy_from_slice(&priv_key.private_key_ml.as_bytes());
+    // `salt` being uniformly random, HKDF can be viewed as a dual-PRF
+    let hkdf: Hkdf<Sha512> = Hkdf::new(Some(&dprf_salt), &src.private_key_ml.as_bytes());
+    let mut seed = [0u8; 32];
+    hkdf.expand_multi_info(&[DERIVE_PATH_SALT, path], &mut seed)
+        .expect("Unexpected error while derivating along the path");
 
-    // Build the public data bytes
-    let mut public_der = [0u8; PUB_DER_LEN];
-    public_der[..PUB_KEY_PREFIX1.len()].copy_from_slice(PUB_KEY_PREFIX1);
-    public_der[PUB_KEY_PREFIX1.len()..PUB_KEY_PREFIX1.len() + ECC_PUBKEY_SIZE]
-        .copy_from_slice(&public_key.public_key_ecc.to_bytes());
-    public_der[PUB_KEY_PREFIX1.len() + ECC_PUBKEY_SIZE
-        ..PUB_KEY_PREFIX1.len() + ECC_PUBKEY_SIZE + PUB_KEY_PREFIX2.len()]
-        .copy_from_slice(PUB_KEY_PREFIX2);
-    public_der[PUB_KEY_PREFIX1.len() + ECC_PUBKEY_SIZE + PUB_KEY_PREFIX2.len()..]
-        .copy_from_slice(&public_key.public_key_ml.as_bytes());
+    seed
+}
 
-    Some(KeyPair {
-        public_der,
-        private_der,
-    })
+fn derive_one_path_component(
+    path: &[u8],
+    privkey: HybridPrivateKey,
+) -> (HybridPrivateKey, HybridPublicKey) {
+    let seed = apply_derive(path, privkey);
+    generate_keypair_from_seed(seed)
+}
+
+/// Return a KeyPair based on a succession of path components and an hybrid private key.
+/// Return None if `path_components` is empty.
+///
+/// See `doc/KEY_DERIVATION.md`.
+pub fn derive_keypair_from_path<'a>(
+    path_components: impl Iterator<Item = &'a [u8]>,
+    src: HybridPrivateKey,
+) -> Option<(HybridPrivateKey, HybridPublicKey)> {
+    // None for public key: we do not have one at the beginning
+    let initial_keypair = (src, None);
+    // Use a fold to feed each newly generated keypair into next derive_one_path_component
+    let (privkey, opt_pubkey) = path_components.fold(initial_keypair, |keypair, path| {
+        let (privkey, pubkey) = derive_one_path_component(path, keypair.0);
+        (privkey, Some(pubkey))
+    });
+    // opt_pubkey will be None iff path_components is empty
+    opt_pubkey.map(|pubkey| (privkey, pubkey))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use kem::{Decapsulate, Encapsulate};
-    use rand::{SeedableRng, rngs::OsRng};
-    use rand_chacha::ChaChaRng;
     use x25519_dalek::PublicKey;
 
     /// MLA private key, DER, X25519 then MLKEM
@@ -675,74 +681,6 @@ mod tests {
     /// Note: Many[0] is MLA_PEM_PUB
     static MLA_PEM_PUB_MANY: &[u8] = include_bytes!("../../../samples/test_mlakey_many_pub.pem");
 
-    // Samples, generated by:
-    // openssl genpkey -algorithm x25519 -outform DER -out test_x25519.der
-    static X_DER_PRIV: &[u8] = include_bytes!("../../../samples/test_x25519.der");
-    // openssl pkey -outform DER -pubout -in test_x25519.der -inform DER -out test_x25519_pub.der
-    static X_DER_PUB: &[u8] = include_bytes!("../../../samples/test_x25519_pub.der");
-
-    // openssl genpkey -algorithm ed25519 -outform DER -out test_ed25519.der
-    static ED_DER_PRIV: &[u8] = include_bytes!("../../../samples/test_ed25519.der");
-    // openssl pkey -outform DER -pubout -in test_ed25519.der -inform DER -out test_ed25519_pub.der
-    static ED_DER_PUB: &[u8] = include_bytes!("../../../samples/test_ed25519_pub.der");
-
-    // openssl pkey -in test_ed25519_pub.der -inform DER -pubin -out test_ed25519_pub.pem -outform PEM -pubout
-    static ED_PEM_PUB: &[u8] = include_bytes!("../../../samples/test_ed25519_pub.pem");
-    // openssl pkey -in test_ed25519.der -inform DER -out test_ed25519.pem -outform PEM
-    static ED_PEM_PRIV: &[u8] = include_bytes!("../../../samples/test_ed25519.pem");
-
-    // Many[0] is PEM_PUB
-    static ED_PEM_PUB_MANY: &[u8] = include_bytes!("../../../samples/test_25519_pub_many.pem");
-
-    #[test]
-    fn parse_and_check_ed_pubkeys_der() {
-        let priv_key = parse_openssl_25519_privkey_der(ED_DER_PRIV).unwrap();
-        let pub_key = parse_openssl_25519_pubkey_der(ED_DER_PUB).unwrap();
-        let computed_pub_key = PublicKey::from(&priv_key);
-        assert_eq!(pub_key.as_bytes().len(), ECC_PUBKEY_SIZE);
-        assert_eq!(priv_key.to_bytes().len(), ECC_PRIVKEY_SIZE);
-        assert_eq!(computed_pub_key.as_bytes(), pub_key.as_bytes());
-    }
-
-    #[test]
-    fn parse_and_check_x_pubkeys_der() {
-        let priv_key = parse_openssl_25519_privkey_der(X_DER_PRIV).unwrap();
-        let pub_key = parse_openssl_25519_pubkey_der(X_DER_PUB).unwrap();
-        let computed_pub_key = PublicKey::from(&priv_key);
-        assert_eq!(pub_key.as_bytes().len(), ECC_PUBKEY_SIZE);
-        assert_eq!(priv_key.to_bytes().len(), ECC_PRIVKEY_SIZE);
-        assert_eq!(computed_pub_key.as_bytes(), pub_key.as_bytes());
-    }
-
-    #[test]
-    fn parse_and_check_pubkeys_multi_format() {
-        let pub_key_pem = parse_openssl_25519_pubkey(ED_PEM_PUB).unwrap();
-        let pub_key_der = parse_openssl_25519_pubkey(ED_DER_PUB).unwrap();
-        assert_eq!(pub_key_der.as_bytes().len(), ECC_PUBKEY_SIZE);
-        assert_eq!(pub_key_der.as_bytes(), pub_key_pem.as_bytes());
-        let priv_key_pem = parse_openssl_25519_privkey(ED_PEM_PRIV).unwrap();
-        let priv_key_der = parse_openssl_25519_privkey(ED_DER_PRIV).unwrap();
-        assert_eq!(priv_key_der.to_bytes().len(), ECC_PRIVKEY_SIZE);
-        assert_eq!(priv_key_der.to_bytes(), priv_key_pem.to_bytes());
-    }
-
-    #[test]
-    fn parse_many_pubkeys() {
-        let pub_keys_pem = parse_openssl_25519_pubkeys_pem_many(ED_PEM_PUB).unwrap();
-        assert_eq!(pub_keys_pem.len(), 1);
-        let pub_key_der = parse_openssl_25519_pubkey(ED_DER_PUB).unwrap();
-        assert_eq!(pub_key_der.as_bytes().len(), ECC_PUBKEY_SIZE);
-        assert_eq!(pub_key_der.as_bytes(), pub_keys_pem[0].as_bytes());
-
-        let pub_keys_pem = parse_openssl_25519_pubkeys_pem_many(ED_PEM_PUB_MANY).unwrap();
-        assert_eq!(pub_keys_pem.len(), 3);
-        assert_eq!(pub_key_der.as_bytes(), pub_keys_pem[0].as_bytes());
-        assert_ne!(pub_key_der.as_bytes(), pub_keys_pem[1].as_bytes());
-
-        let pub_x_key_der = parse_openssl_25519_pubkey(X_DER_PUB).unwrap();
-        assert_eq!(pub_x_key_der.as_bytes(), pub_keys_pem[2].as_bytes());
-    }
-
     /// Check key coherence
     fn check_key_pair(pub_key: HybridPublicKey, priv_key: HybridPrivateKey) {
         // Check the public ECC key rebuilt from the private ECC key is the expected one
@@ -759,7 +697,7 @@ mod tests {
             pub_key.public_key_ml.as_bytes().len(),
             MLKEM_1024_PUBKEY_SIZE
         );
-        let mut rng = OsRng {};
+        let mut rng = rand::rngs::OsRng { };
         let (encap, key) = pub_key.public_key_ml.encapsulate(&mut rng).unwrap();
         let key_decap = priv_key.private_key_ml.decapsulate(&encap).unwrap();
         assert_eq!(key, key_decap);
@@ -768,11 +706,10 @@ mod tests {
     /// Ensure the generated keypair is coherent and re-readable
     #[test]
     fn keypair_and_export() {
-        let mut csprng = OsRng {};
-        let keypair = generate_keypair(&mut csprng).unwrap();
+        let keypair = generate_keypair();
 
-        let priv_key = parse_mlakey_privkey_der(&keypair.private_der).unwrap();
-        let pub_key = parse_mlakey_pubkey_der(&keypair.public_der).unwrap();
+        let priv_key = parse_mlakey_privkey_pem(keypair.0.to_pem().as_bytes()).unwrap();
+        let pub_key = parse_mlakey_pubkey_pem(keypair.1.to_pem().as_bytes()).unwrap();
 
         check_key_pair(pub_key, priv_key);
     }
@@ -783,34 +720,32 @@ mod tests {
         // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
 
         // Check the created key is deterministic
-        let mut csprng = ChaChaRng::seed_from_u64(0);
-        let keypair1 = generate_keypair(&mut csprng).unwrap();
-        let mut csprng = ChaChaRng::seed_from_u64(0);
-        let keypair2 = generate_keypair(&mut csprng).unwrap();
-        assert_eq!(keypair1.private_der, keypair2.private_der);
-        assert_eq!(keypair1.public_der, keypair2.public_der);
+        let keypair1 = generate_keypair_from_seed([0; 32]);
+        let keypair2 = generate_keypair_from_seed([0; 32]);
+        assert_eq!(keypair1.0.to_der(), keypair2.0.to_der());
+        assert_eq!(keypair1.1.to_der(), keypair2.1.to_der());
 
         // Ensure it is not always the same
-        let mut csprng = ChaChaRng::seed_from_u64(1);
-        let keypair3 = generate_keypair(&mut csprng).unwrap();
-        assert_ne!(keypair1.private_der, keypair3.private_der);
+        let keypair3 = generate_keypair_from_seed([1; 32]);
+        assert_ne!(keypair1.0.to_der(), keypair3.0.to_der());
     }
 
     /// Check PEM export from KeyPair
     #[test]
     fn keypair_export_pem() {
         // Generate a KeyPair
-        let mut csprng = OsRng {};
-        let keypair = generate_keypair(&mut csprng).unwrap();
+        let keypair = generate_keypair();
 
         // Parse it as DER, then in PEM form
-        let priv_key = parse_mlakey_privkey_der(&keypair.private_der).unwrap();
-        let pub_key = parse_mlakey_pubkey_der(&keypair.public_der).unwrap();
+        let priv_der = keypair.0.to_der();
+        let pub_der = keypair.1.to_der();
+        let priv_key = parse_mlakey_privkey_der(&priv_der).unwrap();
+        let pub_key = parse_mlakey_pubkey_der(&pub_der).unwrap();
 
-        let priv_pem = keypair.private_as_pem();
-        let pub_pem = keypair.public_as_pem();
-        assert_ne!(&keypair.private_der, priv_pem.as_bytes());
-        assert_ne!(&keypair.public_der, pub_pem.as_bytes());
+        let priv_pem = keypair.0.to_pem();
+        let pub_pem = keypair.1.to_pem();
+        assert_ne!(&priv_der, priv_pem.as_bytes());
+        assert_ne!(&pub_der, pub_pem.as_bytes());
 
         let priv_key_pem = parse_mlakey_privkey_pem(priv_pem.as_bytes()).unwrap();
         let pub_key_pem = parse_mlakey_pubkey_pem(pub_pem.as_bytes()).unwrap();
@@ -970,5 +905,57 @@ mod tests {
             pub_key.public_key_ml.as_bytes(),
             pub_key_rev.public_key_ml.as_bytes()
         );
+    }
+
+    #[test]
+    /// Naive checks for "apply_derive", to avoid naive erros
+    fn check_apply_derive() {
+        use crate::crypto::hybrid::MLKEMDecapsulationKey;
+        use std::collections::HashSet;
+        use x25519_dalek::StaticSecret;
+
+        // Ensure determinism
+        let (privkey, _pubkey) = generate_keypair_from_seed([0; 32]);
+
+        // Derive along "test"
+        let path = b"test";
+        let seed = apply_derive(path, privkey);
+        assert_ne!(seed, [0u8; 32]);
+
+        // Derive along "test2"
+        let (privkey, _pubkey) = generate_keypair_from_seed([0; 32]);
+        let path = b"test2";
+        let seed2 = apply_derive(path, privkey);
+        assert_ne!(seed, seed2);
+
+        // Ensure the secret depends on both keys
+        let mut priv_keys = vec![];
+        for i in 0..1 {
+            for j in 0..1 {
+                priv_keys.push(HybridPrivateKey {
+                    private_key_ecc: StaticSecret::from([i as u8; 32]),
+                    private_key_ml: MLKEMDecapsulationKey::from_bytes(&[j as u8; 3168].into()),
+                });
+            }
+        }
+
+        // Generated seeds for (0, 0), (0, 1), (1, 0) and (1, 1) must be different
+        let seeds: Vec<_> = priv_keys
+            .into_iter()
+            .map(|pkey| apply_derive(b"test", pkey))
+            .collect();
+        assert_eq!(HashSet::<_>::from_iter(seeds.iter()).len(), seeds.len());
+    }
+
+    #[test]
+    fn check_derive_paths() {
+        let der_priv: &'static [u8] = include_bytes!("../../../samples/test_mlakey.der");
+        let der_derived_priv: &'static [u8] =
+            include_bytes!("../../../samples/test_mlakey_derived.der");
+        let secret = crate::crypto::mlakey::parse_mlakey_privkey_der(der_priv).unwrap();
+        // Safe to unwrap, there is at least one derivation path
+        let path = [b"pathcomponent1".as_slice(), b"pathcomponent2".as_slice()];
+        let (privkey, _) = derive_keypair_from_path(path.into_iter(), secret).unwrap();
+        assert_eq!(privkey.to_der().as_slice(), der_derived_priv);
     }
 }

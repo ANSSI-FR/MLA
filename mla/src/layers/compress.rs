@@ -11,7 +11,6 @@ use crate::layers::traits::{
 };
 use crate::{BINCODE_CONFIG, Error};
 
-use crate::config::{ArchiveWriterConfig, ConfigResult};
 use crate::errors::ConfigError;
 
 use super::traits::InnerReaderTrait;
@@ -47,14 +46,17 @@ impl std::default::Default for CompressionConfig {
     }
 }
 
-impl ArchiveWriterConfig {
+impl CompressionConfig {
     /// Set the compression level
     /// compression level (0-11); bigger values cause denser, but slower compression
-    pub fn with_compression_level(&mut self, compression_level: u32) -> ConfigResult {
+    pub(crate) fn set_compression_level(
+        &mut self,
+        compression_level: u32,
+    ) -> Result<&mut Self, ConfigError> {
         if compression_level > 11 {
             Err(ConfigError::CompressionLevelOutOfRange)
         } else {
-            self.compress.compression_level = compression_level;
+            self.compression_level = compression_level;
             Ok(self)
         }
     }
@@ -90,9 +92,9 @@ impl<R: Read> fmt::Debug for CompressionLayerReaderState<R> {
 }
 
 #[derive(Encode, Decode, Debug)]
-pub struct SizesInfo {
+struct SizesInfo {
     /// Ordered list of chunk compressed size; only set at init
-    pub compressed_sizes: Vec<u32>,
+    compressed_sizes: Vec<u32>,
     /// Last block uncompressed size
     last_block_size: u32,
 }
@@ -118,16 +120,11 @@ impl SizesInfo {
         (self.compressed_sizes.len() as u64 - 1) * UNCOMPRESSED_DATA_SIZE as u64
             + self.last_block_size as u64
     }
-
-    // Sum the compressed_sizes
-    pub fn get_compressed_size(&self) -> u64 {
-        self.compressed_sizes.iter().map(|v| *v as u64).sum()
-    }
 }
 
 pub struct CompressionLayerReader<'a, R: 'a + Read> {
     state: CompressionLayerReaderState<Box<dyn 'a + LayerReader<'a, R>>>,
-    pub sizes_info: Option<SizesInfo>,
+    sizes_info: Option<SizesInfo>,
     /// Position in the under-layer (uncompressed stream)
     // /!\ Due to the decompressor having a block size of the compressed size,
     // any read on it may forward the inner layer to the beginning of the next
@@ -294,10 +291,6 @@ impl<'a, R: 'a + Read> CompressionLayerReader<'a, R> {
 }
 
 impl<'a, R: 'a + InnerReaderTrait> LayerReader<'a, R> for CompressionLayerReader<'a, R> {
-    fn into_inner(self) -> Option<Box<dyn 'a + LayerReader<'a, R>>> {
-        Some(self.state.into_inner())
-    }
-
     fn into_raw(self: Box<Self>) -> R {
         self.state.into_inner().into_raw()
     }
@@ -524,21 +517,6 @@ pub struct CompressionLayerWriter<'a, W: 'a + InnerWriterTrait> {
     compression_level: u32,
 }
 
-impl<W: InnerWriterTrait> CompressionLayerWriterState<W> {
-    fn into_inner(self) -> W {
-        match self {
-            CompressionLayerWriterState::Ready(inner) => inner,
-            CompressionLayerWriterState::InData(_written, compress) => {
-                compress.into_inner().into_inner()
-            }
-            // `panic!` explicitly called to avoid propagating an error which
-            // must never happens (ie, calling `into_inner` in an inconsistent
-            // internal state)
-            _ => panic!("[Writer] Empty type to inner is impossible"),
-        }
-    }
-}
-
 impl<'a, W: 'a + InnerWriterTrait> CompressionLayerWriter<'a, W> {
     pub fn new(
         inner: InnerWriterType<'a, W>,
@@ -553,15 +531,7 @@ impl<'a, W: 'a + InnerWriterTrait> CompressionLayerWriter<'a, W> {
 }
 
 impl<'a, W: 'a + InnerWriterTrait> LayerWriter<'a, W> for CompressionLayerWriter<'a, W> {
-    fn into_inner(self) -> Option<InnerWriterType<'a, W>> {
-        Some(self.state.into_inner())
-    }
-
-    fn into_raw(self: Box<Self>) -> W {
-        self.state.into_inner().into_raw()
-    }
-
-    fn finalize(&mut self) -> Result<(), Error> {
+    fn finalize(mut self: Box<Self>) -> Result<W, Error> {
         // Use this mem::replace trick to be able to get back the compressor
         // inner and freely move from CompressionLayerWriterState to others
         let old_state = std::mem::replace(&mut self.state, CompressionLayerWriterState::Empty);
@@ -598,10 +568,7 @@ impl<'a, W: 'a + InnerWriterTrait> LayerWriter<'a, W> for CompressionLayerWriter
         self.compressed_sizes = sinfo.compressed_sizes;
 
         // Recursive call
-        inner.finalize()?;
-        // Store inner, for further into_inner / into_raw calls
-        self.state = CompressionLayerWriterState::Ready(inner);
-        Ok(())
+        inner.finalize()
     }
 }
 
@@ -714,19 +681,6 @@ enum CompressionLayerFailSafeReaderState<R: Read> {
     Empty,
 }
 
-impl<R: Read> CompressionLayerFailSafeReaderState<R> {
-    fn into_inner(self) -> R {
-        match self {
-            CompressionLayerFailSafeReaderState::Ready(inner) => inner,
-            CompressionLayerFailSafeReaderState::InData { inner, .. } => inner,
-            // `panic!` explicitly called to avoid propagating an error which
-            // must never happens (ie, calling `into_inner` in an inconsistent
-            // internal state)
-            _ => panic!("[Reader] Empty type to inner is impossible"),
-        }
-    }
-}
-
 pub struct CompressionLayerFailSafeReader<'a, R: 'a + Read> {
     state: CompressionLayerFailSafeReaderState<Box<dyn 'a + LayerFailSafeReader<'a, R>>>,
 }
@@ -739,15 +693,7 @@ impl<'a, R: 'a + Read> CompressionLayerFailSafeReader<'a, R> {
     }
 }
 
-impl<'a, R: 'a + Read> LayerFailSafeReader<'a, R> for CompressionLayerFailSafeReader<'a, R> {
-    fn into_inner(self) -> Option<Box<dyn 'a + LayerFailSafeReader<'a, R>>> {
-        Some(self.state.into_inner())
-    }
-
-    fn into_raw(self: Box<Self>) -> R {
-        self.state.into_inner().into_raw()
-    }
-}
+impl<'a, R: 'a + Read> LayerFailSafeReader<'a, R> for CompressionLayerFailSafeReader<'a, R> {}
 
 const FAIL_SAFE_BUFFER_SIZE: usize = 4096;
 
@@ -918,7 +864,7 @@ impl<'a, R: 'a + Read> Read for CompressionLayerFailSafeReader<'a, R> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Layers;
+    use crate::config::ArchiveWriterConfig;
 
     use crate::layers::raw::{RawLayerFailSafeReader, RawLayerReader, RawLayerWriter};
     use brotli::writer::StandardAlloc;
@@ -961,7 +907,7 @@ mod tests {
         let fake_data2 = vec![5, 6, 7, 8];
         comp.write_all(fake_data.as_slice()).unwrap();
         comp.write_all(fake_data2.as_slice()).unwrap();
-        let file = comp.into_raw();
+        let file = comp.finalize().unwrap();
 
         let mut src = Cursor::new(file.as_slice());
         let mut reader = brotli::Decompressor::new(&mut src, 0);
@@ -994,7 +940,7 @@ mod tests {
             bytes.len()
         );
 
-        let file = comp.into_raw();
+        let file = comp.finalize().unwrap();
         println!("{}", file.len());
         let mut src = Cursor::new(file.as_slice());
         // Highlight the use of BrotliDecompressStream
@@ -1090,8 +1036,7 @@ mod tests {
             ));
             let now = Instant::now();
             comp.write_all(bytes).unwrap();
-            comp.finalize().unwrap();
-            let file = comp.into_raw();
+            let file = comp.finalize().unwrap();
             let buf = Cursor::new(file.as_slice());
             let mut decomp =
                 Box::new(CompressionLayerReader::new(Box::new(RawLayerReader::new(buf))).unwrap());
@@ -1123,8 +1068,7 @@ mod tests {
             ));
             let now = Instant::now();
             comp.write_all(bytes).unwrap();
-            comp.finalize().unwrap();
-            let file = comp.into_raw();
+            let file = comp.finalize().unwrap();
             let mut decomp = Box::new(
                 CompressionLayerFailSafeReader::new(Box::new(RawLayerFailSafeReader::new(
                     file.as_slice(),
@@ -1159,8 +1103,7 @@ mod tests {
             ));
             let now = Instant::now();
             comp.write_all(bytes).unwrap();
-            comp.finalize().unwrap();
-            let file = comp.into_raw();
+            let file = comp.finalize().unwrap();
 
             // Truncate at the middle
             let stop = file.len() / 2;
@@ -1190,37 +1133,6 @@ mod tests {
     }
 
     #[test]
-    fn compress_layer_with_footer() {
-        // Inspect footer of Compress / decompress
-
-        let data = get_data();
-        let bytes = data.as_slice();
-
-        let file = Vec::new();
-        let mut comp = Box::new(CompressionLayerWriter::new(
-            Box::new(RawLayerWriter::new(file)),
-            &CompressionConfig::default(),
-        ));
-        comp.write_all(bytes).unwrap();
-        comp.finalize().unwrap();
-
-        let mut compressed_sizes = Vec::new();
-        compressed_sizes.extend_from_slice(&comp.compressed_sizes);
-
-        let file = comp.into_raw();
-        let buf = Cursor::new(file.as_slice());
-        let mut decomp =
-            Box::new(CompressionLayerReader::new(Box::new(RawLayerReader::new(buf))).unwrap());
-        decomp.initialize().unwrap();
-
-        // Check the footer has been correctly re-read
-        assert_eq!(
-            compressed_sizes,
-            decomp.sizes_info.unwrap().compressed_sizes
-        );
-    }
-
-    #[test]
     fn seek_with_footer() {
         for data in [get_data(), get_uncompressable_data()] {
             let bytes = data.as_slice();
@@ -1231,9 +1143,8 @@ mod tests {
                 &CompressionConfig::default(),
             ));
             comp.write_all(bytes).unwrap();
-            comp.finalize().unwrap();
 
-            let file = comp.into_raw();
+            let file = comp.finalize().unwrap();
             let buf = Cursor::new(file.as_slice());
             let mut decomp =
                 Box::new(CompressionLayerReader::new(Box::new(RawLayerReader::new(buf))).unwrap());
@@ -1318,34 +1229,28 @@ mod tests {
         let bytes = data.as_slice();
 
         let file = Vec::new();
-        let mut config = ArchiveWriterConfig::new();
-        config
-            .enable_layer(Layers::COMPRESS)
+        let config = ArchiveWriterConfig::without_encryption()
             .with_compression_level(0)
             .unwrap();
         let mut comp = Box::new(CompressionLayerWriter::new(
             Box::new(RawLayerWriter::new(file)),
-            &config.compress,
+            &config.compression_config.unwrap(),
         ));
         comp.write_all(bytes).unwrap();
-        comp.finalize().unwrap();
 
         let file2 = Vec::new();
-        let mut config2 = ArchiveWriterConfig::new();
-        config2
-            .enable_layer(Layers::COMPRESS)
+        let config2 = ArchiveWriterConfig::without_encryption()
             .with_compression_level(5)
             .unwrap();
         let mut comp2 = Box::new(CompressionLayerWriter::new(
             Box::new(RawLayerWriter::new(file2)),
-            &config2.compress,
+            &config2.compression_config.unwrap(),
         ));
         comp2.write_all(bytes).unwrap();
-        comp2.finalize().unwrap();
 
         // file2 must be better compressed than file
-        let file = comp.into_raw();
-        let file2 = comp2.into_raw();
+        let file = comp.finalize().unwrap();
+        let file2 = comp2.finalize().unwrap();
         assert!(file.len() > file2.len());
 
         // Check content

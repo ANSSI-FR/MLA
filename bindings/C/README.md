@@ -65,8 +65,8 @@ FILE* f = fopen("test.mla", "w");
 
 // Create a configuration for the archive writer
 MLAStatus status;
-MLAConfigHandle hConfig = NULL;
-status = mla_config_default_new(&hConfig);
+MLAWriterConfigHandle hConfig = NULL;
+status = create_mla_writer_config_with_public_keys(&hConfig, szPubkey);
 // Error code can be obtained with MLA_STATUS
 if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
 {
@@ -77,7 +77,6 @@ if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
 // For the sake of readability, checks are now omitted
 
 // Add a recipient
-status = mla_config_add_public_keys(hConfig, szPubkey);
 
 // Create the archive writer
 // `callback_write` and `callback_flush` will received whatever context is given to `mla_archive_new`
@@ -88,7 +87,7 @@ status = mla_archive_new(&hConfig, &callback_write, &callback_flush, f, &hArchiv
 // Start a new file in the archive
 // hFile will be used to identify this file inside the archive
 MLAArchiveFileHandle hFile = NULL;
-status = mla_archive_file_new(hArchive, "test.txt", &hFile);
+status = mla_archive_start_entry_with_path_as_name(hArchive, "test.txt", &hFile);
 
 // Append some content
 status = mla_archive_file_append(hArchive, hFile, (const uint8_t*)"Hello, World!\n", (uint32_t)strlen("Hello, World!\n"));

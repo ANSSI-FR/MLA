@@ -3,13 +3,13 @@ use afl::fuzz;
 extern crate afl;
 use bincode::config::{Fixint, Limit};
 use bincode::{Decode, Encode};
-use mla::crypto::mlakey_parser::{parse_mlakey_privkey_pem, parse_mlakey_pubkey_pem};
+use mla::crypto::mlakey::{parse_mlakey_privkey_pem, parse_mlakey_pubkey_pem};
 use std::fs::File;
 use std::io::{self, Cursor, Read, Write};
 
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
-use mla::errors::{Error, FailSafeReadError};
-use mla::{ArchiveFailSafeReader, ArchiveFileID, ArchiveReader, ArchiveWriter, Layers};
+use mla::errors::{Error, TruncatedReadError};
+use mla::{ArchiveEntryId, TruncatedArchiveReader, ArchiveReader, ArchiveWriter};
 
 use std::collections::HashMap;
 
@@ -26,6 +26,34 @@ pub(crate) const BINCODE_CONFIG: bincode::config::Configuration<
 > = bincode::config::standard()
     .with_limit::<{ BINCODE_MAX_DECODE }>()
     .with_fixed_int_encoding();
+
+#[derive(Debug, Clone, Copy, PartialEq, Encode, Decode)]
+pub struct Layers(u8);
+
+bitflags::bitflags! {
+    /// Available layers. Order is relevant:
+    /// ```ascii-art
+    /// [File to blocks decomposition]
+    /// [Compression (COMPRESS)]
+    /// [Encryption (ENCRYPT)]
+    /// [Raw File I/O]
+    /// ```
+    impl Layers: u8 {
+        const ENCRYPT = 0b0000_0001;
+        const COMPRESS = 0b0000_0010;
+        /// Recommended layering
+        const DEFAULT = Self::ENCRYPT.bits() | Self::COMPRESS.bits();
+        /// No additional layer (ie, for debugging purpose)
+        const DEBUG = 0;
+        const EMPTY = 0;
+    }
+}
+
+impl std::default::Default for Layers {
+    fn default() -> Self {
+        Layers::DEFAULT
+    }
+}
 
 #[derive(Encode, Decode, Debug)]
 struct TestInput {
@@ -60,13 +88,10 @@ fn run(data: &[u8]) {
 
     // Create a MLA Archive
     let mut buf = Vec::new();
-    let mut config = ArchiveWriterConfig::new();
-    config
-        .set_layers(test_case.layers)
-        .add_public_keys(&[public_key]);
+    let mut config = ArchiveWriterConfigBuilder::begin().with_public_keys(&[public_key]).without_compression();
     let mut mla = ArchiveWriter::from_config(&mut buf, config).unwrap();
 
-    let mut num2id: HashMap<u8, ArchiveFileID> = HashMap::new();
+    let mut num2id: HashMap<u8, ArchiveEntryId> = HashMap::new();
     let mut filename2content: HashMap<String, Vec<u8>> = HashMap::new();
     for part in test_case.parts {
         let num = {
@@ -80,7 +105,7 @@ fn run(data: &[u8]) {
             if let Some(id) = num2id.get(&num) {
                 *id
             } else {
-                let id = match mla.start_file(&test_case.filenames[num as usize]) {
+                let id = match mla.start_entry(&test_case.filenames[num as usize]) {
                     Err(Error::DuplicateFilename) => {
                         return;
                     }
@@ -91,7 +116,7 @@ fn run(data: &[u8]) {
                 id
             }
         };
-        mla.append_file_content(id, part.len() as u64, &part[..])
+        mla.append_entry_content(id, part.len() as u64, &part[..])
             .expect("Add part failed");
 
         let content = {
@@ -111,7 +136,7 @@ fn run(data: &[u8]) {
         if !filename2content.contains_key(fname) {
             num2id.insert(
                 i as u8,
-                match mla.start_file(fname) {
+                match mla.start_entry(fname) {
                     Err(Error::DuplicateFilename) => {
                         return;
                     }
@@ -123,13 +148,12 @@ fn run(data: &[u8]) {
     }
 
     for id in num2id.values() {
-        mla.end_file(*id).expect("End block failed");
+        mla.end_entry(*id).expect("End block failed");
     }
 
-    mla.finalize().expect("Finalize failed");
+    let dest = mla.finalize().expect("Finalize failed");
 
     // Parse the created MLA Archive
-    let dest = mla.into_raw();
     let buf = Cursor::new(dest.as_slice());
     let private_key = parse_mlakey_privkey_pem(PRIV_KEY).unwrap();
     let mut config = ArchiveReaderConfig::new();
@@ -137,7 +161,7 @@ fn run(data: &[u8]) {
     let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
 
     // Check the list of files is correct
-    let mut flist: Vec<String> = mla_read.list_files().unwrap().cloned().collect();
+    let mut flist: Vec<String> = mla_read.list_entries().unwrap().cloned().collect();
     flist.sort();
     #[allow(clippy::iter_cloned_collect)]
     let mut tflist: Vec<String> = test_case.filenames.iter().cloned().collect();
@@ -148,7 +172,7 @@ fn run(data: &[u8]) {
     // Get and check file per file
     let empty = Vec::new();
     for fname in &tflist {
-        let mut mla_file = mla_read.get_file(fname.clone()).unwrap().unwrap();
+        let mut mla_file = mla_read.get_entry(fname.clone()).unwrap().unwrap();
         assert_eq!(mla_file.filename, fname.clone());
         let mut buf = Vec::new();
         mla_file.data.read_to_end(&mut buf).unwrap();
@@ -161,25 +185,24 @@ fn run(data: &[u8]) {
     let mut config = ArchiveReaderConfig::new();
     let private_key = parse_mlakey_privkey_pem(PRIV_KEY).unwrap();
     config.add_private_keys(&[private_key]);
-    let mut mla_fsread = ArchiveFailSafeReader::from_config(buf, config).unwrap();
+    let mut mla_fsread = TruncatedArchiveReader::from_config(buf, config).unwrap();
 
     // Repair the archive (without any damage, but trigger the corresponding code)
-    let dest_w = Vec::new();
-    let mut mla_w =
-        ArchiveWriter::from_config(dest_w, ArchiveWriterConfig::new()).expect("Writer init failed");
-    if let FailSafeReadError::EndOfOriginalArchiveData =
-        mla_fsread.convert_to_archive(&mut mla_w).unwrap()
+    let mut dest_w = Vec::new();
+    let mla_w = ArchiveWriter::from_config(&mut dest_w, ArchiveWriterConfig::new())
+        .expect("Writer init failed");
+    if let TruncatedReadError::EndOfOriginalArchiveData =
+        mla_fsread.convert_to_archive(mla_w).unwrap()
     {
         // Everything runs as expected
     } else {
         panic!();
-    }
+    };
     // Check the resulting files
-    let dest_r = mla_w.into_raw();
-    let buf = Cursor::new(dest_r.as_slice());
+    let buf = Cursor::new(dest_w.as_slice());
     let mut mla_read = ArchiveReader::from_config(buf, ArchiveReaderConfig::new()).unwrap();
     for fname in tflist {
-        let mut mla_file = mla_read.get_file(fname.clone()).unwrap().unwrap();
+        let mut mla_file = mla_read.get_entry(fname.clone()).unwrap().unwrap();
         assert_eq!(mla_file.filename, fname.clone());
         let mut buf = Vec::new();
         mla_file.data.read_to_end(&mut buf).unwrap();
@@ -210,9 +233,9 @@ fn run(data: &[u8]) {
     config.add_private_keys(&[private_key]);
     let _do_steps = || -> Result<(), Error> {
         let mut mla_read = ArchiveReader::from_config(buf, ArchiveReaderConfig::new())?;
-        let flist = mla_read.list_files()?.cloned().collect::<Vec<String>>();
+        let flist = mla_read.list_entries()?.cloned().collect::<Vec<String>>();
         for fname in flist {
-            let mut finfo = match mla_read.get_file(fname)? {
+            let mut finfo = match mla_read.get_entry(fname)? {
                 Some(finfo) => finfo,
                 None => continue,
             };
@@ -227,7 +250,7 @@ fn run(data: &[u8]) {
     let private_key = parse_mlakey_privkey_pem(PRIV_KEY).unwrap();
     config.add_private_keys(&[private_key]);
     let mut mla_fsread = {
-        if let Ok(mla) = ArchiveFailSafeReader::from_config(buf, config) {
+        if let Ok(mla) = TruncatedArchiveReader::from_config(buf, config) {
             mla
         } else {
             return;
@@ -235,11 +258,11 @@ fn run(data: &[u8]) {
     };
     // Repair the archive (without any damage, but trigger the corresponding code)
     let dest_w = Vec::new();
-    let mut mla_w =
+    let mla_w =
         ArchiveWriter::from_config(dest_w, ArchiveWriterConfig::new()).expect("Writer init failed");
     mla_fsread
-        .convert_to_archive(&mut mla_w)
-        .expect("End without a FailSafeReadError {}");
+        .convert_to_archive(mla_w)
+        .expect("End without a TruncatedReadError {}");
 }
 
 #[cfg(fuzzing)]

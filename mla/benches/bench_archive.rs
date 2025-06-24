@@ -3,10 +3,11 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use criterion::BenchmarkId;
 use criterion::Throughput;
 
+use mla::TruncatedArchiveReader;
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
-use mla::crypto::hybrid::generate_keypair_from_rng;
+use mla::crypto::mlakey::{HybridPublicKey, generate_keypair_from_seed};
+use mla::entry::EntryName;
 use mla::helpers::linear_extract;
-use mla::{ArchiveFailSafeReader, Layers};
 use mla::{ArchiveReader, ArchiveWriter};
 use rand::SeedableRng;
 use rand::distributions::{Alphanumeric, Distribution};
@@ -21,41 +22,50 @@ const MB: usize = 1024 * KB;
 
 const SIZE_LIST: [usize; 4] = [KB, 64 * KB, MB, 16 * MB];
 const SAMPLE_SIZE_SMALL: usize = 20;
-const LAYERS_POSSIBILITIES: [Layers; 4] = [
-    Layers::EMPTY,
-    Layers::COMPRESS,
-    Layers::ENCRYPT,
-    Layers::COMPRESS.union(Layers::ENCRYPT),
-];
+const LAYERS_POSSIBILITIES: [(bool, bool); 4] =
+    [(false, false), (true, false), (false, true), (true, true)];
 
 /// Build an archive with `iters` files of `size` bytes each and `layers` enabled
 ///
 /// Files names are `file_{i}`
-fn build_archive(iters: u64, size: u64, layers: Layers) -> (Vec<u8>, ArchiveReaderConfig) {
+fn build_archive(
+    iters: u64,
+    size: u64,
+    compression: bool,
+    encryption: bool,
+) -> (Vec<u8>, ArchiveReaderConfig) {
     // Setup
     let mut rng = ChaChaRng::seed_from_u64(0);
-    let (private_key, public_key) = generate_keypair_from_rng(&mut rng);
+    let (private_key, public_key) = generate_keypair_from_seed([0; 32]);
     let file = Vec::new();
     // Create the initial archive with `iters` files of `size` bytes
-    let mut config = ArchiveWriterConfig::new();
-    config.enable_layer(layers).add_public_keys(&[public_key]);
+    let config = if encryption {
+        ArchiveWriterConfig::with_public_keys(&[public_key])
+    } else {
+        ArchiveWriterConfig::without_encryption()
+    };
+    let config = if compression {
+        config
+    } else {
+        config.without_compression()
+    };
     let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
     for i in 0..iters {
         let data: Vec<u8> = Alphanumeric
             .sample_iter(&mut rng)
             .take(size as usize)
             .collect();
-        let id = mla.start_file(&format!("file_{i}")).unwrap();
-        mla.append_file_content(id, data.len() as u64, data.as_slice())
+        let id = mla
+            .start_entry(EntryName::from_path(format!("file_{i}")).unwrap())
             .unwrap();
-        mla.end_file(id).unwrap();
+        mla.append_entry_content(id, data.len() as u64, data.as_slice())
+            .unwrap();
+        mla.end_entry(id).unwrap();
     }
-    mla.finalize().unwrap();
+    let dest = mla.finalize().unwrap();
 
     // Instantiate the reader
-    let dest = mla.into_raw();
-    let mut config = ArchiveReaderConfig::new();
-    config.add_private_keys(&[private_key]);
+    let config = ArchiveReaderConfig::with_private_keys(&[private_key]);
     (dest, config)
 }
 
@@ -63,11 +73,28 @@ fn build_archive(iters: u64, size: u64, layers: Layers) -> (Vec<u8>, ArchiveRead
 fn build_archive_reader<'a>(
     iters: u64,
     size: u64,
-    layers: Layers,
+    compression: bool,
+    encryption: bool,
 ) -> ArchiveReader<'a, io::Cursor<Vec<u8>>> {
-    let (dest, config) = build_archive(iters, size, layers);
+    let (dest, config) = build_archive(iters, size, compression, encryption);
     let buf = Cursor::new(dest);
     ArchiveReader::from_config(buf, config).unwrap()
+}
+
+fn layers_to_config(
+    (compression, encryption): &(bool, bool),
+    public_key: &HybridPublicKey,
+) -> ArchiveWriterConfig {
+    let config = if *encryption {
+        ArchiveWriterConfig::with_public_keys(&[public_key.clone()])
+    } else {
+        ArchiveWriterConfig::without_encryption()
+    };
+    if *compression {
+        config
+    } else {
+        config.without_compression()
+    }
 }
 
 /// Benchmark with all layers' permutations different block size
@@ -82,7 +109,7 @@ pub fn writer_multiple_layers_multiple_block_size(c: &mut Criterion) {
     // Setup
     // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
     let mut rng = ChaChaRng::seed_from_u64(0);
-    let (_private_key, public_key) = generate_keypair_from_rng(&mut rng);
+    let (_private_key, public_key) = generate_keypair_from_seed([0; 32]);
 
     let mut group = c.benchmark_group("writer_multiple_layers_multiple_block_size");
     group.measurement_time(Duration::from_secs(10));
@@ -92,21 +119,27 @@ pub fn writer_multiple_layers_multiple_block_size(c: &mut Criterion) {
 
         let data: Vec<u8> = Alphanumeric.sample_iter(&mut rng).take(*size).collect();
 
-        for layers in &LAYERS_POSSIBILITIES {
+        for (compression, encryption) in &LAYERS_POSSIBILITIES {
             // Create an archive
             let file = Vec::new();
-            let mut config = ArchiveWriterConfig::new();
-            config
-                .enable_layer(*layers)
-                .add_public_keys(&[public_key.clone()]);
-            let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
 
-            let id = mla.start_file("file").unwrap();
+            let mut mla = ArchiveWriter::from_config(
+                file,
+                layers_to_config(&(*compression, *encryption), &public_key),
+            )
+            .expect("Writer init failed");
+
+            let id = mla
+                .start_entry(EntryName::from_path("file").unwrap())
+                .unwrap();
             group.bench_with_input(
-                BenchmarkId::new(format!("{layers:?}"), size),
+                BenchmarkId::new(
+                    format!("compression: {compression}, encryption: {encryption}"),
+                    size,
+                ),
                 size,
                 |b, &_size| {
-                    b.iter(|| mla.append_file_content(id, data.len() as u64, data.as_slice()));
+                    b.iter(|| mla.append_entry_content(id, data.len() as u64, data.as_slice()));
                 },
             );
         }
@@ -136,19 +169,19 @@ pub fn multiple_compression_quality(c: &mut Criterion) {
 
         // Create an archive
         let file = Vec::new();
-        let mut config = ArchiveWriterConfig::new();
-        config
-            .enable_layer(Layers::COMPRESS)
+        let config = ArchiveWriterConfig::without_encryption()
             .with_compression_level(quality)
             .unwrap();
         let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
 
-        let id = mla.start_file("file").unwrap();
+        let id = mla
+            .start_entry(EntryName::from_path("file").unwrap())
+            .unwrap();
         group.bench_with_input(
             BenchmarkId::new(format!("CompressionLevel {quality}"), size),
             &size,
             |b, &_size| {
-                b.iter(|| mla.append_file_content(id, data.len() as u64, data.as_slice()));
+                b.iter(|| mla.append_entry_content(id, data.len() as u64, data.as_slice()));
             },
         );
     }
@@ -160,12 +193,15 @@ pub fn multiple_compression_quality(c: &mut Criterion) {
 ///
 /// This function is used to measure only the read time without the cost of
 /// creation nor file getting
-fn read_one_file_by_chunk(iters: u64, size: u64, layers: Layers) -> Duration {
+fn read_one_file_by_chunk(iters: u64, size: u64, compression: bool, encryption: bool) -> Duration {
     // Prepare data
-    let mut mla_read = build_archive_reader(1, size * iters, layers);
+    let mut mla_read = build_archive_reader(1, size * iters, compression, encryption);
 
     // Get the file (costly as `seek` are implied)
-    let subfile = mla_read.get_file("file_0".to_string()).unwrap().unwrap();
+    let subfile = mla_read
+        .get_entry(EntryName::from_path("file_0").unwrap())
+        .unwrap()
+        .unwrap();
 
     // Read iters * size bytes
     let start = Instant::now();
@@ -185,10 +221,18 @@ pub fn reader_multiple_layers_multiple_block_size(c: &mut Criterion) {
     for size in SIZE_LIST.iter() {
         group.throughput(Throughput::Bytes(*size as u64));
 
-        for layers in &LAYERS_POSSIBILITIES {
-            group.bench_function(BenchmarkId::new(format!("{layers:?}"), size), move |b| {
-                b.iter_custom(|iters| read_one_file_by_chunk(iters, *size as u64, *layers))
-            });
+        for (compression, encryption) in &LAYERS_POSSIBILITIES {
+            group.bench_function(
+                BenchmarkId::new(
+                    format!("compression: {compression}, encryption: {encryption}"),
+                    size,
+                ),
+                move |b| {
+                    b.iter_custom(|iters| {
+                        read_one_file_by_chunk(iters, *size as u64, *compression, *encryption)
+                    })
+                },
+            );
         }
     }
     group.finish();
@@ -199,15 +243,20 @@ pub fn reader_multiple_layers_multiple_block_size(c: &mut Criterion) {
 ///
 /// This function is used to measure only the get_file + read time without the
 /// cost of archive creation
-fn iter_read_multifiles_random(iters: u64, size: u64, layers: Layers) -> Duration {
-    let mut mla_read = build_archive_reader(iters, size, layers);
+fn iter_read_multifiles_random(
+    iters: u64,
+    size: u64,
+    compression: bool,
+    encryption: bool,
+) -> Duration {
+    let mut mla_read = build_archive_reader(iters, size, compression, encryption);
 
     let mut rng = ChaChaRng::seed_from_u64(0);
     // Measure the time needed to get and read a file
     let start = Instant::now();
     for i in sample(&mut rng, iters as usize, iters as usize).iter() {
         let subfile = mla_read
-            .get_file(format!("file_{i}").to_string())
+            .get_entry(EntryName::from_path(format!("file_{i}")).unwrap())
             .unwrap()
             .unwrap();
         let mut src = subfile.data;
@@ -226,10 +275,18 @@ pub fn reader_multiple_layers_multiple_block_size_multifiles_random(c: &mut Crit
     for size in SIZE_LIST.iter() {
         group.throughput(Throughput::Bytes(*size as u64));
 
-        for layers in &LAYERS_POSSIBILITIES {
-            group.bench_function(BenchmarkId::new(format!("{layers:?}"), size), move |b| {
-                b.iter_custom(|iters| iter_read_multifiles_random(iters, *size as u64, *layers))
-            });
+        for (compression, encryption) in &LAYERS_POSSIBILITIES {
+            group.bench_function(
+                BenchmarkId::new(
+                    format!("compression: {compression}, encryption: {encryption}"),
+                    size,
+                ),
+                move |b| {
+                    b.iter_custom(|iters| {
+                        iter_read_multifiles_random(iters, *size as u64, *compression, *encryption)
+                    })
+                },
+            );
         }
     }
     group.finish();
@@ -240,13 +297,18 @@ pub fn reader_multiple_layers_multiple_block_size_multifiles_random(c: &mut Crit
 ///
 /// This function is used to measure only `linear_extract` time without the cost
 /// of archive creation
-fn iter_decompress_multifiles_linear(iters: u64, size: u64, layers: Layers) -> Duration {
-    let mut mla_read = build_archive_reader(iters, size, layers);
+fn iter_decompress_multifiles_linear(
+    iters: u64,
+    size: u64,
+    compression: bool,
+    encryption: bool,
+) -> Duration {
+    let mut mla_read = build_archive_reader(iters, size, compression, encryption);
 
-    let fnames: Vec<String> = mla_read.list_files().unwrap().cloned().collect();
+    let fnames: Vec<EntryName> = mla_read.list_entries().unwrap().cloned().collect();
     // Measure the time needed to get and read a file
     // Prepare output
-    let mut export: HashMap<&String, io::Sink> =
+    let mut export: HashMap<&EntryName, io::Sink> =
         fnames.iter().map(|fname| (fname, io::sink())).collect();
     let start = Instant::now();
     linear_extract(&mut mla_read, &mut export).unwrap();
@@ -266,12 +328,23 @@ pub fn reader_multiple_layers_multiple_block_size_multifiles_linear(c: &mut Crit
     for size in SIZE_LIST.iter() {
         group.throughput(Throughput::Bytes(*size as u64));
 
-        for layers in &LAYERS_POSSIBILITIES {
-            group.bench_function(BenchmarkId::new(format!("{layers:?}"), size), move |b| {
-                b.iter_custom(|iters| {
-                    iter_decompress_multifiles_linear(iters, *size as u64, *layers)
-                })
-            });
+        for (compression, encryption) in &LAYERS_POSSIBILITIES {
+            group.bench_function(
+                BenchmarkId::new(
+                    format!("compression: {compression}, encryption: {encryption}"),
+                    size,
+                ),
+                move |b| {
+                    b.iter_custom(|iters| {
+                        iter_decompress_multifiles_linear(
+                            iters,
+                            *size as u64,
+                            *compression,
+                            *encryption,
+                        )
+                    })
+                },
+            );
         }
     }
     group.finish();
@@ -280,21 +353,20 @@ pub fn reader_multiple_layers_multiple_block_size_multifiles_linear(c: &mut Crit
 /// Create an archive then repair it.
 ///
 /// Return the time taken by the repair operation
-fn repair_archive(iters: u64, size: u64, layers: Layers) -> Duration {
-    let (data, config) = build_archive(iters, size, layers);
+fn repair_archive(iters: u64, size: u64, compression: bool, encryption: bool) -> Duration {
+    let (data, config) = build_archive(iters, size, compression, encryption);
     let buf = Cursor::new(data);
     let dest = Vec::new();
 
     // No need to truncate the data, repair the whole file
-    let mut mla_repair = ArchiveFailSafeReader::from_config(buf, config).unwrap();
+    let mut mla_repair = TruncatedArchiveReader::from_config(buf, config).unwrap();
     // Avoid any layers to speed up writing, as this is not the measurement target
-    let mut writer_config = ArchiveWriterConfig::new();
-    writer_config.set_layers(Layers::EMPTY);
-    let mut mla_output = ArchiveWriter::from_config(dest, writer_config).unwrap();
+    let writer_config = ArchiveWriterConfig::without_encryption().without_compression();
+    let mla_output = ArchiveWriter::from_config(dest, writer_config).unwrap();
 
     let start = Instant::now();
     // Measure the convert_to_archive time
-    mla_repair.convert_to_archive(&mut mla_output).unwrap();
+    mla_repair.convert_to_archive(mla_output).unwrap();
     start.elapsed()
 }
 
@@ -309,10 +381,14 @@ pub fn failsafe_multiple_layers_repair(c: &mut Criterion) {
     group.sample_size(10);
     group.throughput(Throughput::Bytes(size));
 
-    for layers in &LAYERS_POSSIBILITIES {
-        group.bench_function(BenchmarkId::new(format!("{layers:?}"), size), move |b| {
-            b.iter_custom(|iters| repair_archive(iters, size, *layers))
-        });
+    for (compression, encryption) in &LAYERS_POSSIBILITIES {
+        group.bench_function(
+            BenchmarkId::new(
+                format!("compression: {compression}, encryption: {encryption}"),
+                size,
+            ),
+            move |b| b.iter_custom(|iters| repair_archive(iters, size, *compression, *encryption)),
+        );
     }
 }
 

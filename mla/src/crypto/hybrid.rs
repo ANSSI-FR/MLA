@@ -11,7 +11,8 @@ use bincode::{
 use hkdf::Hkdf;
 use kem::{Decapsulate, Encapsulate};
 use ml_kem::{KemCore, MlKem1024};
-use rand::Rng;
+use rand::{Rng, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 use rand_chacha::rand_core::CryptoRngCore;
 use sha2::Sha512;
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
@@ -66,7 +67,7 @@ const HYBRIDKEM_ASSOCIATED_DATA: &[u8; 0] = b"";
 ///   used instead of the "Dual-PRF Combiner" (also from [6]). Indeed, this combiner force the "salt" part of HKDF
 ///   to be uniformly random using an additional PRF use, ensuring the following HKDF is indeed a Dual-PRF
 ///
-/// uniformly_random_ss1 = HKDF-SHA256-Extract(
+/// uniformly_random_ss1 = HKDF-SHA512-Extract(
 ///     salt=0,
 ///     ikm=ss1
 /// )
@@ -118,7 +119,7 @@ fn combine(
 // to avoid confusion / prone-to-error code
 
 /// Per-recipient hybrid encapsulated shared secret
-struct HybridRecipientEncapsulatedKey {
+pub struct HybridRecipientEncapsulatedKey {
     ct_ml: MLKEMCiphertext,
     /// Ciphertext for DH-KEM (actually an ECC ephemeral public key)
     ct_ecc: DHKEMCiphertext,
@@ -179,7 +180,7 @@ impl<'de, Context> BorrowDecode<'de, Context> for HybridRecipientEncapsulatedKey
 /// Will be store in and load from the header
 pub struct HybridMultiRecipientEncapsulatedKey {
     /// Key wrapping for each recipient
-    recipients: Vec<HybridRecipientEncapsulatedKey>,
+    pub recipients: Vec<HybridRecipientEncapsulatedKey>,
 }
 
 impl Encode for HybridMultiRecipientEncapsulatedKey {
@@ -210,19 +211,21 @@ impl HybridMultiRecipientEncapsulatedKey {
     }
 }
 
-/// Private key for hybrid cryptography, made of
-/// - a X25519 key, for ECC (pre-quantum) cryptography
-/// - a ML-KEM 1024 key, for post-quantum cryptography
+/// Private key for hybrid cryptography.
 ///
-/// Support KEM decapsulation
+/// Made of:
+/// - an X25519 key, for ECC (pre-quantum) cryptography
+/// - an ML-KEM 1024 key, for post-quantum cryptography
+///
+/// Supports KEM decapsulation
 #[derive(Clone)]
 pub struct HybridPrivateKey {
-    pub private_key_ecc: X25519StaticSecret,
-    pub private_key_ml: MLKEMDecapsulationKey,
+    pub(crate) private_key_ecc: X25519StaticSecret,
+    pub(crate) private_key_ml: MLKEMDecapsulationKey,
 }
 
-impl Zeroize for HybridPrivateKey {
-    fn zeroize(&mut self) {
+impl Drop for HybridPrivateKey {
+    fn drop(&mut self) {
         self.private_key_ecc.zeroize();
         // ml-kem zeroization is done natively on drop cf. https://github.com/RustCrypto/KEMs/commit/a75d842b697aa54477d017c0c7c5da661e689be3
     }
@@ -275,13 +278,15 @@ impl Decapsulate<HybridMultiRecipientEncapsulatedKey, HybridKemSharedSecret> for
     }
 }
 
-/// Public key for hybrid cryptography, made of
-/// - a X25519 key, for ECC (pre-quantum) cryptography
-/// - a ML-KEM 1024 key, for post-quantum cryptography
+/// Public key for hybrid cryptography
+///
+/// Made of:
+/// - an X25519 key, for ECC (pre-quantum) cryptography
+/// - an ML-KEM 1024 key, for post-quantum cryptography
 #[derive(Clone)]
 pub struct HybridPublicKey {
-    pub public_key_ecc: X25519PublicKey,
-    pub public_key_ml: MLKEMEncapsulationKey,
+    pub(crate) public_key_ecc: X25519PublicKey,
+    pub(crate) public_key_ml: MLKEMEncapsulationKey,
 }
 
 /// Public keys for multiple recipients, used for hybrid cryptography
@@ -350,8 +355,18 @@ impl Encapsulate<HybridMultiRecipientEncapsulatedKey, HybridKemSharedSecret>
     }
 }
 
+/// WARNING: the seed is thus as secret as the private key.
+/// If provided, it should be a cryptographically secure random.
+/// You should probably rather use the `generate_keypair` function.
+///
+/// Generate an Hybrid key pair using the provided seed
+pub fn generate_keypair_from_seed(seed: [u8; 32]) -> (HybridPrivateKey, HybridPublicKey) {
+    let mut csprng = ChaCha20Rng::from_seed(seed);
+    generate_keypair_from_rng(&mut csprng)
+}
+
 /// Generate an Hybrid key pair using the provided csprng
-pub fn generate_keypair_from_rng(
+fn generate_keypair_from_rng(
     mut csprng: impl CryptoRngCore,
 ) -> (HybridPrivateKey, HybridPublicKey) {
     let private_key_ecc = X25519StaticSecret::random_from_rng(&mut csprng);

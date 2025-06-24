@@ -9,6 +9,7 @@ edition = "2024"
 [dependencies]
 afl = "0.15"
 bincode = "2.0"
+bitflags = { version = "2.9", default-features = false }
 mla = { path = "../mla" }
 
 [lints.rust]

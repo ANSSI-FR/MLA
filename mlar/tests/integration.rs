@@ -8,12 +8,28 @@ use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, File, metadata, read_dir};
 use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use tar::Archive;
 
 const SIZE_FILE1: usize = 10 * 1024 * 1024;
 const SIZE_FILE2: usize = 10 * 1024 * 1024;
 const UTIL: &str = "mlar";
+
+fn normalize(path: &Path) -> PathBuf {
+    let mut stack = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::Prefix(_) => (),
+            Component::RootDir => (),
+            Component::CurDir => (),
+            Component::ParentDir => {
+                stack.pop();
+            }
+            Component::Normal(os_str) => stack.push(os_str),
+        }
+    }
+    stack
+}
 
 struct TestFS {
     // Files ordered by names
@@ -134,7 +150,12 @@ fn file_list_append_from_dir(dir: &Path, file_list: &mut Vec<String>) {
         if new_path.is_dir() {
             file_list_append_from_dir(&new_path, file_list);
         } else {
-            file_list.push(new_path.to_string_lossy().to_string());
+            file_list.push(
+                normalize(&new_path)
+                    .to_string_lossy()
+                    .replace('\\', "/")
+                    .to_string(),
+            );
         }
     }
 }
@@ -220,11 +241,21 @@ fn test_create_filelist_stdin() {
     cmd.arg("-");
     println!("{cmd:?}");
 
+    let mut file_list_stdin = String::new();
+    for file in &testfs.files {
+        file_list_stdin.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
+    }
     let mut file_list = String::new();
     for file in &testfs.files {
-        file_list.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
+        file_list.push_str(
+            format!(
+                "{}\n",
+                normalize(file.path()).to_string_lossy().replace('\\', "/")
+            )
+            .as_str(),
+        );
     }
-    cmd.write_stdin(String::from(&file_list));
+    cmd.write_stdin(String::from(&file_list_stdin));
     println!("{file_list:?}");
     let assert = cmd.assert();
     assert.success().stderr(String::from(&file_list));
@@ -263,7 +294,13 @@ fn test_create_list_tar() {
     let mut file_list = String::new();
     for file in &testfs.files {
         cmd.arg(file.path());
-        file_list.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
+        file_list.push_str(
+            format!(
+                "{}\n",
+                normalize(file.path()).to_string_lossy().replace('\\', "/")
+            )
+            .as_str(),
+        );
     }
 
     println!("{cmd:?}");
@@ -323,12 +360,20 @@ fn test_truncated_repair_list_tar() {
     let mut file_list_no_last = String::new(); // Sorted by name
     for file in &testfs.files {
         if file.path() != testfs.files_archive_order.last().unwrap() {
-            file_list_no_last.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
+            file_list_no_last.push_str(
+                format!(
+                    "{}\n",
+                    normalize(file.path()).to_string_lossy().replace('\\', "/")
+                )
+                .as_str(),
+            );
         }
     }
     for path in &testfs.files_archive_order {
         cmd.arg(path);
-        file_list.push_str(format!("{}\n", path.to_string_lossy()).as_str());
+        file_list.push_str(
+            format!("{}\n", normalize(path).to_string_lossy().replace('\\', "/")).as_str(),
+        );
     }
 
     println!("{cmd:?}");
@@ -457,7 +502,13 @@ fn test_multiple_keys() {
     let mut file_list = String::new();
     for file in &testfs.files {
         cmd.arg(file.path());
-        file_list.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
+        file_list.push_str(
+            format!(
+                "{}\n",
+                normalize(file.path()).to_string_lossy().replace('\\', "/")
+            )
+            .as_str(),
+        );
     }
 
     println!("{cmd:?}");
@@ -532,7 +583,13 @@ fn test_multiple_compression_level() {
         let mut file_list = String::new();
         for file in &testfs.files {
             cmd.arg(file.path());
-            file_list.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
+            file_list.push_str(
+                format!(
+                    "{}\n",
+                    normalize(file.path()).to_string_lossy().replace('\\', "/")
+                )
+                .as_str(),
+            );
         }
 
         println!("{cmd:?}");
@@ -550,6 +607,7 @@ fn test_multiple_compression_level() {
         // `mlar to-tar -i {src} -o {tar_name}`
         let mut cmd = Command::cargo_bin(UTIL).unwrap();
         cmd.arg("to-tar")
+            .arg("--accept-unencrypted")
             .arg("-i")
             .arg(src.path())
             .arg("-o")
@@ -589,7 +647,13 @@ fn test_convert() {
     let mut file_list = String::new();
     for file in &testfs.files {
         cmd.arg(file.path());
-        file_list.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
+        file_list.push_str(
+            format!(
+                "{}\n",
+                normalize(file.path()).to_string_lossy().replace('\\', "/")
+            )
+            .as_str(),
+        );
     }
 
     println!("{cmd:?}");
@@ -612,7 +676,9 @@ fn test_convert() {
 
     println!("{cmd:?}");
     let assert = cmd.assert();
-    assert.success().stderr(String::from(&file_list));
+    assert
+        .success()
+        .stderr(String::from(&file_list).replace("/", "%2f"));
 
     // Hopefully, compressed must be smaller than without compression
     let size_output = metadata(mlar_file.path()).unwrap().len();
@@ -659,7 +725,13 @@ fn test_stdio() {
     let mut file_list = String::new();
     for file in &testfs.files {
         cmd.arg(file.path());
-        file_list.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
+        file_list.push_str(
+            format!(
+                "{}\n",
+                normalize(file.path()).to_string_lossy().replace('\\', "/")
+            )
+            .as_str(),
+        );
     }
 
     println!("{cmd:?}");
@@ -725,7 +797,9 @@ fn test_multi_fileorders() {
         let mut file_list = String::new();
         for file in list {
             cmd.arg(file);
-            file_list.push_str(format!("{}\n", file.to_string_lossy()).as_str());
+            file_list.push_str(
+                format!("{}\n", normalize(file).to_string_lossy().replace('\\', "/")).as_str(),
+            );
         }
 
         println!("{cmd:?}");
@@ -763,7 +837,13 @@ fn test_verbose_listing() {
     let mut file_list = String::new();
     for file in &testfs.files {
         cmd.arg(file.path());
-        file_list.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
+        file_list.push_str(
+            format!(
+                "{}\n",
+                normalize(file.path()).to_string_lossy().replace('\\', "/")
+            )
+            .as_str(),
+        );
     }
 
     println!("{cmd:?}");
@@ -772,7 +852,10 @@ fn test_verbose_listing() {
 
     // `mlar list -i output.mla`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
-    cmd.arg("list").arg("-i").arg(mlar_file.path());
+    cmd.arg("list")
+        .arg("--accept-unencrypted")
+        .arg("-i")
+        .arg(mlar_file.path());
 
     println!("{cmd:?}");
     let assert = cmd.assert();
@@ -780,7 +863,11 @@ fn test_verbose_listing() {
 
     // `mlar list -v -i output.mla`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
-    cmd.arg("list").arg("-v").arg("-i").arg(mlar_file.path());
+    cmd.arg("list")
+        .arg("--accept-unencrypted")
+        .arg("-v")
+        .arg("-i")
+        .arg(mlar_file.path());
 
     println!("{cmd:?}");
     let assert = cmd.assert();
@@ -788,7 +875,11 @@ fn test_verbose_listing() {
 
     // `mlar list -vv -i output.mla`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
-    cmd.arg("list").arg("-vv").arg("-i").arg(mlar_file.path());
+    cmd.arg("list")
+        .arg("--accept-unencrypted")
+        .arg("-vv")
+        .arg("-i")
+        .arg(mlar_file.path());
 
     println!("{cmd:?}");
     let assert = cmd.assert();
@@ -807,17 +898,18 @@ fn test_extract() {
     let mut file_list = String::new();
     for file in &testfs.files {
         cmd.arg(file.path());
-        file_list.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
+        file_list.push_str(
+            format!(
+                "{}\n",
+                normalize(file.path()).to_string_lossy().replace('\\', "/")
+            )
+            .as_str(),
+        );
     }
 
     println!("{cmd:?}");
     let assert = cmd.assert();
     assert.success().stderr(String::from(&file_list));
-
-    let mut file_list = String::new();
-    for file in &testfs.files {
-        file_list.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
-    }
 
     // Test global (with all files)
 
@@ -826,6 +918,7 @@ fn test_extract() {
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("extract")
         .arg("-v")
+        .arg("--accept-unencrypted")
         .arg("-i")
         .arg(mlar_file.path())
         .arg("-o")
@@ -845,6 +938,7 @@ fn test_extract() {
     let output_dir = TempDir::new().unwrap();
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("extract")
+        .arg("--accept-unencrypted")
         .arg("-v")
         .arg("-i")
         .arg(mlar_file.path())
@@ -855,7 +949,7 @@ fn test_extract() {
     let assert = cmd.assert();
     let expected_output = format!(
         "Extracting the whole archive using a linear extraction\n{}",
-        file_list
+        file_list,
     );
     assert.success().stdout(expected_output);
 
@@ -881,17 +975,19 @@ fn test_extract() {
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("extract")
         .arg("-v")
+        .arg("--accept-unencrypted")
         .arg("-i")
         .arg(mlar_file.path())
         .arg("-o")
         .arg(output_dir.path())
-        .arg(one_filename);
+        .arg(normalize(one_filename).to_string_lossy().replace('\\', "/"));
 
     println!("{cmd:?}");
     let assert = cmd.assert();
-    assert
-        .success()
-        .stdout(format!("{}\n", one_filename.to_string_lossy()));
+    assert.success().stdout(format!(
+        "{}\n",
+        normalize(one_filename).to_string_lossy().replace('\\', "/")
+    ));
 
     ensure_directory_content(output_dir.path(), &one_file);
 
@@ -901,6 +997,7 @@ fn test_extract() {
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("extract")
         .arg("-v")
+        .arg("--accept-unencrypted")
         .arg("-i")
         .arg(mlar_file.path())
         .arg("-o")
@@ -910,9 +1007,10 @@ fn test_extract() {
 
     println!("{cmd:?}");
     let assert = cmd.assert();
-    assert
-        .success()
-        .stdout(format!("{}\n", one_filename.to_string_lossy()));
+    assert.success().stdout(format!(
+        "{}\n",
+        normalize(one_filename).to_string_lossy().replace('\\', "/")
+    ));
 
     ensure_directory_content(output_dir.path(), &one_file);
 }
@@ -929,7 +1027,13 @@ fn test_cat() {
     let mut file_list = String::new();
     for file in &testfs.files {
         cmd.arg(file.path());
-        file_list.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
+        file_list.push_str(
+            format!(
+                "{}\n",
+                normalize(file.path()).to_string_lossy().replace('\\', "/")
+            )
+            .as_str(),
+        );
     }
 
     println!("{cmd:?}");
@@ -941,7 +1045,8 @@ fn test_cat() {
     cmd.arg("cat")
         .arg("-i")
         .arg(mlar_file.path())
-        .arg(&testfs.files_archive_order[2]);
+        .arg("--accept-unencrypted")
+        .arg(normalize(&testfs.files_archive_order[2]));
 
     println!("{cmd:?}");
     let assert = cmd.assert();
@@ -978,7 +1083,13 @@ fn test_keygen() {
     let mut file_list = String::new();
     for file in &testfs.files {
         cmd.arg(file.path());
-        file_list.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
+        file_list.push_str(
+            format!(
+                "{}\n",
+                normalize(file.path()).to_string_lossy().replace('\\', "/")
+            )
+            .as_str(),
+        );
     }
 
     println!("{cmd:?}");
@@ -1174,7 +1285,13 @@ fn test_verbose_info() {
     let mut file_list = String::new();
     for file in &testfs.files {
         cmd.arg(file.path());
-        file_list.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
+        file_list.push_str(
+            format!(
+                "{}\n",
+                normalize(file.path()).to_string_lossy().replace('\\', "/")
+            )
+            .as_str(),
+        );
     }
 
     println!("{cmd:?}");
@@ -1232,7 +1349,13 @@ fn test_no_open_on_encrypt() {
     let mut file_list = String::new();
     for file in &testfs.files {
         cmd.arg(file.path());
-        file_list.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
+        file_list.push_str(
+            format!(
+                "{}\n",
+                normalize(file.path()).to_string_lossy().replace('\\', "/")
+            )
+            .as_str(),
+        );
     }
 
     println!("{cmd:?}");
@@ -1296,16 +1419,21 @@ fn test_extract_lot_files() {
     for file in &testfs.files {
         file_list.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
     }
+    let mut file_listing = String::new();
+    for file in &testfs.files {
+        file_listing.push_str(
+            format!(
+                "{}\n",
+                normalize(file.path()).to_string_lossy().replace('\\', "/")
+            )
+            .as_str(),
+        );
+    }
     cmd.write_stdin(String::from(&file_list));
 
     println!("{:?}", cmd);
     let assert = cmd.assert();
-    assert.success().stderr(String::from(&file_list));
-
-    let mut file_list = String::new();
-    for file in &testfs.files {
-        file_list.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
-    }
+    assert.success().stderr(String::from(&file_listing));
 
     // Test global (with all files)
 
@@ -1314,6 +1442,7 @@ fn test_extract_lot_files() {
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("extract")
         .arg("-v")
+        .arg("--accept-unencrypted")
         .arg("-i")
         .arg(mlar_file.path())
         .arg("-o")
@@ -1323,7 +1452,7 @@ fn test_extract_lot_files() {
 
     println!("{:?}", cmd);
     let assert = cmd.assert();
-    assert.success().stdout(file_list.clone());
+    assert.success().stdout(file_listing.clone());
 
     ensure_directory_content(output_dir.path(), &testfs.files);
 
@@ -1334,6 +1463,7 @@ fn test_extract_lot_files() {
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("extract")
         .arg("-v")
+        .arg("--accept-unencrypted")
         .arg("-i")
         .arg(mlar_file.path())
         .arg("-o")
@@ -1343,7 +1473,7 @@ fn test_extract_lot_files() {
     let assert = cmd.assert();
     let expected_output = format!(
         "Extracting the whole archive using a linear extraction\n{}",
-        file_list
+        &file_listing
     );
     assert.success().stdout(expected_output);
 
@@ -1369,17 +1499,19 @@ fn test_extract_lot_files() {
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("extract")
         .arg("-v")
+        .arg("--accept-unencrypted")
         .arg("-i")
         .arg(mlar_file.path())
         .arg("-o")
         .arg(output_dir.path())
-        .arg(one_filename);
+        .arg(normalize(one_filename));
 
     println!("{:?}", cmd);
     let assert = cmd.assert();
-    assert
-        .success()
-        .stdout(format!("{}\n", one_filename.to_string_lossy()));
+    assert.success().stdout(format!(
+        "{}\n",
+        normalize(one_filename).to_string_lossy().replace('\\', "/")
+    ));
 
     ensure_directory_content(output_dir.path(), &one_file);
 }

@@ -14,14 +14,12 @@ use crate::layers::traits::{
 use std::io;
 use std::io::{BufReader, Cursor, Read, Seek, SeekFrom, Write};
 
-use crate::config::{ArchiveReaderConfig, ArchiveWriterConfig};
 use crate::errors::ConfigError;
 use bincode::{
     BorrowDecode, Decode, Encode,
     de::{BorrowDecoder, Decoder},
     error::DecodeError,
 };
-use hpke::HpkeError;
 use kem::{Decapsulate, Encapsulate};
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
@@ -164,7 +162,7 @@ impl<'de, Context> BorrowDecode<'de, Context> for EncryptionPersistentConfig {
 
 #[derive(Default)]
 /// ArchiveWriterConfig specific configuration for the Encryption, to let API users specify encryption options
-pub struct EncryptionConfig {
+pub(crate) struct EncryptionConfig {
     /// Public keys of recipients
     public_keys: HybridMultiRecipientsPublicKeys,
     pub(crate) rng: EncapsulationRNG,
@@ -193,15 +191,6 @@ impl Default for EncapsulationRNG {
 }
 
 impl EncryptionConfig {
-    /// Consistency check
-    pub fn check(&self) -> Result<(), ConfigError> {
-        if self.public_keys.keys.is_empty() {
-            Err(ConfigError::NoRecipients)
-        } else {
-            Ok(())
-        }
-    }
-
     /// Create a persistent version of the configuration to be reloaded
     ///    and the internal configuration, containing the cryptographic material
     ///
@@ -232,12 +221,9 @@ impl EncryptionConfig {
             cryptographic_material,
         ))
     }
-}
 
-impl ArchiveWriterConfig {
-    /// Set public keys to use
-    pub fn add_public_keys(&mut self, keys: &[HybridPublicKey]) -> &mut ArchiveWriterConfig {
-        self.encrypt.public_keys.keys.extend_from_slice(keys);
+    pub(crate) fn add_public_keys(&mut self, keys: &[HybridPublicKey]) -> &mut EncryptionConfig {
+        self.public_keys.keys.extend_from_slice(keys);
         self
     }
 }
@@ -252,6 +238,10 @@ pub struct EncryptionReaderConfig {
 }
 
 impl EncryptionReaderConfig {
+    pub(crate) fn set_private_keys(&mut self, private_keys: &[HybridPrivateKey]) {
+        self.private_keys = private_keys.to_vec();
+    }
+
     pub fn load_persistent(
         &mut self,
         config: EncryptionPersistentConfig,
@@ -277,19 +267,6 @@ impl EncryptionReaderConfig {
 
         // A key has been found, check if it is the one expected
         check_key_commitment(key, nonce, &config.key_commitment)
-    }
-}
-
-impl ArchiveReaderConfig {
-    /// Set private key to use
-    pub fn add_private_keys(&mut self, keys: &[HybridPrivateKey]) -> &mut ArchiveReaderConfig {
-        self.encrypt.private_keys.extend_from_slice(keys);
-        self
-    }
-
-    /// Retrieve key and nonce used for encryption
-    pub fn get_encrypt_parameters(&self) -> Option<(Key, Nonce)> {
-        self.encrypt.encrypt_parameters
     }
 }
 
@@ -327,10 +304,7 @@ impl<'a, W: 'a + InnerWriterTrait> EncryptionLayerWriter<'a, W> {
 
     fn renew_cipher_aad(&mut self, aad: &[u8]) -> Result<Tag, Error> {
         // Prepare a new cipher
-        self.current_ctr = self
-            .current_ctr
-            .checked_add(1)
-            .ok_or(HpkeError::MessageLimitReached)?;
+        self.current_ctr = self.current_ctr.checked_add(1).ok_or(Error::HPKEError)?;
         self.current_chunk_offset = 0;
         let cipher = AesGcm256::new(
             &self.key,
@@ -351,15 +325,7 @@ impl<'a, W: 'a + InnerWriterTrait> EncryptionLayerWriter<'a, W> {
 }
 
 impl<'a, W: 'a + InnerWriterTrait> LayerWriter<'a, W> for EncryptionLayerWriter<'a, W> {
-    fn into_inner(self) -> Option<InnerWriterType<'a, W>> {
-        Some(self.inner)
-    }
-
-    fn into_raw(self: Box<Self>) -> W {
-        self.inner.into_raw()
-    }
-
-    fn finalize(&mut self) -> Result<(), Error> {
+    fn finalize(mut self: Box<Self>) -> Result<W, Error> {
         // Write the tag of the current chunk
         // Get previous chunk tag and initialize final block content cipher context with specific AAD
         let last_content_tag = self.last_renew_cipher()?;
@@ -570,10 +536,6 @@ impl<'a, R: 'a + Read + Seek> EncryptionLayerReader<'a, R> {
 }
 
 impl<'a, R: 'a + InnerReaderTrait> LayerReader<'a, R> for EncryptionLayerReader<'a, R> {
-    fn into_inner(self) -> Option<Box<dyn 'a + LayerReader<'a, R>>> {
-        Some(self.inner)
-    }
-
     fn into_raw(self: Box<Self>) -> R {
         self.inner.into_raw()
     }
@@ -704,15 +666,7 @@ impl<'a, R: 'a + Read> EncryptionLayerFailSafeReader<'a, R> {
     }
 }
 
-impl<'a, R: 'a + Read> LayerFailSafeReader<'a, R> for EncryptionLayerFailSafeReader<'a, R> {
-    fn into_inner(self) -> Option<Box<dyn 'a + LayerFailSafeReader<'a, R>>> {
-        Some(self.inner)
-    }
-
-    fn into_raw(self: Box<Self>) -> R {
-        self.inner.into_raw()
-    }
-}
+impl<'a, R: 'a + Read> LayerFailSafeReader<'a, R> for EncryptionLayerFailSafeReader<'a, R> {}
 
 impl<R: Read> Read for EncryptionLayerFailSafeReader<'_, R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
@@ -725,7 +679,7 @@ impl<R: Read> Read for EncryptionLayerFailSafeReader<'_, R> {
             self.current_chunk_number = self
                 .current_chunk_number
                 .checked_add(1)
-                .ok_or(Error::HPKEError(HpkeError::MessageLimitReached))?;
+                .ok_or(Error::HPKEError)?;
             self.current_chunk_offset = 0;
             self.cipher = AesGcm256::new(
                 &self.key,
@@ -781,9 +735,8 @@ mod tests {
         );
         encrypt_w.write_all(&FAKE_FILE[..21]).unwrap();
         encrypt_w.write_all(&FAKE_FILE[21..]).unwrap();
-        encrypt_w.finalize().unwrap();
 
-        let out = encrypt_w.into_raw();
+        let out = encrypt_w.finalize().unwrap();
         assert_eq!(out.len(), FAKE_FILE.len() + TAG_LENGTH + FINAL_BLOCK_SIZE);
         assert_ne!(out[..FAKE_FILE.len()], FAKE_FILE);
         out
@@ -907,9 +860,8 @@ mod tests {
         let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(0);
         let data: Vec<u8> = Alphanumeric.sample_iter(&mut rng).take(length).collect();
         encrypt_w.write_all(&data).unwrap();
-        encrypt_w.finalize().unwrap();
+        let out = encrypt_w.finalize().unwrap();
 
-        let out = encrypt_w.into_raw();
         assert_eq!(out.len(), length + 2 * TAG_LENGTH + FINAL_BLOCK_SIZE);
         assert_ne!(&out[..length], data.as_slice());
 

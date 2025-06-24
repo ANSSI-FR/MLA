@@ -1,23 +1,25 @@
 use std::{
     collections::HashMap,
+    hash::{DefaultHasher, Hash, Hasher},
     io::{self, Read},
+    path::PathBuf,
     sync::Mutex,
 };
-
-use ml_kem::EncodedSizeUser;
-use mla::crypto::mlakey_parser::{
+use mla::crypto::mlakey::{
     parse_mlakey_privkey_der, parse_mlakey_privkey_pem, parse_mlakey_pubkey_der,
     parse_mlakey_pubkey_pem,
 };
 use mla::{
-    ArchiveReader, ArchiveWriter, Layers,
+    ArchiveReader, ArchiveWriter,
     config::{ArchiveReaderConfig, ArchiveWriterConfig},
-    crypto::hybrid::{HybridPrivateKey, HybridPublicKey},
+    crypto::mlakey::{HybridPrivateKey, HybridPublicKey},
 };
+use mla::entry::EntryName as RustEntryName;
 use pyo3::{
     create_exception,
     exceptions::{PyKeyError, PyRuntimeError, PyTypeError},
     prelude::*,
+    pyclass::CompareOp,
     types::{PyBytes, PyString, PyTuple, PyType},
 };
 
@@ -30,6 +32,7 @@ use pyo3::{
 enum WrappedError {
     WrappedMLA(mla::errors::Error),
     WrappedPy(PyErr),
+    EntryNameError
 }
 
 // Add a dedicated MLA Exception (mla.MLAError) and associated sub-Exception
@@ -40,7 +43,7 @@ create_exception!(
     mla,
     UnsupportedVersion,
     MLAError,
-    "Unsupported version, must be 1"
+    "Unsupported version, must be 2"
 );
 create_exception!(
     mla,
@@ -147,6 +150,8 @@ create_exception!(
 );
 create_exception!(mla, HPKEError, MLAError, "Error during HPKE computation");
 create_exception!(mla, InvalidLastTag, MLAError, "Wrong last block tag");
+create_exception!(mla, EncryptionAskedButNotMarkedPresent, MLAError, "User asked for encryption but archive was not marked as encrypted");
+create_exception!(mla, EntryNameError, MLAError, "An MLA entry name is invalid for the given operation");
 
 // Convert potentials errors to the wrapped type
 
@@ -171,6 +176,12 @@ impl From<std::io::Error> for WrappedError {
 impl From<PyErr> for WrappedError {
     fn from(err: PyErr) -> Self {
         WrappedError::WrappedPy(err)
+    }
+}
+
+impl From<mla::entry::EntryNameError> for WrappedError {
+    fn from(_err: mla::entry::EntryNameError) -> Self {
+        WrappedError::EntryNameError
     }
 }
 
@@ -214,8 +225,8 @@ impl From<WrappedError> for PyErr {
                 )),
                 mla::errors::Error::WrongReaderState(msg) => PyErr::new::<WrongReaderState, _>(msg),
                 mla::errors::Error::WrongWriterState(msg) => PyErr::new::<WrongWriterState, _>(msg),
-                mla::errors::Error::RandError(err) => {
-                    PyErr::new::<RandError, _>(format!("{:}", err))
+                mla::errors::Error::RandError => {
+                    PyErr::new::<RandError, _>("Rand error")
                 }
                 mla::errors::Error::PrivateKeyNeeded => PyErr::new::<PrivateKeyNeeded, _>(
                     "A Private Key is required to decrypt the encrypted cipher key",
@@ -247,14 +258,18 @@ impl From<WrappedError> for PyErr {
                 mla::errors::Error::HKDFInvalidKeyLength => {
                     PyErr::new::<HKDFInvalidKeyLength, _>("Unable to expand while using the HKDF")
                 }
-                mla::errors::Error::HPKEError(msg) => {
-                    PyErr::new::<HPKEError, _>(format!("{:}", msg))
+                mla::errors::Error::HPKEError => {
+                    PyErr::new::<HPKEError, _>("HPKE error")
                 }
                 mla::errors::Error::InvalidLastTag => {
                     PyErr::new::<InvalidLastTag, _>("Wrong last block tag")
                 }
+                mla::errors::Error::EncryptionAskedButNotMarkedPresent => {
+                    PyErr::new::<EncryptionAskedButNotMarkedPresent, _>("User asked for encryption but archive was not marked as encrypted")
+                }
             },
             WrappedError::WrappedPy(inner_err) => inner_err,
+            WrappedError::EntryNameError => PyErr::new::<EntryNameError, _>("An MLA entry name is invalid for the given operation")
         }
     }
 }
@@ -285,7 +300,7 @@ impl FileMetadata {
 
 // -------- mla.PublicKeys --------
 
-/// Represents multiple ECC and MLKEM Public Keys
+/// Represents multiple MLA Public Keys
 ///
 /// Instanciate with path (as string) or data (as bytes)
 /// PEM and DER format are supported
@@ -384,19 +399,14 @@ impl PublicKeys {
             .expect("Mutex poisoned")
             .keys
             .iter()
-            .map(|pubkey| {
-                let mut result = Vec::new();
-                result.extend(pubkey.public_key_ecc.to_bytes());
-                result.extend(pubkey.public_key_ml.as_bytes());
-                result
-            })
+            .map(|pubkey| pubkey.to_der().to_vec())
             .collect()
     }
 }
 
 // -------- mla.PrivateKeys --------
 
-/// Represents multiple ECC and MLKEM Private Keys
+/// Represents multiple MLA Private Keys
 ///
 /// Instanciate with path (as string) or data (as bytes)
 /// PEM and DER format are supported
@@ -496,12 +506,7 @@ impl PrivateKeys {
             .expect("Mutex poisoned")
             .keys
             .iter()
-            .map(|privkey| {
-                let mut result = Vec::new();
-                result.extend(privkey.private_key_ecc.to_bytes());
-                result.extend(privkey.private_key_ml.as_bytes());
-                result
-            })
+            .map(|privkey| privkey.to_der().to_vec())
             .collect()
     }
 }
@@ -515,8 +520,7 @@ const DEFAULT_COMPRESSION_LEVEL: u32 = 5;
 // `ArchiveWriterConfig`. That way, it can be used to produced many of them, as they are
 // consumed during the `ArchiveWriter` init (to avoid reusing cryptographic materials)
 struct WriterConfigInner {
-    layers: Layers,
-    compression_level: u32,
+    compression_level: Option<u32>,
     public_keys: Option<PublicKeys>,
 }
 
@@ -528,61 +532,28 @@ struct WriterConfig {
 #[pymethods]
 impl WriterConfig {
     #[new]
-    #[pyo3(signature = (layers=None, compression_level=DEFAULT_COMPRESSION_LEVEL, public_keys=None))]
+    #[pyo3(signature = (public_keys))]
     fn new(
-        layers: Option<u8>,
-        compression_level: u32,
-        public_keys: Option<PublicKeys>,
+        public_keys: PublicKeys,
     ) -> Result<Self, WrappedError> {
-        // Check parameters
-        let layers = match layers {
-            Some(layers_enabled) => Layers::from_bits(layers_enabled).ok_or(
-                mla::errors::Error::BadAPIArgument("Unknown layers".to_owned()),
-            )?,
-            None => Layers::DEFAULT,
-        };
-
-        // Check compression level is correct using a fake object
-        ArchiveWriterConfig::new().with_compression_level(compression_level)?;
 
         Ok(WriterConfig {
             inner: Mutex::new(WriterConfigInner {
-                layers,
-                compression_level,
-                public_keys,
+                compression_level: Some(DEFAULT_COMPRESSION_LEVEL),
+                public_keys: Some(public_keys),
             }),
         })
     }
 
-    #[getter]
-    fn layers(&self) -> u8 {
-        self.inner.lock().expect("Mutex poisoned").layers.bits()
-    }
-
-    /// Enable a layer
-    fn enable_layer(slf: PyRefMut<Self>, layer: u8) -> Result<PyRefMut<Self>, WrappedError> {
-        let layer = Layers::from_bits(layer).ok_or(mla::errors::Error::BadAPIArgument(
-            "Unknown layer".to_owned(),
-        ))?;
-        slf.inner.lock().expect("Mutex poisoned").layers |= layer;
-        Ok(slf)
-    }
-
-    /// Disable a layer
-    fn disable_layer(slf: PyRefMut<Self>, layer: u8) -> Result<PyRefMut<Self>, WrappedError> {
-        let layer = Layers::from_bits(layer).ok_or(mla::errors::Error::BadAPIArgument(
-            "Unknown layer".to_owned(),
-        ))?;
-        slf.inner.lock().expect("Mutex poisoned").layers &= !layer;
-        Ok(slf)
-    }
-
-    /// Set several layers at once
-    fn set_layers(slf: PyRefMut<Self>, layers: u8) -> Result<PyRefMut<Self>, WrappedError> {
-        slf.inner.lock().expect("Mutex poisoned").layers = Layers::from_bits(layers).ok_or(
-            mla::errors::Error::BadAPIArgument("Unknown layer".to_owned()),
-        )?;
-        Ok(slf)
+    #[classmethod]
+    #[pyo3(signature = ())]
+    fn without_encryption(_cls: &Bound<PyType>) -> Result<Self, WrappedError> {
+        Ok(WriterConfig {
+            inner: Mutex::new(WriterConfigInner {
+                compression_level: Some(DEFAULT_COMPRESSION_LEVEL),
+                public_keys: None,
+            }),
+        })
     }
 
     /// Set the compression level
@@ -592,46 +563,32 @@ impl WriterConfig {
         compression_level: u32,
     ) -> Result<PyRefMut<Self>, WrappedError> {
         // Check compression level is correct using a fake object
-        ArchiveWriterConfig::new().with_compression_level(compression_level)?;
+        ArchiveWriterConfig::without_encryption().with_compression_level(compression_level)?;
 
-        slf.inner.lock().expect("Mutex poisoned").compression_level = compression_level;
+        slf.inner.lock().expect("Mutex poisoned").compression_level = Some(compression_level);
         Ok(slf)
     }
 
-    #[getter]
-    fn compression_level(&self) -> u32 {
-        self.inner.lock().expect("Mutex poisoned").compression_level
-    }
-
-    /// Set public keys
-    fn set_public_keys(
+    fn without_compression(
         slf: PyRefMut<Self>,
-        public_keys: PublicKeys,
     ) -> Result<PyRefMut<Self>, WrappedError> {
-        slf.inner.lock().expect("Mutex poisoned").public_keys = Some(public_keys);
+        slf.inner.lock().expect("Mutex poisoned").compression_level = None;
         Ok(slf)
-    }
-
-    #[getter]
-    fn get_public_keys(&self) -> Option<PublicKeys> {
-        self.inner
-            .lock()
-            .expect("Mutex poisoned")
-            .public_keys
-            .clone()
     }
 }
 
 impl WriterConfig {
     /// Create an `ArchiveWriterConfig` out of the python object
     fn to_archive_writer_config(&self) -> Result<ArchiveWriterConfig, WrappedError> {
-        let mut config = ArchiveWriterConfig::new();
         let inner = self.inner.lock().expect("Mutex poisoned");
-        config.set_layers(inner.layers);
-        config.with_compression_level(inner.compression_level)?;
-        if let Some(ref public_keys) = inner.public_keys {
-            config.add_public_keys(&public_keys.inner.lock().expect("Mutex poisoned").keys);
-        }
+        let config = match inner.public_keys.as_ref() {
+            Some(public_keys) => ArchiveWriterConfig::with_public_keys(&public_keys.inner.lock().expect("Mutex poisoned").keys),
+            None => ArchiveWriterConfig::without_encryption(),
+        };
+        let config = match inner.compression_level.as_ref() {
+            Some(compression_level) => config.with_compression_level(*compression_level)?,
+            None => config.without_compression(),
+        };
         Ok(config)
     }
 }
@@ -642,6 +599,7 @@ impl WriterConfig {
 // `ArchiveReaderConfig`. That way, it can be used to produced many of them, as they are
 // consumed during the `ArchiveReader` init
 struct ReaderConfigInner {
+    accept_unencrypted: bool,
     private_keys: Option<PrivateKeys>,
 }
 
@@ -653,41 +611,46 @@ struct ReaderConfig {
 #[pymethods]
 impl ReaderConfig {
     #[new]
-    #[pyo3(signature = (private_keys=None))]
-    fn new(private_keys: Option<PrivateKeys>) -> Self {
+    #[pyo3(signature = (private_keys))]
+    fn new(private_keys: PrivateKeys) -> Self {
         ReaderConfig {
-            inner: Mutex::new(ReaderConfigInner { private_keys }),
+            inner: Mutex::new(ReaderConfigInner { accept_unencrypted: false, private_keys: Some(private_keys) }),
         }
     }
 
-    /// Set private keys
-    fn set_private_keys(
-        slf: PyRefMut<Self>,
-        private_keys: PrivateKeys,
-    ) -> Result<PyRefMut<Self>, WrappedError> {
-        slf.inner.lock().expect("Mutex poisoned").private_keys = Some(private_keys);
-        Ok(slf)
+    #[classmethod]
+    #[pyo3(signature = (private_keys))]
+    fn with_private_keys_accept_unencrypted(_cls: &Bound<PyType>, private_keys: PrivateKeys) -> Self {
+        ReaderConfig {
+            inner: Mutex::new(ReaderConfigInner { accept_unencrypted: true, private_keys: Some(private_keys) }),
+        }
     }
 
-    #[getter]
-    fn private_keys(&self) -> Option<PrivateKeys> {
-        self.inner
-            .lock()
-            .expect("Mutex poisoned")
-            .private_keys
-            .clone()
+    #[classmethod]
+    #[pyo3(signature = ())]
+    fn without_encryption(_cls: &Bound<PyType>) -> Self {
+        ReaderConfig {
+            inner: Mutex::new(ReaderConfigInner { accept_unencrypted: true, private_keys: None }),
+        }
     }
 }
 
 impl ReaderConfig {
     /// Create an `ArchiveReaderConfig` out of the python object
-    fn to_archive_reader_config(&self) -> Result<ArchiveReaderConfig, WrappedError> {
-        let mut config = ArchiveReaderConfig::new();
-        if let Some(ref private_keys) = self.inner.lock().expect("Mutex poisoned").private_keys {
-            config.add_private_keys(&private_keys.inner.lock().expect("Mutex poisoned").keys);
-            config.layers_enabled |= Layers::ENCRYPT;
+    fn to_archive_reader_config(&self) -> ArchiveReaderConfig {
+        let inner = self.inner.lock().expect("Mutex poisoned");
+        if let Some(ref private_keys) = inner.private_keys {
+            let private_keys = &private_keys.inner.lock().expect("Mutex poisoned").keys;
+            if inner.accept_unencrypted {
+                ArchiveReaderConfig::with_private_keys_accept_unencrypted(private_keys)
+            } else {
+                ArchiveReaderConfig::with_private_keys(private_keys)
+            }
+        } else if inner.accept_unencrypted {
+            ArchiveReaderConfig::without_encryption()
+        } else {
+            panic!("Given ReaderConfig API this should not happen. Please report bug")
         }
-        Ok(config)
     }
 }
 
@@ -701,79 +664,88 @@ impl ReaderConfig {
 /// `'static` lifetime for the writer. This should not be a problem as the writer is not
 /// supposed to be used after the drop of the parent object
 /// (see https://pyo3.rs/v0.24.0/class#no-lifetime-parameters)
-enum ExplicitWriters {
+enum ExplicitWriter {
     FileWriter(ArchiveWriter<'static, std::fs::File>),
 }
 
+fn finalize_if_not_already(opt_writer: &mut Option<Box<ExplicitWriter>>) -> Result<(), WrappedError> {
+    match opt_writer.take() {
+        Some(writer) => writer.finalize().map_err(WrappedError::from),
+        None => Err(mla::errors::Error::BadAPIArgument(
+            "Cannot call any API on already finalized MLAFile".to_owned(),
+        ).into())
+    }
+}
+
 /// Wrap calls to the inner type
-impl ExplicitWriters {
-    fn finalize(&mut self) -> Result<(), mla::errors::Error> {
+impl ExplicitWriter {
+    fn finalize(self) -> Result<(), mla::errors::Error> {
         match self {
-            ExplicitWriters::FileWriter(writer) => {
+            ExplicitWriter::FileWriter(writer) => {
                 writer.finalize()?;
                 Ok(())
             }
         }
     }
 
-    fn add_file<R: Read>(
+    fn add_entry<R: Read>(
         &mut self,
-        key: &str,
+        key: RustEntryName,
         size: u64,
         reader: &mut R,
     ) -> Result<(), mla::errors::Error> {
         match self {
-            ExplicitWriters::FileWriter(writer) => {
-                writer.add_file(key, size, reader)?;
+            ExplicitWriter::FileWriter(writer) => {
+                writer.add_entry(key, size, reader)?;
                 Ok(())
             }
         }
     }
 
-    fn start_file(&mut self, key: &str) -> Result<u64, mla::errors::Error> {
+    fn start_entry(&mut self, key: RustEntryName) -> Result<u64, mla::errors::Error> {
         match self {
-            ExplicitWriters::FileWriter(writer) => writer.start_file(key),
+            ExplicitWriter::FileWriter(writer) => writer.start_entry(key),
         }
     }
 
-    fn append_file_content(
+    fn append_entry_content(
         &mut self,
         id: u64,
         size: usize,
         data: &[u8],
     ) -> Result<(), mla::errors::Error> {
         match self {
-            ExplicitWriters::FileWriter(writer) => {
-                writer.append_file_content(id, size as u64, data)
+            ExplicitWriter::FileWriter(writer) => {
+                writer.append_entry_content(id, size as u64, data)
             }
         }
     }
 
-    fn end_file(&mut self, id: u64) -> Result<(), mla::errors::Error> {
+    fn end_entry(&mut self, id: u64) -> Result<(), mla::errors::Error> {
         match self {
-            ExplicitWriters::FileWriter(writer) => writer.end_file(id),
+            ExplicitWriter::FileWriter(writer) => writer.end_entry(id),
         }
     }
 }
 
-/// See `ExplicitWriters` for details
-enum ExplicitReaders {
+/// See `ExplicitWriter` for details
+enum ExplicitReader {
     FileReader(ArchiveReader<'static, std::fs::File>),
 }
 
 /// Wrap calls to the inner type
-impl ExplicitReaders {
-    fn list_files(&self) -> Result<impl Iterator<Item = &String>, mla::errors::Error> {
+impl ExplicitReader {
+    fn list_entries(&self) -> Result<impl Iterator<Item = &RustEntryName>, mla::errors::Error> {
         match self {
-            ExplicitReaders::FileReader(reader) => reader.list_files(),
+            ExplicitReader::FileReader(reader) => reader.list_entries(),
         }
     }
 }
 
 /// Opening Mode for a MLAFile
 enum OpeningModeInner {
-    Read(ExplicitReaders),
-    Write(Box<ExplicitWriters>),
+    Read(ExplicitReader),
+    Write(Option<Box<ExplicitWriter>>),
 }
 
 pub struct MLAFileInner {
@@ -796,12 +768,12 @@ impl MLAFile {
     /// ```
     fn with_reader<F, R>(&self, f: F) -> Result<R, WrappedError>
     where
-        F: FnOnce(&mut ExplicitReaders) -> Result<R, WrappedError>,
+        F: FnOnce(&mut ExplicitReader) -> Result<R, WrappedError>,
     {
         let mut inner_lock = self.inner.lock().expect("Mutex poisoned");
         match &mut inner_lock.inner {
             OpeningModeInner::Read(inner) => f(inner),
-            _ => Err(mla::errors::Error::BadAPIArgument(
+            OpeningModeInner::Write(_) => Err(mla::errors::Error::BadAPIArgument(
                 "This API is only callable in Read mode".to_owned(),
             )
             .into()),
@@ -815,65 +787,66 @@ impl MLAFile {
     /// ```
     fn with_writer<F, R>(&self, f: F) -> Result<R, WrappedError>
     where
-        F: FnOnce(&mut ExplicitWriters) -> Result<R, WrappedError>,
+        F: FnOnce(&mut ExplicitWriter) -> Result<R, WrappedError>,
+    {
+        self.with_maybe_finalized_writer(|opt_inner| match opt_inner {
+            Some(inner) => f(inner),
+            None => Err(mla::errors::Error::BadAPIArgument(
+                "Cannot call any API on already finalized MLAFile".to_owned(),
+            ).into())
+        })
+    }
+
+    fn with_maybe_finalized_writer<F, R>(&self, f: F) -> Result<R, WrappedError>
+    where
+        F: FnOnce(&mut Option<Box<ExplicitWriter>>) -> Result<R, WrappedError>,
     {
         let mut inner_lock = self.inner.lock().expect("Mutex poisoned");
         match &mut inner_lock.inner {
-            OpeningModeInner::Write(inner) => f(inner),
-            _ => Err(mla::errors::Error::BadAPIArgument(
+            OpeningModeInner::Write(opt_inner) => f(opt_inner),
+            OpeningModeInner::Read(_) => Err(mla::errors::Error::BadAPIArgument(
                 "This API is only callable in Write mode".to_owned(),
             )
             .into()),
         }
     }
+
 }
 
 #[pymethods]
 impl MLAFile {
     #[new]
-    #[pyo3(signature = (path, mode="r", config=None))]
+    #[pyo3(signature = (path, mode, config))]
     fn new(
         path: &str,
         mode: &str,
-        config: Option<&Bound<'_, PyAny>>,
+        config: &Bound<'_, PyAny>,
     ) -> Result<Self, WrappedError> {
         match mode {
             "r" => {
-                let rconfig = match config {
-                    Some(config) => {
-                        // Must be a ReaderConfig
-                        config
-                            .extract::<PyRef<ReaderConfig>>()?
-                            .to_archive_reader_config()?
-                    }
-                    None => ArchiveReaderConfig::new(),
-                };
+                let rconfig = config
+                                .extract::<PyRef<ReaderConfig>>()?
+                                .to_archive_reader_config();
                 let input_file = std::fs::File::open(path)?;
                 let arch_reader = ArchiveReader::from_config(input_file, rconfig)?;
                 Ok(MLAFile {
                     inner: Mutex::new(MLAFileInner {
-                        inner: OpeningModeInner::Read(ExplicitReaders::FileReader(arch_reader)),
+                        inner: OpeningModeInner::Read(ExplicitReader::FileReader(arch_reader)),
                         path: path.to_owned(),
                     }),
                 })
             }
             "w" => {
-                let wconfig = match config {
-                    Some(config) => {
-                        // Must be a WriterConfig
-                        config
+                let wconfig = config
                             .extract::<PyRef<WriterConfig>>()?
-                            .to_archive_writer_config()?
-                    }
-                    None => ArchiveWriterConfig::new(),
-                };
+                            .to_archive_writer_config()?;
                 let output_file = std::fs::File::create(path)?;
                 let arch_writer = ArchiveWriter::from_config(output_file, wconfig)?;
                 Ok(MLAFile {
                     inner: Mutex::new(MLAFileInner {
-                        inner: OpeningModeInner::Write(Box::new(ExplicitWriters::FileWriter(
+                        inner: OpeningModeInner::Write(Some(Box::new(ExplicitWriter::FileWriter(
                             arch_writer,
-                        ))),
+                        )))),
                         path: path.to_owned(),
                     }),
                 })
@@ -898,88 +871,89 @@ impl MLAFile {
         )
     }
 
-    /// Return the list of files in the archive
-    fn keys(&self) -> Result<Vec<String>, WrappedError> {
-        self.with_reader(|inner| Ok(inner.list_files()?.cloned().collect()))
+    /// Return the list of entry names in the archive as `EntryName`s
+    fn keys(&self) -> Result<Vec<EntryName>, WrappedError> {
+        self.with_reader(|inner| Ok(inner.list_entries()?.cloned().map(EntryName::from_rust_entry_name).collect()))
     }
 
-    /// Return the list of the files in the archive, along with metadata
+    /// Return the list of the entries in the archive, along with metadata
     /// If `include_size` is set, the size will be included in the metadata
     /// If `include_hash` is set, the hash (SHA256) will be included in the metadata
     ///
     /// Example:
     /// ```python
-    /// metadatas = archive.list_files(include_size=True, include_hash=True)
-    /// for fname, metadata in metadatas.items():
-    ///    print(f"File {fname} has size {metadata.size} and hash {metadata.hash}")
+    /// metadatas = archive.list_entries(include_size=True, include_hash=True)
+    /// for entry_name, metadata in metadatas.items():
+    ///    print(f"File {entry_name.to_pathbuf_escaped_string()} has size {metadata.size} and hash {metadata.hash}")
     /// ```
     #[pyo3(signature = (include_size=false, include_hash=false))]
-    fn list_files(
+    fn list_entries(
         &mut self,
         include_size: bool,
         include_hash: bool,
-    ) -> Result<HashMap<String, FileMetadata>, WrappedError> {
+    ) -> Result<HashMap<EntryName, FileMetadata>, WrappedError> {
         self.with_reader(|inner| {
             let mut output = HashMap::new();
-            let iter: Vec<String> = inner.list_files()?.cloned().collect();
+            let iter: Vec<RustEntryName> = inner.list_entries()?.cloned().collect();
             for fname in iter {
                 let mut metadata = FileMetadata {
                     size: None,
                     hash: None,
                 };
                 match inner {
-                    ExplicitReaders::FileReader(reader) => {
+                    ExplicitReader::FileReader(reader) => {
                         if include_size {
                             metadata.size = Some(
                                 reader
-                                    .get_file(fname.clone())?
+                                    .get_entry(fname.clone())?
                                     .ok_or(PyRuntimeError::new_err(format!(
-                                        "File {} not found",
-                                        fname
+                                        "EntryNot found (escaped name): {}",
+                                        fname.raw_content_to_escaped_string()
                                     )))?
                                     .size,
                             );
                         }
                         if include_hash {
                             metadata.hash = Some(reader.get_hash(&fname)?.ok_or(
-                                PyRuntimeError::new_err(format!("File {} not found", fname)),
+                                PyRuntimeError::new_err(format!("EntryNot found (escaped name): {}", fname.raw_content_to_escaped_string())),
                             )?);
                         }
                     }
                 }
-                output.insert(fname.to_owned(), metadata);
+                output.insert(EntryName::from_rust_entry_name(fname), metadata);
             }
             Ok(output)
         })
     }
 
-    /// Return whether the file is in the archive
-    fn __contains__(&self, key: &str) -> Result<bool, WrappedError> {
-        self.with_reader(|inner| Ok(inner.list_files()?.any(|x| x == key)))
+    /// Return whether the given `EntryName` is in the archive
+    fn __contains__(&self, key: &EntryName) -> Result<bool, WrappedError> {
+        let rust_entry_name = key.to_rust_entry_name();
+        self.with_reader(|inner| Ok(inner.list_entries()?.any(|x| x == &rust_entry_name)))
     }
 
-    /// Return the content of a file as bytes
-    fn __getitem__(&mut self, key: &str) -> Result<Vec<u8>, WrappedError> {
+    /// Return the content of an entry indexed by its `EntryName` as bytes
+    fn __getitem__(&mut self, key: &EntryName) -> Result<Vec<u8>, WrappedError> {
         self.with_reader(|inner| match inner {
-            ExplicitReaders::FileReader(reader) => {
-                let file = reader.get_file(key.to_owned())?;
-                if let Some(mut archive_file) = file {
+            ExplicitReader::FileReader(reader) => {
+                let file = reader.get_entry(key.to_rust_entry_name())?;
+                if let Some(mut archive_entry) = file {
                     let mut buf = Vec::new();
-                    archive_file.data.read_to_end(&mut buf)?;
+                    archive_entry.data.read_to_end(&mut buf)?;
                     Ok(buf)
                 } else {
-                    Err(PyKeyError::new_err(format!("File {} not found", key)).into())
+                    Err(PyKeyError::new_err(format!("EntryNot found (escaped name): {}", key.raw_content_to_escaped_string())).into())
                 }
             }
         })
     }
 
-    /// Add a file to the archive
-    fn __setitem__(&mut self, key: &str, value: &[u8]) -> Result<(), WrappedError> {
+    /// Add an entry to the archive indexed by its `EntryName`
+    fn __setitem__(&mut self, key: &EntryName, value: &[u8]) -> Result<(), WrappedError> {
         self.with_writer(|writer| match writer {
-            ExplicitWriters::FileWriter(writer) => {
+            ExplicitWriter::FileWriter(writer) => {
                 let mut reader = std::io::Cursor::new(value);
-                writer.add_file(key, value.len() as u64, &mut reader)?;
+                writer.add_entry(key.to_rust_entry_name(), value.len() as u64, &mut reader)?;
                 Ok(())
             }
         })
@@ -987,13 +961,13 @@ impl MLAFile {
 
     /// Return the number of file in the archive
     fn __len__(&self) -> Result<usize, WrappedError> {
-        self.with_reader(|inner| Ok(inner.list_files()?.count()))
+        self.with_reader(|inner| Ok(inner.list_entries()?.count()))
     }
 
     /// Finalize the archive creation. This API *must* be called or essential records will no be written
     /// An archive can only be finalized once
     fn finalize(&mut self) -> Result<(), WrappedError> {
-        self.with_writer(|writer| writer.finalize().map_err(WrappedError::from))
+        self.with_maybe_finalized_writer(finalize_if_not_already)
     }
 
     // Context management protocol (PEP 0343)
@@ -1019,9 +993,9 @@ impl MLAFile {
             OpeningModeInner::Read(_) => {
                 // Nothing to do, dropping this object should close the inner stream
             }
-            OpeningModeInner::Write(ref mut writer) => {
+            OpeningModeInner::Write(ref mut opt_writer) => {
                 // Finalize. If an exception occured, raise it
-                writer.finalize()?;
+                finalize_if_not_already(opt_writer)?;
             }
         }
         Ok(false)
@@ -1034,7 +1008,7 @@ impl MLAFile {
         py.import("io")?.getattr("BufferedIOBase")?.extract()
     }
 
-    /// Write an archive file to @dest, which can be:
+    /// Write an archive entry given by its `EntryName` to @dest, which can be:
     /// - a string, corresponding to the output path
     /// - a writable BufferedIOBase object (file-object like)
     /// If a BufferedIOBase object is provided, the size of the chunck passed to `.write` can be adjusted
@@ -1043,30 +1017,30 @@ impl MLAFile {
     /// Example:
     /// ```python
     /// with open("/path/to/extract/file1", "wb") as f:
-    ///     archive.write_file_to("file1", f)
+    ///     archive.write_entry_to(EntryName("file1"), f)
     /// ```
     /// Or
     /// ```python
-    /// archive.write_file_to("file1", "/path/to/extract/file1")
+    /// archive.write_entry_to(EntryName("file1"), "/path/to/extract/file1")
     /// ```
     #[pyo3(signature = (key, dest, chunk_size=4194304))]
-    fn write_file_to(
+    fn write_entry_to(
         &mut self,
         py: Python,
-        key: &str,
+        key: &EntryName,
         dest: &Bound<PyAny>,
         chunk_size: usize,
     ) -> Result<(), WrappedError> {
         self.with_reader(|reader| {
-            let archive_file = match reader {
-                ExplicitReaders::FileReader(reader) => reader.get_file(key.to_owned())?,
+            let archive_entry = match reader {
+                ExplicitReader::FileReader(reader) => reader.get_entry(key.to_rust_entry_name())?,
             };
 
             if let Ok(dest) = dest.downcast::<PyString>() {
                 let mut output = std::fs::File::create(dest.to_string())?;
-                io::copy(&mut archive_file.unwrap().data, &mut output)?;
+                io::copy(&mut archive_entry.unwrap().data, &mut output)?;
             } else if dest.is_instance(&py.get_type::<MLAFile>().getattr("_buffered_type")?)? {
-                let src = &mut archive_file.unwrap().data;
+                let src = &mut archive_entry.unwrap().data;
                 let mut buf = Vec::from_iter(std::iter::repeat_n(0, chunk_size));
                 while let Ok(n) = src.read(&mut buf) {
                     if n == 0 {
@@ -1084,7 +1058,7 @@ impl MLAFile {
         })
     }
 
-    /// Add a file to an archive from @src, which can be:
+    /// Add an entry named by @src `EntryName` to an archive from @src, which can be:
     /// - a string, corresponding to the input path
     /// - a readable BufferedIOBase object (file-object like)
     /// If a BufferedIOBase object is provided, the size of the chunck passed to `.read` can be adjusted
@@ -1092,27 +1066,28 @@ impl MLAFile {
     ///
     /// Example:
     /// ```python
-    /// archive.add_file_from("file1", "/path/to/file1")
+    /// archive.add_entry_from(EntryName("file1"), "/path/to/file1")
     /// ```
     /// Or
     /// ```python
     /// with open("/path/to/file1", "rb") as f:
-    ///    archive.add_file_from("file1", f)
+    ///    archive.add_entry_from(EntryName("file1"), f)
     /// ```
     #[pyo3(signature = (key, src, chunk_size=4194304))]
-    fn add_file_from(
+    fn add_entry_from(
         &mut self,
         py: Python,
-        key: &str,
+        key: &EntryName,
         src: &Bound<PyAny>,
         chunk_size: usize,
     ) -> Result<(), WrappedError> {
+        let key = key.to_rust_entry_name();
         self.with_writer(|writer| {
             if let Ok(src) = src.downcast::<PyString>() {
                 let mut input = std::fs::File::open(src.to_string())?;
-                writer.add_file(key, input.metadata()?.len(), &mut input)?;
+                writer.add_entry(key, input.metadata()?.len(), &mut input)?;
             } else if src.is_instance(&py.get_type::<MLAFile>().getattr("_buffered_type")?)? {
-                let id = writer.start_file(key)?;
+                let id = writer.start_entry(key)?;
                 loop {
                     let py_bytes = src
                         .call_method1("read", (chunk_size,))?
@@ -1121,9 +1096,9 @@ impl MLAFile {
                     if data.is_empty() {
                         break;
                     }
-                    writer.append_file_content(id, data.len(), data)?;
+                    writer.append_entry_content(id, data.len(), data)?;
                 }
-                writer.end_file(id)?;
+                writer.end_entry(id)?;
             } else {
                 return Err(PyTypeError::new_err(
                     "Expected a string or a file-object like (subclass of io.RawIOBase)",
@@ -1135,6 +1110,106 @@ impl MLAFile {
     }
 }
 
+#[pyclass]
+struct EntryName {
+    inner: Mutex<RustEntryName>,
+}
+
+impl PartialEq for EntryName {
+    fn eq(&self, other: &EntryName) -> bool {
+        let lhs = self.inner.lock().expect("Mutex poisonned");
+        let rhs = other.inner.lock().expect("Mutex poisonned");
+        lhs.eq(&rhs)
+    }
+}
+
+impl Eq for EntryName {}
+
+impl Hash for EntryName {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.inner.lock().expect("Mutex poisonned").hash(state);
+    }
+}
+
+impl EntryName {
+    fn from_rust_entry_name(entry_name: RustEntryName) -> Self {
+        Self {
+            inner: Mutex::new(entry_name)
+        }
+    }
+
+    fn to_rust_entry_name(&self) -> RustEntryName {
+        self.inner.lock().expect("Mutex poisonned").clone()
+    }
+}
+
+#[pymethods]
+impl EntryName {
+    #[new]
+    #[pyo3(signature = (str_path))]
+    /// Builds an EntryName from a str interpreted like a path
+    /// 
+    /// See Rust `EntryName::from_path` doc to read what this function does
+    fn new(str_path: &str) -> Result<Self, WrappedError> {
+        Ok(Self {
+            inner: Mutex::new(RustEntryName::from_path(str_path)?)
+        })
+    }
+
+    #[staticmethod]
+    #[pyo3(signature = (path))]
+    /// Builds an EntryName from an os.PathLike
+    /// 
+    /// See Rust `EntryName::from_path` doc to read what this function does
+    fn from_path(path: PathBuf) -> Result<Self, WrappedError> {
+        Ok(Self {
+            inner: Mutex::new(RustEntryName::from_path(path)?)
+        })
+    }
+
+    #[staticmethod]
+    #[pyo3(signature = (bytes))]
+    /// Builds an EntryName from an os.PathLike
+    /// 
+    /// See Rust `EntryName::from_arbitrary_bytes` doc to read what this function does
+    fn from_arbitrary_bytes(bytes: &[u8]) -> Result<Self, WrappedError> {
+        Ok(Self {
+            inner: Mutex::new(RustEntryName::from_arbitrary_bytes(bytes)?)
+        })
+    }
+
+    #[getter]
+    /// SECURITY WARNING: See Rust `EntryName::as_arbitrary_bytes` doc to read what this returns
+    fn arbitrary_bytes(&self) -> Vec<u8> {
+        self.inner.lock().expect("Mutex poisonned").as_arbitrary_bytes().to_vec()
+    }
+
+    /// See Rust `EntryName::raw_content_to_escaped_string` doc to read what this function does
+    fn raw_content_to_escaped_string(&self) -> String {
+        self.inner.lock().expect("Mutex poisonned").raw_content_to_escaped_string()
+    }
+
+    /// SECURITY WARNING: See Rust `EntryName::to_pathbuf` doc to read what this function does
+    fn to_pathbuf(&self) -> Result<PathBuf, WrappedError> {
+        self.inner.lock().expect("Mutex poisonned").to_pathbuf().map_err(|_| WrappedError::EntryNameError)
+    }
+
+    /// See Rust `EntryName::to_pathbuf_escaped_string` doc to read what this function does
+    fn to_pathbuf_escaped_string(&self) -> Result<String, WrappedError> {
+        self.inner.lock().expect("Mutex poisonned").to_pathbuf_escaped_string().map_err(|_| WrappedError::EntryNameError)
+    }
+
+    fn __richcmp__(&self, other: &EntryName, op: CompareOp) -> bool {
+        op.matches(self.inner.lock().expect("Mutex poisonned").cmp(&other.inner.lock().expect("Mutex poisonned")))
+    }
+
+    fn __hash__(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        self.hash(&mut hasher);
+        hasher.finish()
+    }
+}
+
 // -------- Python module instanciation --------
 
 /// Instanciate the Python module
@@ -1143,6 +1218,7 @@ impl MLAFile {
 fn pymla(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Classes
     m.add_class::<MLAFile>()?;
+    m.add_class::<EntryName>()?;
     m.add_class::<FileMetadata>()?;
     m.add_class::<WriterConfig>()?;
     m.add_class::<PublicKeys>()?;
@@ -1190,10 +1266,6 @@ fn pymla(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("InvalidLastTag", py.get_type::<InvalidLastTag>())?;
 
     // Add constants
-    m.add("LAYER_COMPRESS", Layers::COMPRESS.bits())?;
-    m.add("LAYER_ENCRYPT", Layers::ENCRYPT.bits())?;
-    m.add("LAYER_DEFAULT", Layers::DEFAULT.bits())?;
-    m.add("LAYER_EMPTY", Layers::EMPTY.bits())?;
     m.add("DEFAULT_COMPRESSION_LEVEL", DEFAULT_COMPRESSION_LEVEL)?;
     Ok(())
 }
