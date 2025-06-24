@@ -1,0 +1,1314 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Multi Layer Archive</title>
+        <meta name="robots" content="noindex">
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Multi Layer Archive</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="design"><a class="header" href="#design">Design</a></h1>
+<p>As the name spoils it, an MLA is made of several, independent, layers. The following section introduces the design ideas behind MLA. Please refer to <a href="FORMAT.html">FORMAT.md</a> for a more formal description.</p>
+<h2 id="layers"><a class="header" href="#layers">Layers</a></h2>
+<p>Each layer acts as a <em>Unix PIPE</em>, taking bytes in input and outputting in the next
+layer.
+A layer is made of:</p>
+<ul>
+<li>a <code>Writer</code>, implementing the <code>Write</code> trait. It is responsible for emitting bytes while creating a new archive</li>
+<li>a <code>Reader</code>, implementing both <code>Read</code> and <code>Seek</code> traits. It is responsible for reading bytes while reading an archive</li>
+<li>a <code>FailSafeReader</code>, implementing only the <code>Read</code> trait. It is responsible for reading bytes while repairing an archive</li>
+</ul>
+<p>Layers are made with the <em>repairable</em> property in mind. Reading them must never need information from the footer, but a footer can be used to optimize the reading. For example, accessing a file inside the archive can be optimized using the footer to seek to the file beginning, but it is still possible to get information by reading the whole archive until the file is found.</p>
+<p>Layers are optional, but their order is enforced. Users can choose to enable or disable them.
+Current order is the following:</p>
+<ol>
+<li><em>File storage abstraction (not a layer)</em></li>
+<li>Raw layer (mandatory)</li>
+<li>Compression layer</li>
+<li>Encryption layer</li>
+<li>Position layer (mandatory)</li>
+<li><em>Stored bytes</em></li>
+</ol>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<pre><code>+----------------+-------------------------------------------------------------------------------------------------------------+
+| Archive Header |                                                                                                             | =&gt; Final container (File / Buffer / etc.)
++------------------------------------------------------------------------------------------------------------------------------+
+                 +-------------------------------------------------------------------------------------------------------------+
+                 |                                                                                                             | =&gt; Raw layer
+                 +-------------------------------------------------------------------------------------------------------------+
+                 +-----------+---------+------+---------+------+---------------------------------------------------------------+
+                 | E. header | Block 1 | TAG1 | Block 2 | TAG2 | Block 3 | TAG3 | ...                                          | =&gt; Encryption layer
+                 +-----------+---------+------+---------+------+---------------------------------------------------------------+
+                             |         |      |         |      |         |      |                                              |
+                             +-------+--      --+-------       -----------      ----+---------+------+---------+ +-------------+
+                             | Blk 1 |          | Blk 2                             | Block 3 | ...  | Block n | |    Footer   | =&gt; Compression Layer
+                             +-------+--      --+-------       -----------      ----+---------+------+---------+ +-------------+
+                            /         \                                                             /           \
+                           /           \                                                           /             \
+                          /             \                                                         /               \
+                         +-----------------------------------------------------------------------------------------+
+                         |                                                                                         |             =&gt; Position layer
+                         +-----------------------------------------------------------------------------------------+
+                         +-------------+-------------+-------------+-------------+-----------+-------+-------------+
+                         | File1 start | File1 data1 | File2 start | File1 data2 | File1 end |  ...  | Files index |             =&gt; Files information and content
+                         +-------------+-------------+-------------+-------------+-----------+-------+-------------+
+</code></pre>
+<h2 id="layers-description"><a class="header" href="#layers-description">Layers description</a></h2>
+<h3 id="raw-layer"><a class="header" href="#raw-layer">Raw Layer</a></h3>
+<p>Implemented in <code>RawLayer*</code> (i.e. <code>RawLayerWriter</code>, <code>RawLayerReader</code> and <code>RawLayerFailSafeReader</code>).</p>
+<p>This is the simplest layer. It is required to provide an API between layers and
+final output worlds. It is also used to keep the position of data's start.</p>
+<h3 id="position-layer"><a class="header" href="#position-layer">Position Layer</a></h3>
+<p>Implemented in <code>PositionLayer*</code>.</p>
+<p>Similar to the <code>RawLayer</code>, this is a very simple, utility, layer. It keeps
+track of how many bytes have been written to the sub-layers.</p>
+<p>For instance, it is required by the file storage layer to keep track of the
+position in the flow of files, for indexing purpose.</p>
+<h3 id="encryption-layer"><a class="header" href="#encryption-layer">Encryption Layer</a></h3>
+<p>Implemented in <code>EncryptionLayer*</code>.</p>
+<p>This layer encrypts data as explained in <code>CRYPTO.md</code> and <code>FORMAT.md</code>.</p>
+<h3 id="compression-layer"><a class="header" href="#compression-layer">Compression Layer</a></h3>
+<p>Implemented in <code>CompressionLayer*</code>.</p>
+<p>This layer is based on the Brotli compression algorithm (<a href="https://tools.ietf.org/html/rfc7932">RFC 7932</a>).
+Each 4MB of cleartext data is stored in a separately compressed chunk.</p>
+<p>This algorithm, used with a <em>window</em> of size 1, is able to read each chunk and
+stop when 4MB of cleartext has been obtained. It is then reset, and starts
+decompressing the next chunk.</p>
+<p>To speed up the decompression, and to make the layer seekable, a footer is used. It
+saves the compressed size. Knowing the decompressed size, a seek at a cleartext
+position can be performed by seeking to the beginning of the correct compressed
+block, then decompressing the first bytes until the desired position is reached.</p>
+<p>The footer is also used to allow for a wider <em>window</em>, enabling faster
+decompression. Finally, it also records the size of the last block, to compute the
+frontier between compressed data and the footer.</p>
+<p>The 4MB size is a trade-off between a better compression (higher value) and faster seeking (smaller value). It has been chosen based on benchmarking of representative data. Better compression can also be achieved by setting the compression quality parameter to a higher value (leading to a slower process).</p>
+<h2 id="file-storage"><a class="header" href="#file-storage">File storage</a></h2>
+<p>Files are saved as series of archive-file blocks. A first special type of block
+indicates the start of a file, along with its filename and a file ID. A second special type of
+block indicates the end of the current file.</p>
+<p>Blocks contain file data, prepended with the current block size and the corresponding file ID. Even if the
+format handles streaming files, the size of a file chunk must be known before
+writing it. The file ID enables blocks from different files to be interleaved.</p>
+<p>The file-ending block marks the end of data for a given file, and includes its
+full content SHA256. Thus, the integrity of files can be checked, even on repair
+operations.</p>
+<p>The layer footer contains for each file its size, its ending block offset and an index of its block locations. Block location index enables direct access. The ending block offset enables fast hash retrieval and the file size eases the conversion to formats needing the size of the file before the data, such as Tar.</p>
+<p>If this footer is unavailable, the archive is read from the beginning to recover
+file information.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="versioning"><a class="header" href="#versioning">Versioning</a></h1>
+<p>Relation between the MLA version and the file format version:</p>
+<div class="table-wrapper"><table><thead><tr><th>MLA Version</th><th>Supported file format</th></tr></thead><tbody>
+<tr><td>2.0</td><td>2</td></tr>
+</tbody></table>
+</div>
+<h1 id="mla-file-format-v2"><a class="header" href="#mla-file-format-v2">MLA file format v2</a></h1>
+<p>This document introduces the MLA file format in its current version, v2.
+For a more comprehensive introduction of the ideas behind it, please refer to <a href="README.html">README.md</a>.</p>
+<p>Structures marked with #[bincode] below are encoded with <a href="https://docs.rs/bincode/2.0.0/bincode/index.html">bincode</a> in version 2 with fixed-size integer encoding in little endian.</p>
+<h2 id="mla-header"><a class="header" href="#mla-header">MLA Header</a></h2>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>struct MLA {
+    // MLA magic
+    magic: [u8; 3] = b"MLA",
+    // Current file format version
+    #[little_endian]
+    format_version: u32 = 2,
+    #[bincode]
+    struct ArchivePersistentConfig {
+        // bitfield indicating which Layer is enabled
+        // - ENCRYPT = 0b0000_0001;
+        // - COMPRESS = 0b0000_0010;
+        layers_enabled: Layers,
+        // Optional field, if "encrypt" layer is enabled
+        encrypt: Option&lt;struct EncryptionPersistentConfig {
+            // HPKE with multi recipient
+            recipients: Vec&lt;struct HybridRecipientEncapsulatedKey {
+                /// "Ciphertext" for ML-KEM 1024
+                ct_ml: [u8; 1568],
+                /// "Ciphertext" for DH-KEM (actually an ECC ephemeral public key)
+                ct_ecc: [u8; 32],
+                /// Wrapped (encrypted) version of the main shared secret
+                /// - Algorithm: AES-256-GCM
+                /// - Key: per-recipient hybrid shared secret
+                /// - Nonce: per-recipient
+                wrapped_ss: [u8; 32],
+                /// Associated tag
+                tag: [u8; 16],
+            }&gt;,
+            key_commitment: struct KeyCommitmentAndTag {
+                key_commitment: [u8; 64],
+                tag: [u8; 16],
+            }
+        }&gt;,
+    },
+    data: [u8],
+}
+<span class="boring">}</span></code></pre></pre>
+<p>The content of the <code>data</code> field then depend on what layers are enabled, in the following order:</p>
+<ol>
+<li>Encryption layer</li>
+<li>Compression layer</li>
+<li>Actual archive entries</li>
+</ol>
+<h3 id="example"><a class="header" href="#example">Example</a></h3>
+<p>For example, on <a href="samples/archive_v2.mla">samples/archive_v2.mla</a>:</p>
+<ul>
+<li><code>4d 4c 41</code>: <code>magic</code></li>
+<li><code>02 00 00 00</code>: <code>format_version</code>, set to 2 for archive format v2</li>
+<li><code>03</code>: <code>layers</code>, with <code>ENCRYPT | COMPRESS = 0b11</code>, i.e. Encryption and Compression layers are enabled</li>
+<li><code>01</code>: <code>EncryptionPersistentConfig</code> is present, as expected because the corresponding layer ("encrypt") is enabled</li>
+<li><code>01 00 00 00 00 00 00 00</code> : there is one recipient</li>
+<li><code>a6 (.. 1568-bytes length ..) b8</code>: <code>recipients[0].mlkem_encapsulated_key</code></li>
+<li><code>37 (.. 32-bytes length ..) 00</code>: <code>recipients[0].ecc_encapsulated_key</code></li>
+<li><code>41 (.. 32-bytes length ..) b3</code>: <code>recipients[0].encrypted_shared_secret</code></li>
+<li><code>83 (.. 16-bytes length ..) 51</code>: <code>recipients[0].encrypted_shared_secret_tag</code></li>
+<li><code>08 (.. 64-bytes length ..) df</code>: <code>encrypted_key_commitment</code></li>
+<li><code>f3 (.. 16-bytes length ..) 26</code>: <code>encrypted_key_commitment_tag</code></li>
+<li><code>a3 until EOF</code>: <code>data</code></li>
+</ul>
+<h2 id="encryption-layer-1"><a class="header" href="#encryption-layer-1">Encryption layer</a></h2>
+<p>From the information in the header, the cryptographic material is recovered as described in <code>CRYPTO.md</code>. This enables decrypting following content.</p>
+<p><code>data</code> is a contiguous list of:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>struct DataBlock {
+    encrypted_content: [u8; 128 * 1024],
+    tag: [u8; 16],
+}
+<span class="boring">}</span></code></pre></pre>
+<p>followed by one:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>struct FinalBlock {
+    encrypted_content: [u8; 10],
+    tag: [u8; 16],
+}
+<span class="boring">}</span></code></pre></pre>
+<p>The last <code>DataBlock</code> is an exception: <code>encrypted_content</code> might be smaller. Its size is then <code>((data.len() - sizeof(FinalBlock)) % sizeof(DataBlock)) - 16</code>.</p>
+<p>To protect from a truncation attack, before using an archive, it must be checked that <code>FinalBlock.tag</code> is correct and that <code>msg_final</code> is <code>FINALBLOCK</code>.</p>
+<p>Formats for DER keys (thus PEM keys too) are documented in comments of functions <code>parse_mlakey_privkey_der</code> and <code>parse_mlakey_pubkey_der</code>.</p>
+<h3 id="example-1"><a class="header" href="#example-1">Example</a></h3>
+<p>For example, with the private key <a href="samples/test_mlakey_archive_v2.der">samples/test_mlakey_archive_v2.der</a>:</p>
+<ul>
+<li>The MLA private key ASN.1 DER encoded data is a X25519 private key followed by a ML-KEM 1024 private key</li>
+<li>MLA private key X25519 part: <code>5d 58 a8 7c 9c 69 ba 67 4a f9 d3 89 23 76 c9 5e d8 eb 08 cf 09 cd 61 5c 07 28 99 c3 79 45 96 a9</code></li>
+<li>MLA private key <code>mlkem_dk</code> (<code>dk_pke||ek||h||z</code>) part: <code>21 f0 (.. 3168-bytes length ..) de 3e</code></li>
+</ul>
+<p>This gives with <a href="samples/archive_v2.mla">samples/archive_v2.mla</a>:</p>
+<ul>
+<li><code>ecc_shared_secret</code>: <code>40 1c 7f b9 ba 4a d3 7c 5a 8f a9 7a 6f b4 02 57 22 d6 e9 b2 66 2c 02 cd eb d0 f4 81 0c 14 16 00</code></li>
+<li><code>mlkem_shared_secret</code>: <code>6a 92 fa 89 e2 30 57 19 eb 39 52 46 24 06 de 65 30 61 b8 f6 bb 6e 61 63 3c b3 99 d5 f6 a3 95 d0</code></li>
+<li><code>combined_shared_secret</code>: <code>ec f2 64 11 18 2e 19 0a 3e da bf 55 51 5f 51 0e 85 ed 3c 66 78 59 f5 7d 78 44 b9 96 41 a1 57 1f</code></li>
+<li><code>Per-Recipient Hybrid KEM HPKE base_nonce</code>: <code>cb 7e 1d 35 29 c1 92 a2 71 03 6c 71</code></li>
+<li><code>Per-Recipient Hybrid KEM HPKE key</code>: <code>8c 22 67 a9 65 4b d4 c1 45 42 6b e9 4e f1 94 93 d5 e8 ae 83 c2 dd 65 62 a3 82 fa d0 b9 95 d1 79</code></li>
+<li><code>Per-Recipient Hybrid KEM decapsulated key</code>: <code>41 14 54 34 3b 09 a9 cd df d7 f0 83 46 63 35 dc f4 89 4b 12 46 06 81 68 6d 1f d0 0e 11 63 3a b3</code></li>
+<li><code>Multi-Recipient Hybrid KEM HPKE base_nonce</code>: <code>df d3 f3 74 d1 0e b9 1f 31 ba 6c 09</code></li>
+<li><code>Multi-Recipient Hybrid KEM HPKE key</code>: <code>8a a1 b7 a7 ad 5d 8d 07 ae 97 27 93 d5 5b 45 d9 ed dc b3 30 91 93 88 ce f1 19 63 78 0d 32 b0 0b</code></li>
+</ul>
+<p>These last two elements are those with which HPKE is setup to do AES-256-GCM decryption of the rest of the archive.</p>
+<ul>
+<li>Now, the decryption process can be started. <code>data</code> length (<code>27273=29044-(sizeof(header)=1745)-(sizeof(FinalBlock)=26)</code>) being smaller than <code>sizeof(DataBlock)</code>, the <code>encrypted_content</code> is 27257-bytes long. The corresponding tag is <code>2e .. 16</code> (which corresponds to the last 16-bytes of <code>data</code> before the <code>FinalBlock</code> ).</li>
+</ul>
+<p>The first decrypted bytes are <code>9b ff ff 3f 67 54 af 01 03 e7 35 a9 87 88 82 3e ...</code>.</p>
+<p>In the next section, <code>data</code> is now the decrypted content (as if the encryption layer was absent).</p>
+<h2 id="compression"><a class="header" href="#compression">Compression</a></h2>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>struct CompressionLayer {
+    // Compressed data, explained below
+    compressed_data: [u8],
+    // Footer
+    #[bincode]
+    sizes_info: struct SizesInfo {
+        /// Ordered list of chunk compressed sizes; only set at initialization
+        compressed_sizes: Vec&lt;u32&gt;,
+        /// Last block uncompressed size
+        last_block_size: u32,
+    }
+    // Size of the serialized `sizes_info`
+    #[little_endian]
+    sizes_info_length: u32
+}
+<span class="boring">}</span></code></pre></pre>
+<p>The compression layer footer information is retrieved by first reading the value of <code>sizes_info_length</code> at the end of <code>data</code>, then reading <code>sizes_info_length</code>-bytes at the end of <code>data</code> minus 4 bytes.</p>
+<p><code>compressed_data</code> is a concatenation of <code>compressed_block_i</code> blocks of size <code>compressed_sizes[i]</code>.</p>
+<p>A <code>compressed_block_i</code> is a <a href="https://tools.ietf.org/html/rfc7932">brotli compressed</a> block. Its uncompressed data size is <code>4 * 1024 * 1024</code>-bytes, except for the last block (<code>last_block_size</code>).  This format already brings necessary data for decompression, such as the quality level used.</p>
+<p>The resulting data is the concatenation of all decompressed <code>compressed_block_i</code>.</p>
+<h3 id="example-2"><a class="header" href="#example-2">Example</a></h3>
+<p>For example, on <a href="samples/archive_v2.mla">samples/archive_v2.mla</a>, after decryption:</p>
+<ul>
+<li>Reading from the end of <code>data</code> leads to <code>sizes_info_length = 24</code></li>
+<li>The corresponding <code>SizesInfo</code> is:</li>
+</ul>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>SizesInfo {
+    compressed_sizes: [
+        13333,
+        259,
+        13637,
+    ],
+    last_block_size: 3209403,
+}
+<span class="boring">}</span></code></pre></pre>
+<p>It indeed corresponds to the size of <code>data</code>: <code>data.len() = 27257 = 13333 + 259 + 13637 + 24 + 4</code>. The decompressed size is then <code>decompressed.len() = 2 * (4 * 1024 * 1024) + 3209403</code>.</p>
+<ul>
+<li>Each block can now be decompressed</li>
+</ul>
+<p>The first decompressed bytes are <code>00 00 00 00 00 00 00 00 00 06 00 00 00 00 00 00 00 73 69 6d 70 6c 65 01 00 00 00 00 00 00 00 00</code>.</p>
+<p>In the next section, <code>data</code> is now the decompressed content (as if the compression layer was absent).</p>
+<h2 id="entries-names"><a class="header" href="#entries-names">Entries names</a></h2>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[bincode]
+struct EntryName {
+    name: Vec&lt;u8&gt;
+}
+<span class="boring">}</span></code></pre></pre>
+<p>These names are described in <code>doc/ENTRY_NAME.md</code></p>
+<h2 id="actual-archive-entries-data"><a class="header" href="#actual-archive-entries-data">Actual archive entries data</a></h2>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>struct ArchiveContent {
+    // Data content, explained below
+    entry_data: [u8]
+    // Footer
+    #[bincode]
+    struct ArchiveFooter {
+        // EntryName -&gt; Corresponding EntryInfo
+        entries_info: Vec&lt;(EntryName, struct EntryInfo {
+            // Offsets of continuous chunks of `ArchiveEntryBlock`
+            offsets: Vec&lt;u64&gt;,
+            // Size of the `entry_data`, in bytes
+            size: u64,
+            // Offset of the ArchiveEntryBlock::EndOfEntry
+            eof_offset: u64,
+        })&gt;,
+    },
+    // Size of the serialized `ArchiveFooter`
+    #[little_endian]
+    archive_footer_length: u64
+}
+<span class="boring">}</span></code></pre></pre>
+<p>The archive footer information is optionally retrieved by first reading the value of <code>archive_footer_length</code> at the end of <code>data</code>, then reading <code>archive_footer_length</code>-bytes at the end of <code>data</code> minus 8 bytes.</p>
+<p><code>entry_data</code> is the concatenation of all <code>ArchiveEntryBlock</code>s. Each block starts with a <code>u8</code> corresponding to the block type:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>enum ArchiveEntryBlockType {
+    EntryStart = 0x00,
+    EntryContent = 0x01,
+
+    EndOfArchiveData = 0xFE,
+    EndOfEntry = 0xFF,
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Then, depending on the block type:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>struct EntryStart {
+    // entry unique ID in the archive
+    #[little_endian]
+    id: u64,
+    // entry name
+    name: EntryName
+}
+
+struct EntryContent {
+    // entry unique ID in the archive
+    #[little_endian]
+    id: u64,
+    // Length of the block_data
+    #[little_endian]
+    length: u64,
+    // Content
+    block_data: [u8; length]
+}
+
+struct EndOfEntry {
+    // Entry unique ID in the archive
+    #[little_endian]
+    id: u64,
+    // SHA-256 of the entry content
+    hash: [u8; 32]
+}
+
+struct EndOfArchiveData {}
+<span class="boring">}</span></code></pre></pre>
+<p>An entry <code>entry_i</code> in the archive always starts with an <code>EntryStart</code>, giving its name and unique ID.</p>
+<p>Let <code>content_i</code> be the content of <code>entry_i</code>. It starts empty.</p>
+<p>Each time a <code>EntryContent</code> is encountered, the corresponding <code>block_data</code> is appended to <code>content_i</code>.</p>
+<p>Once the <code>EndOfEntry</code> for <code>entry_i</code> is reached, the entry is completely read. Its content SHA-256 hash can be verified with the <code>EndOfEntry.hash</code>.</p>
+<p>Between the last <code>EndOfEntry</code> block and the beginning of the <code>ArchiveFooter</code>, there is the only <code>EndOfArchiveData</code> block. It is used in the repair process, to correctly separate the actual archive data from the footer.</p>
+<p>As blocks from different entries can be interleaved, the <code>entries_info.offsets</code> are the offsets in <code>entry_data</code> of blocks for the same entry.</p>
+<p>For instance, if the blocks are:</p>
+<pre><code>Off0: [EntryStart ID 1]
+Off1: [EntryStart ID 2]
+Off2: [EntryContent ID 1]
+Off3: [EntryContent ID 1]
+Off4: [EntryContent ID 2]
+Off5: [EndOfEntry ID 1]
+...
+</code></pre>
+<p>The <code>offsets</code> for the entry with ID 1 will be <code>Off0</code>, <code>Off2</code>, <code>Off5</code>.
+Additionally, for faster <code>hash</code> retrieval, <code>entries_info.eof_offset</code> is the offset of the <code>EndOfEntry</code> block for the corresponding entry. In this example, <code>eof_offset = Off5</code> for ID 1.</p>
+<p>Finally, the <code>entries_info.size</code> is the size in bytes of the corresponding entry content.</p>
+<p>For reproducibility, the <code>entries_info</code> <code>Vec</code> is sorted by entry name (lexicographically by bytes values) before being serialized.</p>
+<h3 id="example-3"><a class="header" href="#example-3">Example</a></h3>
+<p>For example, on <a href="samples/archive_v2.mla">samples/archive_v2.mla</a>, after decryption and decompression:</p>
+<ul>
+<li>Reading from the end of <code>data</code> leads to <code>archive_footer_length = 18444</code></li>
+<li>The corresponding <code>ArchiveFooter</code> is (observed order may be different if deserialized into a HashMap):</li>
+</ul>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>ArchiveFooter {
+    entries_info: {
+        "big": EntryInfo {
+            offsets: [
+                1074403,
+            ],
+            size: 10485760,
+            eof_offset: 11560200,
+        },
+        "file_0": EntryInfo {
+            offsets: [
+                337,
+                19122,
+                1074362,
+            ],
+            size: 4096,
+            eof_offset: 1074362,
+        },
+        ...
+        "simple": EntryInfo {
+                        offsets: [
+                            0,
+                        ],
+                        size: 256,
+                        eof_offset: 296,
+                    },
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Let's start reading the first entry of the archive. For easier reading, here is an excerpt of the first 400 bytes of <code>data</code>:</p>
+<pre><code>0000  00 00 00 00 00 00 00 00 00 06 00 00 00 00 00 00   ................
+0010  00 73 69 6d 70 6c 65 01 00 00 00 00 00 00 00 00   .simple.........
+0020  00 01 00 00 00 00 00 00 00 01 02 03 04 05 06 07   ................
+0030  08 09 0a 0b 0c 0d 0e 0f 10 11 12 13 14 15 16 17   ................
+0040  18 19 1a 1b 1c 1d 1e 1f 20 21 22 23 24 25 26 27   ........ !"#$%&amp;'
+0050  28 29 2a 2b 2c 2d 2e 2f 30 31 32 33 34 35 36 37   ()*+,-./01234567
+0060  38 39 3a 3b 3c 3d 3e 3f 40 41 42 43 44 45 46 47   89:;&lt;=&gt;?@ABCDEFG
+0070  48 49 4a 4b 4c 4d 4e 4f 50 51 52 53 54 55 56 57   HIJKLMNOPQRSTUVW
+0080  58 59 5a 5b 5c 5d 5e 5f 60 61 62 63 64 65 66 67   XYZ[\]^_`abcdefg
+0090  68 69 6a 6b 6c 6d 6e 6f 70 71 72 73 74 75 76 77   hijklmnopqrstuvw
+00a0  78 79 7a 7b 7c 7d 7e 7f 80 81 82 83 84 85 86 87   xyz{|}~.........
+00b0  88 89 8a 8b 8c 8d 8e 8f 90 91 92 93 94 95 96 97   ................
+00c0  98 99 9a 9b 9c 9d 9e 9f a0 a1 a2 a3 a4 a5 a6 a7   ................
+00d0  a8 a9 aa ab ac ad ae af b0 b1 b2 b3 b4 b5 b6 b7   ................
+00e0  b8 b9 ba bb bc bd be bf c0 c1 c2 c3 c4 c5 c6 c7   ................
+00f0  c8 c9 ca cb cc cd ce cf d0 d1 d2 d3 d4 d5 d6 d7   ................
+0100  d8 d9 da db dc dd de df e0 e1 e2 e3 e4 e5 e6 e7   ................
+0110  e8 e9 ea eb ec ed ee ef f0 f1 f2 f3 f4 f5 f6 f7   ................
+0120  f8 f9 fa fb fc fd fe ff ff 00 00 00 00 00 00 00   ................
+0130  00 40 af f2 e9 d2 d8 92 2e 47 af d4 64 8e 69 67   .@.......G..d.ig
+0140  49 71 58 78 5f bd 1d a8 70 e7 11 02 66 bf 94 48   IqXx_...p...f..H
+0150  80 00 01 00 00 00 00 00 00 00 06 00 00 00 00 00   ................
+0160  00 00 66 69 6c 65 5f 30 00 02 00 00 00 00 00 00   ..file_0........
+0170  00 06 00 00 00 00 00 00 00 66 69 6c 65 5f 31 00   .........file_1.
+0180  03 00 00 00 00 00 00 00 06 00 00 00 00 00 00 00   ................
+</code></pre>
+<ul>
+<li><code>00</code>: mark a <code>EntryStart</code> block</li>
+<li><code>00 00 00 00 00 00 00 00</code>: entry ID is 0</li>
+<li><code>06 00 00 00 00 00 00 00</code>: name length, in bytes, is 6</li>
+<li><code>73 69 6d 70 6c 65</code>: the name is "simple"</li>
+<li><code>01</code>: mark a <code>EntryContent</code> block</li>
+<li><code>00 00 00 00 00 00 00 00</code>: corresponding entry ID is 0 (ie, the entry "simple")</li>
+<li><code>00 01 00 00 00 00 00 00</code>: this block contains 0x100 bytes of data</li>
+<li><code>00 .. (256-bytes long) .. ff</code>: actual 256 first bytes of "simple"</li>
+<li><code>ff</code>: mark a <code>EndOfEntry</code> block</li>
+<li><code>00 00 00 00 00 00 00 00</code>: entry ID is 0. The entry "simple" has been fully recovered</li>
+<li><code>40 .. (32-bytes long) .. 80</code>: SHA256 hash of the entry "simple" content, ie <code>SHA256(00 01 02 .. FE FF)</code></li>
+</ul>
+<p>Here, the entry "simple" has been fully recovered. If one continues, there are:</p>
+<ul>
+<li>A <code>EntryStart</code> block for the entry "file_0" with ID 1</li>
+<li>A <code>EntryStart</code> block for the entry "file_1" with ID 2</li>
+<li>A <code>EntryStart</code> block with ID 3 for a name of length 6, incomplete in the excerpt</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="entry-name-documentation"><a class="header" href="#entry-name-documentation">Entry name documentation</a></h1>
+<p>An archive can store entries associated with a name. These entries may or may
+not represent OS filesystem files. And their name may or may not represent an
+OS file system path.</p>
+<p>An entry name is a nonempty sequence of bytes (maximum length of 65536).</p>
+<p>Please keep in mind that names, interpreted as paths or not, may contain
+arbitrary bytes like slash, backslash, <code>..</code>, <code>C:\\{}...]</code>, newline, spaces,
+carriage return, terminal escape sequences, Unicode chars like U+0085 or RTLO,
+HTML, SQL, semicolons, homoglyphs, etc.</p>
+<h2 id="interpretation-of-an-entry-name-as-an-os-filesystem-file-path"><a class="header" href="#interpretation-of-an-entry-name-as-an-os-filesystem-file-path">Interpretation of an entry name as an OS filesystem file path</a></h2>
+<p>If it is to be interpreted as a file path, the underlying bytes must consist of
+ASCII slash separated components and not begin with a slash.
+The rules for each component are:</p>
+<ul>
+<li>must not be empty</li>
+<li>must not contain any ASCII NUL byte</li>
+<li>must not be ASCII dot</li>
+<li>must not be two ASCII dots</li>
+</ul>
+<p>If it is to be interpreted as a Windows file path, in addition to previous rules:</p>
+<ul>
+<li>No byte should be an ASCII backslash (separators are represented by an ASCII slash).</li>
+<li>The eventual second byte of the whole path should not be an ASCII colon (<code>:</code>).</li>
+<li>Every component must be encoded as UTF-8.</li>
+</ul>
+<p>These rules are checked by the accompanying Rust implmentation (<code>EntryName::to_pathbuf</code>).</p>
+<p>Even if respecting these rules, the OS may see the resulting path as invalid.</p>
+<p>Please keep in mind that two different names, may map to same path on OS
+(e.g. Windows case insensitivity).</p>
+<p>When given a path as input, before being converted to an entry name by
+<code>EntryName::from_path</code> and <code>mlar</code> the path is normalized by keeping only
+<code>Normal</code> <code>std::path::Component</code>s and popping an eventual previous component when
+a <code>..</code> is encountered.</p>
+<h2 id="string-representation-of-entry-names"><a class="header" href="#string-representation-of-entry-names">String representation of entry names</a></h2>
+<p>To prevent some security risks, proposed string representations of entry names
+are given with <code>EntryName::to_pathbuf_escaped_string</code> and
+<code>EntryName::raw_content_to_escaped_string</code> and are used by <code>mlar</code>.</p>
+<p>Other representations may be preferred depending on its usage context.</p>
+<p>The idea of this representation is that unwanted bytes are replaced with a
+percent and their hexadecimal representation. Details follow.</p>
+<p>For an entry name interpreted as raw bytes, below generic escaping is applied
+with ASCII alphanumeric chars and ASCII dot as preserved bytes. This is used by
+<code>mlar list --raw-escaped-names</code>.</p>
+<p>For an entry name interpreted as a path, below generic escaping is applied
+with ASCII alphanumeric chars, ASCII dot and ASCII slash as preserved bytes.
+This is used by default by <code>mlar list</code>.</p>
+<h3 id="generic-escaping-implemented-by-helpersmla_percent_escape"><a class="header" href="#generic-escaping-implemented-by-helpersmla_percent_escape">Generic escaping, implemented by <code>helpers::mla_percent_escape</code></a></h3>
+<p>A <code>bytes_to_preserve</code> parameter tells which bytes are not escaped.
+For every input byte:</p>
+<ul>
+<li>If listed in <code>bytes_to_preserve</code> then it will be output without transformation.</li>
+<li>Else, it will be replaced by <code>%xx</code> where <code>xx</code> is their hexadecimal representation.</li>
+</ul>
+<h3 id="generic-unescaping-implemented-by-helpersmla_percent_unescape"><a class="header" href="#generic-unescaping-implemented-by-helpersmla_percent_unescape">Generic unescaping, implemented by <code>helpers::mla_percent_unescape</code></a></h3>
+<p>A <code>bytes_to_allow</code> parameter tells which bytes are not escaped.
+Unescaping fails if feeded with anything else than bytes listed in
+<code>bytes_to_allow</code> and <code>%xx</code> where <code>xx</code> is the hexadecimal representation of a
+byte not listed in <code>bytes_to_allow</code>. Otherwise it reverses the process described
+in <code>Generic escaping</code>.</p>
+<h3 id="examples"><a class="header" href="#examples">Examples</a></h3>
+<p>For each following entry name found serialized in an archive, here is how they are represented as strings when interpreted as path:</p>
+<ul>
+<li>empty bytes -&gt; invalid (even interpreted as arbitrary bytes)</li>
+<li>/a -&gt; invalid path (root directory)</li>
+<li>a/b/../d -&gt; invalid path (path traversal)</li>
+<li>a/b/.. -&gt; invalid path (path traversal)</li>
+<li>a//b -&gt; invalid path (not normalized)</li>
+<li>a/./b -&gt; invalid path (not normalized)</li>
+<li>./b -&gt; invalid path (not normalized)</li>
+<li>a/. -&gt; invalid path (not normalized)</li>
+<li>aNULb (where NUL here represent an ASCII NUL byte) -&gt; invalid path</li>
+<li>m:abcd -&gt; invalid path on Windows (<code>:</code> as second byte), m%3aabcd on UNIX like</li>
+<li>a\b (where <code>\</code> represents an ASCII backslash, not an escaped b) -&gt; invalid path on Windows (contains backslash), a%5cb on UNIX like</li>
+<li>a/b.txt -&gt; a/b.txt</li>
+<li>a/b!c -&gt; a/b%21c</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="cryptography-in-mla"><a class="header" href="#cryptography-in-mla">Cryptography in MLA</a></h1>
+<p>MLA uses cryptographic primitives essentially for the purpose of the <code>Encrypt</code> layer.</p>
+<p>This document introduces the primitives used, arguments for the choice made and some security considerations.</p>
+<h2 id="high-level-overview"><a class="header" href="#high-level-overview">High-level overview</a></h2>
+<h3 id="objectives"><a class="header" href="#objectives">Objectives</a></h3>
+<p>The purpose of the <code>Encrypt</code> layer is to provide confidentiality and data integrity of the inner layer.</p>
+<p>These objectives are obtained using:</p>
+<ul>
+<li>Authenticated encryption</li>
+<li>Asymmetric cryptography, for several recipients</li>
+</ul>
+<p>This layer <strong>does not provide signature</strong>.</p>
+<h3 id="general-design-guidelines"><a class="header" href="#general-design-guidelines">General design guidelines</a></h3>
+<ol>
+<li>The size and the initial computation time used for the encryption needs are not a big issue, if kept reasonable. Indeed, in the author understanding, MLA archives are usually several MB long and the computation time is primarily spent in compression/decompression and encryption/decryption of the data</li>
+</ol>
+<p>As a result, some optimization have not been performed -- which help keeping an hopefully auditable and conservative design.</p>
+<ol start="2">
+<li>
+<p>Only one encryption method and key type is available, to avoid confusion and potential corner cases errors</p>
+</li>
+<li>
+<p>When possible, use audited code and test vectors</p>
+</li>
+</ol>
+<h3 id="main-bricks-encryption"><a class="header" href="#main-bricks-encryption">Main bricks: Encryption</a></h3>
+<p>The data is encrypted using AES-256-GCM, an AEAD algorithm.
+To offer a <em>seekable</em> layer, data is encrypted using chunks of 128KB each, except for the last one. These encrypted chunks are all present with their associated tag. Tags are checked during decryption before returning data to the upper layer.</p>
+<p>To prevent truncation attacks, another chunk is added at the end corresponding to the encryption of the ASCII string "FINALBLOCK" with "FINALAAD" as additional authenticated data. Any usage of the archive must check correct decryption (including tag verification) of this last block.</p>
+<p>The key, the base nonce and the nonce derivation for each data chunk are computed following HPKE (RFC 9180) <sup class="footnote-reference" id="fr-hpke-1"><a href="#footnote-hpke">1</a></sup>.
+HPKE is parameterized with:</p>
+<ul>
+<li>Mode: "Base" (no PSK, no sender authentication)</li>
+<li>KDF: HKDF-SHA512</li>
+<li>AEAD: AES-256-GCM</li>
+<li>KEM: Multi-Recipient Hybrid KEM, a custom KEM described later in this document</li>
+</ul>
+<p>Thus, only one cryptography suite is available for now. If this setting ends up broken by cryptanalysis, we will move users onward to the next MLA version, using appropriate cryptography. Therefore, MLA lacks cryptography agility which is an encouraged property regarding post-quantum cryptography by ANSSI <sup class="footnote-reference" id="fr-frsuggest-1"><a href="#footnote-frsuggest">2</a></sup>. Still, HPKE improves this aspect of MLA <sup class="footnote-reference" id="fr-hpke-2"><a href="#footnote-hpke">1</a></sup>.</p>
+<p>Full details are available below.</p>
+<p>Additionally, "key commitment" is included using a method described in <sup class="footnote-reference" id="fr-keycommit-1"><a href="#footnote-keycommit">3</a></sup> and detailed in <sup class="footnote-reference" id="fr-issuekeycommit-1"><a href="#footnote-issuekeycommit">4</a></sup>.</p>
+<h3 id="main-bricks-asymmetric-encryption"><a class="header" href="#main-bricks-asymmetric-encryption">Main bricks: Asymmetric encryption</a></h3>
+<p>Since the format <code>v2</code>, the <code>Encrypt</code> layer is using post-quantum cryptography (PQC) through an hybrid approach, to avoid "Harvest now, decrypt later" attacks.</p>
+<p>The algorithms used are:</p>
+<ul>
+<li>Curve 25519 for pre-quantum cryptography, using DHKEM (RFC 9180) <sup class="footnote-reference" id="fr-hpke-3"><a href="#footnote-hpke">1</a></sup></li>
+<li>FIPS 203<sup class="footnote-reference" id="fr-fips203-1"><a href="#footnote-fips203">5</a></sup> (CRYSTALS Kyber) MLKEM-1024 for post-quantum cryptography</li>
+</ul>
+<p>The two keys are mixed together (see below) in a manner keeping the IND-CCA2 properties of the two algorithms.</p>
+<p>Sending to multiple recipients is achieved using a two-step process:</p>
+<ol>
+<li>For each recipient, a per-recipient Hybrid KEM is done, leading to a per-recipient shared secret</li>
+<li>These per-recipient shared secret are derived through HPKE to obtain a key and a nonce</li>
+<li>These per-recipient key and nonce are used to decrypt a secret shared by all recipients</li>
+</ol>
+<p>This final secret is the one later used as an input to the encryption layer.
+The whole process can be viewed as a KEM encapsulation for multiple recipients.</p>
+<h2 id="details"><a class="header" href="#details">Details</a></h2>
+<p>The following sections describe the whole process for data encryption and seed derivation.
+They are meant to ease the understanding of the code and MLA format re-implementation.</p>
+<p>The interested reader could also look at the Rust implementation in this repository for more details.
+The implementation also includes tests (including some test vectors) and comments.</p>
+<h3 id="asymmetric-encryption---per-recipient-kem"><a class="header" href="#asymmetric-encryption---per-recipient-kem">Asymmetric encryption - Per-recipient KEM</a></h3>
+<h4 id="notations"><a class="header" href="#notations">Notations</a></h4>
+<ul>
+<li>$pk_{ecc}^i$, $sk_{ecc}^i$, $pk_{mlkem}^i$ and $sk_{mlkem}^i$: respectively the curve 25519 public key and secret key, and the MLKEM-1024 (FIPS 203 <sup class="footnote-reference" id="fr-fips203-2"><a href="#footnote-fips203">5</a></sup>) encapsulating key and decapsulating key</li>
+<li>$\textrm{DHKEM.Encapsulate}$ and $\textrm{DHKEM.Decapsulate}$: key encapsulation methods on the curve 25519, as defined in RFC 9180, section 4 <sup class="footnote-reference" id="fr-hpke-4"><a href="#footnote-hpke">1</a></sup></li>
+<li>$\textrm{MLKEM.Encapsulate}$ and $\textrm{MLKEM.Decapsulate}$: key encapsulation methods on MLKEM-1024, as defined in FIPS 203 <sup class="footnote-reference" id="fr-fips203-3"><a href="#footnote-fips203">5</a></sup></li>
+<li>$ss_{recipients}$: a 32-bytes secret, produced by a cryptographic RNG. Informally, this is the secret shared among recipients, encapsulated separately for each recipient</li>
+<li>$\textrm{KeySchedule}_{recipient}$: <code>KeySchedule</code> function from RFC 9180 <sup class="footnote-reference" id="fr-hpke-5"><a href="#footnote-hpke">1</a></sup>, instanciated with:
+<ul>
+<li>Mode: "Base"</li>
+<li>KDF: HKDF-SHA-512</li>
+<li>AEAD: AES-256-GCM</li>
+<li>KEM: a custom KEM ID, numbered 0x1120</li>
+</ul>
+</li>
+<li>$\textrm{Encrypt}_{AES\ 256\ GCM}$: AES-256-GCM encryption, returning the encrypted data concatened with the associated tag</li>
+<li>$\textrm{Decrypt}_{AES\ 256\ GCM}$ AES-256-GCM decryption, returning the decrypted data after verifying the tag</li>
+<li>$\textrm{Serialize}$ and $\textrm{Deserialize}$: respectively produce a byte string encoding the data in argument, and produce the data from the byte string in argument</li>
+</ul>
+<h4 id="process"><a class="header" href="#process">Process</a></h4>
+<p>To encrypt to a target recipient $i$, knowing $pk_{ecc}^i$ and $pk_{mlkem}^i$:</p>
+<ol>
+<li>Compute shared secrets and ciphertexts for both KEM:</li>
+</ol>
+<pre><code class="language-math">\begin{align}
+(ss_{ecc}^i, ct_{ecc}^i) &amp;= \textrm{DHKEM.Encapsulate}(pk_{ecc}^i) \\
+(ss_{mlkem}^i, ct_{mlkem}^i) &amp;= \textrm{MLKEM.Encapsulate}(pk_{mlkem}^i)
+\end{align}
+</code></pre>
+<ol start="2">
+<li>Combine the shared secrets (implemented in <code>mla::crypto::hybrid::combine</code>):</li>
+</ol>
+<pre><code class="language-python">def combine(ss1, ss2, ct1, ct2):
+    uniformly_random_ss1 = HKDF-SHA512-Extract(
+        salt=0,
+        ikm=ss1
+    )
+    key = HKDF(
+        salt=uniformly_random_ss1,
+        ikm=ss2,
+        info=ct1 . ct2
+    )
+    return key
+</code></pre>
+<pre><code class="language-math">ss_{recipient}^i = \textrm{combine}(ss_{ecc}^i, ss_{mlkem}^i, ct_{ecc}^i, ct_{mlkem}^i)
+</code></pre>
+<ol start="3">
+<li>Wrap the recipients' shared secret:</li>
+</ol>
+<pre><code class="language-math">\begin{align}
+(key^i, nonce^i) &amp;= \textrm{KeySchedule}_{recipient}(
+        shared\_secret=ss_{recipient}^i,
+    \textrm{info}=\mathtt{"MLA\ Recipient"}
+)\\
+ct_{wrap}^i &amp;= \textrm{Encrypt}_{AES\ 256\ GCM}(\textrm{key}=key^i, \textrm{nonce}=nonce^i, \textrm{data}=ss_{recipients})\\
+ct_{recipient}^i &amp;= \textrm{Serialize}(ct_{wrap}^i, ct_{ecc}^i, ct_{mlkem}^i)
+\end{align}
+</code></pre>
+<p>Informally, this process can be viewed as a per-recipient KEM taking a shared secret $ss_{recipients}$, the recipient public key (made of the elliptic curve and the PQC public keys) and returning a ciphertext $ct_{recipient}^i$.</p>
+<hr />
+<p>To obtain the shared secret from $ct_{recipient}^i$ for a recipient $i$ knowing $sk_{ecc}^i$ and $sk_{mlkem}^i$:</p>
+<ol>
+<li>Compute the recipient's shared secret:</li>
+</ol>
+<pre><code class="language-math">\begin{align}
+(ct_{wrap}^i, ct_{ecc}^i, ct_{mlkem}^i) &amp;= \textrm{Deserialize}(ct_{recipient}^i)\\
+ss_{ecc}^i &amp;= \textrm{DHKEM.Decapsulate}(sk_{ecc}^i, ct_{ecc}^i) \\
+ss_{mlkem}^i &amp;= \textrm{MLKEM.Decapsulate}(sk_{mlkem}^i, ct_{mlkem}^i)\\
+ss_{recipient}^i &amp;= \textrm{combine}(ss_{ecc}^i, ss_{mlkem}^i, ct_{ecc}^i, ct_{mlkem}^i)
+\end{align}
+</code></pre>
+<ol start="2">
+<li>Try to decrypt the secret shared among recipients:</li>
+</ol>
+<pre><code class="language-math">\begin{align}
+(key^i, nonce^i) &amp;= \textrm{KeySchedule}_{recipient}(
+        shared\_secret=ss_{recipient}^i,
+    \textrm{info}=\mathtt{"MLA\ Recipient"}
+)\\
+ss_{recipients} &amp;= \textrm{Decrypt}_{AES\ 256\ GCM}(\textrm{key}=key^i, \textrm{nonce}=nonce^i, \textrm{data}=ct_{wrap}^i)
+\end{align}
+</code></pre>
+<p>If the decryption is a success, returns $ss_{recipients}$. Otherwise, returns an error.</p>
+<h4 id="arguments"><a class="header" href="#arguments">Arguments</a></h4>
+<ul>
+<li>Using HPKE (RFC 9180 <sup class="footnote-reference" id="fr-hpke-6"><a href="#footnote-hpke">1</a></sup>) for both elliptic curve encryption (DHKEM) and post-quantum encryption (MLKEM) offers several benefits<sup class="footnote-reference" id="fr-issuehpke-1"><a href="#footnote-issuehpke">6</a></sup>:
+<ul>
+<li>Easier re-implementation of the format MLA, thanks to the availability of HPKE in cryptographic libraries</li>
+<li>An existing formal analysis <sup class="footnote-reference" id="fr-hpkeanalysis-1"><a href="#footnote-hpkeanalysis">7</a></sup></li>
+<li>Easier code and security auditing, thanks to the use of known bricks</li>
+<li>Availability of test vectors in the RFC, making the implementation more reliable</li>
+<li>If signature is added to MLA in a future version, it could also be integrated using HPKE</li>
+</ul>
+</li>
+<li>To the knowledge of the author, no HPKE algorithm has been standardized for quantum hybridation, hence the custom algorithm</li>
+<li>FIPS 203 is used as, at the time of writing:
+<ul>
+<li>It is the only KEM algorithm standardized by the NIST <sup class="footnote-reference" id="fr-nist-1"><a href="#footnote-nist">8</a></sup></li>
+<li>It is in line with the French suggestions <sup class="footnote-reference" id="fr-frsuggest-2"><a href="#footnote-frsuggest">2</a></sup> for PQ cryptography</li>
+</ul>
+</li>
+<li>The MLKEM-1024 mode is used for stronger security, and to limit consequence of future advances [^mlkemcon1]<sup class="footnote-reference" id="fr-mlkemcon2-1"><a href="#footnote-mlkemcon2">9</a></sup>. This is also the choice of other industry standards [^signal]<sup class="footnote-reference" id="fr-imessage-1"><a href="#footnote-imessage">10</a></sup></li>
+<li>The shared secret from the two-KEM is produced using a "Nested Dual-PRF Combiner", proved in <sup class="footnote-reference" id="fr-dualnest-1"><a href="#footnote-dualnest">11</a></sup> (3.3):
+<ul>
+<li>The use of concatenation scheme <strong>including ciphertexts</strong> keeps IND-CCA2 if one of the two underlying scheme is IND-CCA2, as proved in <sup class="footnote-reference" id="fr-combinearg1-1"><a href="#footnote-combinearg1">12</a></sup> and explained in <sup class="footnote-reference" id="fr-combinearg4-1"><a href="#footnote-combinearg4">13</a></sup></li>
+<li>TLS <sup class="footnote-reference" id="fr-combinearg2-1"><a href="#footnote-combinearg2">14</a></sup> uses a similar scheme, and IKE <sup class="footnote-reference" id="fr-combinearg3-1"><a href="#footnote-combinearg3">15</a></sup> also uses a concatenation scheme</li>
+<li>This kind of scheme follows ANSSI recommendations <sup class="footnote-reference" id="fr-frsuggest-3"><a href="#footnote-frsuggest">2</a></sup></li>
+<li>HKDF can be considered as a Dual-PRF if both inputs are uniformly random <sup class="footnote-reference" id="fr-combinearg7-1"><a href="#footnote-combinearg7">16</a></sup>. In MLA, the <code>combine</code> method is called with a shared secret from ML-KEM, and the resulting ECC key derivation -- both are uniformly random</li>
+<li>To avoid potential mistake in the future, or a mis-reuse of this method, the "Nested Dual-PRF Combiner" is used instead of the "Dual-PRF Combiner" (also from <sup class="footnote-reference" id="fr-dualnest-2"><a href="#footnote-dualnest">11</a></sup>). Indeed, this combiner force the "salt" part of HKDF to be uniformly random using an additional PRF use, ensuring the following HKDF is indeed a Dual-PRF</li>
+</ul>
+</li>
+</ul>
+<h3 id="asymmetric-encryption---multi-recipient-hybrid-kem"><a class="header" href="#asymmetric-encryption---multi-recipient-hybrid-kem">Asymmetric encryption - Multi-Recipient Hybrid KEM</a></h3>
+<h4 id="intuition"><a class="header" href="#intuition">Intuition</a></h4>
+<p>KEM, such as the one described above, returns a fresh and distinct secret for each recipient.</p>
+<p>To obtain a "meta-KEM", working for multi-recipient, the strategy is the use of per-recipient KEM to encrypt a common secret.</p>
+<p>This whole process can then be viewed as a KEM for multi-recipient, taking in input a list of public keys and returning a shared secret and a ciphertext made of the concatenation of each per-recipient ciphertext.</p>
+<p>To avoid marking which per-recipient ciphertext correspond to which recipient public key, the decapsulation process "brute-force" each ciphertext for a given decapsulation key. If the decryption works (with the associated tag), the shared secret is returned.</p>
+<p>Key commitment, to avoid rather unlikely mismatch, is further ensured inside the <code>Encrypt</code> layer (see below).</p>
+<h4 id="process-1"><a class="header" href="#process-1">Process</a></h4>
+<p>The "Per-recipient KEM" process described above is noted:</p>
+<ul>
+<li>$\mathrm{PerRecipientKEM.Encapsulate}$, taking a couple of public key ($pk_{ecc}^i$ and $pk_{mlkem}^i$), a shared secret $ss_{recipients}$ and returning a recipient ciphertext $ct_{recipient}^i$</li>
+<li>$\mathrm{PerRecipientKEM.Decapsulate}$, taking a couple of private key ($sk_{ecc}^i$ and $sk_{mlkem}^i$), a ciphertext $ct_{recipients}$ and returning either a shared secret $ss_{recipients}$ if the recipient $i$ is a legitimate recipient (if the AEAD decryption works), or an error otherwise</li>
+</ul>
+<p>$\mathrm{CSPRNG(n)}$ is a cryptographically secured RNG producing a n-bytes secret.</p>
+<p>To encapsulate to a list of recipient $[(pk_{ecc}^0, pk_{mlkem}^0), ..., (pk_{ecc}^{n-1}, pk_{mlkem}^{n-1})]$:</p>
+<pre><code class="language-math">\begin{align*}
+\mathtt{def\ } &amp; \mathrm{HybridKEM.Encapsulate}([(pk_{ecc}^0, pk_{mlkem}^0), ..., (pk_{ecc}^{n-1}, pk_{mlkem}^{n-1})])\\
+&amp; ss_{recipients} = \mathrm{CSPRNG(32)}\\
+&amp; ct_{recipient}^0 = \mathrm{PerRecipientKEM}((pk_{ecc}^0,pk_{mlkem}^0),ss_{recipients})\\
+&amp; \dots\\
+&amp; ct_{recipient}^{n-1} = \mathrm{PerRecipientKEM}((pk_{ecc}^{n-1},pk_{mlkem}^{n-1}),ss_{recipients})\\
+&amp; ct_{recipients} = \mathrm{Serialize}(ct_{recipient}^0, \dots, ct_{recipient}^{n-1})\\
+&amp; \mathtt{return}\ ss_{recipients},\ ct_{recipients}
+\end{align*}
+</code></pre>
+<hr />
+<p>To decapsulate from a ciphertext $ct_{recipients}$, knowing a recipient private key $(sk_{ecc}^i,sk_{mlkem}^i)$:</p>
+<p>$\mathtt{def\ } \mathrm{HybridKEM.Decapsulate}((sk_{ecc}^i,sk_{mlkem}^i), ct_{recipients})$<br />
+$\hspace{1cm}\mathtt{foreach\ } ct_k \mathtt{\ in\ } \mathrm{Deserialize}(ct_{recipients})$<br />
+$\hspace{2cm}\mathtt{try:}$<br />
+$\hspace{3cm}ss_{recipients} = \mathrm{PerRecipientKEM.Decapsulate}((sk_{ecc}^i,sk_{mlkem}^i), ct_k)$<br />
+$\hspace{2cm}\mathtt{success:}$<br />
+$\hspace{3cm}\mathtt{return}\ ss_{recipients}$<br />
+$\hspace{2cm}\mathtt{error:}$<br />
+$\hspace{3cm}\mathtt{continue}$<br />
+$\hspace{1cm}\mathtt{throw\ KeyNotFoundError}$</p>
+<h4 id="arguments-1"><a class="header" href="#arguments-1">Arguments</a></h4>
+<ul>
+<li>The shared secret is cryptographically generated, so it can later be used as a shared secret in HPKE encryption</li>
+<li>This secret is unique per archive, as it is generated on archive creation. Even "converting" or "repairing" an archive in <code>mlar</code> CLI will force a newly fresh secret. It is a new secret as there is no edit feature implemented, even if it is doable. Hence, a new random symetric key is used to encrypt its content while "converting" or "repairing" an archive.</li>
+<li>Even if the AEAD decryption worked for an non legitimate recipient, for instance following an intentional manipulation, the shared secret obtained will later be checked using Key commitment before decrypting actual data (see below)</li>
+<li>Optimization would have been possible here, such as sharing a common ephemeral key for the DHKEM. But the size gain is not worth enough regarding the ciphertext size of MLKEM and would move the implementation away from the DHKEM in RFC 9180</li>
+</ul>
+<h3 id="encryption"><a class="header" href="#encryption">Encryption</a></h3>
+<h4 id="notation"><a class="header" href="#notation">Notation</a></h4>
+<p>The "Multi-Recipient Hybrid KEM" process described above is noted:</p>
+<ul>
+<li>$\mathrm{MultiRecipientHybridKEM.Encapsulate}$, taking a list of public keys $[(pk_{ecc}^0, pk_{mlkem}^0), ..., (pk_{ecc}^{n-1}, pk_{mlkem}^{n-1})]$ and returing a shared secret $ss_{recipients}$ and a ciphertext $ct_{recipients}$</li>
+<li>$\mathrm{MultiRecipientHybridKEM.Decapsulate}$, taking a couple of private keys ($sk_{ecc}^i$ and $sk_{mlkem}^i$), a ciphertext $ct_{recipients}$ and returning either a shared secret $ss_{recipients}$ if the recipient $i$ is a legitimate recipient (if the AEAD decryption works), or an error otherwise</li>
+</ul>
+<p><code>KeyCommitmentChain</code> is defined as the array of 64-bytes: <code>-KEY COMMITMENT--KEY COMMITMENT--KEY COMMITMENT--KEY COMMITMENT-</code>.</p>
+<p>$\textrm{KeySchedule}_{hybrid}$: <code>KeySchedule</code> function from RFC 9180 <sup class="footnote-reference" id="fr-hpke-7"><a href="#footnote-hpke">1</a></sup>, instanciated with:</p>
+<ul>
+<li>Mode: "Base"</li>
+<li>KDF: HKDF-SHA-512</li>
+<li>AEAD: AES-256-GCM</li>
+<li>KEM: a custom KEM ID, numbered 0x1020</li>
+</ul>
+<p>$\mathrm{ComputeNonce}$: function from RFC 9180 <sup class="footnote-reference" id="fr-hpke-8"><a href="#footnote-hpke">1</a></sup>.</p>
+<h4 id="process-2"><a class="header" href="#process-2">Process</a></h4>
+<p>To encrypt n-bytes <code>data</code> to a list of public keys $[(pk_{ecc}^0, pk_{mlkem}^0), ..., (pk_{ecc}^{n-1}, pk_{mlkem}^{n-1})]$:</p>
+<ol>
+<li>Compute a shared secret and the corresponding ciphertext:</li>
+</ol>
+<pre><code class="language-math">ss_{recipients},\ ct_{recipients} = \mathrm{MultiRecipientHybridKEM.Encapsulate}([(pk_{ecc}^0, pk_{mlkem}^0), ..., (pk_{ecc}^{n-1}, pk_{mlkem}^{n-1})])
+</code></pre>
+<ol start="2">
+<li>Derive the key and base nonce using HPKE</li>
+</ol>
+<pre><code class="language-math">(key, base\_nonce) = \textrm{KeySchedule}_{hybrid}(
+        shared\_secret=ss_{recipients},
+    \textrm{info}=\mathtt{"MLA\ Encrypt\ Layer"}
+)
+</code></pre>
+<ol start="3">
+<li>Ensure key-commitment</li>
+</ol>
+<pre><code class="language-math">\begin{align*}
+keycommit&amp; = \textrm{Encrypt}_{AES\ 256\ GCM}(\\
+    &amp;\textrm{key}=key,\\
+    &amp;\textrm{nonce}=\mathrm{ComputeNonce}(base\_nonce, 0),\\
+    &amp;\textrm{data}=\textrm{KeyCommitmentChain}\\
+)&amp;
+\end{align*}
+</code></pre>
+<ol start="4">
+<li>For each 128KB $chunk_j$ of data:</li>
+</ol>
+<pre><code class="language-math">\begin{align*}
+enc_j&amp; = \textrm{Encrypt}_{AES\ 256\ GCM}(\\
+    &amp;\textrm{key}=key,\\
+    &amp;\textrm{nonce}=\mathrm{ComputeNonce}(base\_nonce, j + 1),\\
+    &amp;\textrm{data}=chunk_j\\
+)&amp;
+\end{align*}
+</code></pre>
+<p>Note: $j$ starts at 0. $j+1$ is used because the sequence numbered 0 has already been used by the Key commitment.</p>
+<ol start="5">
+<li>
+<p>When the layer is finalized, the last chunk of data (with a length lower than or equals to 128KB) is encrypted the same way</p>
+</li>
+<li>
+<p>Finally, a final chunk with sequence number $n+1$ (where $n$ is the number of data chunks) and special content and additional authenticated data is appended:</p>
+</li>
+</ol>
+<pre><code class="language-math">\begin{align*}
+final\_chunk&amp; = \textrm{Encrypt}_{AES\ 256\ GCM}(\\
+    &amp;\textrm{key}=key,\\
+    &amp;\textrm{nonce}=\mathrm{ComputeNonce}(base\_nonce, n + 1),\\
+    &amp;\textrm{data}="FINALBLOCK"\\
+    &amp;\textrm{aad}="FINALAAD"\\
+)&amp;
+\end{align*}
+</code></pre>
+<p>The resulting layer is composed of:</p>
+<ul>
+<li>header: $ct_{recipients}$</li>
+<li>data: $keycommit \ .\ enc_0\ . \dots\ enc_n \ .$ $<code>final\_chunk</code>$</li>
+</ul>
+<p>Special care must be taken not to reuse a sequence number in implementations as this would be catastrophic given GCM properties. For $n$ chunks of data:</p>
+<ul>
+<li>sequence 0: key commitment</li>
+<li>sequence 1 to $n$: data</li>
+<li>sequence $n+1$: $<code>final\_chunk</code>$ with only the 10 bytes "FINALBLOCK" as content</li>
+</ul>
+<hr />
+<p>To decrypt the data at position $pos$:</p>
+<ol>
+<li>Once for the whole session, get the cryptographic materials</li>
+</ol>
+<pre><code class="language-math">\begin{align}
+ss_{recipients} &amp;= \mathrm{MultiRecipientHybridKEM.Decapsulate}((sk_{ecc}^i, sk_{mlkem}^i), ct_{recipients})\\
+(key, base\_nonce) &amp;= \textrm{KeySchedule}_{hybrid}(
+        shared\_secret=ss_{recipients},
+    \textrm{info}=\mathtt{"MLA\ Encrypt\ Layer"}
+)
+\end{align}
+</code></pre>
+<ol start="2">
+<li>Once for the whole session, check the key commitment</li>
+</ol>
+<pre><code class="language-math">\begin{align*}
+commit&amp; = \textrm{Decrypt}_{AES\ 256\ GCM}(\\
+    &amp;\textrm{key}=key,\\
+    &amp;\textrm{nonce}=\mathrm{ComputeNonce}(base\_nonce, 0),\\
+    &amp;\textrm{data}=keycommit\\
+)&amp;
+\end{align*}
+</code></pre>
+<pre><code class="language-math">\mathtt{assert\ }commit = \textrm{KeyCommitmentChain}
+</code></pre>
+<ol start="3">
+<li>Retrieve the encrypted chunk of data</li>
+</ol>
+<pre><code class="language-math">\begin{align}
+start &amp;= pos - \mathtt{sizeof}(keycommit)\\
+j &amp;= pos \div 128KiB\\
+\end{align}
+</code></pre>
+<p>Where $\div$ is the Euclidian division.</p>
+<p>Then:</p>
+<pre><code class="language-math">\begin{align*}
+chunk_j&amp; = \textrm{Decrypt}_{AES\ 256\ GCM}(\\
+    &amp;\textrm{key}=key,\\
+    &amp;\textrm{nonce}=\mathrm{ComputeNonce}(base\_nonce, j + 1),\\
+    &amp;\textrm{data}=enc_j\\
+)&amp;
+\end{align*}
+</code></pre>
+<h4 id="arguments-2"><a class="header" href="#arguments-2">Arguments</a></h4>
+<ul>
+<li>Key commitment is always checked before returning clear-text data to the caller</li>
+<li>AEAD tag of a chunk is always checked before returning the corresponding clear-text data to the caller</li>
+<li>Arguments for HPKE use are very similar to the ones mentioned above. In particular, this is a standardized approach with existing analysis</li>
+<li>As there is two kind of custom KEM used ("Per-recipient KEM" and "Hybrid KEM"), two distinct KEM ID are used. In addition, two distinct MLA specific <code>info</code> are used to bind this derivation to MLA</li>
+<li>As described in <sup class="footnote-reference" id="fr-keycommit-2"><a href="#footnote-keycommit">3</a></sup> and <sup class="footnote-reference" id="fr-keycommit2-1"><a href="#footnote-keycommit2">17</a></sup>, AES in GCM mode does not ensure "key commitment". This property is added in the layer using the "padding fix" scheme from <sup class="footnote-reference" id="fr-keycommit-3"><a href="#footnote-keycommit">3</a></sup> with the recommended 512-bits size for a 256-bits security</li>
+<li>Key commitment is mainly used to ensure that two recipients will decrypt to the same plaintext if given the same ciphertext, i.e. an attacker modifying the header of an archive cannot provide two distinct plaintext to two distinct recipient</li>
+<li>AES-GCM is used as an industry standard AEAD
+<ul>
+<li>the base nonce, and therefore each nonce used, are unique per archive because they are generated from the archive-specific shared secret, limiting the nonce-reuse risk to standard acceptability <sup class="footnote-reference" id="fr-hpke-9"><a href="#footnote-hpke">1</a></sup></li>
+<li>no more than $2^{64}$ chunks will be produced, as the sequence's type used in MLA implementation is a <code>u64</code> checked for overflow. As this is a widely accepted limit of AES-GCM, this value is also within the range provided by <sup class="footnote-reference" id="fr-hpke-10"><a href="#footnote-hpke">1</a></sup></li>
+<li>the tag size is 128-bits (standard one), avoiding attacks described in <sup class="footnote-reference" id="fr-weaknessgcm-1"><a href="#footnote-weaknessgcm">18</a></sup></li>
+<li>128KiB is lower than the maximum plaintext length for a single message in AES-GCM (64 GiB)<sup class="footnote-reference" id="fr-weaknessgcm-2"><a href="#footnote-weaknessgcm">18</a></sup></li>
+</ul>
+</li>
+</ul>
+<h3 id="seed-derivation"><a class="header" href="#seed-derivation">Seed derivation</a></h3>
+<p>The asymmetric encryption in MLA, particularly the KEMs, provides deterministic API.</p>
+<p>These API are usually fed with cryptographically generated data, except for the regression test and the "seed derivation" feature in <code>mlar</code> CLI.</p>
+<p>This feature is meant to provide a way for client to implement:</p>
+<ul>
+<li>A derivation tree</li>
+<li>Keep the root secret in a safe place, and be able to find back the derived secrets</li>
+</ul>
+<p>The derivation scheme is based on the same ideas than <code>mla::crypto::hybrid::combine</code>:</p>
+<ol>
+<li>A dual-PRF (HKDF-Extract with a uniform random salt <sup class="footnote-reference" id="fr-combinearg7-2"><a href="#footnote-combinearg7">16</a></sup>) to extract entropy from the private key</li>
+<li>HKDF-Expand to derive along the given path component</li>
+</ol>
+<p>From a private key ($sk_{ecc}^i$ and $sk_{mlkem}^i$), the secret is derived from the path component $pc$ through:</p>
+<pre><code class="language-math">\begin{align}
+ecc\_rnd &amp;= \mathrm{HKDF.Extract_{SHA512}}(\mathrm{salt}=0, \mathrm{ikm}=sk_{ecc}^i)\\
+seed &amp;= \mathrm{HKDF_{SHA512}}(
+    \mathrm{salt}=ecc\_rnd,
+    \mathrm{ikm}=sk_{mlkem}^i,
+    \mathrm{info}=\mathtt{"PATH\ DERIVATION"}\ .\ pc
+)
+\end{align}
+</code></pre>
+<p>To derive a key using a <code>seed</code>, a <code>ChaChaRng</code> is used.
+If a <code>seed</code> is provided, the <code>ChaChaRng</code> is seeded with the first 32-bytes of $\mathrm{SHA512}(seed)$. Otherwise, the <code>ChaChaRng::from_entropy</code> is used, wrapping OS Cryptographic RNG sources.</p>
+<p>The CSRNG is then provided to MLA deterministic APIs.</p>
+<h2 id="implementation-specificities"><a class="header" href="#implementation-specificities">Implementation specificities</a></h2>
+<h3 id="external-dependencies"><a class="header" href="#external-dependencies">External dependencies</a></h3>
+<p>Some of the external cryptographic libraries have been reviewed:</p>
+<ul>
+<li>RustCrypto AES-GCM, reviewed by NCC Group <sup class="footnote-reference" id="fr-reviewncc-1"><a href="#footnote-reviewncc">19</a></sup></li>
+<li>Dalek cryptography library, reviewed by Quarkslab <sup class="footnote-reference" id="fr-reviewqb-1"><a href="#footnote-reviewqb">20</a></sup></li>
+<li><code>rust-hpke</code> library, reviewed in version 0.8 by CloudFlare <sup class="footnote-reference" id="fr-reviewcloudflare-1"><a href="#footnote-reviewcloudflare">21</a></sup></li>
+</ul>
+<p>In addition to the review, <code>rust-hpke</code> is mainly based on <code>RustCrypto</code>, avoiding the need for additional newer dependencies.</p>
+<p>The MLKEM implementation used is the one of <code>RustCrypto</code>, as MLA already depends on this project and the code quality and auditability are, in the author understanding, rather good.</p>
+<p>The generation uses <code>OsRng</code> from crate <code>rand</code>, that uses <code>getrandom()</code> from crate <code>getrandom</code>. <code>getrandom</code> provides implementations for many systems, listed <a href="https://docs.rs/getrandom/0.1.14/getrandom/">here</a>.
+On Linux it uses the <code>getrandom()</code> syscall and falls back on <code>/dev/urandom</code>.
+On Windows it uses the <code>RtlGenRandom</code> API (available since Windows XP/Windows Server 2003).</p>
+<p>In order to be "better safe than sorry", a <code>ChaChaRng</code> is seeded from the bytes generated by <code>OsRng</code> in order to build a CSPRNG(Cryptographically Secure PseudoRandom Number Generator). This <code>ChaChaRng</code> provides the actual bytes used in keys and nonces generations.</p>
+<p>The authors decided to use elliptic curve over RSA, because:</p>
+<ul>
+<li>No ready-for-production Rust-based libraries have been found at the date of writing</li>
+<li>A security-audited Rust library already exists for Curve25519</li>
+<li>Curve25519 is widely used and <a href="https://safecurves.cr.yp.to/">respects several criteria</a></li>
+<li>Common arguments, such as the ones of <a href="https://blog.trailofbits.com/2019/07/08/fuck-rsa/">Trail of bits</a></li>
+</ul>
+<p>AES-GCM is used because it is one of the most commonly used AEAD algorithms and using one avoids a whole class of attacks. In addition, it lets us rely on hardware acceleration (like AES-NI) to keep reasonable performance.</p>
+<h3 id="aes-gcm-re-implementation"><a class="header" href="#aes-gcm-re-implementation">AES-GCM re-implementation</a></h3>
+<p>While the AES and GHash bricks come from RustCrypto, the GCM mode for AES-256 has been re-implemented in MLA.</p>
+<p>Indeed, the repair mode must be able to only partially decrypt a data chunk, and decide whether the associated tag must be verified or not. This API is not provided by the RustCrypto project, for very understandable reasons.</p>
+<p>To ensure the implementation follows the standard, it is tested against AES-256-GCM test vectors in MLA regression tests.</p>
+<h3 id="hpke-key-schedule-re-implementation"><a class="header" href="#hpke-key-schedule-re-implementation">HPKE Key Schedule re-implementation</a></h3>
+<p>For several reasons described in the code, but mainly due to the availability of API, the possibility to add custom KEM ID and the relative few lines needed for re-implementation, the $\mathrm{KeySchedule}$ method has been re-implemented in MLA.</p>
+<p>It still use some bricks from <code>rust-hpke</code>, as the KDF, $\mathrm{LabeledExtract}$ and $\mathrm{LabeledExpand}$. It is tested against RFC 9180 <sup class="footnote-reference" id="fr-hpke-11"><a href="#footnote-hpke">1</a></sup> test vectors in MLA regression tests.</p>
+<h3 id="mlkem-implementation-without-a-review"><a class="header" href="#mlkem-implementation-without-a-review">MLKEM implementation without a review</a></h3>
+<p>Thanks to the hybrid approach, a flawed implementation of MLKEM would have limited consequences. It satisfies ANSSI guidelines for the transition first phase to PQC hybridization <sup class="footnote-reference" id="fr-frsuggest-4"><a href="#footnote-frsuggest">2</a></sup>. For this reason, MLA is eligible for a security visa evaluation.</p>
+<p>For now, it is therefore accepted by the author (as a trade-off) to use a MLKEM implementation without existing review to bring as soon as possible a reasonable protection against "Harvest now, decrypt later" attacks.</p>
+<p>If a reviewed implementation with acceptable dependency emerges in the future, it can be easily swapped in MLA. Thus, MLA would also satisfy the requirements to get a security visa evaluation in the second and third phases of these guidelines by including its PQC implementation.</p>
+<h2 id="security-consideration"><a class="header" href="#security-consideration">Security consideration</a></h2>
+<h3 id="absence-of-signature"><a class="header" href="#absence-of-signature">Absence of signature</a></h3>
+<p>As there is no signature for now in MLA, an attacker knowing the recipient public key can always create a custom archive with arbitrary data.</p>
+<p>For this reason, several known attacks are considered acceptable, such as:</p>
+<ul>
+<li>The bit indicating if the <code>Encrypt</code> layer is present is not protected in integrity</li>
+</ul>
+<p>An attacker can remove it, making the reader treating the archive as if encryption was absent. <em>The reader is responsible of checking for encryption bit if it was expected in the first place</em>.</p>
+<p>For instance, the <code>mlar</code> CLI will refuse to open an archive without the <code>Encrypt</code> bit unless <code>--accept-unencrypted</code> is provided on the command line.</p>
+<ul>
+<li>An attacker with the ability to modify a real archive in transit can replace what the reader will be able to read with arbitrary data</li>
+</ul>
+<p>To perform this attack, the attacker will have to either remove the <code>Encrypt</code> bit or modify the key used for decryption with one she has.
+The remaining encrypted data will then act as random values.</p>
+<p>Still, the attacker could expect to gain enough privilege, like arbitrary code execution in the process, during the archive read. One can then try to reuse the provided key to decrypt, then act on the real data.</p>
+<p>Limiting this attack is beyond the scope of this document. It mainly involves the security features of Rust, reviewed implementation, testing &amp; fuzzing, zeroizing secrets when possible <sup class="footnote-reference" id="fr-issuezeroize-1"><a href="#footnote-issuezeroize">22</a></sup>, etc.</p>
+<ul>
+<li>An attacker can truncate an archive and hope for repair</li>
+</ul>
+<p>This attack is based on a trade-off: should the <code>SafeReader</code> try to get as many bytes as possible, or should it return only data that have been authenticated?</p>
+<p>The choice has been made to report the decision to the user of the library<sup class="footnote-reference" id="fr-issueallowunauth-1"><a href="#footnote-issueallowunauth">23</a></sup>.</p>
+<h3 id="other-properties"><a class="header" href="#other-properties">Other properties</a></h3>
+<ul>
+<li>Plaintext length</li>
+</ul>
+<p>The <code>Encrypt</code> layer does not hide the plaintext length.</p>
+<p>Usually, this layer is used with the <code>Compress</code> layer. If an attacker knows the original file size, he might learn information about the original data entropy.</p>
+<ul>
+<li>Hidden recipient list</li>
+</ul>
+<p>Only the owner of a recipient's private key can determine that they are a recipient of the archive. In other words, while the recipient list remains private, the total number of recipients is still visible.</p>
+<p>This is an intentional privacy feature.</p>
+<hr>
+<ol class="footnote-definition"><li id="footnote-hpke">
+<p><a href="https://datatracker.ietf.org/doc/rfc9180/">Hybrid Public Key Encryption, RFC 9180</a> <a href="#fr-hpke-1">↩</a> <a href="#fr-hpke-2">↩2</a> <a href="#fr-hpke-3">↩3</a> <a href="#fr-hpke-4">↩4</a> <a href="#fr-hpke-5">↩5</a> <a href="#fr-hpke-6">↩6</a> <a href="#fr-hpke-7">↩7</a> <a href="#fr-hpke-8">↩8</a> <a href="#fr-hpke-9">↩9</a> <a href="#fr-hpke-10">↩10</a> <a href="#fr-hpke-11">↩11</a></p>
+</li>
+<li id="footnote-frsuggest">
+<p>https://cyber.gouv.fr/en/publications/follow-position-paper-post-quantum-cryptography <a href="#fr-frsuggest-1">↩</a> <a href="#fr-frsuggest-2">↩2</a> <a href="#fr-frsuggest-3">↩3</a> <a href="#fr-frsuggest-4">↩4</a></p>
+</li>
+<li id="footnote-keycommit">
+<p><a href="https://www.usenix.org/conference/usenixsecurity22/presentation/albertini">"How to Abuse and Fix Authenticated Encryption Without Key Commitment", Usenix'22</a> <a href="#fr-keycommit-1">↩</a> <a href="#fr-keycommit-2">↩2</a> <a href="#fr-keycommit-3">↩3</a></p>
+</li>
+<li id="footnote-issuekeycommit">
+<p>https://github.com/ANSSI-FR/MLA/issues/206 <a href="#fr-issuekeycommit-1">↩</a></p>
+</li>
+<li id="footnote-fips203">
+<p><a href="https://csrc.nist.gov/pubs/fips/203/ipd">FIPS 203 - MLKEM Standard</a> <a href="#fr-fips203-1">↩</a> <a href="#fr-fips203-2">↩2</a> <a href="#fr-fips203-3">↩3</a></p>
+</li>
+<li id="footnote-issuehpke">
+<p>https://github.com/ANSSI-FR/MLA/issues/211 <a href="#fr-issuehpke-1">↩</a></p>
+</li>
+<li id="footnote-hpkeanalysis">
+<p>https://eprint.iacr.org/2020/1499.pdf <a href="#fr-hpkeanalysis-1">↩</a></p>
+</li>
+<li id="footnote-nist">
+<p>https://csrc.nist.gov/News/2022/pqc-candidates-to-be-standardized-and-round-4 <a href="#fr-nist-1">↩</a></p>
+</li>
+<li id="footnote-mlkemcon2">
+<p>https://kyberslash.cr.yp.to/ <a href="#fr-mlkemcon2-1">↩</a></p>
+</li>
+<li id="footnote-imessage">
+<p>https://security.apple.com/blog/imessage-pq3/ <a href="#fr-imessage-1">↩</a></p>
+</li>
+<li id="footnote-dualnest">
+<p>https://eprint.iacr.org/2018/903.pdf <a href="#fr-dualnest-1">↩</a> <a href="#fr-dualnest-2">↩2</a></p>
+</li>
+<li id="footnote-combinearg1">
+<p>https://eprint.iacr.org/2018/024 <a href="#fr-combinearg1-1">↩</a></p>
+</li>
+<li id="footnote-combinearg4">
+<p>https://eprint.iacr.org/2024/039 <a href="#fr-combinearg4-1">↩</a></p>
+</li>
+<li id="footnote-combinearg2">
+<p>https://datatracker.ietf.org/doc/draft-ietf-tls-hybrid-design/ <a href="#fr-combinearg2-1">↩</a></p>
+</li>
+<li id="footnote-combinearg3">
+<p>https://datatracker.ietf.org/doc/html/rfc9370 <a href="#fr-combinearg3-1">↩</a></p>
+</li>
+<li id="footnote-combinearg7">
+<p>https://eprint.iacr.org/2023/861 <a href="#fr-combinearg7-1">↩</a> <a href="#fr-combinearg7-2">↩2</a></p>
+</li>
+<li id="footnote-keycommit2">
+<p>https://eprint.iacr.org/2019/016.pdf <a href="#fr-keycommit2-1">↩</a></p>
+</li>
+<li id="footnote-weaknessgcm">
+<p><a href="https://csrc.nist.gov/csrc/media/projects/block-cipher-techniques/documents/bcm/comments/cwc-gcm/ferguson2.pdf">"Authentication weaknesses in GCM"</a> <a href="#fr-weaknessgcm-1">↩</a> <a href="#fr-weaknessgcm-2">↩2</a></p>
+</li>
+<li id="footnote-reviewncc">
+<p>https://research.nccgroup.com/wp-content/uploads/2020/02/NCC_Group_MobileCoin_RustCrypto_AESGCM_ChaCha20Poly1305_Implementation_Review_2020-02-12_v1.0.pdf <a href="#fr-reviewncc-1">↩</a></p>
+</li>
+<li id="footnote-reviewqb">
+<p>https://blog.quarkslab.com/security-audit-of-dalek-libraries.html <a href="#fr-reviewqb-1">↩</a></p>
+</li>
+<li id="footnote-reviewcloudflare">
+<p>https://blog.cloudflare.com/using-hpke-to-encrypt-request-payloads/ <a href="#fr-reviewcloudflare-1">↩</a></p>
+</li>
+<li id="footnote-issuezeroize">
+<p>https://github.com/ANSSI-FR/MLA/issues/46 <a href="#fr-issuezeroize-1">↩</a></p>
+</li>
+<li id="footnote-issueallowunauth">
+<p>https://github.com/ANSSI-FR/MLA/issues/167 <a href="#fr-issueallowunauth-1">↩</a></p>
+</li>
+</ol><div style="break-before: page; page-break-before: always;"></div><h2 id="key-derivation"><a class="header" href="#key-derivation">Key derivation</a></h2>
+<p>This feature can help setup a hierarchical key infrastructure.</p>
+<p><code>mlar</code> provides a subcommand <code>keyderive</code> to deterministically derive sub-keys from a given key along a derivation path (a bit like <a href="https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki">BIP-32</a>, except children public keys can't be derived from the parent one).</p>
+<p>For instance, if one wants to derive the following scheme:</p>
+<pre><code class="language-ascii">root_key
+    ├──["App X"]── key_app_x
+    │   └──["v1.2.3"]── key_app_x_v1.2.3
+    └──["App Y"]── key_app_y
+</code></pre>
+<p>One can use the following commands:</p>
+<pre><code class="language-bash"># Create the root key (--seed can be used if this key must be created deterministically)
+mlar keygen root_key
+# Create App keys
+mlar keyderive root_key key_app_x --path-component "App X"
+mlar keyderive root_key key_app_y --path-component "App Y"
+# Create the v1.2.3 key of App X
+mlar keyderive key_app_x key_app_x_v1.2.3 --path-component "v1.2.3"
+</code></pre>
+<p>At this point, let's consider an outage happened and keys have been lost.</p>
+<p>One can recover all the keys from the <code>root_key</code> private key.
+For instance, to recover the <code>key_app_v1.2.3</code>:</p>
+<pre><code class="language-bash">mlar keyderive root_key recovered_key --path-component "App X" --path-component "v1.2.3"
+</code></pre>
+<p>As such, if the <code>App X</code> owner only knows <code>key_app_x</code>, he can recover all of its subkeys, including <code>key_app_v1.2.3</code> but excluding <code>key_app_y</code>.</p>
+<p>WARNING: This scheme does not provide any revocation mechanism. If a parent key is compromised, all of the key in its sub-tree must be considered compromised (ie. all past and futures key that can be obtained from it). The opposite is not true: a parent key remains safe if any of its children key is compromised.</p>
+<div style="break-before: page; page-break-before: always;"></div><h2 id="fuzzing"><a class="header" href="#fuzzing">Fuzzing</a></h2>
+<p>A fuzzing scenario made with <a href="https://github.com/rust-fuzz/afl.rs">afl.rs</a> is available in <code>mla-fuzz-afl</code>.
+The scenario is capable of:</p>
+<ul>
+<li>Creating archives with interleaved files, and different layers enabled</li>
+<li>Reading them to check their content</li>
+<li>Repairing the archive without truncation, and verifying it</li>
+<li>Altering the archive raw data, and ensuring reading it does not panic (but only fail)</li>
+<li>Repairing the altered archive, and ensuring the recovery doesn't fail (only reports detected errors)</li>
+</ul>
+<p>To launch it:</p>
+<ol>
+<li>produce initial samples by uncommenting <code>produce_samples()</code> in <code>mla-fuzz-afl/src/main.rs</code></li>
+</ol>
+<pre><code class="language-sh">cd mla-fuzz-afl
+# ... uncomment `produces_samples()` ...
+mkdir in
+mkdir out
+cargo run
+</code></pre>
+<ol start="2">
+<li>build and launch AFL</li>
+</ol>
+<pre><code class="language-sh">cargo afl build
+cargo afl run -i in -o out ../target/debug/mla-fuzz-afl
+</code></pre>
+<p>If you have found crashes, try to replay them with either:</p>
+<ul>
+<li>Peruvian rabbit mode of AFL: <code>cargo afl run -i - -o out -C ../target/debug/mla-fuzz-afl</code></li>
+<li>Direct replay: <code>../target/debug/mla-fuzz-afl &lt; out/crashes/crash_id</code></li>
+<li>Debugging: uncomment the "Replay sample" part of <code>mla-fuzz-afl/src/main.rs</code>, and add <code>dbg!()</code> when it's needed</li>
+</ul>
+<p>:warning: The stability is quite low, likely due to the process used for the scenario (deserialization from the data provided by AFL) and variability of inner algorithms, such as brotli. Crashes, if any, might not be reproducible or due to the <code>mla-fuzz-afl</code> inner working, which is a bit complex (and therefore likely buggy). One can comment unrelevant parts in <code>mla-fuzz-afl/src/main.rs</code> to ensure a better experience.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+
+            </nav>
+
+        </div>
+
+        <!-- Livereload script (if served using the cli tool) -->
+        <script>
+            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
+            const socket = new WebSocket(wsAddress);
+            socket.onmessage = function (event) {
+                if (event.data === "reload") {
+                    socket.close();
+                    location.reload();
+                }
+            };
+
+            window.onbeforeunload = function() {
+                socket.close();
+            }
+        </script>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+        <script>
+        window.addEventListener('load', function() {
+            window.setTimeout(window.print, 100);
+        });
+        </script>
+
+    </div>
+    </body>
+</html>
