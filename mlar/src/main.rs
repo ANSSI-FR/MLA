@@ -585,7 +585,7 @@ fn add_string_file(
         if path.exists() {
             if add_file_or_dir(mla, path).is_err() {
                 eprintln!(
-                    " [!] Line {} cannot be read as text (UTF-8) or added",
+                    " [!] Line {} cannot be read as text (UTF-8)",
                     index + 1
                 );
             }
@@ -597,7 +597,7 @@ fn add_string_file(
     if total_lines > 0 && invalid_paths_count == total_lines {
         return Err(MlarError::IOError(std::io::ErrorKind::InvalidData.into()));
     } else if total_lines == 0 {
-        eprintln!(" [!] One given file is empty, not added to MLA");
+        eprintln!(" [!] One given file is empty and haven't been added to MLA");
     }
 
     Ok(())
@@ -629,7 +629,7 @@ fn process_chunk(
 
 fn add_from_stdin(
     mla: &mut ArchiveWriter<OutputTypes>,
-    filenames: Vec<String>,
+    filenames: &mut impl Iterator<Item = String>,
     sep: Option<&String>,
 ) -> Result<(), MlarError> {
     const BUFFER_CAPACITY: usize = 4096;
@@ -639,20 +639,7 @@ fn add_from_stdin(
         let mut buffer = Vec::new();
         io::stdin().lock().read_to_end(&mut buffer)?;
 
-        let filename = filenames
-            .first()
-            .cloned()
-            .unwrap_or_else(|| "chunk_0.bin".to_string());
-
-        if let Ok(text) = std::str::from_utf8(&buffer) {
-            if let Err(MlarError::IOError(err)) = add_string_file(mla, text) {
-                if err.kind() == std::io::ErrorKind::InvalidData {
-                    add_binary(mla, &filename, &buffer)?;
-                }
-            }
-        } else {
-            add_binary(mla, &filename, &buffer)?;
-        }
+        process_chunk(mla, &buffer, filenames, 0)?;
 
         return Ok(());
     }
@@ -663,7 +650,6 @@ fn add_from_stdin(
     let mut chunk = Vec::with_capacity(BUFFER_CAPACITY);
     let mut buffer = [0; BUFFER_CAPACITY];
 
-    let mut filename_iterator = filenames.into_iter();
     let mut processed_file = 0;
 
     let mut reader = BufReader::new(io::stdin());
@@ -674,7 +660,7 @@ fn add_from_stdin(
             // EOF, process remaining chunk if not empty
             if !chunk.is_empty() {
                 processed_file += 1;
-                process_chunk(mla, &chunk, &mut filename_iterator, processed_file)?;
+                process_chunk(mla, &chunk, filenames, processed_file)?;
             }
             break;
         }
@@ -686,7 +672,7 @@ fn add_from_stdin(
         if chunks.len() > 1 {
             for part in &chunks[..chunks.len() - 1] {
                 processed_file += 1;
-                process_chunk(mla, part, &mut filename_iterator, processed_file)?;
+                process_chunk(mla, part, filenames, processed_file)?;
             }
 
             chunk = chunks[chunks.len() - 1].to_vec();
@@ -704,13 +690,14 @@ fn create(matches: &ArgMatches) -> Result<(), MlarError> {
     if let Some(files) = matches.get_many::<PathBuf>("files") {
         for filename in files {
             if filename.as_os_str() == "-" {
-                let filenames = matches
+                let mut filenames = matches
                     .get_many::<String>("filenames")
                     .map(|values_ref| values_ref.map(ToString::to_string).collect::<Vec<String>>())
-                    .unwrap_or_default();
+                    .unwrap_or_default()
+                    .into_iter();
                 let sep = matches.get_one::<String>("separator");
 
-                add_from_stdin(&mut mla, filenames, sep)?;
+                add_from_stdin(&mut mla, &mut filenames, sep)?;
             } else {
                 let path = Path::new(&filename);
                 add_file_or_dir(&mut mla, path)?;
