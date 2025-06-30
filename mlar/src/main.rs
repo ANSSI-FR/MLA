@@ -639,13 +639,18 @@ fn add_from_stdin(
         let mut buffer = Vec::new();
         io::stdin().lock().read_to_end(&mut buffer)?;
 
+        let filename = filenames
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "chunk_0.bin".to_string());
+
         if let Ok(text) = std::str::from_utf8(&buffer) {
-            add_string_file(mla, text)?;
+            if let Err(MlarError::IOError(err)) = add_string_file(mla, text) {
+                if err.kind() == std::io::ErrorKind::InvalidData {
+                    add_binary(mla, &filename, &buffer)?;
+                }
+            }
         } else {
-            let filename = filenames
-                .first()
-                .cloned()
-                .unwrap_or_else(|| "chunk_0.bin".to_string());
             add_binary(mla, &filename, &buffer)?;
         }
 
@@ -687,26 +692,6 @@ fn add_from_stdin(
             chunk = chunks[chunks.len() - 1].to_vec();
         }
     }
-
-    // `.unwrap()` is safe error since we checked it before
-    /*let separator = sep.unwrap().as_bytes();
-    let mut reader = io::BufReader::new(stdin);
-    let mut buffer = Vec::new();
-    reader.read_to_end(&mut buffer)?;
-
-    let chunks = split_by_subsequence(&buffer, separator);
-
-    for (index, chunk) in chunks.into_iter().enumerate() {
-        if let Ok(text) = std::str::from_utf8(&chunk) {
-            add_string_file(mla, text.to_string())?;
-        } else {
-            let filename = filenames
-                .get(index)
-                .cloned()
-                .unwrap_or_else(|| format!("{index}.bin"));
-            add_binary(mla, &filename, &chunk)?;
-        }
-    }*/
 
     Ok(())
 }
