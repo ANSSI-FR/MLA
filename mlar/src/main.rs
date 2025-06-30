@@ -24,8 +24,7 @@ use std::collections::{HashMap, HashSet};
 use std::error;
 use std::fmt;
 use std::fs::{self, File, read_dir};
-use std::io::{self, BufRead};
-use std::io::{Read, Seek, Write};
+use std::io::{self, BufReader, Read, Seek, Write};
 use std::num::NonZeroUsize;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
@@ -515,10 +514,200 @@ fn add_dir(mla: &mut ArchiveWriter<OutputTypes>, dir: &Path) -> Result<(), MlarE
     Ok(())
 }
 
-fn add_from_stdin(mla: &mut ArchiveWriter<OutputTypes>) -> Result<(), MlarError> {
-    for line in io::stdin().lock().lines() {
-        add_file_or_dir(mla, Path::new(&line?))?;
+/// Split a buffer into chunks according to a custom separator, removing
+/// any immediately following newline characters from the start of the next chunk.
+fn split_by_subsequence<'a>(buffer: &'a [u8], boundary: &[u8]) -> Vec<&'a [u8]> {
+    let mut parts = Vec::new();
+    let mut start = 0;
+    let mut i = 0;
+
+    // If boundary is empty, avoid doing search
+    if boundary.is_empty() {
+        parts.push(buffer);
+        return parts;
     }
+
+    let boundary_len = boundary.len();
+    let buffer_len = buffer.len();
+
+    while i + boundary_len <= buffer_len {
+        if &buffer[i..i + boundary_len] == boundary {
+            parts.push(&buffer[start..i]);
+            i += boundary_len;
+            start = i;
+
+            // Skip any immediate newline characters (LF or CRLF) after the separator
+            while start < buffer_len {
+                if buffer[start] == b'\n' {
+                    start += 1;
+                } else if buffer[start] == b'\r'
+                    && start + 1 < buffer_len
+                    && buffer[start + 1] == b'\n'
+                {
+                    start += 2; // Consume both CR and LF
+                } else {
+                    break;
+                }
+            }
+            i = start;
+        } else {
+            i += 1;
+        }
+    }
+
+    // Add last chunk (no separator)
+    if start <= buffer_len {
+        parts.push(&buffer[start..]);
+    }
+
+    parts
+}
+
+fn add_binary(
+    mla: &mut ArchiveWriter<OutputTypes>,
+    filename: &str,
+    buffer: &[u8],
+) -> Result<(), MlarError> {
+    Ok(mla.add_file(filename, buffer.len() as u64, buffer)?)
+}
+
+fn add_string_file(
+    mla: &mut ArchiveWriter<OutputTypes>,
+    file_content: &str,
+) -> Result<(), MlarError> {
+    let mut total_lines = 0;
+    let mut invalid_paths_count = 0;
+
+    for (index, line) in file_content.lines().enumerate() {
+        total_lines += 1;
+        let path = Path::new(line.trim());
+
+        if path.exists() {
+            if add_file_or_dir(mla, path).is_err() {
+                eprintln!(
+                    " [!] Line {} cannot be read as text (UTF-8) or added",
+                    index + 1
+                );
+            }
+        } else {
+            invalid_paths_count += 1;
+        }
+    }
+
+    if total_lines > 0 && invalid_paths_count == total_lines {
+        return Err(MlarError::IOError(std::io::ErrorKind::InvalidData.into()));
+    } else if total_lines == 0 {
+        eprintln!(" [!] One given file is empty, not added to MLA");
+    }
+
+    Ok(())
+}
+
+fn process_chunk(
+    mla: &mut ArchiveWriter<OutputTypes>,
+    chunk: &[u8],
+    filename_iterator: &mut impl Iterator<Item = String>,
+    fallback_filename: usize,
+) -> Result<(), MlarError> {
+    if let Ok(text) = std::str::from_utf8(chunk) {
+        if let Err(MlarError::IOError(err)) = add_string_file(mla, text) {
+            if err.kind() == std::io::ErrorKind::InvalidData {
+                let filename = filename_iterator
+                    .next()
+                    .unwrap_or_else(|| format!("./chunk_{fallback_filename}.bin"));
+                add_binary(mla, &filename, chunk)?;
+            }
+        }
+    } else {
+        let filename = filename_iterator
+            .next()
+            .unwrap_or_else(|| format!("./chunk_{fallback_filename}.bin"));
+        add_binary(mla, &filename, chunk)?;
+    }
+    Ok(())
+}
+
+fn add_from_stdin(
+    mla: &mut ArchiveWriter<OutputTypes>,
+    filenames: Vec<String>,
+    sep: Option<&String>,
+) -> Result<(), MlarError> {
+    const BUFFER_CAPACITY: usize = 4096;
+
+    // If no separator is provided, it's assumed that the file is a single
+    if sep.is_none() {
+        let mut buffer = Vec::new();
+        io::stdin().lock().read_to_end(&mut buffer)?;
+
+        if let Ok(text) = std::str::from_utf8(&buffer) {
+            add_string_file(mla, text)?;
+        } else {
+            let filename = filenames
+                .first()
+                .cloned()
+                .unwrap_or_else(|| "chunk_0.bin".to_string());
+            add_binary(mla, &filename, &buffer)?;
+        }
+
+        return Ok(());
+    }
+
+    // `.unwrap()` is safe error since we checked it before
+    let sep = sep.unwrap().as_bytes();
+
+    let mut chunk = Vec::with_capacity(BUFFER_CAPACITY);
+    let mut buffer = [0; BUFFER_CAPACITY];
+
+    let mut filename_iterator = filenames.into_iter();
+    let mut processed_file = 0;
+
+    let mut reader = BufReader::new(io::stdin());
+    loop {
+        let bytes_read = reader.read(&mut buffer)?;
+
+        if bytes_read == 0 {
+            // EOF, process remaining chunk if not empty
+            if !chunk.is_empty() {
+                processed_file += 1;
+                process_chunk(mla, &chunk, &mut filename_iterator, processed_file)?;
+            }
+            break;
+        }
+
+        chunk.extend_from_slice(&buffer[..bytes_read]);
+
+        let chunks = split_by_subsequence(&chunk, sep);
+
+        if chunks.len() > 1 {
+            for part in &chunks[..chunks.len() - 1] {
+                processed_file += 1;
+                process_chunk(mla, part, &mut filename_iterator, processed_file)?;
+            }
+
+            chunk = chunks[chunks.len() - 1].to_vec();
+        }
+    }
+
+    // `.unwrap()` is safe error since we checked it before
+    /*let separator = sep.unwrap().as_bytes();
+    let mut reader = io::BufReader::new(stdin);
+    let mut buffer = Vec::new();
+    reader.read_to_end(&mut buffer)?;
+
+    let chunks = split_by_subsequence(&buffer, separator);
+
+    for (index, chunk) in chunks.into_iter().enumerate() {
+        if let Ok(text) = std::str::from_utf8(&chunk) {
+            add_string_file(mla, text.to_string())?;
+        } else {
+            let filename = filenames
+                .get(index)
+                .cloned()
+                .unwrap_or_else(|| format!("{index}.bin"));
+            add_binary(mla, &filename, &chunk)?;
+        }
+    }*/
+
     Ok(())
 }
 
@@ -530,7 +719,13 @@ fn create(matches: &ArgMatches) -> Result<(), MlarError> {
     if let Some(files) = matches.get_many::<PathBuf>("files") {
         for filename in files {
             if filename.as_os_str() == "-" {
-                add_from_stdin(&mut mla)?;
+                let filenames = matches
+                    .get_many::<String>("filenames")
+                    .map(|values_ref| values_ref.map(ToString::to_string).collect::<Vec<String>>())
+                    .unwrap_or_default();
+                let sep = matches.get_one::<String>("separator");
+
+                add_from_stdin(&mut mla, filenames, sep)?;
             } else {
                 let path = Path::new(&filename);
                 add_file_or_dir(&mut mla, path)?;
@@ -1068,6 +1263,19 @@ fn app() -> clap::Command {
                     .help("Files to add")
                     .value_parser(value_parser!(PathBuf))
                     .action(ArgAction::Append)
+                )
+                .arg(
+                    Arg::new("filenames")
+                    .long("filenames")
+                    .help("When reading from stdin (pipeline), set names for files in the order they appear")
+                    .action(ArgAction::Append)
+                )
+                .arg(
+                    Arg::new("separator")
+                    .long("separator")
+                    .help("A string used to delimit files when reading concatenated input from stdin (e.g., via a pipe).")
+                    .value_parser(value_parser!(String))
+                    .num_args(1)
                 ),
         )
         .subcommand(
