@@ -568,6 +568,7 @@ fn add_binary(
     filename: &str,
     buffer: &[u8],
 ) -> Result<(), MlarError> {
+    println!("{filename}");
     Ok(mla.add_file(filename, buffer.len() as u64, buffer)?)
 }
 
