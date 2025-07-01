@@ -91,7 +91,7 @@ impl std::default::Default for EncryptionConfig {
 
 impl EncryptionConfig {
     /// Consistency check
-    pub fn check(&self) -> Result<(), ConfigError> {
+    pub const fn check(&self) -> Result<(), ConfigError> {
         if self.ecc_keys.is_empty() {
             Err(ConfigError::EncryptionKeyIsMissing)
         } else {
