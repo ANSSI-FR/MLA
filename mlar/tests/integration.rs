@@ -1,4 +1,4 @@
-use assert_cmd::Command;
+use assert_cmd::{Command, output};
 use assert_fs::fixture::{FileWriteBin, NamedTempFile, TempDir};
 use permutate::Permutator;
 use rand::SeedableRng;
@@ -1524,7 +1524,9 @@ fn test_stdin() {
 
     println!("{cmd:?}");
     let assert = cmd.assert();
-    assert.success().stdout(output_files.first().unwrap().to_string() + "\n");
+    assert
+        .success()
+        .stdout(output_files.first().unwrap().to_string() + "\n");
 
     // `mlar extract -v -i output.mla -o ouput_dir -g '*'`
     let output_dir = TempDir::new().unwrap();
