@@ -1,0 +1,8 @@
+[book]
+authors = ["extiop"]
+language = "en"
+src = "src"
+title = "Multi Layer Archive"
+
+[output.html]
+mathjax-support = true
