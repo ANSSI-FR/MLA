@@ -36,7 +36,7 @@ pub struct MultiRecipientPersistent {
 }
 
 impl MultiRecipientPersistent {
-    pub fn count_keys(&self) -> usize {
+    pub const fn count_keys(&self) -> usize {
         self.encrypted_keys.len()
     }
 }

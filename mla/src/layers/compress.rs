@@ -101,7 +101,7 @@ pub struct SizesInfo {
 
 impl SizesInfo {
     /// Get the uncompressed block size of block `block_num`
-    fn uncompressed_block_size_at(&self, block_num: usize) -> u32 {
+    const fn uncompressed_block_size_at(&self, block_num: usize) -> u32 {
         if block_num < self.compressed_sizes.len() - 1 {
             UNCOMPRESSED_DATA_SIZE
         } else {
