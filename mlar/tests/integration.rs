@@ -1515,3 +1515,50 @@ fn test_extract_lot_files() {
 
     ensure_directory_content(output_dir.path(), &one_file);
 }
+
+#[test]
+fn test_stdin() {
+    let msg = "echo... echo... echo...";
+    let mlar_file = NamedTempFile::new("output.mla").unwrap();
+
+    let output_files = ["file.txt"];
+
+    // `ECHO "echo... echo... echo..." | mlar create -l -o output.mla --filenames file.txt -`
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("create")
+        .arg("-l")
+        .arg("-o")
+        .arg(mlar_file.path())
+        .arg("--filenames")
+        .arg(output_files.first().unwrap())
+        .arg("-")
+        .write_stdin(msg);
+
+    println!("{cmd:?}");
+    let assert = cmd.assert();
+    assert
+        .success()
+        .stdout((*output_files.first().unwrap()).to_string() + "\n");
+
+    // `mlar extract -v --accept-unencrypted -i output.mla -o ouput_dir`
+    let output_dir = TempDir::new().unwrap();
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("extract")
+        .arg("-v")
+        .arg("--accept-unencrypted")
+        .arg("-i")
+        .arg(mlar_file.path())
+        .arg("-o")
+        .arg(output_dir.path());
+
+    println!("{cmd:?}");
+    let assert = cmd.assert();
+    assert.success();
+
+    let extracted_file_path = output_dir.path().join(output_files.first().unwrap());
+    let content = fs::read_to_string(&extracted_file_path).unwrap();
+    assert_eq!(content, msg);
+
+    // Esoteric.
+    // ensure_directory_content(output_dir.path(), &testfs.files);
+}
