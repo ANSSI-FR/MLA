@@ -585,10 +585,7 @@ fn add_string_file(
 
         if path.exists() {
             if add_file_or_dir(mla, path).is_err() {
-                eprintln!(
-                    " [!] Line {} cannot be read as text (UTF-8)",
-                    index + 1
-                );
+                eprintln!(" [!] Line {} cannot be read as text (UTF-8)", index + 1);
             }
         } else {
             invalid_paths_count += 1;
