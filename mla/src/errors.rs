@@ -88,7 +88,7 @@ impl From<Error> for io::Error {
             // On IOError, unwrap it (MLAError(IOError(err))) -> err
             Error::IOError(err) => err,
             // Otherwise, use a generic construction
-            _ => Self::other( format!("{error}")),
+            _ => Self::other(format!("{error}")),
         }
     }
 }
