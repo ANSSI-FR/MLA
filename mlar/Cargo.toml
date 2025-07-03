@@ -24,7 +24,7 @@ zeroize = { version = "1.8", default-features = false}
 # Could be made optional / feature to enable (for binary size)
 tar = "0.4"
 rand_chacha = "0.9"
-lru = "0.14"
+lru = "0.16"
 
 [lints]
 workspace = true
