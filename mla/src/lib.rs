@@ -1340,7 +1340,7 @@ impl<'b, R: 'b + Read> ArchiveFailSafeReader<'b, R> {
             src = Box::new(EncryptionLayerFailSafeReader::new(src, &config.encrypt)?);
         }
         if config.layers_enabled.contains(Layers::COMPRESS) {
-            src = Box::new(CompressionLayerFailSafeReader::new(src)?);
+            src = Box::new(CompressionLayerFailSafeReader::new(src));
         }
 
         Ok(Self { config, src })
