@@ -622,8 +622,8 @@ fn u64_as_i64(n: u64) -> Result<i64, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::Path;
     use std::io::{Empty, Read, Seek, SeekFrom};
+    use std::path::Path;
 
     use crate::{
         Sha256Hash,
@@ -737,7 +737,10 @@ mod tests {
     #[test]
     fn entry_name_from_arbitrary_bytes_empty() {
         let res = entryname::EntryName::from_arbitrary_bytes(b"");
-        assert!(matches!(res, Err(entryname::EntryNameError::InvalidPathComponentContent)));
+        assert!(matches!(
+            res,
+            Err(entryname::EntryNameError::InvalidPathComponentContent)
+        ));
     }
 
     #[test]
@@ -758,7 +761,10 @@ mod tests {
     fn entry_name_from_path_empty() {
         let path = Path::new("");
         let res = entryname::EntryName::from_path(path);
-        assert!(matches!(res, Err(entryname::EntryNameError::InvalidPathComponentContent)));
+        assert!(matches!(
+            res,
+            Err(entryname::EntryNameError::InvalidPathComponentContent)
+        ));
     }
 
     #[test]
