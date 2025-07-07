@@ -371,6 +371,9 @@ const MLA_FORMAT_VERSION: u32 = 2;
 /// to be used as a filename, an absolute path, or... ?). 32KiB was chosen because it
 /// supports any path a Windows NT, Linux, FreeBSD, OpenBSD, or NetBSD kernel supports.
 const FILENAME_MAX_SIZE: u64 = 65536;
+
+const ENTRIES_LAYER_MAGIC: &[u8; 8] = b"MLAENAAA";
+
 /// Maximum allowed object size (in bytes) to decode in-memory, to avoid DoS on
 /// malformed files
 const BINCODE_MAX_DECODE: usize = 512 * 1024 * 1024;
@@ -661,6 +664,9 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         let mut final_dest = Box::new(PositionLayerWriter::new(dest));
         final_dest.reset_position();
 
+        // Write the magic
+        final_dest.write_all(ENTRIES_LAYER_MAGIC)?;
+
         // Build initial archive
         Ok(ArchiveWriter {
             internal_config: InternalConfig {
@@ -938,6 +944,13 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
         // Reset the position for further uses
         src.rewind()?;
 
+        // Read the magic
+        let mut magic = [0u8; 8];
+        src.read_exact(&mut magic)?;
+        if magic != *ENTRIES_LAYER_MAGIC {
+            return Err(Error::WrongMagic);
+        }
+
         Ok(ArchiveReader { src, metadata })
     }
 
@@ -1070,6 +1083,13 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
         }
         if layers_enabled.contains(Layers::COMPRESS) {
             src = Box::new(CompressionLayerFailSafeReader::new(src)?);
+        }
+
+        // Read the magic
+        let mut magic = [0u8; 8];
+        src.read_exact(&mut magic)?;
+        if magic != *ENTRIES_LAYER_MAGIC {
+            return Err(Error::WrongMagic);
         }
 
         Ok(Self { config, src })

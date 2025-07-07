@@ -96,6 +96,10 @@ pub fn linear_extract<W1: InnerWriterTrait, R: InnerReaderTrait, S: BuildHasher>
     // Seek at the beginning
     archive.src.rewind()?;
 
+    // Skip the magic, already checked in ArchiveReader::from_config
+    let mut magic = [0u8; 8];
+    archive.src.read_exact(&mut magic)?;
+
     // Use a BufReader to cache, by merging them into one bigger read, small
     // read calls (like the ones on ArchiveEntryBlock reading)
     let mut src = io::BufReader::new(&mut archive.src);
