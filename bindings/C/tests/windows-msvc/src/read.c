@@ -111,9 +111,9 @@ int test_reader_info()
         return 1;
     }
 
-    if (archive_info.layers != 3)
+    if (archive_info.is_encryption_enabled != 1)
     {
-        fprintf(stderr, " [!] Unexpected layers %x\n", archive_info.layers);
+        fprintf(stderr, " [!] Encryption should be enabled");
         CloseHandle(hFile);
         return 2;
     }

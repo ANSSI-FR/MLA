@@ -950,17 +950,15 @@ fn info(matches: &ArgMatches) -> Result<(), MlarError> {
     let mla_file = matches.get_one::<PathBuf>("input").unwrap();
     let mut src = File::open(mla_file)?;
 
-    let info = mla::info::read_header_info(&mut src)?;
+    let info = mla::info::read_info(&mut src)?;
 
     let encryption = info.is_encryption_enabled();
-    let compression = info.is_compression_enabled();
 
     // Format Version
     println!("Format version: {}", info.get_format_version());
 
     // Encryption config
     println!("Encryption: {encryption}");
-    println!("Compression: {compression}");
 
     Ok(())
 }

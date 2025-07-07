@@ -166,11 +166,11 @@ use std::io::{Read, Seek, SeekFrom, Write};
 #[macro_use]
 extern crate bitflags;
 use bincode::config::{Fixint, Limit};
-use byteorder::{LittleEndian, ReadBytesExt};
-use config::{ArchivePersistentConfig, InternalConfig};
+use byteorder::ReadBytesExt;
 use crypto::hybrid::HybridPublicKey;
 use layers::compress::COMPRESSION_LAYER_MAGIC;
-use layers::encrypt::EncryptionConfig;
+use layers::encrypt::ENCRYPTION_LAYER_MAGIC;
+use layers::strip_head_tail::StripHeadTailReader;
 use layers::traits::InnerReaderTrait;
 
 pub mod entry;
@@ -368,8 +368,9 @@ extern crate hex_literal;
 
 // -------- Constants --------
 
-const MLA_MAGIC: &[u8; 3] = b"MLA";
+const MLA_MAGIC: &[u8; 8] = b"MLAFAAAA";
 const MLA_FORMAT_VERSION: u32 = 2;
+const END_MLA_MAGIC: &[u8; 8] = b"EMLAAAAA";
 /// Maximum number of UTF-8 characters supported in each file's "name" (which is free
 /// to be used as a filename, an absolute path, or... ?). 32KiB was chosen because it
 /// supports any path a Windows NT, Linux, FreeBSD, OpenBSD, or NetBSD kernel supports.
@@ -387,8 +388,6 @@ pub(crate) const BINCODE_CONFIG: bincode::config::Configuration<
 > = bincode::config::standard()
     .with_limit::<{ BINCODE_MAX_DECODE }>()
     .with_fixed_int_encoding();
-
-use format::Layers;
 
 const EMPTY_OPTS_SERIALIZATION: &[u8; 1] = &[0];
 const EMPTY_TAIL_OPTS_SERIALIZATION: &[u8; 9] = &[0, 1, 0, 0, 0, 0, 0, 0, 0];
@@ -601,11 +600,6 @@ macro_rules! check_state_file_opened {
 pub struct ArchiveWriter<'a, W: 'a + InnerWriterTrait> {
     /// MLA Archive format writer
     ///
-    /// Configuration
-    // config is not used for now after archive creation,
-    // but it could in the future
-    #[allow(dead_code)]
-    internal_config: InternalConfig,
     ///
     /// Internals part:
     ///
@@ -643,40 +637,20 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
     /// Create an `ArchiveWriter` from config.
     pub fn from_config(dest: W, config: ArchiveWriterConfig) -> Result<Self, Error> {
         let mut dest: InnerWriterType<W> = Box::new(RawLayerWriter::new(dest));
-        let ArchiveWriterConfig {
-            compression_config,
-            encryption_config,
-        } = config;
-        let enc_cfg = match encryption_config {
-            Some(encryption_config) => Some(EncryptionConfig::to_persistent(&encryption_config)?),
-            None => None,
-        };
-        let mut layers_enabled = Layers::EMPTY;
-        if compression_config.is_some() {
-            layers_enabled |= Layers::COMPRESS;
-        }
-        if enc_cfg.is_some() {
-            layers_enabled |= Layers::ENCRYPT;
-        }
 
-        // Write archive header
-        ArchiveHeader {
-            format_version: MLA_FORMAT_VERSION,
-            config: ArchivePersistentConfig {
-                layers_enabled,
-                encrypt: enc_cfg.as_ref().map(|c| c.0.clone()),
-            },
-        }
-        .dump(&mut dest)?;
+        let archive_header = ArchiveHeader {
+            format_version_number: MLA_FORMAT_VERSION,
+        };
+        archive_header.serialize(&mut dest)?;
 
         // Enable layers depending on user option
-        dest = match enc_cfg.as_ref() {
-            Some((persistent, internal)) => {
-                Box::new(EncryptionLayerWriter::new(dest, persistent, internal)?)
+        dest = match config.encryption_config {
+            Some(encryption_config) => {
+                Box::new(EncryptionLayerWriter::new(dest, &encryption_config)?)
             }
             None => dest,
         };
-        dest = match compression_config {
+        dest = match config.compression_config {
             Some(cfg) => Box::new(CompressionLayerWriter::new(dest, &cfg)?),
             None => dest,
         };
@@ -691,9 +665,6 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
 
         // Build initial archive
         Ok(ArchiveWriter {
-            internal_config: InternalConfig {
-                encrypt: enc_cfg.map(|c| c.1),
-            },
             dest: final_dest,
             state: ArchiveWriterState::OpenedFiles {
                 ids: Vec::new(),
@@ -745,7 +716,10 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         self.dest.write_all(EMPTY_TAIL_OPTS_SERIALIZATION)?; // No option for the moment
 
         // Recursive call
-        self.dest.finalize()
+        let mut final_dest = self.dest.finalize()?;
+        final_dest.write_all(EMPTY_TAIL_OPTS_SERIALIZATION)?; // No option for the moment
+        final_dest.write_all(END_MLA_MAGIC)?;
+        Ok(final_dest)
     }
 
     /// Add the current offset to the corresponding list if the file id is not
@@ -943,6 +917,22 @@ impl<W: Write> MLASerialize<W> for usize {
     }
 }
 
+impl<W: Write> MLASerialize<W> for u32 {
+    fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
+        dest.write_all(&self.to_le_bytes())?;
+        Ok(4)
+    }
+}
+
+impl<R: Read> MLADeserialize<R> for u32 {
+    fn deserialize(src: &mut R) -> Result<Self, Error> {
+        let mut n = [0; 4];
+        src.read_exact(&mut n)
+            .map_err(|_| Error::DeserializationError)?;
+        Ok(u32::from_le_bytes(n))
+    }
+}
+
 impl<W: Write> MLASerialize<W> for u16 {
     fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
         dest.write_all(&self.to_le_bytes())?;
@@ -1073,27 +1063,52 @@ fn read_mla_entries_header_skip_magic(mut src: impl Read) -> Result<(), Error> {
 
 impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
     /// Create an `ArchiveReader`.
-    pub fn from_config(mut src: R, mut config: ArchiveReaderConfig) -> Result<Self, Error> {
+    pub fn from_config(mut src: R, config: ArchiveReaderConfig) -> Result<Self, Error> {
         // Make sure we read the archive header from the start
         src.rewind()?;
-        let header = ArchiveHeader::from(&mut src)?;
-        let layers_enabled = header.config.layers_enabled;
-        config.load_persistent(header.config)?;
+
+        ArchiveHeader::deserialize(&mut src)?;
 
         // Pin the current position (after header) as the new 0
         let mut raw_src = Box::new(RawLayerReader::new(src));
         raw_src.reset_position()?;
+        let mut src: Box<dyn 'b + LayerReader<'b, R>> = raw_src;
+
+        // Read and strip tail (end magic, tail options)
+        let end_magic_position = src.seek(SeekFrom::End(-8))?;
+        let end_magic = read_layer_magic(&mut src)?;
+        if &end_magic != END_MLA_MAGIC {
+            return Err(Error::WrongEndMagic);
+        }
+        src.seek(SeekFrom::End(-16))?;
+        let mla_footer_options_length = u64::deserialize(&mut src)?;
+        let mla_tail_len = mla_footer_options_length + 16;
+        let inner_len = end_magic_position + 8;
+        src.seek(SeekFrom::Start(0))?;
+        src = Box::new(StripHeadTailReader::new(
+            src,
+            0,
+            mla_tail_len,
+            inner_len,
+            0,
+        )?);
 
         // Enable layers depending on user option. Order is relevant
-        let mut src: Box<dyn 'b + LayerReader<'b, R>> = raw_src;
+
         let accept_unencrypted = config.accept_unencrypted;
-        if layers_enabled.contains(Layers::ENCRYPT) {
-            src = Box::new(EncryptionLayerReader::new(src, config.encrypt, None)?);
+        let mut magic = read_layer_magic(&mut src)?;
+        if &magic == ENCRYPTION_LAYER_MAGIC {
+            src = Box::new(EncryptionLayerReader::new_skip_magic(
+                src,
+                config.encrypt,
+                None,
+            )?);
             src.initialize()?;
+            magic = read_layer_magic(&mut src)?;
         } else if !accept_unencrypted {
             return Err(Error::EncryptionAskedButNotMarkedPresent);
         }
-        let magic = read_layer_magic(&mut src)?;
+
         if &magic == COMPRESSION_LAYER_MAGIC {
             src = Box::new(CompressionLayerReader::new_skip_magic(src)?);
             src.initialize()?;
@@ -1101,7 +1116,7 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
 
         // read `entries_footer_options`
         src.seek(SeekFrom::End(-8))?;
-        let entries_footer_options_length = src.read_u64::<LittleEndian>()?;
+        let entries_footer_options_length = u64::deserialize(&mut src)?;
         // skip reading them as there are none for the moment
 
         // Read the footer
@@ -1111,7 +1126,7 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
                 .ok_or(Error::DeserializationError)?;
         // Read the footer length
         src.seek(SeekFrom::End(entries_footer_length_offset_from_end))?;
-        let entries_footer_length = src.read_u64::<LittleEndian>()?;
+        let entries_footer_length = u64::deserialize(&mut src)?;
         // Prepare for deserialization
         let start_of_entries_footer_from_current = (-8i64)
             .checked_sub_unsigned(entries_footer_length)
@@ -1239,25 +1254,24 @@ macro_rules! update_error {
 
 impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
     /// Create a `TruncatedArchiveReader` with given config.
-    pub fn from_config(mut src: R, mut config: ArchiveReaderConfig) -> Result<Self, Error> {
-        let header = ArchiveHeader::from(&mut src)?;
-        let layers_enabled = header.config.layers_enabled;
-        config.load_persistent(header.config)?;
+    pub fn from_config(mut src: R, config: ArchiveReaderConfig) -> Result<Self, Error> {
+        ArchiveHeader::deserialize(&mut src)?;
 
         // Enable layers depending on user option. Order is relevant
         let mut src: Box<dyn 'b + LayerFailSafeReader<'b, R>> =
             Box::new(RawLayerFailSafeReader::new(src));
         let accept_unencrypted = config.accept_unencrypted;
-        if layers_enabled.contains(Layers::ENCRYPT) {
-            src = Box::new(EncryptionLayerFailSafeReader::from_persistent_config(
+        let mut magic = read_layer_magic(&mut src)?;
+        if &magic == ENCRYPTION_LAYER_MAGIC {
+            src = Box::new(EncryptionLayerFailSafeReader::new_skip_magic(
                 src,
                 config.encrypt,
                 None,
             )?);
+            magic = read_layer_magic(&mut src)?;
         } else if !accept_unencrypted {
             return Err(Error::EncryptionAskedButNotMarkedPresent);
         }
-        let mut magic = read_layer_magic(&mut src)?;
         if &magic == COMPRESSION_LAYER_MAGIC {
             src = Box::new(CompressionLayerFailSafeReader::new_skip_magic(src)?);
             magic = read_layer_magic(&mut src)?;
@@ -1519,8 +1533,6 @@ pub mod info;
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use crate::config::ArchivePersistentConfig;
-
     use super::*;
     use crypto::hybrid::{HybridPrivateKey, generate_keypair_from_seed};
     // use curve25519_parser::{parse_openssl_25519_privkey, parse_openssl_25519_pubkey};
@@ -1536,18 +1548,14 @@ pub(crate) mod tests {
     #[test]
     fn read_dump_header() {
         let header = ArchiveHeader {
-            format_version: MLA_FORMAT_VERSION,
-            config: ArchivePersistentConfig {
-                layers_enabled: Layers::default(),
-                encrypt: None,
-            },
+            format_version_number: MLA_FORMAT_VERSION,
         };
         let mut buf = Vec::new();
-        header.dump(&mut buf).unwrap();
+        header.serialize(&mut buf).unwrap();
         println!("{:?}", buf);
 
-        let header_rebuild = ArchiveHeader::from(&mut buf.as_slice()).unwrap();
-        assert_eq!(header_rebuild.config.layers_enabled, Layers::default());
+        let header_rebuild = ArchiveHeader::deserialize(&mut buf.as_slice()).unwrap();
+        assert_eq!(header_rebuild.format_version_number, MLA_FORMAT_VERSION);
     }
 
     #[test]
@@ -2285,8 +2293,8 @@ pub(crate) mod tests {
         assert_eq!(
             Sha256::digest(&raw_mla).as_slice(),
             [
-                246, 209, 86, 99, 226, 71, 217, 183, 250, 34, 251, 49, 153, 220, 242, 55, 189, 236,
-                172, 48, 234, 191, 10, 98, 39, 161, 236, 110, 243, 80, 232, 212
+                249, 25, 27, 204, 78, 17, 100, 189, 202, 248, 50, 116, 61, 231, 59, 145, 62, 104,
+                191, 191, 237, 103, 0, 119, 39, 253, 168, 37, 204, 177, 89, 166
             ]
         )
     }
@@ -2378,8 +2386,8 @@ pub(crate) mod tests {
         assert_eq!(
             Sha256::digest(&file).as_slice(),
             [
-                115, 247, 179, 135, 231, 123, 5, 70, 220, 151, 55, 4, 141, 174, 226, 206, 16, 143,
-                47, 138, 97, 5, 12, 171, 82, 24, 102, 169, 207, 22, 244, 19
+                52, 219, 175, 82, 41, 98, 122, 173, 85, 164, 89, 183, 67, 234, 87, 12, 78, 9, 45,
+                247, 74, 237, 34, 45, 17, 218, 232, 209, 234, 17, 150, 165
             ]
         )
     }

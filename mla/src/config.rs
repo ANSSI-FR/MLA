@@ -5,7 +5,7 @@ use crate::errors::ConfigError;
 use crate::format::Layers;
 use crate::layers::compress::CompressionConfig;
 use crate::layers::encrypt::{
-    EncryptionConfig, EncryptionPersistentConfig, EncryptionReaderConfig, InternalEncryptionConfig,
+    EncryptionConfig, EncryptionPersistentConfig, EncryptionReaderConfig,
 };
 
 /// Configuration to write an archive.
@@ -64,14 +64,6 @@ pub(crate) struct ArchivePersistentConfig {
     pub encrypt: Option<EncryptionPersistentConfig>,
 }
 
-/// Internal config, to be used only during MLA processing, by MLA
-#[derive(Default)]
-pub(crate) struct InternalConfig {
-    // Layers specifics
-    #[allow(dead_code)]
-    pub encrypt: Option<InternalEncryptionConfig>,
-}
-
 /// Configuration used to read an archive.
 pub struct ArchiveReaderConfig {
     pub(crate) accept_unencrypted: bool,
@@ -107,22 +99,5 @@ impl ArchiveReaderConfig {
             accept_unencrypted: true,
             encrypt,
         }
-    }
-
-    pub(crate) fn load_persistent(
-        &mut self,
-        config: ArchivePersistentConfig,
-    ) -> Result<&mut ArchiveReaderConfig, ConfigError> {
-        if config.layers_enabled.contains(Layers::ENCRYPT) {
-            match config.encrypt {
-                Some(to_load) => {
-                    self.encrypt.load_persistent(to_load)?;
-                }
-                None => {
-                    return Err(ConfigError::IncoherentPersistentConfig);
-                }
-            }
-        }
-        Ok(self)
     }
 }
