@@ -308,14 +308,14 @@ The implementation also includes tests (including some test vectors) and comment
 <li>It is in line with the French suggestions <sup class="footnote-reference" id="fr-frsuggest-2"><a href="#footnote-frsuggest">4</a></sup> for PQ cryptography</li>
 </ul>
 </li>
-<li>The MLKEM-1024 mode is used for stronger security, and to limit consequence of future advances [^mlkemcon1]<sup class="footnote-reference" id="fr-mlkemcon2-1"><a href="#footnote-mlkemcon2">11</a></sup>. This is also the choice of other industry standards [^signal]<sup class="footnote-reference" id="fr-imessage-1"><a href="#footnote-imessage">12</a></sup></li>
-<li>The shared secret from the two-KEM is produced using a "Nested Dual-PRF Combiner", proved in <sup class="footnote-reference" id="fr-dualnest-1"><a href="#footnote-dualnest">13</a></sup> (3.3):
+<li>The MLKEM-1024 mode is used for stronger security, and to limit consequence of future advances <sup class="footnote-reference" id="fr-mlkemcon1-1"><a href="#footnote-mlkemcon1">11</a></sup> <sup class="footnote-reference" id="fr-mlkemcon2-1"><a href="#footnote-mlkemcon2">12</a></sup>. This is also the choice of other industry standards <sup class="footnote-reference" id="fr-signal-1"><a href="#footnote-signal">13</a></sup> <sup class="footnote-reference" id="fr-imessage-1"><a href="#footnote-imessage">14</a></sup></li>
+<li>The shared secret from the two-KEM is produced using a "Nested Dual-PRF Combiner", proved in <sup class="footnote-reference" id="fr-dualnest-1"><a href="#footnote-dualnest">15</a></sup> (3.3):
 <ul>
-<li>The use of concatenation scheme <strong>including ciphertexts</strong> keeps IND-CCA2 if one of the two underlying scheme is IND-CCA2, as proved in <sup class="footnote-reference" id="fr-combinearg1-1"><a href="#footnote-combinearg1">14</a></sup> and explained in <sup class="footnote-reference" id="fr-combinearg4-1"><a href="#footnote-combinearg4">15</a></sup></li>
-<li>TLS <sup class="footnote-reference" id="fr-combinearg2-1"><a href="#footnote-combinearg2">16</a></sup> uses a similar scheme, and IKE <sup class="footnote-reference" id="fr-combinearg3-1"><a href="#footnote-combinearg3">17</a></sup> also uses a concatenation scheme</li>
+<li>The use of concatenation scheme <strong>including ciphertexts</strong> keeps IND-CCA2 if one of the two underlying scheme is IND-CCA2, as proved in <sup class="footnote-reference" id="fr-combinearg1-1"><a href="#footnote-combinearg1">16</a></sup> and explained in <sup class="footnote-reference" id="fr-combinearg4-1"><a href="#footnote-combinearg4">17</a></sup></li>
+<li>TLS <sup class="footnote-reference" id="fr-combinearg2-1"><a href="#footnote-combinearg2">18</a></sup> uses a similar scheme, and IKE <sup class="footnote-reference" id="fr-combinearg3-1"><a href="#footnote-combinearg3">19</a></sup> also uses a concatenation scheme</li>
 <li>This kind of scheme follows ANSSI recommendations <sup class="footnote-reference" id="fr-frsuggest-3"><a href="#footnote-frsuggest">4</a></sup></li>
-<li>HKDF can be considered as a Dual-PRF if both inputs are uniformly random <sup class="footnote-reference" id="fr-combinearg7-1"><a href="#footnote-combinearg7">18</a></sup>. In MLA, the <code>combine</code> method is called with a shared secret from ML-KEM, and the resulting ECC key derivation -- both are uniformly random</li>
-<li>To avoid potential mistake in the future, or a mis-reuse of this method, the "Nested Dual-PRF Combiner" is used instead of the "Dual-PRF Combiner" (also from <sup class="footnote-reference" id="fr-dualnest-2"><a href="#footnote-dualnest">13</a></sup>). Indeed, this combiner force the "salt" part of HKDF to be uniformly random using an additional PRF use, ensuring the following HKDF is indeed a Dual-PRF</li>
+<li>HKDF can be considered as a Dual-PRF if both inputs are uniformly random <sup class="footnote-reference" id="fr-combinearg7-1"><a href="#footnote-combinearg7">20</a></sup>. In MLA, the <code>combine</code> method is called with a shared secret from ML-KEM, and the resulting ECC key derivation -- both are uniformly random</li>
+<li>To avoid potential mistake in the future, or a mis-reuse of this method, the "Nested Dual-PRF Combiner" is used instead of the "Dual-PRF Combiner" (also from <sup class="footnote-reference" id="fr-dualnest-2"><a href="#footnote-dualnest">15</a></sup>). Indeed, this combiner force the "salt" part of HKDF to be uniformly random using an additional PRF use, ensuring the following HKDF is indeed a Dual-PRF</li>
 </ul>
 </li>
 </ul>
@@ -432,14 +432,14 @@ The implementation also includes tests (including some test vectors) and comment
 <li>AEAD tag of a chunk is always checked before returning the corresponding clear-text data to the caller</li>
 <li>Arguments for HPKE use are very similar to the ones mentioned above. In particular, this is a standardized approach with existing analysis</li>
 <li>As there is two kind of custom KEM used ("Per-recipient KEM" and "Hybrid KEM"), two distinct KEM ID are used. In addition, two distinct MLA specific <code>info</code> are used to bind this derivation to MLA</li>
-<li>As described in <sup class="footnote-reference" id="fr-keycommit-2"><a href="#footnote-keycommit">5</a></sup> and <sup class="footnote-reference" id="fr-keycommit2-1"><a href="#footnote-keycommit2">19</a></sup>, AES in GCM mode does not ensure "key commitment". This property is added in the layer using the "padding fix" scheme from <sup class="footnote-reference" id="fr-keycommit-3"><a href="#footnote-keycommit">5</a></sup> with the recommended 512-bits size for a 256-bits security</li>
+<li>As described in <sup class="footnote-reference" id="fr-keycommit-2"><a href="#footnote-keycommit">5</a></sup> and <sup class="footnote-reference" id="fr-keycommit2-1"><a href="#footnote-keycommit2">21</a></sup>, AES in GCM mode does not ensure "key commitment". This property is added in the layer using the "padding fix" scheme from <sup class="footnote-reference" id="fr-keycommit-3"><a href="#footnote-keycommit">5</a></sup> with the recommended 512-bits size for a 256-bits security</li>
 <li>Key commitment is mainly used to ensure that two recipients will decrypt to the same plaintext if given the same ciphertext, i.e. an attacker modifying the header of an archive cannot provide two distinct plaintext to two distinct recipient</li>
 <li>AES-GCM is used as an industry standard AEAD
 <ul>
 <li>the base nonce, and therefore each nonce used, are unique per archive because they are generated from the archive-specific shared secret, limiting the nonce-reuse risk to standard acceptability <sup class="footnote-reference" id="fr-hpke-9"><a href="#footnote-hpke">3</a></sup></li>
 <li>no more than <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8141em;"></span><span class="mord"><span class="mord">2</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">64</span></span></span></span></span></span></span></span></span></span></span></span> chunks will be produced, as the sequence's type used in MLA implementation is a <code>u64</code> checked for overflow. As this is a widely accepted limit of AES-GCM, this value is also within the range provided by <sup class="footnote-reference" id="fr-hpke-10"><a href="#footnote-hpke">3</a></sup></li>
-<li>the tag size is 128-bits (standard one), avoiding attacks described in <sup class="footnote-reference" id="fr-weaknessgcm-1"><a href="#footnote-weaknessgcm">20</a></sup></li>
-<li>128KiB is lower than the maximum plaintext length for a single message in AES-GCM (64 GiB)<sup class="footnote-reference" id="fr-weaknessgcm-2"><a href="#footnote-weaknessgcm">20</a></sup></li>
+<li>the tag size is 128-bits (standard one), avoiding attacks described in <sup class="footnote-reference" id="fr-weaknessgcm-1"><a href="#footnote-weaknessgcm">22</a></sup></li>
+<li>128KiB is lower than the maximum plaintext length for a single message in AES-GCM (64 GiB)<sup class="footnote-reference" id="fr-weaknessgcm-2"><a href="#footnote-weaknessgcm">22</a></sup></li>
 </ul>
 </li>
 </ul>
@@ -453,7 +453,7 @@ The implementation also includes tests (including some test vectors) and comment
 </ul>
 <p>The derivation scheme is based on the same ideas than <code>mla::crypto::hybrid::combine</code>:</p>
 <ol>
-<li>A dual-PRF (HKDF-Extract with a uniform random salt <sup class="footnote-reference" id="fr-combinearg7-2"><a href="#footnote-combinearg7">18</a></sup>) to extract entropy from the private key</li>
+<li>A dual-PRF (HKDF-Extract with a uniform random salt <sup class="footnote-reference" id="fr-combinearg7-2"><a href="#footnote-combinearg7">20</a></sup>) to extract entropy from the private key</li>
 <li>HKDF-Expand to derive along the given path component</li>
 </ol>
 <p>From a private key (<span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.0717em;vertical-align:-0.247em;"></span><span class="mord mathnormal">s</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8247em;"><span style="top:-2.453em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">ecc</span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.247em;"><span></span></span></span></span></span></span></span></span></span> and <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.1078em;vertical-align:-0.2831em;"></span><span class="mord mathnormal">s</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8247em;"><span style="top:-2.4169em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">m</span><span class="mord mathnormal mtight" style="margin-right:0.01968em;">l</span><span class="mord mathnormal mtight" style="margin-right:0.03148em;">k</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">m</span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2831em;"><span></span></span></span></span></span></span></span></span></span>), the secret is derived from the path component <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.625em;vertical-align:-0.1944em;"></span><span class="mord mathnormal">p</span><span class="mord mathnormal">c</span></span></span></span> through:</p>
@@ -465,9 +465,9 @@ If a <code>seed</code> is provided, the <code>ChaChaRng</code> is seeded with th
 <h3 id="external-dependencies"><a class="header" href="#external-dependencies">External dependencies</a></h3>
 <p>Some of the external cryptographic libraries have been reviewed:</p>
 <ul>
-<li>RustCrypto AES-GCM, reviewed by NCC Group <sup class="footnote-reference" id="fr-reviewncc-1"><a href="#footnote-reviewncc">21</a></sup></li>
-<li>Dalek cryptography library, reviewed by Quarkslab <sup class="footnote-reference" id="fr-reviewqb-1"><a href="#footnote-reviewqb">22</a></sup></li>
-<li><code>rust-hpke</code> library, reviewed in version 0.8 by CloudFlare <sup class="footnote-reference" id="fr-reviewcloudflare-1"><a href="#footnote-reviewcloudflare">23</a></sup></li>
+<li>RustCrypto AES-GCM, reviewed by NCC Group <sup class="footnote-reference" id="fr-reviewncc-1"><a href="#footnote-reviewncc">23</a></sup></li>
+<li>Dalek cryptography library, reviewed by Quarkslab <sup class="footnote-reference" id="fr-reviewqb-1"><a href="#footnote-reviewqb">24</a></sup></li>
+<li><code>rust-hpke</code> library, reviewed in version 0.8 by CloudFlare <sup class="footnote-reference" id="fr-reviewcloudflare-1"><a href="#footnote-reviewcloudflare">25</a></sup></li>
 </ul>
 <p>In addition to the review, <code>rust-hpke</code> is mainly based on <code>RustCrypto</code>, avoiding the need for additional newer dependencies.</p>
 <p>The MLKEM implementation used is the one of <code>RustCrypto</code>, as MLA already depends on this project and the code quality and auditability are, in the author understanding, rather good.</p>
@@ -509,12 +509,12 @@ On Windows it uses the <code>RtlGenRandom</code> API (available since Windows XP
 <p>To perform this attack, the attacker will have to either remove the <code>Encrypt</code> bit or modify the key used for decryption with one she has.
 The remaining encrypted data will then act as random values.</p>
 <p>Still, the attacker could expect to gain enough privilege, like arbitrary code execution in the process, during the archive read. One can then try to reuse the provided key to decrypt, then act on the real data.</p>
-<p>Limiting this attack is beyond the scope of this document. It mainly involves the security features of Rust, reviewed implementation, testing &amp; fuzzing, zeroizing secrets when possible <sup class="footnote-reference" id="fr-issuezeroize-1"><a href="#footnote-issuezeroize">24</a></sup>, etc.</p>
+<p>Limiting this attack is beyond the scope of this document. It mainly involves the security features of Rust, reviewed implementation, testing &amp; fuzzing, zeroizing secrets when possible <sup class="footnote-reference" id="fr-issuezeroize-1"><a href="#footnote-issuezeroize">26</a></sup>, etc.</p>
 <ul>
 <li>An attacker can truncate an archive and hope for repair</li>
 </ul>
 <p>This attack is based on a trade-off: should the <code>SafeReader</code> try to get as many bytes as possible, or should it return only data that have been authenticated?</p>
-<p>The choice has been made to report the decision to the user of the library<sup class="footnote-reference" id="fr-issueallowunauth-1"><a href="#footnote-issueallowunauth">25</a></sup>.</p>
+<p>The choice has been made to report the decision to the user of the library<sup class="footnote-reference" id="fr-issueallowunauth-1"><a href="#footnote-issueallowunauth">27</a></sup>.</p>
 <h3 id="other-properties"><a class="header" href="#other-properties">Other properties</a></h3>
 <ul>
 <li>Plaintext length</li>
@@ -557,8 +557,14 @@ The remaining encrypted data will then act as random values.</p>
 <li id="footnote-nist">
 <p><a href="https://csrc.nist.gov/News/2022/pqc-candidates-to-be-standardized-and-round-4">NIST PQC Standardization News</a> <a href="#fr-nist-1">↩</a></p>
 </li>
+<li id="footnote-mlkemcon1">
+<p><a href="https://blog.cr.yp.to/20231003-countcorrectly.html">Counting Correctly in MLKEM</a> <a href="#fr-mlkemcon1-1">↩</a></p>
+</li>
 <li id="footnote-mlkemcon2">
 <p><a href="https://kyberslash.cr.yp.to/">KyberSlash</a> <a href="#fr-mlkemcon2-1">↩</a></p>
+</li>
+<li id="footnote-signal">
+<p><a href="https://signal.org/docs/specifications/pqxdh/">Signal PQXDH Specification</a> <a href="#fr-signal-1">↩</a></p>
 </li>
 <li id="footnote-imessage">
 <p><a href="https://security.apple.com/blog/imessage-pq3/">Apple iMessage PQ3 Security Blog</a> <a href="#fr-imessage-1">↩</a></p>
