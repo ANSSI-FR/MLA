@@ -167,437 +167,270 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="design"><a class="header" href="#design">Design</a></h1>
-<p>As the name spoils it, an MLA is made of several, independent, layers. The following section introduces the design ideas behind MLA. Please refer to <a href="FORMAT.html">FORMAT.md</a> for a more formal description.</p>
-<h2 id="layers"><a class="header" href="#layers">Layers</a></h2>
-<p>Each layer acts as a <em>Unix PIPE</em>, taking bytes in input and outputting in the next
-layer.
-A layer is made of:</p>
+                        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.4/dist/katex.min.css">
+<p><a href="https://github.com/ANSSI-FR/MLA/actions"><img src="https://github.com/ANSSI-FR/MLA/workflows/Build%20&amp;%20test/badge.svg" alt="Build &amp; test" /></a>
+<a href="https://crates.io/crates/mla"><img src="https://img.shields.io/badge/crates.io-mla-red" alt="Cargo MLA" /></a>
+<a href="https://docs.rs/mla"><img src="https://img.shields.io/badge/docs.rs-mla-blue" alt="Documentation MLA" /></a>
+<a href="https://crates.io/crates/mlar"><img src="https://img.shields.io/badge/crates.io-mlar-red" alt="Cargo MLAR" /></a></p>
+<h1 id="multi-layer-archive-mla"><a class="header" href="#multi-layer-archive-mla">Multi Layer Archive (MLA)</a></h1>
+<p>MLA is an archive file format with the following features:</p>
 <ul>
-<li>a <code>Writer</code>, implementing the <code>Write</code> trait. It is responsible for emitting bytes while creating a new archive</li>
-<li>a <code>Reader</code>, implementing both <code>Read</code> and <code>Seek</code> traits. It is responsible for reading bytes while reading an archive</li>
-<li>a <code>FailSafeReader</code>, implementing only the <code>Read</code> trait. It is responsible for reading bytes while repairing an archive</li>
+<li>Support for traditional and post-quantum encryption hybridation with asymmetric keys (HPKE with AES256-GCM and a KEM based on an hybridation of X25519 and post-quantum ML-KEM 1024)</li>
+<li>Support for compression (based on <a href="https://github.com/dropbox/rust-brotli/"><code>rust-brotli</code></a>)</li>
+<li>Streamable archive creation:
+<ul>
+<li>An archive can be built even over a data-diode</li>
+<li>An entry can be added through chunks of data, without initially knowing the final size</li>
+<li>Entry chunks can be interleaved (one can add the beginning of an entry, start a second one, and then continue adding the first entry's parts)</li>
 </ul>
-<p>Layers are made with the <em>repairable</em> property in mind. Reading them must never need information from the footer, but a footer can be used to optimize the reading. For example, accessing a file inside the archive can be optimized using the footer to seek to the file beginning, but it is still possible to get information by reading the whole archive until the file is found.</p>
-<p>Layers are optional, but their order is enforced. Users can choose to enable or disable them.
-Current order is the following:</p>
-<ol>
-<li><em>File storage abstraction (not a layer)</em></li>
-<li>Raw layer (mandatory)</li>
-<li>Compression layer</li>
-<li>Encryption layer</li>
-<li>Position layer (mandatory)</li>
-<li><em>Stored bytes</em></li>
-</ol>
-<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
-<pre><code>+----------------+-------------------------------------------------------------------------------------------------------------+
-| Archive Header |                                                                                                             | =&gt; Final container (File / Buffer / etc.)
-+------------------------------------------------------------------------------------------------------------------------------+
-                 +-------------------------------------------------------------------------------------------------------------+
-                 |                                                                                                             | =&gt; Raw layer
-                 +-------------------------------------------------------------------------------------------------------------+
-                 +-----------+---------+------+---------+------+---------------------------------------------------------------+
-                 | E. header | Block 1 | TAG1 | Block 2 | TAG2 | Block 3 | TAG3 | ...                                          | =&gt; Encryption layer
-                 +-----------+---------+------+---------+------+---------------------------------------------------------------+
-                             |         |      |         |      |         |      |                                              |
-                             +-------+--      --+-------       -----------      ----+---------+------+---------+ +-------------+
-                             | Blk 1 |          | Blk 2                             | Block 3 | ...  | Block n | |    Footer   | =&gt; Compression Layer
-                             +-------+--      --+-------       -----------      ----+---------+------+---------+ +-------------+
-                            /         \                                                             /           \
-                           /           \                                                           /             \
-                          /             \                                                         /               \
-                         +-----------------------------------------------------------------------------------------+
-                         |                                                                                         |             =&gt; Position layer
-                         +-----------------------------------------------------------------------------------------+
-                         +-------------+-------------+-------------+-------------+-----------+-------+-------------+
-                         | File1 start | File1 data1 | File2 start | File1 data2 | File1 end |  ...  | Files index |             =&gt; Files information and content
-                         +-------------+-------------+-------------+-------------+-----------+-------+-------------+
+</li>
+<li>Architecture agnostic and portable to some extent (written entirely in Rust)</li>
+<li>Archive reading is seekable, even if compressed or encrypted. An entry can be accessed in the middle of the archive without reading from the beginning</li>
+<li>If truncated, archives can be repaired to some extent. Two modes are available:
+<ul>
+<li>Authenticated repair (default): only authenticated encrypted chunks of data are retrieved</li>
+<li>Unauthenticated repair: authenticated and unauthenticated encrypted chunks of data are retrieved. Use at your own risk.</li>
+</ul>
+</li>
+<li>Arguably less prone to bugs, especially while parsing an untrusted archive (Rust safety)</li>
+</ul>
+<h1 id="repository"><a class="header" href="#repository">Repository</a></h1>
+<p>This repository contains:</p>
+<ul>
+<li><code>mla</code>: the Rust library implementing MLA reader and writer</li>
+<li><code>mlar</code>: a Rust cli utility wrapping <code>mla</code> for common actions (create, list, extract...)</li>
+<li><code>doc</code> : advanced documentation related to MLA (e.g. format specification)</li>
+<li><code>bindings</code> : bindings for other languages</li>
+<li><code>samples</code> : test assets</li>
+<li><code>mla-fuzz-afl</code> : a Rust utility to fuzz <code>mla</code></li>
+<li><code>.github</code>: Continuous Integration needs</li>
+</ul>
+<h1 id="quick-command-line-usage"><a class="header" href="#quick-command-line-usage">Quick command-line usage</a></h1>
+<p>Here are some commands to use <code>mlar</code> in order to work with archives in MLA format.</p>
+<pre><code class="language-sh"># Generate an MLA key pair {key, key.pub}
+mlar keygen key
+
+# Create an archive with some files, using the public key
+mlar create -p key.pub -o my_archive.mla /etc/./os-release /etc/security/../issue ../file.txt
+
+# List the content of the archive, using the private key.
+# Note that order may vary, root dir are stripped,
+# paths are normalized and listing is encoded as described in
+# `doc/ESCAPING.md`.
+# This outputs:
+# ```
+# etc/issue
+# etc/os%2drelease
+# file.txt
+# ```
+mlar list -k key -i my_archive.mla
+
+# Extract the content of the archive into a new directory.
+# In this example, this creates two files:
+# extracted_content/etc/issue and extracted_content/etc/os-release
+mlar extract -k key -i my_archive.mla -o extracted_content
+
+# Display the content of a file in the archive
+mlar cat -k key -i my_archive.mla etc/os-release
+
+# Convert the archive to a long-term one, removing encryption and using the best
+# and slower compression level
+mlar convert -k key -i my_archive.mla -o longterm.mla -l compress -q 11
+
+# Create an archive with multiple recipient
+mlar create -p archive.pub -p client1.pub -o my_archive.mla ...
+
+# List an archive containing an entry with a name that cannot be interpreted as path.
+# This outputs:
+# `c%3a%2f%00%3b%e2%80%ae%0ac%0dd%1b%5b1%3b31ma%3cscript%3eevil%5c..%2f%d8%01%c2%85%e2%88%95`
+# corresponding to an entry name containing: ASCII chars, c:, /, .., \,
+# NUL, RTLO, newline, terminal escape sequence, carriage return,
+# HTML, surrogate code unit, U+0085 weird newline, fake unicode slash.
+# Please note that some of these characters may appear in valid a path.
+mlar list -k test_mlakey.priv -i archive_weird.mla --raw-escaped-names
+
+# Get its content.
+# This displays:
+# `' OR 1=1`
+mlar cat -k test_mlakey.priv -i archive_weird.mla --raw-escaped-names c%3a%2f%00%3b%e2%80%ae%0ac%0dd%1b%5b1%3b31ma%3cscript%3eevil%5c..%2f%d8%01%c2%85%e2%88%95
 </code></pre>
-<h2 id="layers-description"><a class="header" href="#layers-description">Layers description</a></h2>
-<h3 id="raw-layer"><a class="header" href="#raw-layer">Raw Layer</a></h3>
-<p>Implemented in <code>RawLayer*</code> (i.e. <code>RawLayerWriter</code>, <code>RawLayerReader</code> and <code>RawLayerFailSafeReader</code>).</p>
-<p>This is the simplest layer. It is required to provide an API between layers and
-final output worlds. It is also used to keep the position of data's start.</p>
-<h3 id="position-layer"><a class="header" href="#position-layer">Position Layer</a></h3>
-<p>Implemented in <code>PositionLayer*</code>.</p>
-<p>Similar to the <code>RawLayer</code>, this is a very simple, utility, layer. It keeps
-track of how many bytes have been written to the sub-layers.</p>
-<p>For instance, it is required by the file storage layer to keep track of the
-position in the flow of files, for indexing purpose.</p>
-<h3 id="encryption-layer"><a class="header" href="#encryption-layer">Encryption Layer</a></h3>
-<p>Implemented in <code>EncryptionLayer*</code>.</p>
-<p>This layer encrypts data as explained in <code>CRYPTO.md</code> and <code>FORMAT.md</code>.</p>
-<h3 id="compression-layer"><a class="header" href="#compression-layer">Compression Layer</a></h3>
-<p>Implemented in <code>CompressionLayer*</code>.</p>
-<p>This layer is based on the Brotli compression algorithm (<a href="https://tools.ietf.org/html/rfc7932">RFC 7932</a>).
-Each 4MB of cleartext data is stored in a separately compressed chunk.</p>
-<p>This algorithm, used with a <em>window</em> of size 1, is able to read each chunk and
-stop when 4MB of cleartext has been obtained. It is then reset, and starts
-decompressing the next chunk.</p>
-<p>To speed up the decompression, and to make the layer seekable, a footer is used. It
-saves the compressed size. Knowing the decompressed size, a seek at a cleartext
-position can be performed by seeking to the beginning of the correct compressed
-block, then decompressing the first bytes until the desired position is reached.</p>
-<p>The footer is also used to allow for a wider <em>window</em>, enabling faster
-decompression. Finally, it also records the size of the last block, to compute the
-frontier between compressed data and the footer.</p>
-<p>The 4MB size is a trade-off between a better compression (higher value) and faster seeking (smaller value). It has been chosen based on benchmarking of representative data. Better compression can also be achieved by setting the compression quality parameter to a higher value (leading to a slower process).</p>
-<h2 id="file-storage"><a class="header" href="#file-storage">File storage</a></h2>
-<p>Files are saved as series of archive-file blocks. A first special type of block
-indicates the start of a file, along with its filename and a file ID. A second special type of
-block indicates the end of the current file.</p>
-<p>Blocks contain file data, prepended with the current block size and the corresponding file ID. Even if the
-format handles streaming files, the size of a file chunk must be known before
-writing it. The file ID enables blocks from different files to be interleaved.</p>
-<p>The file-ending block marks the end of data for a given file, and includes its
-full content SHA256. Thus, the integrity of files can be checked, even on repair
-operations.</p>
-<p>The layer footer contains for each file its size, its ending block offset and an index of its block locations. Block location index enables direct access. The ending block offset enables fast hash retrieval and the file size eases the conversion to formats needing the size of the file before the data, such as Tar.</p>
-<p>If this footer is unavailable, the archive is read from the beginning to recover
-file information.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="versioning"><a class="header" href="#versioning">Versioning</a></h1>
-<p>Relation between the MLA version and the file format version:</p>
+<p><code>mlar</code> can be obtained:</p>
+<ul>
+<li>through Cargo: <code>cargo install mlar</code></li>
+<li>using the <a href="https://github.com/ANSSI-FR/MLA/releases">latest release</a> for supported operating systems</li>
+</ul>
+<h1 id="api-usage"><a class="header" href="#api-usage">API usage</a></h1>
+<p>See <a href="https://docs.rs/mla">https://docs.rs/mla</a></p>
+<h1 id="using-mla-with-others-languages"><a class="header" href="#using-mla-with-others-languages">Using MLA with others languages</a></h1>
+<p>Bindings are available for:</p>
+<ul>
+<li><a href="../../bindings/C/README.html">C/CPP</a></li>
+<li><a href="../../bindings/python/README.html">Python</a></li>
+</ul>
+<h2 id="security"><a class="header" href="#security">Security</a></h2>
+<ul>
+<li>Please keep in mind, it is generally not safe to extract in a place where at least one ancestor is writable by others (symbolic link attacks).</li>
+<li>Even if encrypted with an authenticated cipher, if you receive an unsigned archive , it may have been crafted by anyone having your public key and thus can contain arbitrary data.</li>
+<li>Read API documentation and mlar help before using their functionnalities. They sometimes provide important security warnings. <code>doc/ENTRY_NAME.md</code> is also of particular interest.</li>
+<li>mlar escapes entry names on output to avoid security issues.</li>
+<li>Except for symbolic link attacks, mlar will not extract outside given output directory.</li>
+</ul>
+<h2 id="faq"><a class="header" href="#faq">FAQ</a></h2>
+<p><strong>Is <code>MLAArchiveWriter</code> <code>Send</code>?</strong></p>
+<p>By default, <code>MLAArchiveWriter</code> is not <code>Send</code>. If the inner writable type is also <code>Send</code>, one can enable the feature <code>send</code> for <code>mla</code> in <code>Cargo.toml</code>, such as:</p>
+<pre><code class="language-toml">[dependencies]
+mla = { version = "...", default-features = false, features = ["send"]}
+</code></pre>
+<p><strong>Was a new format really required?</strong></p>
+<p>As existing archive formats are numerous, probably not.</p>
+<p>But to the best of the authors' knowledge, none of them support the aforementioned
+features (but, of course, are better suitable for others purposes).</p>
+<p>For instance (from the understanding of the author):</p>
+<ul>
+<li><code>tar</code> format needs to know the size of files before adding them, and is not
+seekable</li>
+<li><code>zip</code> format could lose information about files if the footer is removed</li>
+<li><code>7zip</code> format requires to rebuild the entire archive while adding files to it
+(not streamable). It is also quite complex, and so harder to audit / trust
+when unpacking unknown archive</li>
+<li><code>journald</code> format is not streamable. Also, one writter / multiple reader is
+not needed here, thus releasing some constraints <code>journald</code> format have</li>
+<li>any archive + <code>age</code>: <a href="https://age-encryption.org/">age</a> does not yet support post quantum encryption</li>
+<li>Backup formats are generally written to avoid things such as duplication,
+hence their need to keep bigger structures in memory, or not being
+streamable</li>
+</ul>
+<p>Tweaking these formats would likely have resulted in similar properties. The
+choice has been made to keep a better control over what the format is capable
+of, and to (try to) KISS.</p>
+<h2 id="performance"><a class="header" href="#performance">Performance</a></h2>
+<p>One can evaluate the performance through embedded benchmark, based on <a href="https://github.com/bheisler/criterion.rs">Criterion</a>.</p>
+<p>Several scenarios are already embedded, such as:</p>
+<ul>
+<li>File addition, with different size and layer configurations</li>
+<li>File addition, varying the compression quality</li>
+<li>File reading, with different size and layer configurations</li>
+<li>Random file read, with different size and layer configurations</li>
+<li>Linear archive extraction, with different size and layer configurations</li>
+</ul>
+<p>On an "Intel(R) Core(TM) i5-7200U CPU @ 2.50GHz":</p>
+<pre><code class="language-sh">$ cd mla/
+$ cargo bench
+...
+multiple_layers_multiple_block_size/Layers ENCRYPT | COMPRESS | DEFAULT/1048576                                                                           
+                        time:   [28.091 ms 28.259 ms 28.434 ms]
+                        thrpt:  [35.170 MiB/s 35.388 MiB/s 35.598 MiB/s]
+...
+chunk_size_decompress_mutilfiles_random/Layers ENCRYPT | COMPRESS | DEFAULT/4194304                                                                          
+                        time:   [126.46 ms 129.54 ms 133.42 ms]
+                        thrpt:  [29.980 MiB/s 30.878 MiB/s 31.630 MiB/s]
+...
+linear_vs_normal_extract/LINEAR / Layers DEBUG | EMPTY/2097152                        
+                        time:   [145.19 us 150.13 us 153.69 us]
+                        thrpt:  [12.708 GiB/s 13.010 GiB/s 13.453 GiB/s]
+...
+</code></pre>
+<p>Criterion.rs documentation explains how to get back HTML reports, compare results, etc.</p>
+<p>The AES-NI extension is enabled in the compilation toolchain for the supported architectures, leading to massive performance gain for the encryption layer, especially in reading operations. Because the crate <code>aesni</code> statically enables it, it might lead to errors if the user's architecture does not support it. It could be disabled at the compilation time, or by commenting the associated section in <code>.cargo/config</code>.</p>
+<h1 id="contributing"><a class="header" href="#contributing">Contributing</a></h1>
+<p>We appreciate your help! To contribute, please read our <a href="../../.github/CONTRIBUTING.html">contributing instructions</a>.</p>
+<div style="break-before: page; page-break-before: always;"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.4/dist/katex.min.css">
+<h1 id="mla-format"><a class="header" href="#mla-format">MLA FORMAT</a></h1>
+<p>Relation between the MLA library version and the file format version:</p>
 <div class="table-wrapper"><table><thead><tr><th>MLA Version</th><th>Supported file format</th></tr></thead><tbody>
-<tr><td>2.0</td><td>2</td></tr>
+<tr><td>2.X</td><td>2</td></tr>
+<tr><td>1.X</td><td>1</td></tr>
 </tbody></table>
 </div>
-<h1 id="mla-file-format-v2"><a class="header" href="#mla-file-format-v2">MLA file format v2</a></h1>
-<p>This document introduces the MLA file format in its current version, v2.
+<p>This document introduces the MLA file format in its current version, 2.
 For a more comprehensive introduction of the ideas behind it, please refer to <a href="README.html">README.md</a>.</p>
-<p>Structures marked with #[bincode] below are encoded with <a href="https://docs.rs/bincode/2.0.0/bincode/index.html">bincode</a> in version 2 with fixed-size integer encoding in little endian.</p>
+<h2 id="types-and-their-serialization-format"><a class="header" href="#types-and-their-serialization-format">Types and their serialization format</a></h2>
+<ul>
+<li>Integers are unsigned and serialized as bytes in little endian. They are called u64 for 64 bits integers, u32 for 32 bits ones, u16 for 16 bits ones and u8 for 8 bits ones. Serialization length in bytes are: 8 for u64, 4 for u32, 2 for u16 and 1 for u8.</li>
+<li><code>Vec&lt;T&gt;</code> is a sequence of elements of type <code>T</code>. It is serialized with its length in number of elements (not necessarily bytes) as a u64 and the sequence of serialized elements of type <code>T</code>.</li>
+<li><code>Opts</code> represents MLA options. It is serialized with a tag of value 0 as a u8 if no option is present. Otherwise it is serialized with a tag of value 1 as u8 followed by a yet unspecified Vec<u8>. Multiple fields in this file format are of type <code>Opts</code> for future proofing reasons, but no option is defined at the moment. For future proofing, implementers of this file format version must still handle the tag of value 1 and read the <code>Vec&lt;u8&gt;</code> even if not using this values. Thus, if an option is specified in the future, pre-dating implementations will be able to work with new archives containing the optional value.</li>
+<li><code>Tail&lt;T&gt;</code> is a <code>T</code> followed by its <code>tail_length</code> length in bytes as a u64. This enables extracting the <code>T</code> when reading from the end. Note that a <code>Tail&lt;Vec&lt;T&gt;&gt;</code> contains two lengths which may differ in units and always differ in values as <code>Tail</code>'s length includes <code>Vec</code>'s serialization of its own length. For example, serialization of a <code>Tail&lt;Vec&lt;u16&gt;&gt;</code> containing 0 and 1, leads to <code>02 00 00 00 00 00 00 00 00 00 01 00 0c 00 00 00 00 00 00 00</code>. As a second example, serialization of <code>Tail&lt;Vec&lt;u8&gt;&gt;</code> containing 0 and 1, leads to <code>02 00 00 00 00 00 00 00 00 01 0a 00 00 00 00 00 00 00</code>.</li>
+</ul>
 <h2 id="mla-header"><a class="header" href="#mla-header">MLA Header</a></h2>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>struct MLA {
-    // MLA magic
-    magic: [u8; 3] = b"MLA",
-    // Current file format version
-    #[little_endian]
-    format_version: u32 = 2,
-    #[bincode]
-    struct ArchivePersistentConfig {
-        // bitfield indicating which Layer is enabled
-        // - ENCRYPT = 0b0000_0001;
-        // - COMPRESS = 0b0000_0010;
-        layers_enabled: Layers,
-        // Optional field, if "encrypt" layer is enabled
-        encrypt: Option&lt;struct EncryptionPersistentConfig {
-            // HPKE with multi recipient
-            recipients: Vec&lt;struct HybridRecipientEncapsulatedKey {
-                /// "Ciphertext" for ML-KEM 1024
-                ct_ml: [u8; 1568],
-                /// "Ciphertext" for DH-KEM (actually an ECC ephemeral public key)
-                ct_ecc: [u8; 32],
-                /// Wrapped (encrypted) version of the main shared secret
-                /// - Algorithm: AES-256-GCM
-                /// - Key: per-recipient hybrid shared secret
-                /// - Nonce: per-recipient
-                wrapped_ss: [u8; 32],
-                /// Associated tag
-                tag: [u8; 16],
-            }&gt;,
-            key_commitment: struct KeyCommitmentAndTag {
-                key_commitment: [u8; 64],
-                tag: [u8; 16],
-            }
-        }&gt;,
-    },
-    data: [u8],
-}
-<span class="boring">}</span></code></pre></pre>
-<p>The content of the <code>data</code> field then depend on what layers are enabled, in the following order:</p>
-<ol>
-<li>Encryption layer</li>
-<li>Compression layer</li>
-<li>Actual archive entries</li>
-</ol>
-<h3 id="example"><a class="header" href="#example">Example</a></h3>
-<p>For example, on <a href="samples/archive_v2.mla">samples/archive_v2.mla</a>:</p>
 <ul>
-<li><code>4d 4c 41</code>: <code>magic</code></li>
-<li><code>02 00 00 00</code>: <code>format_version</code>, set to 2 for archive format v2</li>
-<li><code>03</code>: <code>layers</code>, with <code>ENCRYPT | COMPRESS = 0b11</code>, i.e. Encryption and Compression layers are enabled</li>
-<li><code>01</code>: <code>EncryptionPersistentConfig</code> is present, as expected because the corresponding layer ("encrypt") is enabled</li>
-<li><code>01 00 00 00 00 00 00 00</code> : there is one recipient</li>
-<li><code>a6 (.. 1568-bytes length ..) b8</code>: <code>recipients[0].mlkem_encapsulated_key</code></li>
-<li><code>37 (.. 32-bytes length ..) 00</code>: <code>recipients[0].ecc_encapsulated_key</code></li>
-<li><code>41 (.. 32-bytes length ..) b3</code>: <code>recipients[0].encrypted_shared_secret</code></li>
-<li><code>83 (.. 16-bytes length ..) 51</code>: <code>recipients[0].encrypted_shared_secret_tag</code></li>
-<li><code>08 (.. 64-bytes length ..) df</code>: <code>encrypted_key_commitment</code></li>
-<li><code>f3 (.. 16-bytes length ..) 26</code>: <code>encrypted_key_commitment_tag</code></li>
-<li><code>a3 until EOF</code>: <code>data</code></li>
+<li>An MLA file begins with the <code>mla_header_magic</code> ASCII magic: "MLAFAAAA".</li>
+<li><code>mla_header_magic</code> is followed by the <code>format_version</code> format version number as a u32.</li>
+<li><code>format_version</code> is followed by an <code>header_options</code> field of type <code>Opts</code>.</li>
+<li><code>header_options</code> is followed by archive content <code>archive_content</code>, described below.</li>
+<li><code>archive_content</code> is followed by an <code>footer_options</code> field of type <code>Tail&lt;Opts&gt;</code> to enable determining <code>archive_content</code>'s end when reading from the end of the MLA file.</li>
+<li><code>footer_options</code> is followed by the <code>footer_magic</code> ASCII magic "EMLAAAAA", terminating the archive.</li>
 </ul>
-<h2 id="encryption-layer-1"><a class="header" href="#encryption-layer-1">Encryption layer</a></h2>
-<p>From the information in the header, the cryptographic material is recovered as described in <code>CRYPTO.md</code>. This enables decrypting following content.</p>
-<p><code>data</code> is a contiguous list of:</p>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>struct DataBlock {
-    encrypted_content: [u8; 128 * 1024],
-    tag: [u8; 16],
-}
-<span class="boring">}</span></code></pre></pre>
-<p>followed by one:</p>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>struct FinalBlock {
-    encrypted_content: [u8; 10],
-    tag: [u8; 16],
-}
-<span class="boring">}</span></code></pre></pre>
-<p>The last <code>DataBlock</code> is an exception: <code>encrypted_content</code> might be smaller. Its size is then <code>((data.len() - sizeof(FinalBlock)) % sizeof(DataBlock)) - 16</code>.</p>
-<p>To protect from a truncation attack, before using an archive, it must be checked that <code>FinalBlock.tag</code> is correct and that <code>msg_final</code> is <code>FINALBLOCK</code>.</p>
-<p>Formats for DER keys (thus PEM keys too) are documented in comments of functions <code>parse_mlakey_privkey_der</code> and <code>parse_mlakey_pubkey_der</code>.</p>
-<h3 id="example-1"><a class="header" href="#example-1">Example</a></h3>
-<p>For example, with the private key <a href="samples/test_mlakey_archive_v2.der">samples/test_mlakey_archive_v2.der</a>:</p>
+<p><code>archive_content</code> consists of a serialized MLA entries layer documented below, transformed with zero or more layers, documented below too. A layer consists of a u64 layer magic followed by its data. Layer order plays an important security role, so the signature layer has to be above the encryption layer which has to be above the compression layer. This must be enforced by writers and readers. Readers should ensure users explicitly choose if they allow an archive without signature or without encryption.</p>
+<h2 id="signature-layer"><a class="header" href="#signature-layer">Signature layer</a></h2>
 <ul>
-<li>The MLA private key ASN.1 DER encoded data is a X25519 private key followed by a ML-KEM 1024 private key</li>
-<li>MLA private key X25519 part: <code>5d 58 a8 7c 9c 69 ba 67 4a f9 d3 89 23 76 c9 5e d8 eb 08 cf 09 cd 61 5c 07 28 99 c3 79 45 96 a9</code></li>
-<li>MLA private key <code>mlkem_dk</code> (<code>dk_pke||ek||h||z</code>) part: <code>21 f0 (.. 3168-bytes length ..) de 3e</code></li>
+<li>The layer <code>signature_layer_magic</code> ASCII magic is "SIGMLAAA".</li>
+<li><code>signature_layer_magic</code> is followed by an <code>signature_header_options</code> of type <code>Opts</code>.</li>
+<li><code>signature_header_options</code> is followed by <code>sig_inner_layer</code>, consisting of the inner layer bytes.</li>
+<li><code>sig_inner_layer</code> is followed by <code>signature_footer_options</code> of type <code>Tail&lt;Opts&gt;</code>.</li>
+<li><code>signature_footer_options</code> is followed by <code>signature_data</code> serialized as a <code>Tail&lt;Vec&lt;u8&gt;&gt;</code> which content is described below.</li>
 </ul>
-<p>This gives with <a href="samples/archive_v2.mla">samples/archive_v2.mla</a>:</p>
+<p><code>signature_data</code> is a <code>Vec&lt;u8&gt;</code> whose content bytes consist of a sequence of <code>SignatureDataWHdr</code>. A <code>SignatureDataWHdr</code> is a <code>signature_method_id</code> u16, followed by a <code>signature_data</code> sequence of bytes depending of the tag value. For the moment, there are two valid <code>signature_method_id</code>: 0 and 1. 0 maps to <code>MLAEd25519SigMethod</code>, 1 maps to <code>MLAMLDSA87SigMethod</code>. These methods are described in <code>doc/CRYPTO.md</code>. Their input starts and includes <code>mla_header_magic</code>, up to and including <code>sig_inner_layer</code>.  In the current version, for the signature layer to be considered verified, the reader must verify that at least one <code>SignatureDataWHdr</code> of each <code>signature_method_id</code> is verified.</p>
+<h2 id="encryption-layer"><a class="header" href="#encryption-layer">Encryption layer</a></h2>
+<p>The layer <code>encryption_layer_magic</code> ASCII magic is "ENCMLAAA".
+<code>encryption_layer_magic</code> is followed by <code>encryption_header_options</code> of type <code>Opts</code>.
+<code>encryption_header_options</code> is followed by a <code>encryption_method_id</code> u16, described below.
+<code>encryption_method_id</code> is followed by <code>encryption_metadata</code>, a sequence of bytes described below.
+<code>encryption_metadata</code> is followed by <code>encrypted_inner_layer</code>, a sequence of bytes described below.
+<code>encrypted_inner_layer</code> is followed by one <code>encryption_footer_options</code> of type <code>Tail&lt;Opts&gt;</code>.</p>
+<p>The only <code>encryption_method_id</code> valid <code>encryption_method_id</code> for the moment is 0. It is the encryption method described in <code>CRYPTO.md</code>.</p>
+<p><code>encryption_metadata</code> depends on the previous <code>encryption_method_id</code> value. For <code>encryption_method_id</code> 0, <code>encryption_metadata</code> is a <code>Vec&lt;PerRecipientEncapsulatedKey&gt;</code> followed by a <code>KeyCommitmentAndTag</code>.</p>
+<p>A <code>PerRecipientEncapsulatedKey</code> is an <code>mlkem1024_encapsulated_s</code> field followed by an <code>ed25519_encapsulated_s</code> field, followed by an <code>m0_encrypted_ss</code> field and a <code>prkem_tag</code> field. As described in more detail in <code>CRYPTO.md</code>, <code>m0_encrypted_ss</code> is the AES-256-GCM encrypted <code>global_secret</code>. The AES key used to encrypt this <code>global_secret</code> is recovered from <code>mlkem1024_encapsulated_s</code> and <code>ed25519_encapsulated_s</code>. <code>prkem_tag</code> is the GCM tag associated with <code>m0_encrypted_ss</code>.</p>
+<p><code>mlkem1024_encapsulated_s</code> is a sequence of 1568 bytes corresponding to the ciphertext output of ML-KEM.Encaps as described in FIPS 203. <code>ed25519_encapsulated_s</code> is a sequence of 32 bytes corresponding to the output of the X25519 as described in RFC 7748. <code>m0_encrypted_ss</code> is a 32 bytes sequence. <code>prkem_tag</code> is a 16 bytes sequence.</p>
+<p><code>KeyCommitmentAndTag</code> is the key commitment described in <code>CRYPTO.md</code>. It is a 64-bytes ciphertext followed by a 16-bytes tag.</p>
+<p><code>encrypted_inner_layer</code> is the AES-256-GCM encrypted inner layer with the <code>global_secret</code> key. <code>encrypted_inner_layer</code> is a sequence of <code>M0EncryptedChunk</code> followed by one <code>M0FinalEncryptedChunk</code>. Each <code>M0EncryptedChunk</code> has an <code>encrypted_content</code> (128*1024)-bytes field (last <code>M0EncryptedChunk</code> may be smaller) followed by a <code>tag</code> 16-bytes field. <code>encrypted_content</code> is the inner_layer encrypted chunk, and <code>tag</code> its GCM tag. <code>M0FinalEncryptedChunk</code> has a 10-bytes <code>encrypted_content</code> field followed by a 16-bytes <code>tag</code>.</p>
+<p>The last <code>M0EncryptedChunk</code>'s <code>encrypted_content</code> size is the remainder of inner layer size divided by (128*1024).</p>
+<p>To protect from a truncation attack, before using an archive, it must be checked that the <code>tag</code> of the <code>M0FinalEncryptedChunk</code> is correct and that its decrypted <code>encrypted_content</code> is the ASCII <code>FINALBLOCK</code>.</p>
+<h2 id="compression-layer"><a class="header" href="#compression-layer">Compression layer</a></h2>
+<p>The layer <code>compression_layer_magic</code> ASCII magic is "COMLAAAA".
+<code>compression_layer_magic</code> if followed by <code>compression_header_options</code> of type <code>Opts</code>.
+<code>compression_header_options</code> is followed by <code>compressed_data</code>, a sequence of bytes explained below.
+<code>compressed_data</code> is followed by <code>compression_footer_options</code> of type <code>Tail&lt;Opts&gt;</code>.
+<code>compressed_footer_options</code> is followed by <code>sizes_info</code> of type <code>Tail&lt;SizesInfo&gt;</code>, where <code>SizesInfo</code> is explained below.</p>
+<p>The inner layer, is split in <code>4 * 1024 * 1024</code>-bytes chunks, except for the last chunk which may be smaller. Each chunk is compressed with <a href="https://tools.ietf.org/html/rfc7932">brotli</a>. The resulting size of each compressed chunk is recorded in <code>sizes_info</code>. <code>SizesInfo</code> has a first field <code>compressed_sizes</code>, which is a <code>Vec&lt;u32&gt;</code> corresponding to an ordered list of compressed chunk sizes and a second field <code>last_block_uncompresed_size</code> as a u32 indicating the uncompressed size of last inner layer chunk.</p>
+<p><code>compressed_data</code> is the concatenation of each compressed chunk.</p>
+<p>The compression layer footer information can be retrieved by first reading the value of <code>sizes_info.tail_length</code> at the end of the layer, then reading the preceding <code>sizes_info.tail_length</code>-bytes.</p>
+<h2 id="mla-entries-layer"><a class="header" href="#mla-entries-layer">MLA entries layer</a></h2>
+<p>The layer <code>entries_layer_magic</code> ASCII magic is "MLAENAAA".
+<code>entries_layer_magic</code> is followed by <code>entries_header_options</code> of type <code>Opts</code>.
+<code>entries_header_options</code> is followed by <code>entries_data</code>, a sequence of bytes described below.
+<code>entries_data</code> is followed by <code>entries_footer</code> of type <code>Tail&lt;EntriesFooter&gt;</code>, where <code>EntriesFooter</code> is described below.
+<code>entries_footer</code> is followed by <code>entries_footer_options</code> of type <code>Tail&lt;Opts&gt;</code>.</p>
+<p><code>entries_data</code> is a succession of <code>ArchiveEntryBlock</code> of different type. An <code>ArchiveEntryBlock</code> begins with an <code>ArchiveEntryBlockType</code> u8 determining the type of <code>ArchiveEntryBlock</code>:</p>
 <ul>
-<li><code>ecc_shared_secret</code>: <code>40 1c 7f b9 ba 4a d3 7c 5a 8f a9 7a 6f b4 02 57 22 d6 e9 b2 66 2c 02 cd eb d0 f4 81 0c 14 16 00</code></li>
-<li><code>mlkem_shared_secret</code>: <code>6a 92 fa 89 e2 30 57 19 eb 39 52 46 24 06 de 65 30 61 b8 f6 bb 6e 61 63 3c b3 99 d5 f6 a3 95 d0</code></li>
-<li><code>combined_shared_secret</code>: <code>ec f2 64 11 18 2e 19 0a 3e da bf 55 51 5f 51 0e 85 ed 3c 66 78 59 f5 7d 78 44 b9 96 41 a1 57 1f</code></li>
-<li><code>Per-Recipient Hybrid KEM HPKE base_nonce</code>: <code>cb 7e 1d 35 29 c1 92 a2 71 03 6c 71</code></li>
-<li><code>Per-Recipient Hybrid KEM HPKE key</code>: <code>8c 22 67 a9 65 4b d4 c1 45 42 6b e9 4e f1 94 93 d5 e8 ae 83 c2 dd 65 62 a3 82 fa d0 b9 95 d1 79</code></li>
-<li><code>Per-Recipient Hybrid KEM decapsulated key</code>: <code>41 14 54 34 3b 09 a9 cd df d7 f0 83 46 63 35 dc f4 89 4b 12 46 06 81 68 6d 1f d0 0e 11 63 3a b3</code></li>
-<li><code>Multi-Recipient Hybrid KEM HPKE base_nonce</code>: <code>df d3 f3 74 d1 0e b9 1f 31 ba 6c 09</code></li>
-<li><code>Multi-Recipient Hybrid KEM HPKE key</code>: <code>8a a1 b7 a7 ad 5d 8d 07 ae 97 27 93 d5 5b 45 d9 ed dc b3 30 91 93 88 ce f1 19 63 78 0d 32 b0 0b</code></li>
+<li>0x00 means <code>EntryStart</code></li>
+<li>0x01 means <code>EntryContentChunk</code></li>
+<li>0xFE means <code>EndOfArchiveData</code></li>
+<li>0xFF means <code>EndOfEntry</code></li>
 </ul>
-<p>These last two elements are those with which HPKE is setup to do AES-256-GCM decryption of the rest of the archive.</p>
-<ul>
-<li>Now, the decryption process can be started. <code>data</code> length (<code>27273=29044-(sizeof(header)=1745)-(sizeof(FinalBlock)=26)</code>) being smaller than <code>sizeof(DataBlock)</code>, the <code>encrypted_content</code> is 27257-bytes long. The corresponding tag is <code>2e .. 16</code> (which corresponds to the last 16-bytes of <code>data</code> before the <code>FinalBlock</code> ).</li>
-</ul>
-<p>The first decrypted bytes are <code>9b ff ff 3f 67 54 af 01 03 e7 35 a9 87 88 82 3e ...</code>.</p>
-<p>In the next section, <code>data</code> is now the decrypted content (as if the encryption layer was absent).</p>
-<h2 id="compression"><a class="header" href="#compression">Compression</a></h2>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>struct CompressionLayer {
-    // Compressed data, explained below
-    compressed_data: [u8],
-    // Footer
-    #[bincode]
-    sizes_info: struct SizesInfo {
-        /// Ordered list of chunk compressed sizes; only set at initialization
-        compressed_sizes: Vec&lt;u32&gt;,
-        /// Last block uncompressed size
-        last_block_size: u32,
-    }
-    // Size of the serialized `sizes_info`
-    #[little_endian]
-    sizes_info_length: u32
-}
-<span class="boring">}</span></code></pre></pre>
-<p>The compression layer footer information is retrieved by first reading the value of <code>sizes_info_length</code> at the end of <code>data</code>, then reading <code>sizes_info_length</code>-bytes at the end of <code>data</code> minus 4 bytes.</p>
-<p><code>compressed_data</code> is a concatenation of <code>compressed_block_i</code> blocks of size <code>compressed_sizes[i]</code>.</p>
-<p>A <code>compressed_block_i</code> is a <a href="https://tools.ietf.org/html/rfc7932">brotli compressed</a> block. Its uncompressed data size is <code>4 * 1024 * 1024</code>-bytes, except for the last block (<code>last_block_size</code>).  This format already brings necessary data for decompression, such as the quality level used.</p>
-<p>The resulting data is the concatenation of all decompressed <code>compressed_block_i</code>.</p>
-<h3 id="example-2"><a class="header" href="#example-2">Example</a></h3>
-<p>For example, on <a href="samples/archive_v2.mla">samples/archive_v2.mla</a>, after decryption:</p>
-<ul>
-<li>Reading from the end of <code>data</code> leads to <code>sizes_info_length = 24</code></li>
-<li>The corresponding <code>SizesInfo</code> is:</li>
-</ul>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>SizesInfo {
-    compressed_sizes: [
-        13333,
-        259,
-        13637,
-    ],
-    last_block_size: 3209403,
-}
-<span class="boring">}</span></code></pre></pre>
-<p>It indeed corresponds to the size of <code>data</code>: <code>data.len() = 27257 = 13333 + 259 + 13637 + 24 + 4</code>. The decompressed size is then <code>decompressed.len() = 2 * (4 * 1024 * 1024) + 3209403</code>.</p>
-<ul>
-<li>Each block can now be decompressed</li>
-</ul>
-<p>The first decompressed bytes are <code>00 00 00 00 00 00 00 00 00 06 00 00 00 00 00 00 00 73 69 6d 70 6c 65 01 00 00 00 00 00 00 00 00</code>.</p>
-<p>In the next section, <code>data</code> is now the decompressed content (as if the compression layer was absent).</p>
-<h2 id="entries-names"><a class="header" href="#entries-names">Entries names</a></h2>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>#[bincode]
-struct EntryName {
-    name: Vec&lt;u8&gt;
-}
-<span class="boring">}</span></code></pre></pre>
-<p>These names are described in <code>doc/ENTRY_NAME.md</code></p>
-<h2 id="actual-archive-entries-data"><a class="header" href="#actual-archive-entries-data">Actual archive entries data</a></h2>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>struct ArchiveContent {
-    // Data content, explained below
-    entry_data: [u8]
-    // Footer
-    #[bincode]
-    struct ArchiveFooter {
-        // EntryName -&gt; Corresponding EntryInfo
-        entries_info: Vec&lt;(EntryName, struct EntryInfo {
-            // Offsets of continuous chunks of `ArchiveEntryBlock`
-            offsets: Vec&lt;u64&gt;,
-            // Size of the `entry_data`, in bytes
-            size: u64,
-            // Offset of the ArchiveEntryBlock::EndOfEntry
-            eof_offset: u64,
-        })&gt;,
-    },
-    // Size of the serialized `ArchiveFooter`
-    #[little_endian]
-    archive_footer_length: u64
-}
-<span class="boring">}</span></code></pre></pre>
-<p>The archive footer information is optionally retrieved by first reading the value of <code>archive_footer_length</code> at the end of <code>data</code>, then reading <code>archive_footer_length</code>-bytes at the end of <code>data</code> minus 8 bytes.</p>
-<p><code>entry_data</code> is the concatenation of all <code>ArchiveEntryBlock</code>s. Each block starts with a <code>u8</code> corresponding to the block type:</p>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>enum ArchiveEntryBlockType {
-    EntryStart = 0x00,
-    EntryContent = 0x01,
-
-    EndOfArchiveData = 0xFE,
-    EndOfEntry = 0xFF,
-}
-<span class="boring">}</span></code></pre></pre>
-<p>Then, depending on the block type:</p>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>struct EntryStart {
-    // entry unique ID in the archive
-    #[little_endian]
-    id: u64,
-    // entry name
-    name: EntryName
-}
-
-struct EntryContent {
-    // entry unique ID in the archive
-    #[little_endian]
-    id: u64,
-    // Length of the block_data
-    #[little_endian]
-    length: u64,
-    // Content
-    block_data: [u8; length]
-}
-
-struct EndOfEntry {
-    // Entry unique ID in the archive
-    #[little_endian]
-    id: u64,
-    // SHA-256 of the entry content
-    hash: [u8; 32]
-}
-
-struct EndOfArchiveData {}
-<span class="boring">}</span></code></pre></pre>
-<p>An entry <code>entry_i</code> in the archive always starts with an <code>EntryStart</code>, giving its name and unique ID.</p>
-<p>Let <code>content_i</code> be the content of <code>entry_i</code>. It starts empty.</p>
-<p>Each time a <code>EntryContent</code> is encountered, the corresponding <code>block_data</code> is appended to <code>content_i</code>.</p>
+<p>If the <code>ArchiveEntryBlockType</code> is <code>EntryStart</code>, it is followed by an <code>ArchiveEntryId</code> u64, an <code>EntryName</code> and an <code>entry_start_options</code> of type <code>Opts</code>. An <code>EntryName</code> is a <code>Vec&lt;u8&gt;</code> described in <code>doc/ENTRY_NAME.md</code>.</p>
+<p>If the <code>ArchiveEntryBlockType</code> is <code>EntryContentChunk</code>, it is followed by an <code>ArchiveEntryId</code>, a <code>content_options</code> of type <code>Opts</code> and a <code>Vec&lt;u8&gt;</code> <code>entry_content_data</code>.</p>
+<p>If the <code>ArchiveEntryBlockType</code> is <code>EndOfEntry</code>, it is followed by an <code>ArchiveEntryId</code>, a <code>end_options</code> of type <code>Opts</code> and a <code>hash</code> serialized as 32 u8.</p>
+<p>If the <code>ArchiveEntryBlockType</code> is <code>EndOfArchiveData</code>, it is followed by nothing.</p>
+<p><code>EntriesFooter</code> is a <code>Vec&lt;EntryNameInfoMapElt&gt;</code>. An <code>EntryNameInfoMapElt</code> is an <code>EntryName</code> followed by an <code>entry_blocks_offsets</code> which is a <code>Vec&lt;EntryBlockOffset&gt;</code> explained after, followed by an <code>entry_size</code> as u64. <code>entry_size</code> is the whole size of the content of the entry with the corresponding <code>EntryName</code>. For reproducibility, the <code>EntriesFooter</code> <code>Vec</code> is sorted by entry name (lexicographically by bytes values) before being serialized.</p>
+<p><code>EntryBlockOffset</code> is a u64 indicating at which offset from the begining of the MLA entries layer an <code>ArchiveEntryBlock</code> can be found for the given <code>EntryName</code>. All <code>EntryBlockOffset</code>s for each entry are recorded in <code>entry_blocks_offsets</code> and they are so in ascending order of offset.</p>
+<h3 id="explainations"><a class="header" href="#explainations">Explainations</a></h3>
+<p>An archive entry <code>entry_i</code> in the archive always starts with an <code>EntryStart</code>, giving its name and unique ID i.</p>
+<p><code>entry_i</code> content is the concatenation of all <code>EntryContentChunk</code>s <code>entry_content_data</code> fields with <code>ArchiveEntryId</code> value <code>i</code>.</p>
 <p>Once the <code>EndOfEntry</code> for <code>entry_i</code> is reached, the entry is completely read. Its content SHA-256 hash can be verified with the <code>EndOfEntry.hash</code>.</p>
-<p>Between the last <code>EndOfEntry</code> block and the beginning of the <code>ArchiveFooter</code>, there is the only <code>EndOfArchiveData</code> block. It is used in the repair process, to correctly separate the actual archive data from the footer.</p>
-<p>As blocks from different entries can be interleaved, the <code>entries_info.offsets</code> are the offsets in <code>entry_data</code> of blocks for the same entry.</p>
+<p>Between the last <code>EndOfEntry</code> block and <code>entries_footer</code>, there is the only <code>EndOfArchiveData</code> block. It is used when trying to read a truncated archive, to correctly separate the actual archive data from the footer.</p>
+<p>As blocks from different entries can be interleaved, the <code>entry_block_offsets</code> for an entry are the offsets in <code>entries_data</code> of its blocks.</p>
 <p>For instance, if the blocks are:</p>
 <pre><code>Off0: [EntryStart ID 1]
 Off1: [EntryStart ID 2]
-Off2: [EntryContent ID 1]
-Off3: [EntryContent ID 1]
-Off4: [EntryContent ID 2]
+Off2: [EntryContentChunk ID 1]
+Off3: [EntryContentChunk ID 1]
+Off4: [EntryContentChunk ID 2]
 Off5: [EndOfEntry ID 1]
 ...
 </code></pre>
-<p>The <code>offsets</code> for the entry with ID 1 will be <code>Off0</code>, <code>Off2</code>, <code>Off5</code>.
-Additionally, for faster <code>hash</code> retrieval, <code>entries_info.eof_offset</code> is the offset of the <code>EndOfEntry</code> block for the corresponding entry. In this example, <code>eof_offset = Off5</code> for ID 1.</p>
-<p>Finally, the <code>entries_info.size</code> is the size in bytes of the corresponding entry content.</p>
-<p>For reproducibility, the <code>entries_info</code> <code>Vec</code> is sorted by entry name (lexicographically by bytes values) before being serialized.</p>
-<h3 id="example-3"><a class="header" href="#example-3">Example</a></h3>
-<p>For example, on <a href="samples/archive_v2.mla">samples/archive_v2.mla</a>, after decryption and decompression:</p>
-<ul>
-<li>Reading from the end of <code>data</code> leads to <code>archive_footer_length = 18444</code></li>
-<li>The corresponding <code>ArchiveFooter</code> is (observed order may be different if deserialized into a HashMap):</li>
-</ul>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>ArchiveFooter {
-    entries_info: {
-        "big": EntryInfo {
-            offsets: [
-                1074403,
-            ],
-            size: 10485760,
-            eof_offset: 11560200,
-        },
-        "file_0": EntryInfo {
-            offsets: [
-                337,
-                19122,
-                1074362,
-            ],
-            size: 4096,
-            eof_offset: 1074362,
-        },
-        ...
-        "simple": EntryInfo {
-                        offsets: [
-                            0,
-                        ],
-                        size: 256,
-                        eof_offset: 296,
-                    },
-    }
-}
-<span class="boring">}</span></code></pre></pre>
-<p>Let's start reading the first entry of the archive. For easier reading, here is an excerpt of the first 400 bytes of <code>data</code>:</p>
-<pre><code>0000  00 00 00 00 00 00 00 00 00 06 00 00 00 00 00 00   ................
-0010  00 73 69 6d 70 6c 65 01 00 00 00 00 00 00 00 00   .simple.........
-0020  00 01 00 00 00 00 00 00 00 01 02 03 04 05 06 07   ................
-0030  08 09 0a 0b 0c 0d 0e 0f 10 11 12 13 14 15 16 17   ................
-0040  18 19 1a 1b 1c 1d 1e 1f 20 21 22 23 24 25 26 27   ........ !"#$%&amp;'
-0050  28 29 2a 2b 2c 2d 2e 2f 30 31 32 33 34 35 36 37   ()*+,-./01234567
-0060  38 39 3a 3b 3c 3d 3e 3f 40 41 42 43 44 45 46 47   89:;&lt;=&gt;?@ABCDEFG
-0070  48 49 4a 4b 4c 4d 4e 4f 50 51 52 53 54 55 56 57   HIJKLMNOPQRSTUVW
-0080  58 59 5a 5b 5c 5d 5e 5f 60 61 62 63 64 65 66 67   XYZ[\]^_`abcdefg
-0090  68 69 6a 6b 6c 6d 6e 6f 70 71 72 73 74 75 76 77   hijklmnopqrstuvw
-00a0  78 79 7a 7b 7c 7d 7e 7f 80 81 82 83 84 85 86 87   xyz{|}~.........
-00b0  88 89 8a 8b 8c 8d 8e 8f 90 91 92 93 94 95 96 97   ................
-00c0  98 99 9a 9b 9c 9d 9e 9f a0 a1 a2 a3 a4 a5 a6 a7   ................
-00d0  a8 a9 aa ab ac ad ae af b0 b1 b2 b3 b4 b5 b6 b7   ................
-00e0  b8 b9 ba bb bc bd be bf c0 c1 c2 c3 c4 c5 c6 c7   ................
-00f0  c8 c9 ca cb cc cd ce cf d0 d1 d2 d3 d4 d5 d6 d7   ................
-0100  d8 d9 da db dc dd de df e0 e1 e2 e3 e4 e5 e6 e7   ................
-0110  e8 e9 ea eb ec ed ee ef f0 f1 f2 f3 f4 f5 f6 f7   ................
-0120  f8 f9 fa fb fc fd fe ff ff 00 00 00 00 00 00 00   ................
-0130  00 40 af f2 e9 d2 d8 92 2e 47 af d4 64 8e 69 67   .@.......G..d.ig
-0140  49 71 58 78 5f bd 1d a8 70 e7 11 02 66 bf 94 48   IqXx_...p...f..H
-0150  80 00 01 00 00 00 00 00 00 00 06 00 00 00 00 00   ................
-0160  00 00 66 69 6c 65 5f 30 00 02 00 00 00 00 00 00   ..file_0........
-0170  00 06 00 00 00 00 00 00 00 66 69 6c 65 5f 31 00   .........file_1.
-0180  03 00 00 00 00 00 00 00 06 00 00 00 00 00 00 00   ................
-</code></pre>
-<ul>
-<li><code>00</code>: mark a <code>EntryStart</code> block</li>
-<li><code>00 00 00 00 00 00 00 00</code>: entry ID is 0</li>
-<li><code>06 00 00 00 00 00 00 00</code>: name length, in bytes, is 6</li>
-<li><code>73 69 6d 70 6c 65</code>: the name is "simple"</li>
-<li><code>01</code>: mark a <code>EntryContent</code> block</li>
-<li><code>00 00 00 00 00 00 00 00</code>: corresponding entry ID is 0 (ie, the entry "simple")</li>
-<li><code>00 01 00 00 00 00 00 00</code>: this block contains 0x100 bytes of data</li>
-<li><code>00 .. (256-bytes long) .. ff</code>: actual 256 first bytes of "simple"</li>
-<li><code>ff</code>: mark a <code>EndOfEntry</code> block</li>
-<li><code>00 00 00 00 00 00 00 00</code>: entry ID is 0. The entry "simple" has been fully recovered</li>
-<li><code>40 .. (32-bytes long) .. 80</code>: SHA256 hash of the entry "simple" content, ie <code>SHA256(00 01 02 .. FE FF)</code></li>
-</ul>
-<p>Here, the entry "simple" has been fully recovered. If one continues, there are:</p>
-<ul>
-<li>A <code>EntryStart</code> block for the entry "file_0" with ID 1</li>
-<li>A <code>EntryStart</code> block for the entry "file_1" with ID 2</li>
-<li>A <code>EntryStart</code> block with ID 3 for a name of length 6, incomplete in the excerpt</li>
-</ul>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="entry-name-documentation"><a class="header" href="#entry-name-documentation">Entry name documentation</a></h1>
+<p>The <code>offsets</code> for the entry with ID 1 will be <code>Off0</code>, <code>Off2</code>, <code>Off3</code> and <code>Off5</code>.</p>
+<div style="break-before: page; page-break-before: always;"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.4/dist/katex.min.css">
+<h1 id="entry-name-documentation"><a class="header" href="#entry-name-documentation">Entry name documentation</a></h1>
 <p>An archive can store entries associated with a name. These entries may or may
 not represent OS filesystem files. And their name may or may not represent an
 OS file system path.</p>
@@ -673,19 +506,25 @@ in <code>Generic escaping</code>.</p>
 <li>a/b.txt -&gt; a/b.txt</li>
 <li>a/b!c -&gt; a/b%21c</li>
 </ul>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="cryptography-in-mla"><a class="header" href="#cryptography-in-mla">Cryptography in MLA</a></h1>
-<p>MLA uses cryptographic primitives essentially for the purpose of the <code>Encrypt</code> layer.</p>
+<div style="break-before: page; page-break-before: always;"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.4/dist/katex.min.css">
+<h1 id="cryptography-in-mla"><a class="header" href="#cryptography-in-mla">Cryptography in MLA</a></h1>
+<p>MLA uses cryptographic primitives essentially for the purpose of the Encrytion and Signature layers.</p>
 <p>This document introduces the primitives used, arguments for the choice made and some security considerations.</p>
-<h2 id="high-level-overview"><a class="header" href="#high-level-overview">High-level overview</a></h2>
-<h3 id="objectives"><a class="header" href="#objectives">Objectives</a></h3>
-<p>The purpose of the <code>Encrypt</code> layer is to provide confidentiality and data integrity of the inner layer.</p>
+<p>Keys used for encryption and signature are generated and used separately.</p>
+<h3 id="signature"><a class="header" href="#signature">Signature</a></h3>
+<p>As described in <code>FORMAT.md</code> an archive can be signed. Implementation must ensure users explicitely choose if signature is made and verified. Two methods are available and must be used together. Method input is called <code>m</code>. The SHA-512 hash <code>h</code> of <code>m</code> may be computed in a first step.</p>
+<p>For method <code>MLAEd25519SigMethod</code>, <code>signature_data</code> is the Ed25519ph (as described in RFC 8032 <sup class="footnote-reference" id="fr-rfc8032-1"><a href="#footnote-rfc8032">1</a></sup>) signature of <code>m</code> (not <code>h</code> even though it can be used for computing the result). The context given as parameter to Ed25519ph is the ASCII <code>MLAEd25519SigMethod</code>. Signature verification and key generation are done as described in RFC 8032. Key storage is described in <code>KEY_FORMAT.md</code>.</p>
+<p>For method <code>MLAMLDSA87SigMethod</code>, <code>signature_data</code> is the ML-DSA-87 signature (as described in FIPS 204 <sup class="footnote-reference" id="fr-fips204-1"><a href="#footnote-fips204">2</a></sup>, not HashMLA-DSA) of <code>h</code> (not <code>m</code> this time) with the ASCII <code>MLAMLDSA87SigMethod</code> as context. Signature verification and key generation are done as described in FIPS 204. Key storage is described in <code>KEY_FORMAT.md</code>.</p>
+<h3 id="encryption-high-level-overview"><a class="header" href="#encryption-high-level-overview">Encryption high-level overview</a></h3>
+<h4 id="objectives"><a class="header" href="#objectives">Objectives</a></h4>
+<p>The purpose of the Encryption layer is to provide confidentiality and data integrity of the inner layer.</p>
 <p>These objectives are obtained using:</p>
 <ul>
 <li>Authenticated encryption</li>
 <li>Asymmetric cryptography, for several recipients</li>
 </ul>
 <p>This layer <strong>does not provide signature</strong>.</p>
-<h3 id="general-design-guidelines"><a class="header" href="#general-design-guidelines">General design guidelines</a></h3>
+<h4 id="general-design-guidelines"><a class="header" href="#general-design-guidelines">General design guidelines</a></h4>
 <ol>
 <li>The size and the initial computation time used for the encryption needs are not a big issue, if kept reasonable. Indeed, in the author understanding, MLA archives are usually several MB long and the computation time is primarily spent in compression/decompression and encryption/decryption of the data</li>
 </ol>
@@ -698,11 +537,11 @@ in <code>Generic escaping</code>.</p>
 <p>When possible, use audited code and test vectors</p>
 </li>
 </ol>
-<h3 id="main-bricks-encryption"><a class="header" href="#main-bricks-encryption">Main bricks: Encryption</a></h3>
+<h4 id="main-bricks-encryption"><a class="header" href="#main-bricks-encryption">Main bricks: Encryption</a></h4>
 <p>The data is encrypted using AES-256-GCM, an AEAD algorithm.
 To offer a <em>seekable</em> layer, data is encrypted using chunks of 128KB each, except for the last one. These encrypted chunks are all present with their associated tag. Tags are checked during decryption before returning data to the upper layer.</p>
 <p>To prevent truncation attacks, another chunk is added at the end corresponding to the encryption of the ASCII string "FINALBLOCK" with "FINALAAD" as additional authenticated data. Any usage of the archive must check correct decryption (including tag verification) of this last block.</p>
-<p>The key, the base nonce and the nonce derivation for each data chunk are computed following HPKE (RFC 9180) <sup class="footnote-reference" id="fr-hpke-1"><a href="#footnote-hpke">1</a></sup>.
+<p>The key, the base nonce and the nonce derivation for each data chunk are computed following HPKE (RFC 9180) <sup class="footnote-reference" id="fr-hpke-1"><a href="#footnote-hpke">3</a></sup>.
 HPKE is parameterized with:</p>
 <ul>
 <li>Mode: "Base" (no PSK, no sender authentication)</li>
@@ -710,15 +549,15 @@ HPKE is parameterized with:</p>
 <li>AEAD: AES-256-GCM</li>
 <li>KEM: Multi-Recipient Hybrid KEM, a custom KEM described later in this document</li>
 </ul>
-<p>Thus, only one cryptography suite is available for now. If this setting ends up broken by cryptanalysis, we will move users onward to the next MLA version, using appropriate cryptography. Therefore, MLA lacks cryptography agility which is an encouraged property regarding post-quantum cryptography by ANSSI <sup class="footnote-reference" id="fr-frsuggest-1"><a href="#footnote-frsuggest">2</a></sup>. Still, HPKE improves this aspect of MLA <sup class="footnote-reference" id="fr-hpke-2"><a href="#footnote-hpke">1</a></sup>.</p>
+<p>Thus, only one cryptography suite is available for now. If this setting ends up broken by cryptanalysis, we will move users onward to the next MLA version, using appropriate cryptography. Therefore, MLA lacks cryptography agility which is an encouraged property regarding post-quantum cryptography by ANSSI <sup class="footnote-reference" id="fr-frsuggest-1"><a href="#footnote-frsuggest">4</a></sup>. Still, HPKE improves this aspect of MLA <sup class="footnote-reference" id="fr-hpke-2"><a href="#footnote-hpke">3</a></sup>.</p>
 <p>Full details are available below.</p>
-<p>Additionally, "key commitment" is included using a method described in <sup class="footnote-reference" id="fr-keycommit-1"><a href="#footnote-keycommit">3</a></sup> and detailed in <sup class="footnote-reference" id="fr-issuekeycommit-1"><a href="#footnote-issuekeycommit">4</a></sup>.</p>
-<h3 id="main-bricks-asymmetric-encryption"><a class="header" href="#main-bricks-asymmetric-encryption">Main bricks: Asymmetric encryption</a></h3>
+<p>Additionally, "key commitment" is included using a method described in <sup class="footnote-reference" id="fr-keycommit-1"><a href="#footnote-keycommit">5</a></sup> and detailed in <sup class="footnote-reference" id="fr-issuekeycommit-1"><a href="#footnote-issuekeycommit">6</a></sup>.</p>
+<h4 id="main-bricks-asymmetric-encryption"><a class="header" href="#main-bricks-asymmetric-encryption">Main bricks: Asymmetric encryption</a></h4>
 <p>Since the format <code>v2</code>, the <code>Encrypt</code> layer is using post-quantum cryptography (PQC) through an hybrid approach, to avoid "Harvest now, decrypt later" attacks.</p>
 <p>The algorithms used are:</p>
 <ul>
-<li>Curve 25519 for pre-quantum cryptography, using DHKEM (RFC 9180) <sup class="footnote-reference" id="fr-hpke-3"><a href="#footnote-hpke">1</a></sup></li>
-<li>FIPS 203<sup class="footnote-reference" id="fr-fips203-1"><a href="#footnote-fips203">5</a></sup> (CRYSTALS Kyber) MLKEM-1024 for post-quantum cryptography</li>
+<li>X25519 for pre-quantum cryptography, using DHKEM (RFC 9180) <sup class="footnote-reference" id="fr-hpke-3"><a href="#footnote-hpke">3</a></sup></li>
+<li>FIPS 203<sup class="footnote-reference" id="fr-fips203-1"><a href="#footnote-fips203">7</a></sup> (CRYSTALS Kyber) MLKEM-1024 for post-quantum cryptography</li>
 </ul>
 <p>The two keys are mixed together (see below) in a manner keeping the IND-CCA2 properties of the two algorithms.</p>
 <p>Sending to multiple recipients is achieved using a two-step process:</p>
@@ -729,19 +568,19 @@ HPKE is parameterized with:</p>
 </ol>
 <p>This final secret is the one later used as an input to the encryption layer.
 The whole process can be viewed as a KEM encapsulation for multiple recipients.</p>
-<h2 id="details"><a class="header" href="#details">Details</a></h2>
+<h3 id="encryption-details"><a class="header" href="#encryption-details">Encryption Details</a></h3>
 <p>The following sections describe the whole process for data encryption and seed derivation.
 They are meant to ease the understanding of the code and MLA format re-implementation.</p>
 <p>The interested reader could also look at the Rust implementation in this repository for more details.
 The implementation also includes tests (including some test vectors) and comments.</p>
-<h3 id="asymmetric-encryption---per-recipient-kem"><a class="header" href="#asymmetric-encryption---per-recipient-kem">Asymmetric encryption - Per-recipient KEM</a></h3>
-<h4 id="notations"><a class="header" href="#notations">Notations</a></h4>
+<h4 id="asymmetric-encryption---per-recipient-kem"><a class="header" href="#asymmetric-encryption---per-recipient-kem">Asymmetric encryption - Per-recipient KEM</a></h4>
+<h5 id="notations"><a class="header" href="#notations">Notations</a></h5>
 <ul>
-<li>$pk_{ecc}^i$, $sk_{ecc}^i$, $pk_{mlkem}^i$ and $sk_{mlkem}^i$: respectively the curve 25519 public key and secret key, and the MLKEM-1024 (FIPS 203 <sup class="footnote-reference" id="fr-fips203-2"><a href="#footnote-fips203">5</a></sup>) encapsulating key and decapsulating key</li>
-<li>$\textrm{DHKEM.Encapsulate}$ and $\textrm{DHKEM.Decapsulate}$: key encapsulation methods on the curve 25519, as defined in RFC 9180, section 4 <sup class="footnote-reference" id="fr-hpke-4"><a href="#footnote-hpke">1</a></sup></li>
-<li>$\textrm{MLKEM.Encapsulate}$ and $\textrm{MLKEM.Decapsulate}$: key encapsulation methods on MLKEM-1024, as defined in FIPS 203 <sup class="footnote-reference" id="fr-fips203-3"><a href="#footnote-fips203">5</a></sup></li>
-<li>$ss_{recipients}$: a 32-bytes secret, produced by a cryptographic RNG. Informally, this is the secret shared among recipients, encapsulated separately for each recipient</li>
-<li>$\textrm{KeySchedule}_{recipient}$: <code>KeySchedule</code> function from RFC 9180 <sup class="footnote-reference" id="fr-hpke-5"><a href="#footnote-hpke">1</a></sup>, instanciated with:
+<li><span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.0717em;vertical-align:-0.247em;"></span><span class="mord mathnormal">p</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8247em;"><span style="top:-2.453em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">ecc</span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.247em;"><span></span></span></span></span></span></span></span></span></span>, <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.0717em;vertical-align:-0.247em;"></span><span class="mord mathnormal">s</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8247em;"><span style="top:-2.453em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">ecc</span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.247em;"><span></span></span></span></span></span></span></span></span></span>, <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.1078em;vertical-align:-0.2831em;"></span><span class="mord mathnormal">p</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8247em;"><span style="top:-2.4169em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">m</span><span class="mord mathnormal mtight" style="margin-right:0.01968em;">l</span><span class="mord mathnormal mtight" style="margin-right:0.03148em;">k</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">m</span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2831em;"><span></span></span></span></span></span></span></span></span></span> and <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.1078em;vertical-align:-0.2831em;"></span><span class="mord mathnormal">s</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8247em;"><span style="top:-2.4169em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">m</span><span class="mord mathnormal mtight" style="margin-right:0.01968em;">l</span><span class="mord mathnormal mtight" style="margin-right:0.03148em;">k</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">m</span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2831em;"><span></span></span></span></span></span></span></span></span></span>: respectively the X25519 public key and secret key, and the MLKEM-1024 (FIPS 203 <sup class="footnote-reference" id="fr-fips203-2"><a href="#footnote-fips203">7</a></sup>) encapsulating key and decapsulating key</li>
+<li><span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord text"><span class="mord textrm">DHKEM.Encapsulate</span></span></span></span></span> and <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord text"><span class="mord textrm">DHKEM.Decapsulate</span></span></span></span></span>: key encapsulation methods with X25519, as defined in RFC 9180, section 4 <sup class="footnote-reference" id="fr-hpke-4"><a href="#footnote-hpke">3</a></sup></li>
+<li><span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord text"><span class="mord textrm">MLKEM.Encapsulate</span></span></span></span></span> and <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord text"><span class="mord textrm">MLKEM.Decapsulate</span></span></span></span></span>: key encapsulation methods on MLKEM-1024, as defined in FIPS 203 <sup class="footnote-reference" id="fr-fips203-3"><a href="#footnote-fips203">7</a></sup></li>
+<li><span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7167em;vertical-align:-0.2861em;"></span><span class="mord mathnormal">s</span><span class="mord"><span class="mord mathnormal">s</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">rec</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">p</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">n</span><span class="mord mathnormal mtight">t</span><span class="mord mathnormal mtight">s</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span></span></span></span>: a 32-bytes secret, produced by a cryptographic RNG. Informally, this is the secret shared among recipients, encapsulated separately for each recipient</li>
+<li><span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.0747em;vertical-align:-0.3802em;"></span><span class="mord"><span class="mord text"><span class="mord textrm">KeySchedule</span></span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.2175em;"><span style="top:-2.4559em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">rec</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">p</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">n</span><span class="mord mathnormal mtight">t</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.3802em;"><span></span></span></span></span></span></span></span></span></span>: <code>KeySchedule</code> function from RFC 9180 <sup class="footnote-reference" id="fr-hpke-5"><a href="#footnote-hpke">3</a></sup>, instanciated with:
 <ul>
 <li>Mode: "Base"</li>
 <li>KDF: HKDF-SHA-512</li>
@@ -749,12 +588,12 @@ The implementation also includes tests (including some test vectors) and comment
 <li>KEM: a custom KEM ID, numbered 0x1120</li>
 </ul>
 </li>
-<li>$\textrm{Encrypt}_{AES\ 256\ GCM}$: AES-256-GCM encryption, returning the encrypted data concatened with the associated tag</li>
-<li>$\textrm{Decrypt}_{AES\ 256\ GCM}$ AES-256-GCM decryption, returning the decrypted data after verifying the tag</li>
-<li>$\textrm{Serialize}$ and $\textrm{Deserialize}$: respectively produce a byte string encoding the data in argument, and produce the data from the byte string in argument</li>
+<li><span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.9275em;vertical-align:-0.2441em;"></span><span class="mord"><span class="mord text"><span class="mord textrm">Encrypt</span></span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.2342em;"><span style="top:-2.4559em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">A</span><span class="mord mathnormal mtight" style="margin-right:0.05764em;">ES</span><span class="mspace mtight"><span class="mtight"> </span></span><span class="mord mtight">256</span><span class="mspace mtight"><span class="mtight"> </span></span><span class="mord mathnormal mtight" style="margin-right:0.10903em;">GCM</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2441em;"><span></span></span></span></span></span></span></span></span></span>: AES-256-GCM encryption, returning the encrypted data concatened with the associated tag</li>
+<li><span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.9275em;vertical-align:-0.2441em;"></span><span class="mord"><span class="mord text"><span class="mord textrm">Decrypt</span></span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.2342em;"><span style="top:-2.4559em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">A</span><span class="mord mathnormal mtight" style="margin-right:0.05764em;">ES</span><span class="mspace mtight"><span class="mtight"> </span></span><span class="mord mtight">256</span><span class="mspace mtight"><span class="mtight"> </span></span><span class="mord mathnormal mtight" style="margin-right:0.10903em;">GCM</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2441em;"><span></span></span></span></span></span></span></span></span></span> AES-256-GCM decryption, returning the decrypted data after verifying the tag</li>
+<li><span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord text"><span class="mord textrm">Serialize</span></span></span></span></span> and <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord text"><span class="mord textrm">Deserialize</span></span></span></span></span>: respectively produce a byte string encoding the data in argument, and produce the data from the byte string in argument</li>
 </ul>
-<h4 id="process"><a class="header" href="#process">Process</a></h4>
-<p>To encrypt to a target recipient $i$, knowing $pk_{ecc}^i$ and $pk_{mlkem}^i$:</p>
+<h5 id="process"><a class="header" href="#process">Process</a></h5>
+<p>To encrypt to a target recipient <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6595em;"></span><span class="mord mathnormal">i</span></span></span></span>, knowing <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.0717em;vertical-align:-0.247em;"></span><span class="mord mathnormal">p</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8247em;"><span style="top:-2.453em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">ecc</span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.247em;"><span></span></span></span></span></span></span></span></span></span> and <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.1078em;vertical-align:-0.2831em;"></span><span class="mord mathnormal">p</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8247em;"><span style="top:-2.4169em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">m</span><span class="mord mathnormal mtight" style="margin-right:0.01968em;">l</span><span class="mord mathnormal mtight" style="margin-right:0.03148em;">k</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">m</span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2831em;"><span></span></span></span></span></span></span></span></span></span>:</p>
 <ol>
 <li>Compute shared secrets and ciphertexts for both KEM:</li>
 </ol>
@@ -792,9 +631,9 @@ ct_{wrap}^i &amp;= \textrm{Encrypt}_{AES\ 256\ GCM}(\textrm{key}=key^i, \textrm{
 ct_{recipient}^i &amp;= \textrm{Serialize}(ct_{wrap}^i, ct_{ecc}^i, ct_{mlkem}^i)
 \end{align}
 </code></pre>
-<p>Informally, this process can be viewed as a per-recipient KEM taking a shared secret $ss_{recipients}$, the recipient public key (made of the elliptic curve and the PQC public keys) and returning a ciphertext $ct_{recipient}^i$.</p>
+<p>Informally, this process can be viewed as a per-recipient KEM taking a shared secret <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7167em;vertical-align:-0.2861em;"></span><span class="mord mathnormal">s</span><span class="mord"><span class="mord mathnormal">s</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">rec</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">p</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">n</span><span class="mord mathnormal mtight">t</span><span class="mord mathnormal mtight">s</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span></span></span></span>, the recipient public key (made of the elliptic curve and the PQC public keys) and returning a ciphertext <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.2194em;vertical-align:-0.3948em;"></span><span class="mord mathnormal">c</span><span class="mord"><span class="mord mathnormal">t</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8247em;"><span style="top:-2.4413em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">rec</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">p</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">n</span><span class="mord mathnormal mtight">t</span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.3948em;"><span></span></span></span></span></span></span></span></span></span>.</p>
 <hr />
-<p>To obtain the shared secret from $ct_{recipient}^i$ for a recipient $i$ knowing $sk_{ecc}^i$ and $sk_{mlkem}^i$:</p>
+<p>To obtain the shared secret from <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.2194em;vertical-align:-0.3948em;"></span><span class="mord mathnormal">c</span><span class="mord"><span class="mord mathnormal">t</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8247em;"><span style="top:-2.4413em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">rec</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">p</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">n</span><span class="mord mathnormal mtight">t</span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.3948em;"><span></span></span></span></span></span></span></span></span></span> for a recipient <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6595em;"></span><span class="mord mathnormal">i</span></span></span></span> knowing <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.0717em;vertical-align:-0.247em;"></span><span class="mord mathnormal">s</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8247em;"><span style="top:-2.453em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">ecc</span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.247em;"><span></span></span></span></span></span></span></span></span></span> and <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.1078em;vertical-align:-0.2831em;"></span><span class="mord mathnormal">s</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8247em;"><span style="top:-2.4169em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">m</span><span class="mord mathnormal mtight" style="margin-right:0.01968em;">l</span><span class="mord mathnormal mtight" style="margin-right:0.03148em;">k</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">m</span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2831em;"><span></span></span></span></span></span></span></span></span></span>:</p>
 <ol>
 <li>Compute the recipient's shared secret:</li>
 </ol>
@@ -816,13 +655,13 @@ ss_{recipient}^i &amp;= \textrm{combine}(ss_{ecc}^i, ss_{mlkem}^i, ct_{ecc}^i, c
 ss_{recipients} &amp;= \textrm{Decrypt}_{AES\ 256\ GCM}(\textrm{key}=key^i, \textrm{nonce}=nonce^i, \textrm{data}=ct_{wrap}^i)
 \end{align}
 </code></pre>
-<p>If the decryption is a success, returns $ss_{recipients}$. Otherwise, returns an error.</p>
-<h4 id="arguments"><a class="header" href="#arguments">Arguments</a></h4>
+<p>If the decryption is a success, returns <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7167em;vertical-align:-0.2861em;"></span><span class="mord mathnormal">s</span><span class="mord"><span class="mord mathnormal">s</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">rec</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">p</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">n</span><span class="mord mathnormal mtight">t</span><span class="mord mathnormal mtight">s</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span></span></span></span>. Otherwise, returns an error.</p>
+<h5 id="arguments"><a class="header" href="#arguments">Arguments</a></h5>
 <ul>
-<li>Using HPKE (RFC 9180 <sup class="footnote-reference" id="fr-hpke-6"><a href="#footnote-hpke">1</a></sup>) for both elliptic curve encryption (DHKEM) and post-quantum encryption (MLKEM) offers several benefits<sup class="footnote-reference" id="fr-issuehpke-1"><a href="#footnote-issuehpke">6</a></sup>:
+<li>Using HPKE (RFC 9180 <sup class="footnote-reference" id="fr-hpke-6"><a href="#footnote-hpke">3</a></sup>) for both elliptic curve encryption (DHKEM) and post-quantum encryption (MLKEM) offers several benefits<sup class="footnote-reference" id="fr-issuehpke-1"><a href="#footnote-issuehpke">8</a></sup>:
 <ul>
 <li>Easier re-implementation of the format MLA, thanks to the availability of HPKE in cryptographic libraries</li>
-<li>An existing formal analysis <sup class="footnote-reference" id="fr-hpkeanalysis-1"><a href="#footnote-hpkeanalysis">7</a></sup></li>
+<li>An existing formal analysis <sup class="footnote-reference" id="fr-hpkeanalysis-1"><a href="#footnote-hpkeanalysis">9</a></sup></li>
 <li>Easier code and security auditing, thanks to the use of known bricks</li>
 <li>Availability of test vectors in the RFC, making the implementation more reliable</li>
 <li>If signature is added to MLA in a future version, it could also be integrated using HPKE</li>
@@ -831,36 +670,36 @@ ss_{recipients} &amp;= \textrm{Decrypt}_{AES\ 256\ GCM}(\textrm{key}=key^i, \tex
 <li>To the knowledge of the author, no HPKE algorithm has been standardized for quantum hybridation, hence the custom algorithm</li>
 <li>FIPS 203 is used as, at the time of writing:
 <ul>
-<li>It is the only KEM algorithm standardized by the NIST <sup class="footnote-reference" id="fr-nist-1"><a href="#footnote-nist">8</a></sup></li>
-<li>It is in line with the French suggestions <sup class="footnote-reference" id="fr-frsuggest-2"><a href="#footnote-frsuggest">2</a></sup> for PQ cryptography</li>
+<li>It is the only KEM algorithm standardized by the NIST <sup class="footnote-reference" id="fr-nist-1"><a href="#footnote-nist">10</a></sup></li>
+<li>It is in line with the French suggestions <sup class="footnote-reference" id="fr-frsuggest-2"><a href="#footnote-frsuggest">4</a></sup> for PQ cryptography</li>
 </ul>
 </li>
-<li>The MLKEM-1024 mode is used for stronger security, and to limit consequence of future advances [^mlkemcon1]<sup class="footnote-reference" id="fr-mlkemcon2-1"><a href="#footnote-mlkemcon2">9</a></sup>. This is also the choice of other industry standards [^signal]<sup class="footnote-reference" id="fr-imessage-1"><a href="#footnote-imessage">10</a></sup></li>
-<li>The shared secret from the two-KEM is produced using a "Nested Dual-PRF Combiner", proved in <sup class="footnote-reference" id="fr-dualnest-1"><a href="#footnote-dualnest">11</a></sup> (3.3):
+<li>The MLKEM-1024 mode is used for stronger security, and to limit consequence of future advances [^mlkemcon1]<sup class="footnote-reference" id="fr-mlkemcon2-1"><a href="#footnote-mlkemcon2">11</a></sup>. This is also the choice of other industry standards [^signal]<sup class="footnote-reference" id="fr-imessage-1"><a href="#footnote-imessage">12</a></sup></li>
+<li>The shared secret from the two-KEM is produced using a "Nested Dual-PRF Combiner", proved in <sup class="footnote-reference" id="fr-dualnest-1"><a href="#footnote-dualnest">13</a></sup> (3.3):
 <ul>
-<li>The use of concatenation scheme <strong>including ciphertexts</strong> keeps IND-CCA2 if one of the two underlying scheme is IND-CCA2, as proved in <sup class="footnote-reference" id="fr-combinearg1-1"><a href="#footnote-combinearg1">12</a></sup> and explained in <sup class="footnote-reference" id="fr-combinearg4-1"><a href="#footnote-combinearg4">13</a></sup></li>
-<li>TLS <sup class="footnote-reference" id="fr-combinearg2-1"><a href="#footnote-combinearg2">14</a></sup> uses a similar scheme, and IKE <sup class="footnote-reference" id="fr-combinearg3-1"><a href="#footnote-combinearg3">15</a></sup> also uses a concatenation scheme</li>
-<li>This kind of scheme follows ANSSI recommendations <sup class="footnote-reference" id="fr-frsuggest-3"><a href="#footnote-frsuggest">2</a></sup></li>
-<li>HKDF can be considered as a Dual-PRF if both inputs are uniformly random <sup class="footnote-reference" id="fr-combinearg7-1"><a href="#footnote-combinearg7">16</a></sup>. In MLA, the <code>combine</code> method is called with a shared secret from ML-KEM, and the resulting ECC key derivation -- both are uniformly random</li>
-<li>To avoid potential mistake in the future, or a mis-reuse of this method, the "Nested Dual-PRF Combiner" is used instead of the "Dual-PRF Combiner" (also from <sup class="footnote-reference" id="fr-dualnest-2"><a href="#footnote-dualnest">11</a></sup>). Indeed, this combiner force the "salt" part of HKDF to be uniformly random using an additional PRF use, ensuring the following HKDF is indeed a Dual-PRF</li>
+<li>The use of concatenation scheme <strong>including ciphertexts</strong> keeps IND-CCA2 if one of the two underlying scheme is IND-CCA2, as proved in <sup class="footnote-reference" id="fr-combinearg1-1"><a href="#footnote-combinearg1">14</a></sup> and explained in <sup class="footnote-reference" id="fr-combinearg4-1"><a href="#footnote-combinearg4">15</a></sup></li>
+<li>TLS <sup class="footnote-reference" id="fr-combinearg2-1"><a href="#footnote-combinearg2">16</a></sup> uses a similar scheme, and IKE <sup class="footnote-reference" id="fr-combinearg3-1"><a href="#footnote-combinearg3">17</a></sup> also uses a concatenation scheme</li>
+<li>This kind of scheme follows ANSSI recommendations <sup class="footnote-reference" id="fr-frsuggest-3"><a href="#footnote-frsuggest">4</a></sup></li>
+<li>HKDF can be considered as a Dual-PRF if both inputs are uniformly random <sup class="footnote-reference" id="fr-combinearg7-1"><a href="#footnote-combinearg7">18</a></sup>. In MLA, the <code>combine</code> method is called with a shared secret from ML-KEM, and the resulting ECC key derivation -- both are uniformly random</li>
+<li>To avoid potential mistake in the future, or a mis-reuse of this method, the "Nested Dual-PRF Combiner" is used instead of the "Dual-PRF Combiner" (also from <sup class="footnote-reference" id="fr-dualnest-2"><a href="#footnote-dualnest">13</a></sup>). Indeed, this combiner force the "salt" part of HKDF to be uniformly random using an additional PRF use, ensuring the following HKDF is indeed a Dual-PRF</li>
 </ul>
 </li>
 </ul>
-<h3 id="asymmetric-encryption---multi-recipient-hybrid-kem"><a class="header" href="#asymmetric-encryption---multi-recipient-hybrid-kem">Asymmetric encryption - Multi-Recipient Hybrid KEM</a></h3>
-<h4 id="intuition"><a class="header" href="#intuition">Intuition</a></h4>
+<h4 id="asymmetric-encryption---multi-recipient-hybrid-kem"><a class="header" href="#asymmetric-encryption---multi-recipient-hybrid-kem">Asymmetric encryption - Multi-Recipient Hybrid KEM</a></h4>
+<h5 id="intuition"><a class="header" href="#intuition">Intuition</a></h5>
 <p>KEM, such as the one described above, returns a fresh and distinct secret for each recipient.</p>
 <p>To obtain a "meta-KEM", working for multi-recipient, the strategy is the use of per-recipient KEM to encrypt a common secret.</p>
 <p>This whole process can then be viewed as a KEM for multi-recipient, taking in input a list of public keys and returning a shared secret and a ciphertext made of the concatenation of each per-recipient ciphertext.</p>
 <p>To avoid marking which per-recipient ciphertext correspond to which recipient public key, the decapsulation process "brute-force" each ciphertext for a given decapsulation key. If the decryption works (with the associated tag), the shared secret is returned.</p>
 <p>Key commitment, to avoid rather unlikely mismatch, is further ensured inside the <code>Encrypt</code> layer (see below).</p>
-<h4 id="process-1"><a class="header" href="#process-1">Process</a></h4>
+<h5 id="process-1"><a class="header" href="#process-1">Process</a></h5>
 <p>The "Per-recipient KEM" process described above is noted:</p>
 <ul>
-<li>$\mathrm{PerRecipientKEM.Encapsulate}$, taking a couple of public key ($pk_{ecc}^i$ and $pk_{mlkem}^i$), a shared secret $ss_{recipients}$ and returning a recipient ciphertext $ct_{recipient}^i$</li>
-<li>$\mathrm{PerRecipientKEM.Decapsulate}$, taking a couple of private key ($sk_{ecc}^i$ and $sk_{mlkem}^i$), a ciphertext $ct_{recipients}$ and returning either a shared secret $ss_{recipients}$ if the recipient $i$ is a legitimate recipient (if the AEAD decryption works), or an error otherwise</li>
+<li><span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord"><span class="mord mathrm">PerRecipientKEM.Encapsulate</span></span></span></span></span>, taking a couple of public key (<span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.0717em;vertical-align:-0.247em;"></span><span class="mord mathnormal">p</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8247em;"><span style="top:-2.453em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">ecc</span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.247em;"><span></span></span></span></span></span></span></span></span></span> and <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.1078em;vertical-align:-0.2831em;"></span><span class="mord mathnormal">p</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8247em;"><span style="top:-2.4169em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">m</span><span class="mord mathnormal mtight" style="margin-right:0.01968em;">l</span><span class="mord mathnormal mtight" style="margin-right:0.03148em;">k</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">m</span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2831em;"><span></span></span></span></span></span></span></span></span></span>), a shared secret <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7167em;vertical-align:-0.2861em;"></span><span class="mord mathnormal">s</span><span class="mord"><span class="mord mathnormal">s</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">rec</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">p</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">n</span><span class="mord mathnormal mtight">t</span><span class="mord mathnormal mtight">s</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span></span></span></span> and returning a recipient ciphertext <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.2194em;vertical-align:-0.3948em;"></span><span class="mord mathnormal">c</span><span class="mord"><span class="mord mathnormal">t</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8247em;"><span style="top:-2.4413em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">rec</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">p</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">n</span><span class="mord mathnormal mtight">t</span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.3948em;"><span></span></span></span></span></span></span></span></span></span></li>
+<li><span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord"><span class="mord mathrm">PerRecipientKEM.Decapsulate</span></span></span></span></span>, taking a couple of private key (<span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.0717em;vertical-align:-0.247em;"></span><span class="mord mathnormal">s</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8247em;"><span style="top:-2.453em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">ecc</span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.247em;"><span></span></span></span></span></span></span></span></span></span> and <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.1078em;vertical-align:-0.2831em;"></span><span class="mord mathnormal">s</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8247em;"><span style="top:-2.4169em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">m</span><span class="mord mathnormal mtight" style="margin-right:0.01968em;">l</span><span class="mord mathnormal mtight" style="margin-right:0.03148em;">k</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">m</span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2831em;"><span></span></span></span></span></span></span></span></span></span>), a ciphertext <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.9012em;vertical-align:-0.2861em;"></span><span class="mord mathnormal">c</span><span class="mord"><span class="mord mathnormal">t</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">rec</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">p</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">n</span><span class="mord mathnormal mtight">t</span><span class="mord mathnormal mtight">s</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span></span></span></span> and returning either a shared secret <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7167em;vertical-align:-0.2861em;"></span><span class="mord mathnormal">s</span><span class="mord"><span class="mord mathnormal">s</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">rec</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">p</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">n</span><span class="mord mathnormal mtight">t</span><span class="mord mathnormal mtight">s</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span></span></span></span> if the recipient <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6595em;"></span><span class="mord mathnormal">i</span></span></span></span> is a legitimate recipient (if the AEAD decryption works), or an error otherwise</li>
 </ul>
-<p>$\mathrm{CSPRNG(n)}$ is a cryptographically secured RNG producing a n-bytes secret.</p>
-<p>To encapsulate to a list of recipient $[(pk_{ecc}^0, pk_{mlkem}^0), ..., (pk_{ecc}^{n-1}, pk_{mlkem}^{n-1})]$:</p>
+<p><span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord mathrm">CSPRNG</span><span class="mopen">(</span><span class="mord mathrm">n</span><span class="mclose">)</span></span></span></span></span> is a cryptographically secured RNG producing a n-bytes secret.</p>
+<p>To encapsulate to a list of recipient <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.1555em;vertical-align:-0.3013em;"></span><span class="mopen">[(</span><span class="mord mathnormal">p</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-2.453em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">ecc</span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">0</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.247em;"><span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">p</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-2.4169em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">m</span><span class="mord mathnormal mtight" style="margin-right:0.01968em;">l</span><span class="mord mathnormal mtight" style="margin-right:0.03148em;">k</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">m</span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">0</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2831em;"><span></span></span></span></span></span></span><span class="mclose">)</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord">...</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mopen">(</span><span class="mord mathnormal">p</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-2.453em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">ecc</span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">n</span><span class="mbin mtight">−</span><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.247em;"><span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">p</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8542em;"><span style="top:-2.3987em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">m</span><span class="mord mathnormal mtight" style="margin-right:0.01968em;">l</span><span class="mord mathnormal mtight" style="margin-right:0.03148em;">k</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">m</span></span></span></span><span style="top:-3.1031em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">n</span><span class="mbin mtight">−</span><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.3013em;"><span></span></span></span></span></span></span><span class="mclose">)]</span></span></span></span>:</p>
 <pre><code class="language-math">\begin{align*}
 \mathtt{def\ } &amp; \mathrm{HybridKEM.Encapsulate}([(pk_{ecc}^0, pk_{mlkem}^0), ..., (pk_{ecc}^{n-1}, pk_{mlkem}^{n-1})])\\
 &amp; ss_{recipients} = \mathrm{CSPRNG(32)}\\
@@ -872,41 +711,41 @@ ss_{recipients} &amp;= \textrm{Decrypt}_{AES\ 256\ GCM}(\textrm{key}=key^i, \tex
 \end{align*}
 </code></pre>
 <hr />
-<p>To decapsulate from a ciphertext $ct_{recipients}$, knowing a recipient private key $(sk_{ecc}^i,sk_{mlkem}^i)$:</p>
-<p>$\mathtt{def\ } \mathrm{HybridKEM.Decapsulate}((sk_{ecc}^i,sk_{mlkem}^i), ct_{recipients})$<br />
-$\hspace{1cm}\mathtt{foreach\ } ct_k \mathtt{\ in\ } \mathrm{Deserialize}(ct_{recipients})$<br />
-$\hspace{2cm}\mathtt{try:}$<br />
-$\hspace{3cm}ss_{recipients} = \mathrm{PerRecipientKEM.Decapsulate}((sk_{ecc}^i,sk_{mlkem}^i), ct_k)$<br />
-$\hspace{2cm}\mathtt{success:}$<br />
-$\hspace{3cm}\mathtt{return}\ ss_{recipients}$<br />
-$\hspace{2cm}\mathtt{error:}$<br />
-$\hspace{3cm}\mathtt{continue}$<br />
-$\hspace{1cm}\mathtt{throw\ KeyNotFoundError}$</p>
-<h4 id="arguments-1"><a class="header" href="#arguments-1">Arguments</a></h4>
+<p>To decapsulate from a ciphertext <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.9012em;vertical-align:-0.2861em;"></span><span class="mord mathnormal">c</span><span class="mord"><span class="mord mathnormal">t</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">rec</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">p</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">n</span><span class="mord mathnormal mtight">t</span><span class="mord mathnormal mtight">s</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span></span></span></span>, knowing a recipient private key <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.1078em;vertical-align:-0.2831em;"></span><span class="mopen">(</span><span class="mord mathnormal">s</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8247em;"><span style="top:-2.453em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">ecc</span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.247em;"><span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">s</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8247em;"><span style="top:-2.4169em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">m</span><span class="mord mathnormal mtight" style="margin-right:0.01968em;">l</span><span class="mord mathnormal mtight" style="margin-right:0.03148em;">k</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">m</span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2831em;"><span></span></span></span></span></span></span><span class="mclose">)</span></span></span></span>:</p>
+<p><span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.1108em;vertical-align:-0.2861em;"></span><span class="mord"><span class="mord mathtt">def</span><span class="mspace"> </span></span><span class="mord"><span class="mord mathrm">HybridKEM.Decapsulate</span></span><span class="mopen">((</span><span class="mord mathnormal">s</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8247em;"><span style="top:-2.453em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">ecc</span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.247em;"><span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">s</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8247em;"><span style="top:-2.4169em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">m</span><span class="mord mathnormal mtight" style="margin-right:0.01968em;">l</span><span class="mord mathnormal mtight" style="margin-right:0.03148em;">k</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">m</span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2831em;"><span></span></span></span></span></span></span><span class="mclose">)</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">c</span><span class="mord"><span class="mord mathnormal">t</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">rec</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">p</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">n</span><span class="mord mathnormal mtight">t</span><span class="mord mathnormal mtight">s</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mclose">)</span></span></span></span><br />
+<span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.0361em;vertical-align:-0.2861em;"></span><span class="mspace" style="margin-right:2.8453em;"></span><span class="mord"><span class="mord mathtt">foreach</span><span class="mspace"> </span></span><span class="mord mathnormal">c</span><span class="mord"><span class="mord mathnormal">t</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.03148em;">k</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mord"><span class="mspace"> </span><span class="mord mathtt">in</span><span class="mspace"> </span></span><span class="mord"><span class="mord mathrm">Deserialize</span></span><span class="mopen">(</span><span class="mord mathnormal">c</span><span class="mord"><span class="mord mathnormal">t</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">rec</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">p</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">n</span><span class="mord mathnormal mtight">t</span><span class="mord mathnormal mtight">s</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mclose">)</span></span></span></span><br />
+<span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7758em;vertical-align:-0.2222em;"></span><span class="mspace" style="margin-right:5.6906em;"></span><span class="mord"><span class="mord mathtt">try</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">:</span></span></span></span></span><br />
+<span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7167em;vertical-align:-0.2861em;"></span><span class="mspace" style="margin-right:8.5358em;"></span><span class="mord mathnormal">s</span><span class="mord"><span class="mord mathnormal">s</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">rec</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">p</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">n</span><span class="mord mathnormal mtight">t</span><span class="mord mathnormal mtight">s</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1.1078em;vertical-align:-0.2831em;"></span><span class="mord"><span class="mord mathrm">PerRecipientKEM.Decapsulate</span></span><span class="mopen">((</span><span class="mord mathnormal">s</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8247em;"><span style="top:-2.453em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">ecc</span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.247em;"><span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">s</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8247em;"><span style="top:-2.4169em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">m</span><span class="mord mathnormal mtight" style="margin-right:0.01968em;">l</span><span class="mord mathnormal mtight" style="margin-right:0.03148em;">k</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">m</span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2831em;"><span></span></span></span></span></span></span><span class="mclose">)</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">c</span><span class="mord"><span class="mord mathnormal">t</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.03148em;">k</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mclose">)</span></span></span></span><br />
+<span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.4306em;"></span><span class="mspace" style="margin-right:5.6906em;"></span><span class="mord"><span class="mord mathtt">success</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">:</span></span></span></span></span><br />
+<span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8397em;vertical-align:-0.2861em;"></span><span class="mspace" style="margin-right:8.5358em;"></span><span class="mord"><span class="mord mathtt">return</span></span><span class="mspace"> </span><span class="mord mathnormal">s</span><span class="mord"><span class="mord mathnormal">s</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">rec</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">p</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">n</span><span class="mord mathnormal mtight">t</span><span class="mord mathnormal mtight">s</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span></span></span></span><br />
+<span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.4306em;"></span><span class="mspace" style="margin-right:5.6906em;"></span><span class="mord"><span class="mord mathtt">error</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">:</span></span></span></span></span><br />
+<span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6111em;"></span><span class="mspace" style="margin-right:8.5358em;"></span><span class="mord"><span class="mord mathtt">continue</span></span></span></span></span><br />
+<span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8333em;vertical-align:-0.2222em;"></span><span class="mspace" style="margin-right:2.8453em;"></span><span class="mord"><span class="mord mathtt">throw</span><span class="mspace"> </span><span class="mord mathtt">KeyNotFoundError</span></span></span></span></span></p>
+<h5 id="arguments-1"><a class="header" href="#arguments-1">Arguments</a></h5>
 <ul>
 <li>The shared secret is cryptographically generated, so it can later be used as a shared secret in HPKE encryption</li>
 <li>This secret is unique per archive, as it is generated on archive creation. Even "converting" or "repairing" an archive in <code>mlar</code> CLI will force a newly fresh secret. It is a new secret as there is no edit feature implemented, even if it is doable. Hence, a new random symetric key is used to encrypt its content while "converting" or "repairing" an archive.</li>
 <li>Even if the AEAD decryption worked for an non legitimate recipient, for instance following an intentional manipulation, the shared secret obtained will later be checked using Key commitment before decrypting actual data (see below)</li>
 <li>Optimization would have been possible here, such as sharing a common ephemeral key for the DHKEM. But the size gain is not worth enough regarding the ciphertext size of MLKEM and would move the implementation away from the DHKEM in RFC 9180</li>
 </ul>
-<h3 id="encryption"><a class="header" href="#encryption">Encryption</a></h3>
-<h4 id="notation"><a class="header" href="#notation">Notation</a></h4>
+<h4 id="encryption"><a class="header" href="#encryption">Encryption</a></h4>
+<h5 id="notation"><a class="header" href="#notation">Notation</a></h5>
 <p>The "Multi-Recipient Hybrid KEM" process described above is noted:</p>
 <ul>
-<li>$\mathrm{MultiRecipientHybridKEM.Encapsulate}$, taking a list of public keys $[(pk_{ecc}^0, pk_{mlkem}^0), ..., (pk_{ecc}^{n-1}, pk_{mlkem}^{n-1})]$ and returing a shared secret $ss_{recipients}$ and a ciphertext $ct_{recipients}$</li>
-<li>$\mathrm{MultiRecipientHybridKEM.Decapsulate}$, taking a couple of private keys ($sk_{ecc}^i$ and $sk_{mlkem}^i$), a ciphertext $ct_{recipients}$ and returning either a shared secret $ss_{recipients}$ if the recipient $i$ is a legitimate recipient (if the AEAD decryption works), or an error otherwise</li>
+<li><span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord"><span class="mord mathrm">MultiRecipientHybridKEM.Encapsulate</span></span></span></span></span>, taking a list of public keys <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.1555em;vertical-align:-0.3013em;"></span><span class="mopen">[(</span><span class="mord mathnormal">p</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-2.453em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">ecc</span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">0</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.247em;"><span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">p</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-2.4169em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">m</span><span class="mord mathnormal mtight" style="margin-right:0.01968em;">l</span><span class="mord mathnormal mtight" style="margin-right:0.03148em;">k</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">m</span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">0</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2831em;"><span></span></span></span></span></span></span><span class="mclose">)</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord">...</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mopen">(</span><span class="mord mathnormal">p</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-2.453em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">ecc</span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">n</span><span class="mbin mtight">−</span><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.247em;"><span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">p</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8542em;"><span style="top:-2.3987em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">m</span><span class="mord mathnormal mtight" style="margin-right:0.01968em;">l</span><span class="mord mathnormal mtight" style="margin-right:0.03148em;">k</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">m</span></span></span></span><span style="top:-3.1031em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">n</span><span class="mbin mtight">−</span><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.3013em;"><span></span></span></span></span></span></span><span class="mclose">)]</span></span></span></span> and returing a shared secret <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7167em;vertical-align:-0.2861em;"></span><span class="mord mathnormal">s</span><span class="mord"><span class="mord mathnormal">s</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">rec</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">p</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">n</span><span class="mord mathnormal mtight">t</span><span class="mord mathnormal mtight">s</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span></span></span></span> and a ciphertext <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.9012em;vertical-align:-0.2861em;"></span><span class="mord mathnormal">c</span><span class="mord"><span class="mord mathnormal">t</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">rec</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">p</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">n</span><span class="mord mathnormal mtight">t</span><span class="mord mathnormal mtight">s</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span></span></span></span></li>
+<li><span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord"><span class="mord mathrm">MultiRecipientHybridKEM.Decapsulate</span></span></span></span></span>, taking a couple of private keys (<span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.0717em;vertical-align:-0.247em;"></span><span class="mord mathnormal">s</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8247em;"><span style="top:-2.453em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">ecc</span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.247em;"><span></span></span></span></span></span></span></span></span></span> and <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.1078em;vertical-align:-0.2831em;"></span><span class="mord mathnormal">s</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8247em;"><span style="top:-2.4169em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">m</span><span class="mord mathnormal mtight" style="margin-right:0.01968em;">l</span><span class="mord mathnormal mtight" style="margin-right:0.03148em;">k</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">m</span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2831em;"><span></span></span></span></span></span></span></span></span></span>), a ciphertext <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.9012em;vertical-align:-0.2861em;"></span><span class="mord mathnormal">c</span><span class="mord"><span class="mord mathnormal">t</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">rec</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">p</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">n</span><span class="mord mathnormal mtight">t</span><span class="mord mathnormal mtight">s</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span></span></span></span> and returning either a shared secret <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7167em;vertical-align:-0.2861em;"></span><span class="mord mathnormal">s</span><span class="mord"><span class="mord mathnormal">s</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">rec</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">p</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">n</span><span class="mord mathnormal mtight">t</span><span class="mord mathnormal mtight">s</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span></span></span></span> if the recipient <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6595em;"></span><span class="mord mathnormal">i</span></span></span></span> is a legitimate recipient (if the AEAD decryption works), or an error otherwise</li>
 </ul>
 <p><code>KeyCommitmentChain</code> is defined as the array of 64-bytes: <code>-KEY COMMITMENT--KEY COMMITMENT--KEY COMMITMENT--KEY COMMITMENT-</code>.</p>
-<p>$\textrm{KeySchedule}_{hybrid}$: <code>KeySchedule</code> function from RFC 9180 <sup class="footnote-reference" id="fr-hpke-7"><a href="#footnote-hpke">1</a></sup>, instanciated with:</p>
+<p><span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.0747em;vertical-align:-0.3802em;"></span><span class="mord"><span class="mord text"><span class="mord textrm">KeySchedule</span></span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.242em;"><span style="top:-2.4559em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">h</span><span class="mord mathnormal mtight" style="margin-right:0.03588em;">y</span><span class="mord mathnormal mtight">b</span><span class="mord mathnormal mtight" style="margin-right:0.02778em;">r</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">d</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.3802em;"><span></span></span></span></span></span></span></span></span></span>: <code>KeySchedule</code> function from RFC 9180 <sup class="footnote-reference" id="fr-hpke-7"><a href="#footnote-hpke">3</a></sup>, instanciated with:</p>
 <ul>
 <li>Mode: "Base"</li>
 <li>KDF: HKDF-SHA-512</li>
 <li>AEAD: AES-256-GCM</li>
 <li>KEM: a custom KEM ID, numbered 0x1020</li>
 </ul>
-<p>$\mathrm{ComputeNonce}$: function from RFC 9180 <sup class="footnote-reference" id="fr-hpke-8"><a href="#footnote-hpke">1</a></sup>.</p>
-<h4 id="process-2"><a class="header" href="#process-2">Process</a></h4>
-<p>To encrypt n-bytes <code>data</code> to a list of public keys $[(pk_{ecc}^0, pk_{mlkem}^0), ..., (pk_{ecc}^{n-1}, pk_{mlkem}^{n-1})]$:</p>
+<p><span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8778em;vertical-align:-0.1944em;"></span><span class="mord"><span class="mord mathrm">ComputeNonce</span></span></span></span></span>: function from RFC 9180 <sup class="footnote-reference" id="fr-hpke-8"><a href="#footnote-hpke">3</a></sup>.</p>
+<h5 id="process-2"><a class="header" href="#process-2">Process</a></h5>
+<p>To encrypt n-bytes <code>data</code> to a list of public keys <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.1555em;vertical-align:-0.3013em;"></span><span class="mopen">[(</span><span class="mord mathnormal">p</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-2.453em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">ecc</span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">0</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.247em;"><span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">p</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-2.4169em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">m</span><span class="mord mathnormal mtight" style="margin-right:0.01968em;">l</span><span class="mord mathnormal mtight" style="margin-right:0.03148em;">k</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">m</span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">0</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2831em;"><span></span></span></span></span></span></span><span class="mclose">)</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord">...</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mopen">(</span><span class="mord mathnormal">p</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-2.453em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">ecc</span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">n</span><span class="mbin mtight">−</span><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.247em;"><span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">p</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8542em;"><span style="top:-2.3987em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">m</span><span class="mord mathnormal mtight" style="margin-right:0.01968em;">l</span><span class="mord mathnormal mtight" style="margin-right:0.03148em;">k</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">m</span></span></span></span><span style="top:-3.1031em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">n</span><span class="mbin mtight">−</span><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.3013em;"><span></span></span></span></span></span></span><span class="mclose">)]</span></span></span></span>:</p>
 <ol>
 <li>Compute a shared secret and the corresponding ciphertext:</li>
 </ol>
@@ -932,7 +771,7 @@ keycommit&amp; = \textrm{Encrypt}_{AES\ 256\ GCM}(\\
 \end{align*}
 </code></pre>
 <ol start="4">
-<li>For each 128KB $chunk_j$ of data:</li>
+<li>For each 128KB <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.9805em;vertical-align:-0.2861em;"></span><span class="mord mathnormal">c</span><span class="mord mathnormal">h</span><span class="mord mathnormal">u</span><span class="mord mathnormal">n</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.05724em;">j</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span></span></span></span> of data:</li>
 </ol>
 <pre><code class="language-math">\begin{align*}
 enc_j&amp; = \textrm{Encrypt}_{AES\ 256\ GCM}(\\
@@ -942,13 +781,13 @@ enc_j&amp; = \textrm{Encrypt}_{AES\ 256\ GCM}(\\
 )&amp;
 \end{align*}
 </code></pre>
-<p>Note: $j$ starts at 0. $j+1$ is used because the sequence numbered 0 has already been used by the Key commitment.</p>
+<p>Note: <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.854em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.05724em;">j</span></span></span></span> starts at 0. <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.854em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.05724em;">j</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">1</span></span></span></span> is used because the sequence numbered 0 has already been used by the Key commitment.</p>
 <ol start="5">
 <li>
 <p>When the layer is finalized, the last chunk of data (with a length lower than or equals to 128KB) is encrypted the same way</p>
 </li>
 <li>
-<p>Finally, a final chunk with sequence number $n+1$ (where $n$ is the number of data chunks) and special content and additional authenticated data is appended:</p>
+<p>Finally, a final chunk with sequence number <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal">n</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">1</span></span></span></span> (where <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.4306em;"></span><span class="mord mathnormal">n</span></span></span></span> is the number of data chunks) and special content and additional authenticated data is appended:</p>
 </li>
 </ol>
 <pre><code class="language-math">\begin{align*}
@@ -962,17 +801,17 @@ final\_chunk&amp; = \textrm{Encrypt}_{AES\ 256\ GCM}(\\
 </code></pre>
 <p>The resulting layer is composed of:</p>
 <ul>
-<li>header: $ct_{recipients}$</li>
-<li>data: $keycommit \ .\ enc_0\ . \dots\ enc_n \ .$ $<code>final\_chunk</code>$</li>
+<li>header: <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.9012em;vertical-align:-0.2861em;"></span><span class="mord mathnormal">c</span><span class="mord"><span class="mord mathnormal">t</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">rec</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">p</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">n</span><span class="mord mathnormal mtight">t</span><span class="mord mathnormal mtight">s</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span></span></span></span></li>
+<li>data: <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="mord mathnormal">eyco</span><span class="mord mathnormal">mmi</span><span class="mord mathnormal">t</span><span class="mspace"> </span><span class="mord">.</span><span class="mspace"> </span><span class="mord mathnormal">e</span><span class="mord mathnormal">n</span><span class="mord"><span class="mord mathnormal">c</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">0</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace"> </span><span class="mord">.</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="minner">…</span><span class="mspace"> </span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">e</span><span class="mord mathnormal">n</span><span class="mord"><span class="mord mathnormal">c</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">n</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace"> </span><span class="mord">.</span></span></span></span> <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.0044em;vertical-align:-0.31em;"></span><span class="mord">‘</span><span class="mord mathnormal" style="margin-right:0.10764em;">f</span><span class="mord mathnormal">ina</span><span class="mord mathnormal" style="margin-right:0.01968em;">l</span><span class="mord" style="margin-right:0.02778em;">_</span><span class="mord mathnormal">c</span><span class="mord mathnormal">h</span><span class="mord mathnormal">u</span><span class="mord mathnormal" style="margin-right:0.03148em;">nk</span><span class="mord">‘</span></span></span></span></li>
 </ul>
-<p>Special care must be taken not to reuse a sequence number in implementations as this would be catastrophic given GCM properties. For $n$ chunks of data:</p>
+<p>Special care must be taken not to reuse a sequence number in implementations as this would be catastrophic given GCM properties. For <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.4306em;"></span><span class="mord mathnormal">n</span></span></span></span> chunks of data:</p>
 <ul>
 <li>sequence 0: key commitment</li>
-<li>sequence 1 to $n$: data</li>
-<li>sequence $n+1$: $<code>final\_chunk</code>$ with only the 10 bytes "FINALBLOCK" as content</li>
+<li>sequence 1 to <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.4306em;"></span><span class="mord mathnormal">n</span></span></span></span>: data</li>
+<li>sequence <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal">n</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">1</span></span></span></span>: <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.0044em;vertical-align:-0.31em;"></span><span class="mord">‘</span><span class="mord mathnormal" style="margin-right:0.10764em;">f</span><span class="mord mathnormal">ina</span><span class="mord mathnormal" style="margin-right:0.01968em;">l</span><span class="mord" style="margin-right:0.02778em;">_</span><span class="mord mathnormal">c</span><span class="mord mathnormal">h</span><span class="mord mathnormal">u</span><span class="mord mathnormal" style="margin-right:0.03148em;">nk</span><span class="mord">‘</span></span></span></span> with only the 10 bytes "FINALBLOCK" as content</li>
 </ul>
 <hr />
-<p>To decrypt the data at position $pos$:</p>
+<p>To decrypt the data at position <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.625em;vertical-align:-0.1944em;"></span><span class="mord mathnormal">p</span><span class="mord mathnormal">os</span></span></span></span>:</p>
 <ol>
 <li>Once for the whole session, get the cryptographic materials</li>
 </ol>
@@ -1005,7 +844,7 @@ start &amp;= pos - \mathtt{sizeof}(keycommit)\\
 j &amp;= pos \div 128KiB\\
 \end{align}
 </code></pre>
-<p>Where $\div$ is the Euclidian division.</p>
+<p>Where <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6667em;vertical-align:-0.0833em;"></span><span class="mord">÷</span></span></span></span> is the Euclidian division.</p>
 <p>Then:</p>
 <pre><code class="language-math">\begin{align*}
 chunk_j&amp; = \textrm{Decrypt}_{AES\ 256\ GCM}(\\
@@ -1015,24 +854,24 @@ chunk_j&amp; = \textrm{Decrypt}_{AES\ 256\ GCM}(\\
 )&amp;
 \end{align*}
 </code></pre>
-<h4 id="arguments-2"><a class="header" href="#arguments-2">Arguments</a></h4>
+<h5 id="arguments-2"><a class="header" href="#arguments-2">Arguments</a></h5>
 <ul>
 <li>Key commitment is always checked before returning clear-text data to the caller</li>
 <li>AEAD tag of a chunk is always checked before returning the corresponding clear-text data to the caller</li>
 <li>Arguments for HPKE use are very similar to the ones mentioned above. In particular, this is a standardized approach with existing analysis</li>
 <li>As there is two kind of custom KEM used ("Per-recipient KEM" and "Hybrid KEM"), two distinct KEM ID are used. In addition, two distinct MLA specific <code>info</code> are used to bind this derivation to MLA</li>
-<li>As described in <sup class="footnote-reference" id="fr-keycommit-2"><a href="#footnote-keycommit">3</a></sup> and <sup class="footnote-reference" id="fr-keycommit2-1"><a href="#footnote-keycommit2">17</a></sup>, AES in GCM mode does not ensure "key commitment". This property is added in the layer using the "padding fix" scheme from <sup class="footnote-reference" id="fr-keycommit-3"><a href="#footnote-keycommit">3</a></sup> with the recommended 512-bits size for a 256-bits security</li>
+<li>As described in <sup class="footnote-reference" id="fr-keycommit-2"><a href="#footnote-keycommit">5</a></sup> and <sup class="footnote-reference" id="fr-keycommit2-1"><a href="#footnote-keycommit2">19</a></sup>, AES in GCM mode does not ensure "key commitment". This property is added in the layer using the "padding fix" scheme from <sup class="footnote-reference" id="fr-keycommit-3"><a href="#footnote-keycommit">5</a></sup> with the recommended 512-bits size for a 256-bits security</li>
 <li>Key commitment is mainly used to ensure that two recipients will decrypt to the same plaintext if given the same ciphertext, i.e. an attacker modifying the header of an archive cannot provide two distinct plaintext to two distinct recipient</li>
 <li>AES-GCM is used as an industry standard AEAD
 <ul>
-<li>the base nonce, and therefore each nonce used, are unique per archive because they are generated from the archive-specific shared secret, limiting the nonce-reuse risk to standard acceptability <sup class="footnote-reference" id="fr-hpke-9"><a href="#footnote-hpke">1</a></sup></li>
-<li>no more than $2^{64}$ chunks will be produced, as the sequence's type used in MLA implementation is a <code>u64</code> checked for overflow. As this is a widely accepted limit of AES-GCM, this value is also within the range provided by <sup class="footnote-reference" id="fr-hpke-10"><a href="#footnote-hpke">1</a></sup></li>
-<li>the tag size is 128-bits (standard one), avoiding attacks described in <sup class="footnote-reference" id="fr-weaknessgcm-1"><a href="#footnote-weaknessgcm">18</a></sup></li>
-<li>128KiB is lower than the maximum plaintext length for a single message in AES-GCM (64 GiB)<sup class="footnote-reference" id="fr-weaknessgcm-2"><a href="#footnote-weaknessgcm">18</a></sup></li>
+<li>the base nonce, and therefore each nonce used, are unique per archive because they are generated from the archive-specific shared secret, limiting the nonce-reuse risk to standard acceptability <sup class="footnote-reference" id="fr-hpke-9"><a href="#footnote-hpke">3</a></sup></li>
+<li>no more than <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8141em;"></span><span class="mord"><span class="mord">2</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">64</span></span></span></span></span></span></span></span></span></span></span></span> chunks will be produced, as the sequence's type used in MLA implementation is a <code>u64</code> checked for overflow. As this is a widely accepted limit of AES-GCM, this value is also within the range provided by <sup class="footnote-reference" id="fr-hpke-10"><a href="#footnote-hpke">3</a></sup></li>
+<li>the tag size is 128-bits (standard one), avoiding attacks described in <sup class="footnote-reference" id="fr-weaknessgcm-1"><a href="#footnote-weaknessgcm">20</a></sup></li>
+<li>128KiB is lower than the maximum plaintext length for a single message in AES-GCM (64 GiB)<sup class="footnote-reference" id="fr-weaknessgcm-2"><a href="#footnote-weaknessgcm">20</a></sup></li>
 </ul>
 </li>
 </ul>
-<h3 id="seed-derivation"><a class="header" href="#seed-derivation">Seed derivation</a></h3>
+<h4 id="seed-derivation"><a class="header" href="#seed-derivation">Seed derivation</a></h4>
 <p>The asymmetric encryption in MLA, particularly the KEMs, provides deterministic API.</p>
 <p>These API are usually fed with cryptographically generated data, except for the regression test and the "seed derivation" feature in <code>mlar</code> CLI.</p>
 <p>This feature is meant to provide a way for client to implement:</p>
@@ -1042,10 +881,10 @@ chunk_j&amp; = \textrm{Decrypt}_{AES\ 256\ GCM}(\\
 </ul>
 <p>The derivation scheme is based on the same ideas than <code>mla::crypto::hybrid::combine</code>:</p>
 <ol>
-<li>A dual-PRF (HKDF-Extract with a uniform random salt <sup class="footnote-reference" id="fr-combinearg7-2"><a href="#footnote-combinearg7">16</a></sup>) to extract entropy from the private key</li>
+<li>A dual-PRF (HKDF-Extract with a uniform random salt <sup class="footnote-reference" id="fr-combinearg7-2"><a href="#footnote-combinearg7">18</a></sup>) to extract entropy from the private key</li>
 <li>HKDF-Expand to derive along the given path component</li>
 </ol>
-<p>From a private key ($sk_{ecc}^i$ and $sk_{mlkem}^i$), the secret is derived from the path component $pc$ through:</p>
+<p>From a private key (<span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.0717em;vertical-align:-0.247em;"></span><span class="mord mathnormal">s</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8247em;"><span style="top:-2.453em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">ecc</span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.247em;"><span></span></span></span></span></span></span></span></span></span> and <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.1078em;vertical-align:-0.2831em;"></span><span class="mord mathnormal">s</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8247em;"><span style="top:-2.4169em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">m</span><span class="mord mathnormal mtight" style="margin-right:0.01968em;">l</span><span class="mord mathnormal mtight" style="margin-right:0.03148em;">k</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">m</span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2831em;"><span></span></span></span></span></span></span></span></span></span>), the secret is derived from the path component <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.625em;vertical-align:-0.1944em;"></span><span class="mord mathnormal">p</span><span class="mord mathnormal">c</span></span></span></span> through:</p>
 <pre><code class="language-math">\begin{align}
 ecc\_rnd &amp;= \mathrm{HKDF.Extract_{SHA512}}(\mathrm{salt}=0, \mathrm{ikm}=sk_{ecc}^i)\\
 seed &amp;= \mathrm{HKDF_{SHA512}}(
@@ -1056,15 +895,15 @@ seed &amp;= \mathrm{HKDF_{SHA512}}(
 \end{align}
 </code></pre>
 <p>To derive a key using a <code>seed</code>, a <code>ChaChaRng</code> is used.
-If a <code>seed</code> is provided, the <code>ChaChaRng</code> is seeded with the first 32-bytes of $\mathrm{SHA512}(seed)$. Otherwise, the <code>ChaChaRng::from_entropy</code> is used, wrapping OS Cryptographic RNG sources.</p>
+If a <code>seed</code> is provided, the <code>ChaChaRng</code> is seeded with the first 32-bytes of <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord mathrm">SHA512</span></span><span class="mopen">(</span><span class="mord mathnormal">see</span><span class="mord mathnormal">d</span><span class="mclose">)</span></span></span></span>. Otherwise, the <code>ChaChaRng::from_entropy</code> is used, wrapping OS Cryptographic RNG sources.</p>
 <p>The CSRNG is then provided to MLA deterministic APIs.</p>
 <h2 id="implementation-specificities"><a class="header" href="#implementation-specificities">Implementation specificities</a></h2>
 <h3 id="external-dependencies"><a class="header" href="#external-dependencies">External dependencies</a></h3>
 <p>Some of the external cryptographic libraries have been reviewed:</p>
 <ul>
-<li>RustCrypto AES-GCM, reviewed by NCC Group <sup class="footnote-reference" id="fr-reviewncc-1"><a href="#footnote-reviewncc">19</a></sup></li>
-<li>Dalek cryptography library, reviewed by Quarkslab <sup class="footnote-reference" id="fr-reviewqb-1"><a href="#footnote-reviewqb">20</a></sup></li>
-<li><code>rust-hpke</code> library, reviewed in version 0.8 by CloudFlare <sup class="footnote-reference" id="fr-reviewcloudflare-1"><a href="#footnote-reviewcloudflare">21</a></sup></li>
+<li>RustCrypto AES-GCM, reviewed by NCC Group <sup class="footnote-reference" id="fr-reviewncc-1"><a href="#footnote-reviewncc">21</a></sup></li>
+<li>Dalek cryptography library, reviewed by Quarkslab <sup class="footnote-reference" id="fr-reviewqb-1"><a href="#footnote-reviewqb">22</a></sup></li>
+<li><code>rust-hpke</code> library, reviewed in version 0.8 by CloudFlare <sup class="footnote-reference" id="fr-reviewcloudflare-1"><a href="#footnote-reviewcloudflare">23</a></sup></li>
 </ul>
 <p>In addition to the review, <code>rust-hpke</code> is mainly based on <code>RustCrypto</code>, avoiding the need for additional newer dependencies.</p>
 <p>The MLKEM implementation used is the one of <code>RustCrypto</code>, as MLA already depends on this project and the code quality and auditability are, in the author understanding, rather good.</p>
@@ -1085,13 +924,13 @@ On Windows it uses the <code>RtlGenRandom</code> API (available since Windows XP
 <p>Indeed, the repair mode must be able to only partially decrypt a data chunk, and decide whether the associated tag must be verified or not. This API is not provided by the RustCrypto project, for very understandable reasons.</p>
 <p>To ensure the implementation follows the standard, it is tested against AES-256-GCM test vectors in MLA regression tests.</p>
 <h3 id="hpke-key-schedule-re-implementation"><a class="header" href="#hpke-key-schedule-re-implementation">HPKE Key Schedule re-implementation</a></h3>
-<p>For several reasons described in the code, but mainly due to the availability of API, the possibility to add custom KEM ID and the relative few lines needed for re-implementation, the $\mathrm{KeySchedule}$ method has been re-implemented in MLA.</p>
-<p>It still use some bricks from <code>rust-hpke</code>, as the KDF, $\mathrm{LabeledExtract}$ and $\mathrm{LabeledExpand}$. It is tested against RFC 9180 <sup class="footnote-reference" id="fr-hpke-11"><a href="#footnote-hpke">1</a></sup> test vectors in MLA regression tests.</p>
+<p>For several reasons described in the code, but mainly due to the availability of API, the possibility to add custom KEM ID and the relative few lines needed for re-implementation, the <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord"><span class="mord mathrm">KeySchedule</span></span></span></span></span> method has been re-implemented in MLA.</p>
+<p>It still use some bricks from <code>rust-hpke</code>, as the KDF, <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord"><span class="mord mathrm">LabeledExtract</span></span></span></span></span> and <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord"><span class="mord mathrm">LabeledExpand</span></span></span></span></span>. It is tested against RFC 9180 <sup class="footnote-reference" id="fr-hpke-11"><a href="#footnote-hpke">3</a></sup> test vectors in MLA regression tests.</p>
 <h3 id="mlkem-implementation-without-a-review"><a class="header" href="#mlkem-implementation-without-a-review">MLKEM implementation without a review</a></h3>
-<p>Thanks to the hybrid approach, a flawed implementation of MLKEM would have limited consequences. It satisfies ANSSI guidelines for the transition first phase to PQC hybridization <sup class="footnote-reference" id="fr-frsuggest-4"><a href="#footnote-frsuggest">2</a></sup>. For this reason, MLA is eligible for a security visa evaluation.</p>
+<p>Thanks to the hybrid approach, a flawed implementation of MLKEM would have limited consequences. It satisfies ANSSI guidelines for the transition first phase to PQC hybridization <sup class="footnote-reference" id="fr-frsuggest-4"><a href="#footnote-frsuggest">4</a></sup>. For this reason, MLA is eligible for a security visa evaluation.</p>
 <p>For now, it is therefore accepted by the author (as a trade-off) to use a MLKEM implementation without existing review to bring as soon as possible a reasonable protection against "Harvest now, decrypt later" attacks.</p>
 <p>If a reviewed implementation with acceptable dependency emerges in the future, it can be easily swapped in MLA. Thus, MLA would also satisfy the requirements to get a security visa evaluation in the second and third phases of these guidelines by including its PQC implementation.</p>
-<h2 id="security-consideration"><a class="header" href="#security-consideration">Security consideration</a></h2>
+<h2 id="security-considerations"><a class="header" href="#security-considerations">Security considerations</a></h2>
 <h3 id="absence-of-signature"><a class="header" href="#absence-of-signature">Absence of signature</a></h3>
 <p>As there is no signature for now in MLA, an attacker knowing the recipient public key can always create a custom archive with arbitrary data.</p>
 <p>For this reason, several known attacks are considered acceptable, such as:</p>
@@ -1106,12 +945,12 @@ On Windows it uses the <code>RtlGenRandom</code> API (available since Windows XP
 <p>To perform this attack, the attacker will have to either remove the <code>Encrypt</code> bit or modify the key used for decryption with one she has.
 The remaining encrypted data will then act as random values.</p>
 <p>Still, the attacker could expect to gain enough privilege, like arbitrary code execution in the process, during the archive read. One can then try to reuse the provided key to decrypt, then act on the real data.</p>
-<p>Limiting this attack is beyond the scope of this document. It mainly involves the security features of Rust, reviewed implementation, testing &amp; fuzzing, zeroizing secrets when possible <sup class="footnote-reference" id="fr-issuezeroize-1"><a href="#footnote-issuezeroize">22</a></sup>, etc.</p>
+<p>Limiting this attack is beyond the scope of this document. It mainly involves the security features of Rust, reviewed implementation, testing &amp; fuzzing, zeroizing secrets when possible <sup class="footnote-reference" id="fr-issuezeroize-1"><a href="#footnote-issuezeroize">24</a></sup>, etc.</p>
 <ul>
 <li>An attacker can truncate an archive and hope for repair</li>
 </ul>
 <p>This attack is based on a trade-off: should the <code>SafeReader</code> try to get as many bytes as possible, or should it return only data that have been authenticated?</p>
-<p>The choice has been made to report the decision to the user of the library<sup class="footnote-reference" id="fr-issueallowunauth-1"><a href="#footnote-issueallowunauth">23</a></sup>.</p>
+<p>The choice has been made to report the decision to the user of the library<sup class="footnote-reference" id="fr-issueallowunauth-1"><a href="#footnote-issueallowunauth">25</a></sup>.</p>
 <h3 id="other-properties"><a class="header" href="#other-properties">Other properties</a></h3>
 <ul>
 <li>Plaintext length</li>
@@ -1124,7 +963,13 @@ The remaining encrypted data will then act as random values.</p>
 <p>Only the owner of a recipient's private key can determine that they are a recipient of the archive. In other words, while the recipient list remains private, the total number of recipients is still visible.</p>
 <p>This is an intentional privacy feature.</p>
 <hr>
-<ol class="footnote-definition"><li id="footnote-hpke">
+<ol class="footnote-definition"><li id="footnote-rfc8032">
+<p>https://datatracker.ietf.org/doc/html/rfc8032 <a href="#fr-rfc8032-1">↩</a></p>
+</li>
+<li id="footnote-fips204">
+<p>https://doi.org/10.6028/NIST.FIPS.204 <a href="#fr-fips204-1">↩</a></p>
+</li>
+<li id="footnote-hpke">
 <p><a href="https://datatracker.ietf.org/doc/rfc9180/">Hybrid Public Key Encryption, RFC 9180</a> <a href="#fr-hpke-1">↩</a> <a href="#fr-hpke-2">↩2</a> <a href="#fr-hpke-3">↩3</a> <a href="#fr-hpke-4">↩4</a> <a href="#fr-hpke-5">↩5</a> <a href="#fr-hpke-6">↩6</a> <a href="#fr-hpke-7">↩7</a> <a href="#fr-hpke-8">↩8</a> <a href="#fr-hpke-9">↩9</a> <a href="#fr-hpke-10">↩10</a> <a href="#fr-hpke-11">↩11</a></p>
 </li>
 <li id="footnote-frsuggest">
@@ -1137,7 +982,7 @@ The remaining encrypted data will then act as random values.</p>
 <p>https://github.com/ANSSI-FR/MLA/issues/206 <a href="#fr-issuekeycommit-1">↩</a></p>
 </li>
 <li id="footnote-fips203">
-<p><a href="https://csrc.nist.gov/pubs/fips/203/ipd">FIPS 203 - MLKEM Standard</a> <a href="#fr-fips203-1">↩</a> <a href="#fr-fips203-2">↩2</a> <a href="#fr-fips203-3">↩3</a></p>
+<p><a href="https://doi.org/10.6028/NIST.FIPS.203">FIPS 203 - MLKEM Standard</a> <a href="#fr-fips203-1">↩</a> <a href="#fr-fips203-2">↩2</a> <a href="#fr-fips203-3">↩3</a></p>
 </li>
 <li id="footnote-issuehpke">
 <p>https://github.com/ANSSI-FR/MLA/issues/211 <a href="#fr-issuehpke-1">↩</a></p>
@@ -1193,7 +1038,8 @@ The remaining encrypted data will then act as random values.</p>
 <li id="footnote-issueallowunauth">
 <p>https://github.com/ANSSI-FR/MLA/issues/167 <a href="#fr-issueallowunauth-1">↩</a></p>
 </li>
-</ol><div style="break-before: page; page-break-before: always;"></div><h2 id="key-derivation"><a class="header" href="#key-derivation">Key derivation</a></h2>
+</ol><div style="break-before: page; page-break-before: always;"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.4/dist/katex.min.css">
+<h2 id="key-derivation"><a class="header" href="#key-derivation">Key derivation</a></h2>
 <p>This feature can help setup a hierarchical key infrastructure.</p>
 <p><code>mlar</code> provides a subcommand <code>keyderive</code> to deterministically derive sub-keys from a given key along a derivation path (a bit like <a href="https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki">BIP-32</a>, except children public keys can't be derived from the parent one).</p>
 <p>For instance, if one wants to derive the following scheme:</p>
@@ -1218,39 +1064,6 @@ For instance, to recover the <code>key_app_v1.2.3</code>:</p>
 </code></pre>
 <p>As such, if the <code>App X</code> owner only knows <code>key_app_x</code>, he can recover all of its subkeys, including <code>key_app_v1.2.3</code> but excluding <code>key_app_y</code>.</p>
 <p>WARNING: This scheme does not provide any revocation mechanism. If a parent key is compromised, all of the key in its sub-tree must be considered compromised (ie. all past and futures key that can be obtained from it). The opposite is not true: a parent key remains safe if any of its children key is compromised.</p>
-<div style="break-before: page; page-break-before: always;"></div><h2 id="fuzzing"><a class="header" href="#fuzzing">Fuzzing</a></h2>
-<p>A fuzzing scenario made with <a href="https://github.com/rust-fuzz/afl.rs">afl.rs</a> is available in <code>mla-fuzz-afl</code>.
-The scenario is capable of:</p>
-<ul>
-<li>Creating archives with interleaved files, and different layers enabled</li>
-<li>Reading them to check their content</li>
-<li>Repairing the archive without truncation, and verifying it</li>
-<li>Altering the archive raw data, and ensuring reading it does not panic (but only fail)</li>
-<li>Repairing the altered archive, and ensuring the recovery doesn't fail (only reports detected errors)</li>
-</ul>
-<p>To launch it:</p>
-<ol>
-<li>produce initial samples by uncommenting <code>produce_samples()</code> in <code>mla-fuzz-afl/src/main.rs</code></li>
-</ol>
-<pre><code class="language-sh">cd mla-fuzz-afl
-# ... uncomment `produces_samples()` ...
-mkdir in
-mkdir out
-cargo run
-</code></pre>
-<ol start="2">
-<li>build and launch AFL</li>
-</ol>
-<pre><code class="language-sh">cargo afl build
-cargo afl run -i in -o out ../target/debug/mla-fuzz-afl
-</code></pre>
-<p>If you have found crashes, try to replay them with either:</p>
-<ul>
-<li>Peruvian rabbit mode of AFL: <code>cargo afl run -i - -o out -C ../target/debug/mla-fuzz-afl</code></li>
-<li>Direct replay: <code>../target/debug/mla-fuzz-afl &lt; out/crashes/crash_id</code></li>
-<li>Debugging: uncomment the "Replay sample" part of <code>mla-fuzz-afl/src/main.rs</code>, and add <code>dbg!()</code> when it's needed</li>
-</ul>
-<p>:warning: The stability is quite low, likely due to the process used for the scenario (deserialization from the data provided by AFL) and variability of inner algorithms, such as brotli. Crashes, if any, might not be reproducible or due to the <code>mla-fuzz-afl</code> inner working, which is a bit complex (and therefore likely buggy). One can comment unrelevant parts in <code>mla-fuzz-afl/src/main.rs</code> to ensure a better experience.</p>
 
                     </main>
 
