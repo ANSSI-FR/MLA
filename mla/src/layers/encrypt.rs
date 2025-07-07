@@ -481,11 +481,11 @@ fn read_encryption_header_after_magic<R: Read>(
     Ok((read_encryption_metadata, encryption_header_length))
 }
 
-pub(crate) struct EncryptionLayerReader<'a, R: 'a + Read + Seek>(
+pub(crate) struct EncryptionLayerReader<'a, R: 'a + InnerReaderTrait>(
     InternalEncryptionLayerReader<'a, R>,
 );
 
-impl<'a, R: 'a + Read + Seek> EncryptionLayerReader<'a, R> {
+impl<'a, R: 'a + InnerReaderTrait> EncryptionLayerReader<'a, R> {
     pub(crate) fn new(
         mut inner: Box<dyn 'a + LayerReader<'a, R>>,
         mut reader_config: EncryptionReaderConfig,
@@ -521,19 +521,19 @@ impl<'a, R: 'a + Read + Seek> EncryptionLayerReader<'a, R> {
     }
 }
 
-impl<'a, R: 'a + Read + Seek> Read for EncryptionLayerReader<'a, R> {
+impl<'a, R: 'a + InnerReaderTrait> Read for EncryptionLayerReader<'a, R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.0.read(buf)
     }
 }
 
-impl<'a, R: 'a + Read + Seek> Seek for EncryptionLayerReader<'a, R> {
+impl<'a, R: 'a + InnerReaderTrait> Seek for EncryptionLayerReader<'a, R> {
     fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
         self.0.seek(pos)
     }
 }
 
-impl<'a, R: 'a + Read + Seek> LayerReader<'a, R> for EncryptionLayerReader<'a, R> {
+impl<'a, R: 'a + InnerReaderTrait> LayerReader<'a, R> for EncryptionLayerReader<'a, R> {
     fn into_raw(self: Box<Self>) -> R {
         Box::new(self.0).into_raw()
     }
@@ -545,7 +545,7 @@ impl<'a, R: 'a + Read + Seek> LayerReader<'a, R> for EncryptionLayerReader<'a, R
 
 // In the case of stream cipher, encrypting is the same that decrypting. Here, we
 // keep the struct separated for any possible future difference
-struct InternalEncryptionLayerReader<'a, R: Read + Seek> {
+struct InternalEncryptionLayerReader<'a, R: InnerReaderTrait> {
     inner: Box<dyn 'a + LayerReader<'a, R>>,
     cipher: AesGcm256,
     key: Key,
@@ -558,7 +558,7 @@ struct InternalEncryptionLayerReader<'a, R: Read + Seek> {
     current_position: u64,
 }
 
-impl<'a, R: 'a + Read + Seek> InternalEncryptionLayerReader<'a, R> {
+impl<'a, R: 'a + InnerReaderTrait> InternalEncryptionLayerReader<'a, R> {
     fn new(
         inner: Box<dyn 'a + LayerReader<'a, R>>,
         config: EncryptionReaderConfig,
@@ -715,7 +715,7 @@ impl<'a, R: 'a + InnerReaderTrait> LayerReader<'a, R> for InternalEncryptionLaye
     }
 }
 
-impl<'a, R: 'a + Read + Seek> Read for InternalEncryptionLayerReader<'a, R> {
+impl<'a, R: 'a + InnerReaderTrait> Read for InternalEncryptionLayerReader<'a, R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let cache_to_consume = CHUNK_SIZE - self.chunk_cache.position();
         if cache_to_consume == 0 {
@@ -751,7 +751,7 @@ fn _tag_position_to_no_tag_position(position: u64) -> u64 {
     cur_chunk * CHUNK_SIZE + std::cmp::min(cur_chunk_pos, CHUNK_SIZE)
 }
 
-impl<'a, R: 'a + Read + Seek> Seek for InternalEncryptionLayerReader<'a, R> {
+impl<'a, R: 'a + InnerReaderTrait> Seek for InternalEncryptionLayerReader<'a, R> {
     fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
         // `pos` is the position without considering tags
         match pos {
