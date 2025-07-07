@@ -103,7 +103,7 @@ If the `ArchiveEntryBlockType` is `EndOfArchiveData`, it is followed by nothing.
 
 `EntryBlockOffset` is a u64 indicating at which offset from the begining of the MLA entries layer an `ArchiveEntryBlock` can be found for the given `EntryName`. All `EntryBlockOffset`s for each entry are recorded in `entry_blocks_offsets` and they are so in ascending order of offset.
 
-### Explainations
+### Explanations
 
 An archive entry `entry_i` in the archive always starts with an `EntryStart`, giving its name and unique ID i.
 
