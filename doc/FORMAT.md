@@ -21,9 +21,9 @@ For a more comprehensive introduction of the ideas behind it, please refer to [R
 
 * An MLA file begins with the `mla_header_magic` ASCII magic: "MLAFAAAA".
 * `mla_header_magic` is followed by the `format_version` format version number as a u32.
-* `format_version` is followed by an `header_options` field of type `Opts`.
+* `format_version` is followed by a `header_options` field of type `Opts`.
 * `header_options` is followed by archive content `archive_content`, described below.
-* `archive_content` is followed by an `footer_options` field of type `Tail<Opts>` to enable determining `archive_content`'s end when reading from the end of the MLA file.
+* `archive_content` is followed by a `footer_options` field of type `Tail<Opts>` to enable determining `archive_content`'s end when reading from the end of the MLA file.
 * `footer_options` is followed by the `footer_magic` ASCII magic "EMLAAAAA", terminating the archive.
 
 `archive_content` consists of a serialized MLA entries layer documented below, transformed with zero or more layers, documented below too. A layer consists of a u64 layer magic followed by its data. Layer order plays an important security role, so the signature layer has to be above the encryption layer which has to be above the compression layer. This must be enforced by writers and readers. Readers should ensure users explicitly choose if they allow an archive without signature or without encryption.

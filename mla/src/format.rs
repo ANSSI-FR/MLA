@@ -6,47 +6,45 @@ use std::io::{Read, Write};
 use bincode::{Decode, Encode};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
-use crate::deserialize_entry_name;
 use crate::{
-    ArchiveEntryBlockType, ArchiveEntryId, BINCODE_CONFIG, FILENAME_MAX_SIZE, MLA_FORMAT_VERSION,
-    MLA_MAGIC, Opts, Sha256Hash, config::ArchivePersistentConfig, entry::EntryName, errors::Error,
+    ArchiveEntryBlockType, ArchiveEntryId, FILENAME_MAX_SIZE, Opts, Sha256Hash, entry::EntryName,
+    errors::Error,
 };
-pub struct ArchiveHeader {
-    pub format_version: u32,
-    pub config: ArchivePersistentConfig,
+use crate::{
+    MLA_FORMAT_VERSION, MLA_MAGIC, MLADeserialize, MLASerialize, deserialize_entry_name,
+    read_layer_magic,
+};
+
+pub(crate) struct ArchiveHeader {
+    pub(crate) format_version_number: u32,
 }
 
-impl ArchiveHeader {
-    pub fn from<T: Read>(src: &mut T) -> Result<Self, Error> {
-        let mut buf = vec![00u8; MLA_MAGIC.len()];
-        src.read_exact(buf.as_mut_slice())?;
-        if buf != MLA_MAGIC {
+impl<W: Write> MLASerialize<W> for ArchiveHeader {
+    fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
+        dest.write_all(MLA_MAGIC)?;
+        let mut len = 8;
+        len += MLA_FORMAT_VERSION.serialize(dest)?;
+        len += Opts.dump(dest)?;
+        Ok(len)
+    }
+}
+
+impl<R: Read> MLADeserialize<R> for ArchiveHeader {
+    fn deserialize(src: &mut R) -> Result<Self, Error> {
+        let mla_magic = read_layer_magic(src)?;
+        if &mla_magic != MLA_MAGIC {
             return Err(Error::WrongMagic);
         }
-        let format_version = src.read_u32::<LittleEndian>()?;
-        if format_version != MLA_FORMAT_VERSION {
+
+        let format_version_number = u32::deserialize(src)?;
+        if format_version_number != MLA_FORMAT_VERSION {
             return Err(Error::UnsupportedVersion);
         }
-        let config: ArchivePersistentConfig =
-            match bincode::decode_from_std_read(src, BINCODE_CONFIG) {
-                Ok(config) => config,
-                _ => {
-                    return Err(Error::DeserializationError);
-                }
-            };
-        Ok(ArchiveHeader {
-            format_version,
-            config,
-        })
-    }
 
-    pub(crate) fn dump<T: Write>(&self, dest: &mut T) -> Result<(), Error> {
-        dest.write_all(MLA_MAGIC)?;
-        dest.write_u32::<LittleEndian>(self.format_version)?;
-        if bincode::encode_into_std_write(&self.config, dest, BINCODE_CONFIG).is_err() {
-            return Err(Error::SerializationError);
-        }
-        Ok(())
+        let _ = Opts::from_reader(src)?; // No option handled at the moment
+        Ok(Self {
+            format_version_number,
+        })
     }
 }
 

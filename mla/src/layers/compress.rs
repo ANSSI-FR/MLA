@@ -3,7 +3,6 @@ use std::io::{self, Read, Seek, SeekFrom, Take, Write};
 
 use brotli::BrotliState;
 use brotli::writer::StandardAlloc;
-use byteorder::{LittleEndian, ReadBytesExt};
 
 use crate::layers::traits::{
     InnerWriterTrait, InnerWriterType, LayerFailSafeReader, LayerReader, LayerWriter,

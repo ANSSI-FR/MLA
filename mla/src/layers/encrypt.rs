@@ -10,9 +10,7 @@ use crate::crypto::hybrid::{
 use crate::layers::traits::{
     InnerWriterTrait, InnerWriterType, LayerFailSafeReader, LayerReader, LayerWriter,
 };
-use crate::{
-    EMPTY_TAIL_OPTS_SERIALIZATION, Error, MLADeserialize, MLASerialize, Opts, read_layer_magic,
-};
+use crate::{EMPTY_TAIL_OPTS_SERIALIZATION, Error, MLADeserialize, MLASerialize, Opts};
 use std::io;
 use std::io::{BufReader, Cursor, Read, Seek, SeekFrom, Write};
 
@@ -326,9 +324,10 @@ pub(crate) struct EncryptionLayerWriter<'a, W: 'a + InnerWriterTrait>(
 impl<'a, W: 'a + InnerWriterTrait> EncryptionLayerWriter<'a, W> {
     pub fn new(
         mut inner: InnerWriterType<'a, W>,
-        persistent_config: &EncryptionPersistentConfig,
-        internal_config: &InternalEncryptionConfig,
+        encryption_config: &EncryptionConfig,
     ) -> Result<Self, Error> {
+        let (persistent_config, internal_config) =
+            EncryptionConfig::to_persistent(encryption_config)?;
         inner.write_all(ENCRYPTION_LAYER_MAGIC)?;
         let _ = Opts.dump(&mut inner)?;
         let encryption_method_id = 0u16;
@@ -336,7 +335,7 @@ impl<'a, W: 'a + InnerWriterTrait> EncryptionLayerWriter<'a, W> {
         persistent_config.serialize(&mut inner)?;
         Ok(Self(InternalEncryptionLayerWriter::new(
             inner,
-            internal_config,
+            &internal_config,
         )?))
     }
 }
@@ -486,15 +485,11 @@ pub(crate) struct EncryptionLayerReader<'a, R: 'a + InnerReaderTrait>(
 );
 
 impl<'a, R: 'a + InnerReaderTrait> EncryptionLayerReader<'a, R> {
-    pub(crate) fn new(
+    pub(crate) fn new_skip_magic(
         mut inner: Box<dyn 'a + LayerReader<'a, R>>,
         mut reader_config: EncryptionReaderConfig,
         persistent_config: Option<EncryptionPersistentConfig>,
     ) -> Result<Self, Error> {
-        let magic = read_layer_magic(&mut inner)?;
-        if &magic != ENCRYPTION_LAYER_MAGIC {
-            return Err(Error::DeserializationError);
-        }
         let (read_encryption_metadata, encryption_header_length) =
             read_encryption_header_after_magic(&mut inner)?;
         let persistent_config = persistent_config.unwrap_or(read_encryption_metadata); // this lets us ensure we use previously verified encryption context if given (e.g. by signature layer)
@@ -805,7 +800,7 @@ pub(crate) struct EncryptionLayerFailSafeReader<'a, R: Read> {
 }
 
 impl<'a, R: 'a + Read> EncryptionLayerFailSafeReader<'a, R> {
-    fn new(
+    fn new_skip_header(
         inner: Box<dyn 'a + LayerFailSafeReader<'a, R>>,
         config: EncryptionReaderConfig,
     ) -> Result<Self, Error> {
@@ -826,19 +821,15 @@ impl<'a, R: 'a + Read> EncryptionLayerFailSafeReader<'a, R> {
         }
     }
 
-    pub(crate) fn from_persistent_config(
+    pub(crate) fn new_skip_magic(
         mut inner: Box<dyn 'a + LayerFailSafeReader<'a, R>>,
         mut reader_config: EncryptionReaderConfig,
         persistent_config: Option<EncryptionPersistentConfig>,
     ) -> Result<Self, Error> {
-        let magic = read_layer_magic(&mut inner)?;
-        if &magic != ENCRYPTION_LAYER_MAGIC {
-            return Err(Error::DeserializationError);
-        }
         let (read_encryption_metadata, _) = read_encryption_header_after_magic(&mut inner)?;
         let persistent_config = persistent_config.unwrap_or(read_encryption_metadata); // this lets us ensure we use previously verified encryption context if given (e.g. by signature layer)
         reader_config.load_persistent(persistent_config)?;
-        Self::new(inner, reader_config)
+        Self::new_skip_header(inner, reader_config)
     }
 }
 
@@ -945,7 +936,7 @@ mod tests {
             private_keys: Vec::new(),
             encrypt_parameters: Some((KEY, NONCE)),
         };
-        let mut encrypt_r = EncryptionLayerFailSafeReader::new(
+        let mut encrypt_r = EncryptionLayerFailSafeReader::new_skip_header(
             Box::new(RawLayerFailSafeReader::new(out.as_slice())),
             config,
         )
@@ -970,7 +961,7 @@ mod tests {
             private_keys: Vec::new(),
             encrypt_parameters: Some((KEY, NONCE)),
         };
-        let mut encrypt_r = EncryptionLayerFailSafeReader::new(
+        let mut encrypt_r = EncryptionLayerFailSafeReader::new_skip_header(
             Box::new(RawLayerFailSafeReader::new(&out[..stop])),
             config,
         )

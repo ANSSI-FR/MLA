@@ -8,10 +8,6 @@
 #include <ostream>
 #include <new>
 
-constexpr static const uint8_t ENCRYPT = 1;
-
-constexpr static const uint8_t COMPRESS = 2;
-
 enum class MLAStatus : uint64_t {
   MLA_STATUS_SUCCESS = 0,
   MLA_STATUS_IO_ERROR = 65536,
@@ -49,6 +45,7 @@ enum class MLAStatus : uint64_t {
   MLA_STATUS_HPKE_ERROR = 98304,
   MLA_STATUS_INVALID_LAST_TAG = 102400,
   MLA_STATUS_ENCRYPTION_ASKED_BUT_NOT_MARKED_PRESENT = 1572864,
+  MLA_STATUS_WRONG_END_MAGIC = 1638400,
   MLA_STATUS_MLA_KEY_PARSER_ERROR = 15859712,
 };
 
@@ -104,7 +101,7 @@ using MLAFileCallBack = int32_t(*)(void *context,
 /// Structure for MLA archive info
 struct ArchiveInfo {
   uint32_t version;
-  uint8_t layers;
+  uint8_t is_encryption_enabled;
 };
 
 extern "C" {
