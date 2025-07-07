@@ -3,7 +3,6 @@
 use std::borrow::BorrowMut;
 use std::io::{Read, Write};
 
-use bincode::{Decode, Encode};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
 use crate::{
@@ -48,7 +47,7 @@ impl<R: Read> MLADeserialize<R> for ArchiveHeader {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Encode, Decode)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Layers(u8);
 
 bitflags! {

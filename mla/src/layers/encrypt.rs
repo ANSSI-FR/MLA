@@ -15,11 +15,6 @@ use std::io;
 use std::io::{BufReader, Cursor, Read, Seek, SeekFrom, Write};
 
 use crate::errors::ConfigError;
-use bincode::{
-    BorrowDecode, Decode, Encode,
-    de::{BorrowDecoder, Decoder},
-    error::DecodeError,
-};
 use kem::{Decapsulate, Encapsulate};
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
@@ -90,7 +85,6 @@ const FIRST_DATA_CHUNK_NUMBER: u64 = 1;
 const HPKE_INFO_LAYER: &[u8] = b"MLA Encrypt Layer";
 
 /// Encrypted Key commitment and associated tag
-#[derive(Decode, Encode)]
 struct KeyCommitmentAndTag {
     key_commitment: [u8; KEY_COMMITMENT_SIZE],
     tag: [u8; TAG_LENGTH],
@@ -155,7 +149,6 @@ impl InternalEncryptionConfig {
 }
 
 /// Configuration stored in the header, to be reloaded
-#[derive(Encode)]
 pub struct EncryptionPersistentConfig {
     /// Key-wrapping for each recipients
     pub hybrid_multi_recipient_encapsulate_key: HybridMultiRecipientEncapsulatedKey,
@@ -181,27 +174,6 @@ impl<R: Read> MLADeserialize<R> for EncryptionPersistentConfig {
         Ok(Self {
             hybrid_multi_recipient_encapsulate_key,
             key_commitment,
-        })
-    }
-}
-
-impl<Context> Decode<Context> for EncryptionPersistentConfig {
-    fn decode<D: Decoder<Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        Ok(Self {
-            hybrid_multi_recipient_encapsulate_key: HybridMultiRecipientEncapsulatedKey::decode(
-                decoder,
-            )?,
-            key_commitment: KeyCommitmentAndTag::decode(decoder)?,
-        })
-    }
-}
-
-impl<'de, Context> BorrowDecode<'de, Context> for EncryptionPersistentConfig {
-    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        Ok(Self {
-            hybrid_multi_recipient_encapsulate_key:
-                HybridMultiRecipientEncapsulatedKey::borrow_decode(decoder)?,
-            key_commitment: KeyCommitmentAndTag::borrow_decode(decoder)?,
         })
     }
 }

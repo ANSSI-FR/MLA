@@ -5,12 +5,6 @@ use crate::crypto::hpke::{DHKEMCiphertext, dhkem_decap, key_schedule_base_hybrid
 use crate::errors::{ConfigError, Error};
 use crate::layers::encrypt::get_crypto_rng;
 use crate::{MLADeserialize, MLASerialize};
-use bincode::{
-    BorrowDecode, Decode, Encode,
-    de::{BorrowDecoder, Decoder},
-    enc::Encoder,
-    error::{DecodeError, EncodeError},
-};
 use hkdf::Hkdf;
 use kem::{Decapsulate, Encapsulate};
 use ml_kem::{KemCore, MlKem1024};
@@ -135,16 +129,6 @@ pub struct HybridRecipientEncapsulatedKey {
     tag: [u8; TAG_LENGTH],
 }
 
-impl Encode for HybridRecipientEncapsulatedKey {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        self.ct_ml.encode(encoder)?;
-        self.ct_ecc.to_bytes().encode(encoder)?;
-        self.wrapped_ss.encode(encoder)?;
-        self.tag.encode(encoder)?;
-        Ok(())
-    }
-}
-
 impl<W: Write> MLASerialize<W> for HybridRecipientEncapsulatedKey {
     fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
         let mut serialization_length = 0;
@@ -176,40 +160,6 @@ impl<R: Read> MLADeserialize<R> for HybridRecipientEncapsulatedKey {
     }
 }
 
-impl<Context> Decode<Context> for HybridRecipientEncapsulatedKey {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let ct_ml = MLKEMCiphertext::decode(decoder)?;
-        let ct_ecc_bytes = <[u8; 32]>::decode(decoder)?;
-        let ct_ecc = DHKEMCiphertext::from_bytes(&ct_ecc_bytes)
-            .map_err(|_| DecodeError::OtherString("Invalid DHKEMCiphertext".to_string()))?;
-        let wrapped_ss = EncryptedSharedSecret::decode(decoder)?;
-        let tag = <[u8; TAG_LENGTH]>::decode(decoder)?;
-        Ok(Self {
-            ct_ml,
-            ct_ecc,
-            wrapped_ss,
-            tag,
-        })
-    }
-}
-
-impl<'de, Context> BorrowDecode<'de, Context> for HybridRecipientEncapsulatedKey {
-    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let ct_ml = MLKEMCiphertext::borrow_decode(decoder)?;
-        let ct_ecc_bytes = <[u8; 32]>::borrow_decode(decoder)?;
-        let ct_ecc = DHKEMCiphertext::from_bytes(&ct_ecc_bytes)
-            .map_err(|_| DecodeError::OtherString("Invalid DHKEMCiphertext".to_string()))?;
-        let wrapped_ss = EncryptedSharedSecret::borrow_decode(decoder)?;
-        let tag = <[u8; TAG_LENGTH]>::borrow_decode(decoder)?;
-        Ok(Self {
-            ct_ml,
-            ct_ecc,
-            wrapped_ss,
-            tag,
-        })
-    }
-}
-
 /// Key encapsulated for multiple recipient with hybrid cryptography
 /// Will be store in and load from the header
 pub struct HybridMultiRecipientEncapsulatedKey {
@@ -226,27 +176,6 @@ impl<W: Write> MLASerialize<W> for HybridMultiRecipientEncapsulatedKey {
 impl<R: Read> MLADeserialize<R> for HybridMultiRecipientEncapsulatedKey {
     fn deserialize(src: &mut R) -> Result<Self, Error> {
         let recipients = MLADeserialize::deserialize(src)?;
-        Ok(Self { recipients })
-    }
-}
-
-impl Encode for HybridMultiRecipientEncapsulatedKey {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        self.recipients.encode(encoder)?;
-        Ok(())
-    }
-}
-
-impl<Context> Decode<Context> for HybridMultiRecipientEncapsulatedKey {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let recipients = Vec::<HybridRecipientEncapsulatedKey>::decode(decoder)?;
-        Ok(Self { recipients })
-    }
-}
-
-impl<'de, Context> BorrowDecode<'de, Context> for HybridMultiRecipientEncapsulatedKey {
-    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let recipients = Vec::<HybridRecipientEncapsulatedKey>::borrow_decode(decoder)?;
         Ok(Self { recipients })
     }
 }
