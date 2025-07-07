@@ -169,6 +169,7 @@ use bincode::config::{Fixint, Limit};
 use byteorder::{LittleEndian, ReadBytesExt};
 use config::{ArchivePersistentConfig, InternalConfig};
 use crypto::hybrid::HybridPublicKey;
+use layers::compress::COMPRESSION_LAYER_MAGIC;
 use layers::encrypt::EncryptionConfig;
 use layers::traits::InnerReaderTrait;
 
@@ -675,7 +676,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
             None => dest,
         };
         dest = match compression_config {
-            Some(cfg) => Box::new(CompressionLayerWriter::new(dest, &cfg)),
+            Some(cfg) => Box::new(CompressionLayerWriter::new(dest, &cfg)?),
             None => dest,
         };
 
@@ -1038,6 +1039,12 @@ impl<R: Read> MLADeserialize<R> for EntryInfo {
     }
 }
 
+fn read_layer_magic<R: Read>(src: &mut R) -> Result<[u8; 8], Error> {
+    let mut buf = [0; 8];
+    src.read_exact(&mut buf)?;
+    Ok(buf)
+}
+
 /// Use this to read an archive
 pub struct ArchiveReader<'a, R: 'a + InnerReaderTrait> {
     /// MLA Archive format Reader
@@ -1055,7 +1062,10 @@ fn read_mla_entries_header(mut src: impl Read) -> Result<(), Error> {
     if magic != *ENTRIES_LAYER_MAGIC {
         return Err(Error::WrongMagic);
     }
+    read_mla_entries_header_skip_magic(src)
+}
 
+fn read_mla_entries_header_skip_magic(mut src: impl Read) -> Result<(), Error> {
     let _ = Opts::from_reader(&mut src)?; // No option handled at the moment
     Ok(())
 }
@@ -1080,10 +1090,12 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
         } else if !config.accept_unencrypted {
             return Err(Error::EncryptionAskedButNotMarkedPresent);
         }
-        if layers_enabled.contains(Layers::COMPRESS) {
-            src = Box::new(CompressionLayerReader::new(src)?);
-        }
         src.initialize()?;
+        let magic = read_layer_magic(&mut src)?;
+        if &magic == COMPRESSION_LAYER_MAGIC {
+            src = Box::new(CompressionLayerReader::new_skip_magic(src)?);
+            src.initialize()?;
+        }
 
         // read `entries_footer_options`
         src.seek(SeekFrom::End(-8))?;
@@ -1243,12 +1255,18 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
         } else if !config.accept_unencrypted {
             return Err(Error::EncryptionAskedButNotMarkedPresent);
         }
-        if layers_enabled.contains(Layers::COMPRESS) {
-            src = Box::new(CompressionLayerFailSafeReader::new(src)?);
+        let mut magic = read_layer_magic(&mut src)?;
+        if &magic == COMPRESSION_LAYER_MAGIC {
+            src = Box::new(CompressionLayerFailSafeReader::new_skip_magic(src)?);
+            magic = read_layer_magic(&mut src)?;
+        }
+
+        if &magic != ENTRIES_LAYER_MAGIC {
+            return Err(Error::DeserializationError);
         }
 
         // Read the magic
-        read_mla_entries_header(&mut src)?;
+        read_mla_entries_header_skip_magic(&mut src)?;
 
         Ok(Self { config, src })
     }
@@ -1923,22 +1941,14 @@ pub(crate) mod tests {
     fn convert_trunc_failsafe() {
         for interleaved in &[false, true] {
             // Build an archive with 3 files, without compressing to truncate at the correct place
-            let (dest, key, pubkey, files, files_info, _) =
+            let (dest, key, pubkey, files, files_info, ids_info) =
                 build_archive2(false, true, *interleaved);
             // Truncate the resulting file (before the footer, hopefully after the header), and prepare the failsafe reader
-            let mut buffer: &mut [u8] = &mut vec![0; BINCODE_MAX_DECODE];
-            let serializable_files_info = files_info
-                .iter()
-                .map(|(k, v)| (k.as_arbitrary_bytes(), v))
-                .collect::<Vec<_>>();
-            let footer_size = bincode::encode_into_std_write::<_, _, &mut [u8]>(
-                serializable_files_info,
-                &mut buffer,
-                BINCODE_CONFIG,
-            )
-            .or(Err(Error::SerializationError))
-            .unwrap()
-                + 4;
+            let footer_size = {
+                let mut cursor = Cursor::new(Vec::new());
+                ArchiveFooter::serialize_into(&mut cursor, &files_info, &ids_info).unwrap();
+                cursor.position() as usize
+            };
 
             for remove in &[1, 10, 30, 50, 70, 95, 100] {
                 let config = ArchiveReaderConfig::with_private_keys(&[key.clone()]);

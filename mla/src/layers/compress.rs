@@ -1,19 +1,21 @@
 use std::fmt;
 use std::io::{self, Read, Seek, SeekFrom, Take, Write};
 
-use bincode::{Decode, Encode};
 use brotli::BrotliState;
 use brotli::writer::StandardAlloc;
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
+use byteorder::{LittleEndian, ReadBytesExt};
 
 use crate::layers::traits::{
     InnerWriterTrait, InnerWriterType, LayerFailSafeReader, LayerReader, LayerWriter,
 };
-use crate::{BINCODE_CONFIG, Error};
+use crate::{EMPTY_TAIL_OPTS_SERIALIZATION, Error, MLADeserialize, MLASerialize, Opts};
 
 use crate::errors::ConfigError;
 
+use super::strip_head_tail::StripHeadTailReader;
 use super::traits::InnerReaderTrait;
+
+pub const COMPRESSION_LAYER_MAGIC: &[u8; 8] = b"COMLAAAA";
 
 // ---------- Config ----------
 
@@ -91,12 +93,31 @@ impl<R: Read> fmt::Debug for CompressionLayerReaderState<R> {
     }
 }
 
-#[derive(Encode, Decode, Debug)]
+#[derive(Debug)]
 struct SizesInfo {
     /// Ordered list of chunk compressed size; only set at init
     compressed_sizes: Vec<u32>,
     /// Last block uncompressed size
     last_block_size: u32,
+}
+
+impl<W: Write> MLASerialize<W> for SizesInfo {
+    fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
+        let mut serialization_length = self.compressed_sizes.serialize(dest)?;
+        serialization_length += self.last_block_size.serialize(dest)?;
+        Ok(serialization_length)
+    }
+}
+
+impl<R: Read> MLADeserialize<R> for SizesInfo {
+    fn deserialize(src: &mut R) -> Result<Self, Error> {
+        let compressed_sizes = MLADeserialize::deserialize(src)?;
+        let last_block_size = MLADeserialize::deserialize(src)?;
+        Ok(Self {
+            compressed_sizes,
+            last_block_size,
+        })
+    }
 }
 
 impl SizesInfo {
@@ -161,14 +182,28 @@ impl<R: Read> CompressionLayerReaderState<R> {
     }
 }
 
-impl<'a, R: 'a + Read> CompressionLayerReader<'a, R> {
-    pub fn new(mut inner: Box<dyn 'a + LayerReader<'a, R>>) -> Result<Self, Error> {
+impl<'a, R: 'a + InnerReaderTrait> CompressionLayerReader<'a, R> {
+    fn new_skip_header(mut inner: Box<dyn 'a + LayerReader<'a, R>>) -> Result<Self, Error> {
         let underlayer_pos = inner.stream_position()?;
+        let inner_len_incl_head_tail = inner.seek(SeekFrom::End(0))?;
+        inner.seek(SeekFrom::Start(underlayer_pos))?;
+        let inner = Box::new(StripHeadTailReader::new(
+            inner,
+            underlayer_pos,
+            0,
+            inner_len_incl_head_tail,
+            0,
+        )?);
         Ok(Self {
             state: CompressionLayerReaderState::Ready(inner),
             sizes_info: None,
-            underlayer_pos,
+            underlayer_pos: 0,
         })
+    }
+
+    pub fn new_skip_magic(mut inner: Box<dyn 'a + LayerReader<'a, R>>) -> Result<Self, Error> {
+        let _ = Opts::from_reader(&mut inner)?; // No option handled at the moment
+        Self::new_skip_header(inner)
     }
 
     /// Returns whether `uncompressed_pos` is in the data stream
@@ -298,22 +333,13 @@ impl<'a, R: 'a + InnerReaderTrait> LayerReader<'a, R> for CompressionLayerReader
     fn initialize(&mut self) -> Result<(), Error> {
         match &mut self.state {
             CompressionLayerReaderState::Ready(inner) => {
-                // Recursive call
-                inner.initialize()?;
-
-                // Read the footer: [SizesInfo][SizesInfo length, on 4 bytes]
-                let pos = inner.seek(SeekFrom::End(-4))?;
-                let len = inner.read_u32::<LittleEndian>()? as u64;
+                // Read the footer: [SizesInfo][SizesInfo length as 8 bytes]
+                let pos = inner.seek(SeekFrom::End(-8))?;
+                let len = u64::deserialize(inner)?;
 
                 // Read SizesInfo
                 inner.seek(SeekFrom::Start(pos - len))?;
-                self.sizes_info =
-                    match bincode::decode_from_std_read(&mut inner.take(len), BINCODE_CONFIG) {
-                        Ok(sinfo) => Some(sinfo),
-                        _ => {
-                            return Err(Error::DeserializationError);
-                        }
-                    };
+                self.sizes_info = Some(MLADeserialize::deserialize(&mut inner.take(len))?);
 
                 Ok(())
             }
@@ -519,14 +545,23 @@ pub struct CompressionLayerWriter<'a, W: 'a + InnerWriterTrait> {
 
 impl<'a, W: 'a + InnerWriterTrait> CompressionLayerWriter<'a, W> {
     pub fn new(
+        mut inner: InnerWriterType<'a, W>,
+        config: &CompressionConfig,
+    ) -> Result<CompressionLayerWriter<'a, W>, Error> {
+        inner.write_all(COMPRESSION_LAYER_MAGIC)?;
+        let _ = Opts.dump(&mut inner)?;
+        Self::new_skip_header(inner, config)
+    }
+
+    fn new_skip_header(
         inner: InnerWriterType<'a, W>,
         config: &CompressionConfig,
-    ) -> CompressionLayerWriter<'a, W> {
-        Self {
+    ) -> Result<CompressionLayerWriter<'a, W>, Error> {
+        Ok(Self {
             state: CompressionLayerWriterState::Ready(inner),
             compressed_sizes: Vec::new(),
             compression_level: config.compression_level,
-        }
+        })
     }
 }
 
@@ -550,6 +585,8 @@ impl<'a, W: 'a + InnerWriterTrait> LayerWriter<'a, W> for CompressionLayerWriter
             }
         };
 
+        inner.write_all(EMPTY_TAIL_OPTS_SERIALIZATION)?; // No option for the moment
+
         // Footer:
         // [SizesInfo][SizesInfo length]
 
@@ -562,9 +599,8 @@ impl<'a, W: 'a + InnerWriterTrait> LayerWriter<'a, W> for CompressionLayerWriter
             compressed_sizes,
             last_block_size,
         };
-        let written_bytes = bincode::encode_into_std_write(&sinfo, &mut inner, BINCODE_CONFIG)
-            .or(Err(Error::SerializationError))?;
-        inner.write_u32::<LittleEndian>(written_bytes as u32)?;
+        let written_bytes = sinfo.serialize(&mut inner)?;
+        written_bytes.serialize(&mut inner)?;
         self.compressed_sizes = sinfo.compressed_sizes;
 
         // Recursive call
@@ -686,10 +722,17 @@ pub struct CompressionLayerFailSafeReader<'a, R: 'a + Read> {
 }
 
 impl<'a, R: 'a + Read> CompressionLayerFailSafeReader<'a, R> {
-    pub fn new(inner: Box<dyn 'a + LayerFailSafeReader<'a, R>>) -> Result<Self, Error> {
+    fn new_skip_header(inner: Box<dyn 'a + LayerFailSafeReader<'a, R>>) -> Result<Self, Error> {
         Ok(Self {
             state: CompressionLayerFailSafeReaderState::Ready(inner),
         })
+    }
+
+    pub fn new_skip_magic(
+        mut inner: Box<dyn 'a + LayerFailSafeReader<'a, R>>,
+    ) -> Result<Self, Error> {
+        let _ = Opts::from_reader(&mut inner)?; // No option handled at the moment
+        Self::new_skip_header(inner)
     }
 }
 
@@ -853,7 +896,7 @@ impl<'a, R: 'a + Read> Read for CompressionLayerFailSafeReader<'a, R> {
                 ret
             }
             CompressionLayerFailSafeReaderState::Empty => Err(Error::WrongReaderState(
-                "[Compression Layer] Should never happens, unless an error already occurs before"
+                "[Compression Layer] Should never happen, unless an error already occurs before"
                     .to_string(),
             )
             .into()),
@@ -899,10 +942,13 @@ mod tests {
     fn compress_layer_writer() {
         // Test with one "CompressedBlock"
         let file = Vec::new();
-        let mut comp = Box::new(CompressionLayerWriter::new(
-            Box::new(RawLayerWriter::new(file)),
-            &CompressionConfig::default(),
-        ));
+        let mut comp = Box::new(
+            CompressionLayerWriter::new_skip_header(
+                Box::new(RawLayerWriter::new(file)),
+                &CompressionConfig::default(),
+            )
+            .unwrap(),
+        );
         let mut fake_data = vec![1, 2, 3, 4];
         let fake_data2 = vec![5, 6, 7, 8];
         comp.write_all(fake_data.as_slice()).unwrap();
@@ -928,10 +974,13 @@ mod tests {
         let bytes = data.as_slice();
 
         let file = Vec::new();
-        let mut comp = Box::new(CompressionLayerWriter::new(
-            Box::new(RawLayerWriter::new(file)),
-            &CompressionConfig::default(),
-        ));
+        let mut comp = Box::new(
+            CompressionLayerWriter::new_skip_header(
+                Box::new(RawLayerWriter::new(file)),
+                &CompressionConfig::default(),
+            )
+            .unwrap(),
+        );
         let now = Instant::now();
         comp.write_all(bytes).unwrap();
         println!(
@@ -1030,16 +1079,21 @@ mod tests {
             let bytes = data.as_slice();
 
             let file = Vec::new();
-            let mut comp = Box::new(CompressionLayerWriter::new(
-                Box::new(RawLayerWriter::new(file)),
-                &CompressionConfig::default(),
-            ));
+            let mut comp = Box::new(
+                CompressionLayerWriter::new_skip_header(
+                    Box::new(RawLayerWriter::new(file)),
+                    &CompressionConfig::default(),
+                )
+                .unwrap(),
+            );
             let now = Instant::now();
             comp.write_all(bytes).unwrap();
             let file = comp.finalize().unwrap();
             let buf = Cursor::new(file.as_slice());
-            let mut decomp =
-                Box::new(CompressionLayerReader::new(Box::new(RawLayerReader::new(buf))).unwrap());
+            let mut decomp = Box::new(
+                CompressionLayerReader::new_skip_header(Box::new(RawLayerReader::new(buf)))
+                    .unwrap(),
+            );
             decomp.initialize().unwrap();
             let mut buf = Vec::new();
             decomp.read_to_end(&mut buf).unwrap();
@@ -1062,17 +1116,20 @@ mod tests {
             let bytes = data.as_slice();
 
             let file = Vec::new();
-            let mut comp = Box::new(CompressionLayerWriter::new(
-                Box::new(RawLayerWriter::new(file)),
-                &CompressionConfig::default(),
-            ));
+            let mut comp = Box::new(
+                CompressionLayerWriter::new_skip_header(
+                    Box::new(RawLayerWriter::new(file)),
+                    &CompressionConfig::default(),
+                )
+                .unwrap(),
+            );
             let now = Instant::now();
             comp.write_all(bytes).unwrap();
             let file = comp.finalize().unwrap();
             let mut decomp = Box::new(
-                CompressionLayerFailSafeReader::new(Box::new(RawLayerFailSafeReader::new(
-                    file.as_slice(),
-                )))
+                CompressionLayerFailSafeReader::new_skip_header(Box::new(
+                    RawLayerFailSafeReader::new(file.as_slice()),
+                ))
                 .unwrap(),
             );
             let mut buf = Vec::new();
@@ -1097,10 +1154,13 @@ mod tests {
             let bytes = data.as_slice();
 
             let file = Vec::new();
-            let mut comp = Box::new(CompressionLayerWriter::new(
-                Box::new(RawLayerWriter::new(file)),
-                &CompressionConfig::default(),
-            ));
+            let mut comp = Box::new(
+                CompressionLayerWriter::new_skip_header(
+                    Box::new(RawLayerWriter::new(file)),
+                    &CompressionConfig::default(),
+                )
+                .unwrap(),
+            );
             let now = Instant::now();
             comp.write_all(bytes).unwrap();
             let file = comp.finalize().unwrap();
@@ -1109,9 +1169,9 @@ mod tests {
             let stop = file.len() / 2;
 
             let mut decomp = Box::new(
-                CompressionLayerFailSafeReader::new(Box::new(RawLayerFailSafeReader::new(
-                    &file[..stop],
-                )))
+                CompressionLayerFailSafeReader::new_skip_header(Box::new(
+                    RawLayerFailSafeReader::new(&file[..stop]),
+                ))
                 .unwrap(),
             );
             let mut buf = Vec::new();
@@ -1138,16 +1198,21 @@ mod tests {
             let bytes = data.as_slice();
 
             let file = Vec::new();
-            let mut comp = Box::new(CompressionLayerWriter::new(
-                Box::new(RawLayerWriter::new(file)),
-                &CompressionConfig::default(),
-            ));
+            let mut comp = Box::new(
+                CompressionLayerWriter::new_skip_header(
+                    Box::new(RawLayerWriter::new(file)),
+                    &CompressionConfig::default(),
+                )
+                .unwrap(),
+            );
             comp.write_all(bytes).unwrap();
 
             let file = comp.finalize().unwrap();
             let buf = Cursor::new(file.as_slice());
-            let mut decomp =
-                Box::new(CompressionLayerReader::new(Box::new(RawLayerReader::new(buf))).unwrap());
+            let mut decomp = Box::new(
+                CompressionLayerReader::new_skip_header(Box::new(RawLayerReader::new(buf)))
+                    .unwrap(),
+            );
             decomp.initialize().unwrap();
 
             // Seek in the first block
@@ -1232,20 +1297,26 @@ mod tests {
         let config = ArchiveWriterConfig::without_encryption()
             .with_compression_level(0)
             .unwrap();
-        let mut comp = Box::new(CompressionLayerWriter::new(
-            Box::new(RawLayerWriter::new(file)),
-            &config.compression_config.unwrap(),
-        ));
+        let mut comp = Box::new(
+            CompressionLayerWriter::new_skip_header(
+                Box::new(RawLayerWriter::new(file)),
+                &config.compression_config.unwrap(),
+            )
+            .unwrap(),
+        );
         comp.write_all(bytes).unwrap();
 
         let file2 = Vec::new();
         let config2 = ArchiveWriterConfig::without_encryption()
             .with_compression_level(5)
             .unwrap();
-        let mut comp2 = Box::new(CompressionLayerWriter::new(
-            Box::new(RawLayerWriter::new(file2)),
-            &config2.compression_config.unwrap(),
-        ));
+        let mut comp2 = Box::new(
+            CompressionLayerWriter::new_skip_header(
+                Box::new(RawLayerWriter::new(file2)),
+                &config2.compression_config.unwrap(),
+            )
+            .unwrap(),
+        );
         comp2.write_all(bytes).unwrap();
 
         // file2 must be better compressed than file
@@ -1256,14 +1327,16 @@ mod tests {
         // Check content
         let buf = Cursor::new(file.as_slice());
         let mut buf_out = Vec::new();
-        let mut decomp =
-            Box::new(CompressionLayerReader::new(Box::new(RawLayerReader::new(buf))).unwrap());
+        let mut decomp = Box::new(
+            CompressionLayerReader::new_skip_header(Box::new(RawLayerReader::new(buf))).unwrap(),
+        );
         decomp.initialize().unwrap();
         decomp.read_to_end(&mut buf_out).unwrap();
         let buf2 = Cursor::new(file2.as_slice());
         let mut buf2_out = Vec::new();
-        let mut decomp =
-            Box::new(CompressionLayerReader::new(Box::new(RawLayerReader::new(buf2))).unwrap());
+        let mut decomp = Box::new(
+            CompressionLayerReader::new_skip_header(Box::new(RawLayerReader::new(buf2))).unwrap(),
+        );
         decomp.initialize().unwrap();
         decomp.read_to_end(&mut buf2_out).unwrap();
         assert_eq!(buf_out, buf2_out);
