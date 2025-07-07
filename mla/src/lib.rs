@@ -647,16 +647,15 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
             compression_config,
             encryption_config,
         } = config;
-        let (encryption_persistent_config, encryption_internal_config) = match encryption_config {
+        let enc_cfg = match encryption_config {
             Some(encryption_config) => Some(EncryptionConfig::to_persistent(&encryption_config)?),
             None => None,
-        }
-        .unzip();
+        };
         let mut layers_enabled = Layers::EMPTY;
         if compression_config.is_some() {
             layers_enabled |= Layers::COMPRESS;
         }
-        if encryption_persistent_config.is_some() {
+        if enc_cfg.is_some() {
             layers_enabled |= Layers::ENCRYPT;
         }
 
@@ -665,14 +664,16 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
             format_version: MLA_FORMAT_VERSION,
             config: ArchivePersistentConfig {
                 layers_enabled,
-                encrypt: encryption_persistent_config,
+                encrypt: enc_cfg.as_ref().map(|c| c.0.clone()),
             },
         }
         .dump(&mut dest)?;
 
         // Enable layers depending on user option
-        dest = match encryption_internal_config.as_ref() {
-            Some(cfg) => Box::new(EncryptionLayerWriter::new(dest, cfg)?),
+        dest = match enc_cfg.as_ref() {
+            Some((persistent, internal)) => {
+                Box::new(EncryptionLayerWriter::new(dest, persistent, internal)?)
+            }
             None => dest,
         };
         dest = match compression_config {
@@ -691,7 +692,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         // Build initial archive
         Ok(ArchiveWriter {
             internal_config: InternalConfig {
-                encrypt: encryption_internal_config,
+                encrypt: enc_cfg.map(|c| c.1),
             },
             dest: final_dest,
             state: ArchiveWriterState::OpenedFiles {
@@ -1085,12 +1086,13 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
 
         // Enable layers depending on user option. Order is relevant
         let mut src: Box<dyn 'b + LayerReader<'b, R>> = raw_src;
+        let accept_unencrypted = config.accept_unencrypted;
         if layers_enabled.contains(Layers::ENCRYPT) {
-            src = Box::new(EncryptionLayerReader::new(src, &config.encrypt)?);
-        } else if !config.accept_unencrypted {
+            src = Box::new(EncryptionLayerReader::new(src, config.encrypt, None)?);
+            src.initialize()?;
+        } else if !accept_unencrypted {
             return Err(Error::EncryptionAskedButNotMarkedPresent);
         }
-        src.initialize()?;
         let magic = read_layer_magic(&mut src)?;
         if &magic == COMPRESSION_LAYER_MAGIC {
             src = Box::new(CompressionLayerReader::new_skip_magic(src)?);
@@ -1212,11 +1214,6 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
 pub struct TruncatedArchiveReader<'a, R: 'a + Read> {
     /// MLA Archive format Reader (fail-safe)
     //
-    /// User's reading configuration
-    // config is not used for now after reader creation,
-    // but it could in the future
-    #[allow(dead_code)]
-    config: ArchiveReaderConfig,
     /// Source
     src: Box<dyn 'a + LayerFailSafeReader<'a, R>>,
 }
@@ -1250,9 +1247,14 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
         // Enable layers depending on user option. Order is relevant
         let mut src: Box<dyn 'b + LayerFailSafeReader<'b, R>> =
             Box::new(RawLayerFailSafeReader::new(src));
+        let accept_unencrypted = config.accept_unencrypted;
         if layers_enabled.contains(Layers::ENCRYPT) {
-            src = Box::new(EncryptionLayerFailSafeReader::new(src, &config.encrypt)?);
-        } else if !config.accept_unencrypted {
+            src = Box::new(EncryptionLayerFailSafeReader::from_persistent_config(
+                src,
+                config.encrypt,
+                None,
+            )?);
+        } else if !accept_unencrypted {
             return Err(Error::EncryptionAskedButNotMarkedPresent);
         }
         let mut magic = read_layer_magic(&mut src)?;
@@ -1268,7 +1270,7 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
         // Read the magic
         read_mla_entries_header_skip_magic(&mut src)?;
 
-        Ok(Self { config, src })
+        Ok(Self { src })
     }
 
     /// Best-effort conversion of the current archive to a correct
