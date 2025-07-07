@@ -1029,7 +1029,6 @@ dependencies = [
  "aes-gcm",
  "bitflags",
  "brotli 7.0.0",
- "byteorder",
  "criterion",
  "ctr",
  "curve25519-dalek",
