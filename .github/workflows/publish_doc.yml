@@ -1,10 +1,14 @@
 name: Deploy mdBook to GitHub Pages
 
+permissions:
+  contents: write
+
 on:
   push:
     branches:
-      - main
-  workflow_dispatch:
+      # for prod:
+      # - gh-pages
+      - add-mla-book
 
 jobs:
   build-deploy:
@@ -15,7 +19,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install mdBook
-        uses: peaceiris/actions-mdbook@v3
+        uses: peaceiris/actions-mdbook@v2
         with:
           mdbook-version: 'latest'
 
