@@ -1,12 +1,7 @@
-use bincode::{Decode, Encode};
-
 use crate::crypto::hybrid::{HybridPrivateKey, HybridPublicKey};
 use crate::errors::ConfigError;
-use crate::format::Layers;
 use crate::layers::compress::CompressionConfig;
-use crate::layers::encrypt::{
-    EncryptionConfig, EncryptionPersistentConfig, EncryptionReaderConfig,
-};
+use crate::layers::encrypt::{EncryptionConfig, EncryptionReaderConfig};
 
 /// Configuration to write an archive.
 pub struct ArchiveWriterConfig {
@@ -53,15 +48,6 @@ impl ArchiveWriterConfig {
         self.compression_config = None;
         self
     }
-}
-
-/// Configuration stored in the header, to be reloaded
-#[derive(Encode, Decode)]
-pub(crate) struct ArchivePersistentConfig {
-    pub layers_enabled: Layers,
-
-    // Layers specifics
-    pub encrypt: Option<EncryptionPersistentConfig>,
 }
 
 /// Configuration used to read an archive.
