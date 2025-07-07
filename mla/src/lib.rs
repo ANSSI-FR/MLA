@@ -387,6 +387,27 @@ pub(crate) const BINCODE_CONFIG: bincode::config::Configuration<
 
 use format::Layers;
 
+const EMPTY_OPTS_SERIALIZATION: &[u8; 1] = &[0];
+const EMPTY_TAIL_OPTS_SERIALIZATION: &[u8; 9] = &[0, 1, 0, 0, 0, 0, 0, 0, 0];
+
+struct Opts;
+
+impl Opts {
+    fn from_reader(mut src: impl Read) -> Result<Self, Error> {
+        let discriminant = src.read_u8()?;
+        match discriminant {
+            0 => (),
+            1 => {
+                let n = src.read_u64::<LittleEndian>()?;
+                let mut v = Vec::new();
+                src.take(n).read_to_end(&mut v)?;
+            }
+            _ => return Err(Error::DeserializationError),
+        }
+        Ok(Opts)
+    }
+}
+
 // -------- MLA Format Footer --------
 
 struct ArchiveFooter {
@@ -428,9 +449,12 @@ impl ArchiveFooter {
     }
 
     /// Parses and instantiates a footer from serialized data
-    pub fn deserialize_from<R: Read + Seek>(mut src: R) -> Result<ArchiveFooter, Error> {
+    pub fn deserialize_from<R: Read + Seek>(
+        mut src: R,
+        end_of_footer_length_offset_from_end: i64,
+    ) -> Result<ArchiveFooter, Error> {
         // Read the footer length
-        let pos = src.seek(SeekFrom::End(-8))?;
+        let pos = src.seek(SeekFrom::End(end_of_footer_length_offset_from_end - 8))?;
         let len = src.read_u64::<LittleEndian>()?;
 
         // Prepare for deserialization
@@ -666,6 +690,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
 
         // Write the magic
         final_dest.write_all(ENTRIES_LAYER_MAGIC)?;
+        final_dest.write_all(EMPTY_OPTS_SERIALIZATION)?; // No option for the moment
 
         // Build initial archive
         Ok(ArchiveWriter {
@@ -719,6 +744,8 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         ArchiveEntryBlock::EndOfArchiveData::<std::io::Empty> {}.dump(&mut self.dest)?;
 
         ArchiveFooter::serialize_into(&mut self.dest, &self.files_info, &self.ids_info)?;
+
+        self.dest.write_all(EMPTY_TAIL_OPTS_SERIALIZATION)?; // No option for the moment
 
         // Recursive call
         self.dest.finalize()
@@ -913,6 +940,18 @@ pub struct ArchiveReader<'a, R: 'a + InnerReaderTrait> {
     metadata: Option<ArchiveFooter>,
 }
 
+fn read_mla_entries_header(mut src: impl Read) -> Result<(), Error> {
+    // Read the magic
+    let mut magic = [0u8; 8];
+    src.read_exact(&mut magic)?;
+    if magic != *ENTRIES_LAYER_MAGIC {
+        return Err(Error::WrongMagic);
+    }
+
+    let _ = Opts::from_reader(&mut src)?; // No option handled at the moment
+    Ok(())
+}
+
 impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
     /// Create an `ArchiveReader`.
     pub fn from_config(mut src: R, mut config: ArchiveReaderConfig) -> Result<Self, Error> {
@@ -938,18 +977,24 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
         }
         src.initialize()?;
 
+        // read `entries_footer_options`
+        src.seek(SeekFrom::End(-8))?;
+        let entries_footer_options_length = src.read_u64::<LittleEndian>()?;
+        // skip reading them as there are none for the moment
+
         // Read the footer
-        let metadata = Some(ArchiveFooter::deserialize_from(&mut src)?);
+        let end_of_footer_length_offset_from_end = 0i64
+            .checked_sub_unsigned(entries_footer_options_length + 8)
+            .ok_or(Error::DeserializationError)?;
+        let metadata = Some(ArchiveFooter::deserialize_from(
+            &mut src,
+            end_of_footer_length_offset_from_end,
+        )?);
 
         // Reset the position for further uses
         src.rewind()?;
 
-        // Read the magic
-        let mut magic = [0u8; 8];
-        src.read_exact(&mut magic)?;
-        if magic != *ENTRIES_LAYER_MAGIC {
-            return Err(Error::WrongMagic);
-        }
+        read_mla_entries_header(&mut src)?;
 
         Ok(ArchiveReader { src, metadata })
     }
@@ -1086,11 +1131,7 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
         }
 
         // Read the magic
-        let mut magic = [0u8; 8];
-        src.read_exact(&mut magic)?;
-        if magic != *ENTRIES_LAYER_MAGIC {
-            return Err(Error::WrongMagic);
-        }
+        read_mla_entries_header(&mut src)?;
 
         Ok(Self { config, src })
     }
