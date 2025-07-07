@@ -758,19 +758,17 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
 
     /// Add the current offset to the corresponding list if the file id is not
     /// the current one, ie. if blocks are not continuous
-    fn mark_continuous_block(&mut self, id: ArchiveEntryId) -> Result<(), Error> {
-        if id != self.current_id {
-            let offset = self.dest.position();
-            match self.ids_info.get_mut(&id) {
-                Some(file_info) => file_info.offsets.push(offset),
-                None => {
-                    return Err(Error::WrongWriterState(
-                        "[mark_continuous_block] Unable to find the ID".to_string(),
-                    ));
-                }
-            };
-            self.current_id = id;
-        }
+    fn record_offset_in_index(&mut self, id: ArchiveEntryId) -> Result<(), Error> {
+        let offset = self.dest.position();
+        match self.ids_info.get_mut(&id) {
+            Some(file_info) => file_info.offsets.push(offset),
+            None => {
+                return Err(Error::WrongWriterState(
+                    "[mark_continuous_block] Unable to find the ID".to_string(),
+                ));
+            }
+        };
+        self.current_id = id;
         Ok(())
     }
 
@@ -853,7 +851,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
             return Ok(());
         }
 
-        self.mark_continuous_block(id)?;
+        self.record_offset_in_index(id)?;
         self.extend_file_size(id, size)?;
         let src = self.state.wrap_with_hash(id, src)?;
 
@@ -886,7 +884,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
             }
         };
 
-        self.mark_continuous_block(id)?;
+        self.record_offset_in_index(id)?;
         // Use std::io::Empty as a readable placeholder type
         ArchiveEntryBlock::EndOfEntry::<std::io::Empty> {
             id,
@@ -1027,7 +1025,7 @@ impl<R: Read, T1: MLADeserialize<R>, T2: MLADeserialize<R>> MLADeserialize<R> fo
 pub(crate) struct EntryInfo {
     /// Entry information to save in the footer
     ///
-    /// Offsets of continuous chunks of `ArchiveEntryBlock`
+    /// Offsets of chunks of `ArchiveEntryBlock`
     offsets: Vec<u64>,
     /// Size of the file, in bytes
     size: u64,
