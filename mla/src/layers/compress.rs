@@ -220,7 +220,7 @@ impl<'a, R: 'a + InnerReaderTrait> CompressionLayerReader<'a, R> {
 
     /// Instantiate a new decompressor at position `uncompressed_pos`
     /// `uncompressed_pos` must be a compressed block's starting position
-    fn new_decompressor_at<S: Read + Seek>(
+    fn new_decompressor_at<S: InnerReaderTrait>(
         &self,
         inner: S,
         uncompressed_pos: u64,
@@ -285,7 +285,7 @@ impl<'a, R: 'a + InnerReaderTrait> CompressionLayerReader<'a, R> {
     // TODO add regression test
     /// Resynchronize the inner layer with `uncompressed_pos` (ie., seek inner with expected position)
     /// `uncompressed_pos` must be a compressed block's starting position
-    fn sync_inner_with_uncompressed_pos<S: Read + Seek>(
+    fn sync_inner_with_uncompressed_pos<S: InnerReaderTrait>(
         &self,
         inner: &mut S,
         uncompressed_pos: u64,
@@ -353,7 +353,7 @@ impl<'a, R: 'a + InnerReaderTrait> LayerReader<'a, R> for CompressionLayerReader
     }
 }
 
-impl<'a, R: 'a + Read + Seek> Read for CompressionLayerReader<'a, R> {
+impl<'a, R: 'a + InnerReaderTrait> Read for CompressionLayerReader<'a, R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         if !self.pos_in_stream(self.underlayer_pos) {
             // No more in the compressed stream -> nothing to read
@@ -411,7 +411,7 @@ impl<'a, R: 'a + Read + Seek> Read for CompressionLayerReader<'a, R> {
     }
 }
 
-impl<R: Read + Seek> Seek for CompressionLayerReader<'_, R> {
+impl<R: InnerReaderTrait> Seek for CompressionLayerReader<'_, R> {
     /// Seek to the position `pos` in the uncompressed stream
     fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
         // Seeking may instantiate a decompressor, and therefore position the
