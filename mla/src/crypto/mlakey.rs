@@ -697,7 +697,7 @@ mod tests {
             pub_key.public_key_ml.as_bytes().len(),
             MLKEM_1024_PUBKEY_SIZE
         );
-        let mut rng = rand::rngs::OsRng { };
+        let mut rng = rand::rngs::OsRng {};
         let (encap, key) = pub_key.public_key_ml.encapsulate(&mut rng).unwrap();
         let key_decap = priv_key.private_key_ml.decapsulate(&encap).unwrap();
         assert_eq!(key, key_decap);
