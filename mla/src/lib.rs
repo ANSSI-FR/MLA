@@ -165,7 +165,6 @@ use std::io;
 use std::io::{Read, Seek, SeekFrom, Write};
 #[macro_use]
 extern crate bitflags;
-use byteorder::ReadBytesExt;
 use crypto::hybrid::HybridPublicKey;
 use layers::compress::COMPRESSION_LAYER_MAGIC;
 use layers::encrypt::ENCRYPTION_LAYER_MAGIC;
@@ -385,7 +384,7 @@ struct Opts;
 
 impl Opts {
     fn from_reader(mut src: impl Read) -> Result<Self, Error> {
-        let discriminant = src.read_u8()?;
+        let discriminant = u8::deserialize(&mut src)?;
         match discriminant {
             0 => (),
             1 => {
@@ -470,29 +469,35 @@ impl ArchiveFooter {
 
 /// Tags used in each ArchiveEntryBlock to indicate the type of block that follows
 #[derive(Debug)]
-#[repr(u8)]
 enum ArchiveEntryBlockType {
-    EntryStart = 0x00,
-    EntryContent = 0x01,
+    EntryStart,
+    EntryContent,
 
-    EndOfArchiveData = 0xFE,
-    EndOfEntry = 0xFF,
+    EndOfArchiveData,
+    EndOfEntry,
 }
 
-impl TryFrom<u8> for ArchiveEntryBlockType {
-    type Error = Error;
+impl<W: Write> MLASerialize<W> for ArchiveEntryBlockType {
+    fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
+        let byte: u8 = match self {
+            ArchiveEntryBlockType::EntryStart => 0,
+            ArchiveEntryBlockType::EntryContent => 1,
+            ArchiveEntryBlockType::EndOfArchiveData => 0xFE,
+            ArchiveEntryBlockType::EndOfEntry => 0xFF,
+        };
+        byte.serialize(dest)
+    }
+}
 
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        if value == ArchiveEntryBlockType::EntryStart as u8 {
-            Ok(ArchiveEntryBlockType::EntryStart)
-        } else if value == ArchiveEntryBlockType::EntryContent as u8 {
-            Ok(ArchiveEntryBlockType::EntryContent)
-        } else if value == ArchiveEntryBlockType::EndOfEntry as u8 {
-            Ok(ArchiveEntryBlockType::EndOfEntry)
-        } else if value == ArchiveEntryBlockType::EndOfArchiveData as u8 {
-            Ok(ArchiveEntryBlockType::EndOfArchiveData)
-        } else {
-            Err(Error::WrongBlockSubFileType)
+impl<R: Read> MLADeserialize<R> for ArchiveEntryBlockType {
+    fn deserialize(src: &mut R) -> Result<Self, Error> {
+        let serialized_block_type = u8::deserialize(src)?;
+        match serialized_block_type {
+            0 => Ok(ArchiveEntryBlockType::EntryStart),
+            1 => Ok(ArchiveEntryBlockType::EntryContent),
+            0xFE => Ok(ArchiveEntryBlockType::EndOfArchiveData),
+            0xFF => Ok(ArchiveEntryBlockType::EndOfEntry),
+            _ => Err(Error::WrongBlockSubFileType),
         }
     }
 }
