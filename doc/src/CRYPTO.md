@@ -110,10 +110,10 @@ To encrypt to a target recipient $i$, knowing $pk_{ecc}^i$ and $pk_{mlkem}^i$:
 1. Compute shared secrets and ciphertexts for both KEM:
 
 $$
-\begin{align}
+\begin{align*}
 (ss_{ecc}^i, ct_{ecc}^i) &= \textrm{DHKEM.Encapsulate}(pk_{ecc}^i) \\
 (ss_{mlkem}^i, ct_{mlkem}^i) &= \textrm{MLKEM.Encapsulate}(pk_{mlkem}^i)
-\end{align}
+\end{align*}
 $$
 
 2. Combine the shared secrets (implemented in `mla::crypto::hybrid::combine`):
@@ -139,14 +139,14 @@ $$
 3. Wrap the recipients' shared secret:
 
 $$
-\begin{align}
+\begin{align*}
 (key^i, nonce^i) &= \textrm{KeySchedule}_{recipient}(
         shared\_secret=ss_{recipient}^i,
     \textrm{info}=\mathtt{"MLA\ Recipient"}
 )\\
 ct_{wrap}^i &= \textrm{Encrypt}_{AES\ 256\ GCM}(\textrm{key}=key^i, \textrm{nonce}=nonce^i, \textrm{data}=ss_{recipients})\\
 ct_{recipient}^i &= \textrm{Serialize}(ct_{wrap}^i, ct_{ecc}^i, ct_{mlkem}^i)
-\end{align}
+\end{align*}
 $$
 
 Informally, this process can be viewed as a per-recipient KEM taking a shared secret $ss_{recipients}$, the recipient public key (made of the elliptic curve and the PQC public keys) and returning a ciphertext $ct_{recipient}^i$.
@@ -158,24 +158,24 @@ To obtain the shared secret from $ct_{recipient}^i$ for a recipient $i$ knowing 
 1. Compute the recipient's shared secret:
 
 $$
-\begin{align}
+\begin{align*}
 (ct_{wrap}^i, ct_{ecc}^i, ct_{mlkem}^i) &= \textrm{Deserialize}(ct_{recipient}^i)\\
 ss_{ecc}^i &= \textrm{DHKEM.Decapsulate}(sk_{ecc}^i, ct_{ecc}^i) \\
 ss_{mlkem}^i &= \textrm{MLKEM.Decapsulate}(sk_{mlkem}^i, ct_{mlkem}^i)\\
 ss_{recipient}^i &= \textrm{combine}(ss_{ecc}^i, ss_{mlkem}^i, ct_{ecc}^i, ct_{mlkem}^i)
-\end{align}
+\end{align*}
 $$
 
 2. Try to decrypt the secret shared among recipients:
 
 $$
-\begin{align}
+\begin{align*}
 (key^i, nonce^i) &= \textrm{KeySchedule}_{recipient}(
         shared\_secret=ss_{recipient}^i,
     \textrm{info}=\mathtt{"MLA\ Recipient"}
 )\\
 ss_{recipients} &= \textrm{Decrypt}_{AES\ 256\ GCM}(\textrm{key}=key^i, \textrm{nonce}=nonce^i, \textrm{data}=ct_{wrap}^i)
-\end{align}
+\end{align*}
 $$
 
 If the decryption is a success, returns $ss_{recipients}$. Otherwise, returns an error.
@@ -353,13 +353,13 @@ To decrypt the data at position $pos$:
 1. Once for the whole session, get the cryptographic materials
 
 $$
-\begin{align}
+\begin{align*}
 ss_{recipients} &= \mathrm{MultiRecipientHybridKEM.Decapsulate}((sk_{ecc}^i, sk_{mlkem}^i), ct_{recipients})\\
 (key, base\_nonce) &= \textrm{KeySchedule}_{hybrid}(
         shared\_secret=ss_{recipients},
     \textrm{info}=\mathtt{"MLA\ Encrypt\ Layer"}
 )
-\end{align}
+\end{align*}
 $$
 
 2. Once for the whole session, check the key commitment
@@ -381,10 +381,10 @@ $$
 3. Retrieve the encrypted chunk of data
 
 $$
-\begin{align}
+\begin{align*}
 start &= pos - \mathtt{sizeof}(keycommit)\\
 j &= pos \div 128KiB\\
-\end{align}
+\end{align*}
 $$
 
 Where $\div$ is the Euclidian division.
@@ -433,14 +433,14 @@ The derivation scheme is based on the same ideas than `mla::crypto::hybrid::comb
 From a private key ($sk_{ecc}^i$ and $sk_{mlkem}^i$), the secret is derived from the path component $pc$ through:
 
 $$
-\begin{align}
+\begin{align*}
 ecc\_rnd &= \mathrm{HKDF.Extract_{SHA512}}(\mathrm{salt}=0, \mathrm{ikm}=sk_{ecc}^i)\\
 seed &= \mathrm{HKDF_{SHA512}}(
     \mathrm{salt}=ecc\_rnd,
     \mathrm{ikm}=sk_{mlkem}^i,
     \mathrm{info}=\mathtt{"PATH\ DERIVATION"}\ .\ pc
 )
-\end{align}
+\end{align*}
 $$
 
 To derive a key using a `seed`, a `ChaChaRng` is used.
