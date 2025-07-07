@@ -774,20 +774,6 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         Ok(())
     }
 
-    /// Set the EoF offset to the current offset for the corresponding file id
-    fn mark_eof(&mut self, id: ArchiveEntryId) -> Result<(), Error> {
-        let offset = self.dest.position();
-        match self.ids_info.get_mut(&id) {
-            Some(file_info) => file_info.eof_offset = offset,
-            None => {
-                return Err(Error::WrongWriterState(
-                    "[mark_eof] Unable to find the ID".to_string(),
-                ));
-            }
-        }
-        Ok(())
-    }
-
     /// Add the current block size to the total size of the corresponding file id
     fn extend_file_size(&mut self, id: ArchiveEntryId, block_size: u64) -> Result<(), Error> {
         match self.ids_info.get_mut(&id) {
@@ -825,7 +811,6 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
             EntryInfo {
                 offsets: vec![self.dest.position()],
                 size: 0,
-                eof_offset: 0,
             },
         );
         // Use std::io::Empty as a readable placeholder type
@@ -902,7 +887,6 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         };
 
         self.mark_continuous_block(id)?;
-        self.mark_eof(id)?;
         // Use std::io::Empty as a readable placeholder type
         ArchiveEntryBlock::EndOfEntry::<std::io::Empty> {
             id,
@@ -1047,18 +1031,12 @@ pub(crate) struct EntryInfo {
     offsets: Vec<u64>,
     /// Size of the file, in bytes
     size: u64,
-    /// Offset of the ArchiveEntryBlock::EndOfEntry
-    ///
-    /// This offset is used to retrieve information from the EndOfEntry tag, such as
-    /// the file hash
-    eof_offset: u64,
 }
 
 impl<W: Write> MLASerialize<W> for EntryInfo {
     fn serialize(&self, mut dest: &mut W) -> Result<u64, Error> {
         let mut serialization_length = self.offsets.serialize(&mut dest)?;
         serialization_length += self.size.serialize(&mut dest)?;
-        serialization_length += self.eof_offset.serialize(&mut dest)?;
         Ok(serialization_length)
     }
 }
@@ -1067,13 +1045,8 @@ impl<R: Read> MLADeserialize<R> for EntryInfo {
     fn deserialize(src: &mut R) -> Result<Self, Error> {
         let offsets = MLADeserialize::deserialize(src)?;
         let size = u64::deserialize(src)?;
-        let eof_offset = u64::deserialize(src)?;
 
-        Ok(Self {
-            offsets,
-            size,
-            eof_offset,
-        })
+        Ok(Self { offsets, size })
     }
 }
 
@@ -1172,14 +1145,18 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
                 None => return Ok(None),
                 Some(finfo) => finfo,
             };
-            // Set the inner layer at the start of the EoF tag
-            self.src.seek(SeekFrom::Start(file_info.eof_offset))?;
+            // Set the inner layer at the start of the EoE tag
+            let eoe_offset = file_info
+                .offsets
+                .last()
+                .ok_or(Error::DeserializationError)?;
+            self.src.seek(SeekFrom::Start(*eoe_offset))?;
 
             // Return the file hash
             match ArchiveEntryBlock::from(&mut self.src)? {
                 ArchiveEntryBlock::EndOfEntry { hash, .. } => Ok(Some(hash)),
                 _ => Err(Error::WrongReaderState(
-                    "[ArchiveReader] eof_offset must point to a EoF".to_string(),
+                    "[ArchiveReader] last offset must point to a EndOfEntry".to_string(),
                 )),
             }
         } else {
