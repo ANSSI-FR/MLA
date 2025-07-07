@@ -461,17 +461,7 @@ impl ArchiveFooter {
     }
 
     /// Parses and instantiates a footer from serialized data
-    pub fn deserialize_from<R: Read + Seek>(
-        mut src: R,
-        end_of_footer_length_offset_from_end: i64,
-    ) -> Result<ArchiveFooter, Error> {
-        // Read the footer length
-        let pos = src.seek(SeekFrom::End(end_of_footer_length_offset_from_end - 8))?;
-        let len = src.read_u64::<LittleEndian>()?;
-
-        // Prepare for deserialization
-        src.seek(SeekFrom::Start(pos - len))?;
-
+    pub fn deserialize_from<R: Read + Seek>(mut src: R) -> Result<ArchiveFooter, Error> {
         // Read files_info
         let n = u64::deserialize(&mut src)?;
         let files_info = (0..n)
@@ -1101,15 +1091,20 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
         // skip reading them as there are none for the moment
 
         // Read the footer
-        let end_of_footer_length_offset_from_end = 0i64
-            .checked_sub_unsigned(entries_footer_options_length + 8)
+        let entries_footer_length_offset_from_end =
+            (-16i64) // -8 for Tail<Opts>'s length, -8 for `Tail<EntriesFooter>`'s length field
+                .checked_sub_unsigned(entries_footer_options_length)
+                .ok_or(Error::DeserializationError)?;
+        // Read the footer length
+        src.seek(SeekFrom::End(entries_footer_length_offset_from_end))?;
+        let entries_footer_length = src.read_u64::<LittleEndian>()?;
+        // Prepare for deserialization
+        let start_of_entries_footer_from_current = (-8i64)
+            .checked_sub_unsigned(entries_footer_length)
             .ok_or(Error::DeserializationError)?;
-        let metadata = Some(ArchiveFooter::deserialize_from(
-            &mut src,
-            end_of_footer_length_offset_from_end,
-        )?);
+        src.seek(SeekFrom::Current(start_of_entries_footer_from_current))?;
+        let metadata = Some(ArchiveFooter::deserialize_from(&mut src)?);
 
-        // Reset the position for further uses
         src.rewind()?;
 
         read_mla_entries_header(&mut src)?;
