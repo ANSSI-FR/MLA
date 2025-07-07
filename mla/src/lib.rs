@@ -390,6 +390,7 @@ use format::Layers;
 const EMPTY_OPTS_SERIALIZATION: &[u8; 1] = &[0];
 const EMPTY_TAIL_OPTS_SERIALIZATION: &[u8; 9] = &[0, 1, 0, 0, 0, 0, 0, 0, 0];
 
+#[derive(Debug)]
 struct Opts;
 
 impl Opts {
@@ -405,6 +406,12 @@ impl Opts {
             _ => return Err(Error::DeserializationError),
         }
         Ok(Opts)
+    }
+
+    fn dump(&mut self, mut src: impl Write) -> Result<u64, Error> {
+        // No option for the moment
+        src.write_all(EMPTY_OPTS_SERIALIZATION)?;
+        Ok(1)
     }
 }
 
@@ -690,7 +697,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
 
         // Write the magic
         final_dest.write_all(ENTRIES_LAYER_MAGIC)?;
-        final_dest.write_all(EMPTY_OPTS_SERIALIZATION)?; // No option for the moment
+        let _ = Opts.dump(&mut final_dest)?;
 
         // Build initial archive
         Ok(ArchiveWriter {
@@ -824,7 +831,12 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
             },
         );
         // Use std::io::Empty as a readable placeholder type
-        ArchiveEntryBlock::EntryStart::<std::io::Empty> { name, id }.dump(&mut self.dest)?;
+        ArchiveEntryBlock::EntryStart::<std::io::Empty> {
+            name,
+            id,
+            opts: Opts,
+        }
+        .dump(&mut self.dest)?;
 
         match &mut self.state {
             ArchiveWriterState::OpenedFiles { ids, hashes } => {
@@ -866,6 +878,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
             id,
             length: size,
             data: Some(src),
+            opts: Opts,
         }
         .dump(&mut self.dest)
     }
@@ -893,7 +906,12 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         self.mark_continuous_block(id)?;
         self.mark_eof(id)?;
         // Use std::io::Empty as a readable placeholder type
-        ArchiveEntryBlock::EndOfEntry::<std::io::Empty> { id, hash }.dump(&mut self.dest)?;
+        ArchiveEntryBlock::EndOfEntry::<std::io::Empty> {
+            id,
+            hash,
+            opts: Opts,
+        }
+        .dump(&mut self.dest)?;
 
         Ok(())
     }
@@ -1172,7 +1190,11 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
                 }
                 Ok(block) => {
                     match block {
-                        ArchiveEntryBlock::EntryStart { name: filename, id } => {
+                        ArchiveEntryBlock::EntryStart {
+                            name: filename,
+                            id,
+                            opts: _,
+                        } => {
                             if let Some(_id_output) = id_failsafe2id_output.get(&id) {
                                 update_error!(error = TruncatedReadError::ArchiveFileIDReuse(id));
                                 break 'read_block;
@@ -1288,7 +1310,11 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
                                 }
                             }
                         }
-                        ArchiveEntryBlock::EndOfEntry { id, hash } => {
+                        ArchiveEntryBlock::EndOfEntry {
+                            id,
+                            hash,
+                            opts: Opts,
+                        } => {
                             let id_output = match id_failsafe2id_output.get(&id) {
                                 Some(id_output) => *id_output,
                                 None => {
@@ -1415,6 +1441,7 @@ pub(crate) mod tests {
         ArchiveEntryBlock::EntryStart::<Empty> {
             id,
             name: EntryName::from_path("foobaré.exe").unwrap(),
+            opts: Opts,
         }
         .dump(&mut buf)
         .unwrap();
@@ -1424,13 +1451,18 @@ pub(crate) mod tests {
             id,
             length: fake_content.len() as u64,
             data: Some(fake_content.as_slice()),
+            opts: Opts,
         };
         block.dump(&mut buf).unwrap();
 
         // std::io::Empty is used because a type with Read is needed
-        ArchiveEntryBlock::EndOfEntry::<Empty> { id, hash }
-            .dump(&mut buf)
-            .unwrap();
+        ArchiveEntryBlock::EndOfEntry::<Empty> {
+            id,
+            hash,
+            opts: Opts,
+        }
+        .dump(&mut buf)
+        .unwrap();
 
         println!("{:?}", buf);
     }
