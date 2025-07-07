@@ -378,19 +378,24 @@ impl<'a, R: Read + Seek> ArchiveEntryDataReader<'a, R> {
             src,
             state: ArchiveEntryDataReaderState::Ready,
             id,
-            current_offsets_index: 0,
+            current_offsets_index: 1,
             offsets_in_src: offsets,
         })
     }
 
-    /// Move `self.src` to the next continuous block
-    fn move_to_next_block_in_entry(&mut self) -> Result<(), Error> {
+    fn increment_current_offsets_index(&mut self) -> Result<(), Error> {
         self.current_offsets_index += 1;
         if self.current_offsets_index >= self.offsets_in_src.len() {
-            return Err(Error::WrongReaderState(
+            Err(Error::WrongReaderState(
                 "[BlocksToFileReader] No more continuous blocks".to_string(),
-            ));
+            ))
+        } else {
+            Ok(())
         }
+    }
+
+    /// Move `self.src` to the next continuous block
+    fn move_to_block_at_current_offsets_index(&mut self) -> Result<(), Error> {
         self.src.seek(SeekFrom::Start(
             self.offsets_in_src[self.current_offsets_index],
         ))?;
@@ -418,7 +423,8 @@ impl<'a, R: Read + Seek> ArchiveEntryDataReader<'a, R> {
                 )),
             }?;
             total += content_len;
-            self.move_to_next_block_in_entry()?;
+            self.increment_current_offsets_index()?;
+            self.move_to_block_at_current_offsets_index()?;
         }
         let offset_in_content_chunk_at_function_entry = match self.state {
             ArchiveEntryDataReaderState::InEntryContent(remaining) => {
@@ -453,18 +459,18 @@ impl<T: Read + Seek> Read for ArchiveEntryDataReader<'_, T> {
                 match ArchiveEntryBlock::from(&mut self.src)? {
                     ArchiveEntryBlock::EntryContent { length, id, .. } => {
                         if id != self.id {
-                            self.move_to_next_block_in_entry()?;
+                            self.move_to_block_at_current_offsets_index()?;
                             return self.read(into);
                         } else {
-                            self.current_offsets_index += 1;
                             let count = self.src.by_ref().take(length).read(into)?;
+                            self.increment_current_offsets_index()?;
                             let count_as_u64 = usize_as_u64(count)?;
                             (length - count_as_u64, count)
                         }
                     }
                     ArchiveEntryBlock::EndOfEntry { id, .. } => {
                         if id != self.id {
-                            self.move_to_next_block_in_entry()?;
+                            self.move_to_block_at_current_offsets_index()?;
                             return self.read(into);
                         } else {
                             self.state = ArchiveEntryDataReaderState::Finish;
@@ -473,7 +479,7 @@ impl<T: Read + Seek> Read for ArchiveEntryDataReader<'_, T> {
                     }
                     ArchiveEntryBlock::EntryStart { id, .. } => {
                         if id != self.id {
-                            self.move_to_next_block_in_entry()?;
+                            self.move_to_block_at_current_offsets_index()?;
                             return self.read(into);
                         }
                         return Err(Error::WrongReaderState(
@@ -536,11 +542,13 @@ impl<T: Read + Seek> Seek for ArchiveEntryDataReader<'_, T> {
                         self.src.seek(SeekFrom::Start(current_src_offset))?;
                         match ArchiveEntryBlock::from(&mut self.src)? {
                             ArchiveEntryBlock::EntryStart { .. } => {
-                                self.move_to_next_block_in_entry()?;
+                                self.increment_current_offsets_index()?;
+                                self.move_to_block_at_current_offsets_index()?;
                             }
                             ArchiveEntryBlock::EntryContent { length, .. } => {
                                 if asked_seek_offset > total_skipped + length {
-                                    self.move_to_next_block_in_entry()?;
+                                    self.increment_current_offsets_index()?;
+                                    self.move_to_block_at_current_offsets_index()?;
                                     total_skipped += length;
                                 } else {
                                     let remaining_to_skip = asked_seek_offset - total_skipped;
