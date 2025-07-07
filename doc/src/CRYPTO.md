@@ -541,31 +541,31 @@ Only the owner of a recipient's private key can determine that they are a recipi
 
 This is an intentional privacy feature.
 
-[^rfc8032]: https://datatracker.ietf.org/doc/html/rfc8032
-[^fips204]: https://doi.org/10.6028/NIST.FIPS.204
-[^keycommit]: ["How to Abuse and Fix Authenticated Encryption Without Key Commitment", Usenix'22](https://www.usenix.org/conference/usenixsecurity22/presentation/albertini)
-[^issuekeycommit]: https://github.com/ANSSI-FR/MLA/issues/206
+[^rfc8032]: [RFC 8032 - Ed25519 Signature Algorithm](https://datatracker.ietf.org/doc/html/rfc8032)
+[^fips204]: [NIST FIPS 204](https://doi.org/10.6028/NIST.FIPS.204)
+[^keycommit]: [How to Abuse and Fix Authenticated Encryption Without Key Commitment, Usenix'22](https://www.usenix.org/conference/usenixsecurity22/presentation/albertini)
+[^issuekeycommit]: [MLA GitHub Issue #206](https://github.com/ANSSI-FR/MLA/issues/206)
 [^hpke]: [Hybrid Public Key Encryption, RFC 9180](https://datatracker.ietf.org/doc/rfc9180/)
 [^fips203]: [FIPS 203 - MLKEM Standard](https://doi.org/10.6028/NIST.FIPS.203)
-[^issuehpke]: https://github.com/ANSSI-FR/MLA/issues/211
-[^hpkeanalysis]: https://eprint.iacr.org/2020/1499.pdf
-[^issuepqc]: https://github.com/ANSSI-FR/MLA/issues/195
-[^frsuggest]: https://cyber.gouv.fr/en/publications/follow-position-paper-post-quantum-cryptography
-[^nist]: https://csrc.nist.gov/News/2022/pqc-candidates-to-be-standardized-and-round-4
-[^mlkemcon1]: https://blog.cr.yp.to/20231003-countcorrectly.html
-[^mlkemcon2]: https://kyberslash.cr.yp.to/
-[^signal]: https://signal.org/docs/specifications/pqxdh/
-[^imessage]: https://security.apple.com/blog/imessage-pq3/
-[^dualnest]: https://eprint.iacr.org/2018/903.pdf
-[^combinearg1]: https://eprint.iacr.org/2018/024
-[^combinearg2]: https://datatracker.ietf.org/doc/draft-ietf-tls-hybrid-design/
-[^combinearg3]: https://datatracker.ietf.org/doc/html/rfc9370
-[^combinearg4]: https://eprint.iacr.org/2024/039 
-[^combinearg7]: https://eprint.iacr.org/2023/861
-[^keycommit2]: https://eprint.iacr.org/2019/016.pdf
-[^weaknessgcm]: ["Authentication weaknesses in GCM"](https://csrc.nist.gov/csrc/media/projects/block-cipher-techniques/documents/bcm/comments/cwc-gcm/ferguson2.pdf)
-[^reviewncc]: https://research.nccgroup.com/wp-content/uploads/2020/02/NCC_Group_MobileCoin_RustCrypto_AESGCM_ChaCha20Poly1305_Implementation_Review_2020-02-12_v1.0.pdf
-[^reviewqb]: https://blog.quarkslab.com/security-audit-of-dalek-libraries.html
-[^reviewcloudflare]: https://blog.cloudflare.com/using-hpke-to-encrypt-request-payloads/
-[^issuezeroize]: https://github.com/ANSSI-FR/MLA/issues/46
-[^issueallowunauth]: https://github.com/ANSSI-FR/MLA/issues/167
+[^issuehpke]: [MLA GitHub Issue #211](https://github.com/ANSSI-FR/MLA/issues/211)
+[^hpkeanalysis]: [A Formal Analysis of HPKE](https://eprint.iacr.org/2020/1499.pdf)
+[^issuepqc]: [MLA GitHub Issue #195](https://github.com/ANSSI-FR/MLA/issues/195)
+[^frsuggest]: [ANSSI Position Paper on Post-Quantum Cryptography](https://cyber.gouv.fr/en/publications/follow-position-paper-post-quantum-cryptography)
+[^nist]: [NIST PQC Standardization News](https://csrc.nist.gov/News/2022/pqc-candidates-to-be-standardized-and-round-4)
+[^mlkemcon1]: [Counting Correctly in MLKEM](https://blog.cr.yp.to/20231003-countcorrectly.html)
+[^mlkemcon2]: [KyberSlash](https://kyberslash.cr.yp.to/)
+[^signal]: [Signal PQXDH Specification](https://signal.org/docs/specifications/pqxdh/)
+[^imessage]: [Apple iMessage PQ3 Security Blog](https://security.apple.com/blog/imessage-pq3/)
+[^dualnest]: [Dual-PRF Combiners](https://eprint.iacr.org/2018/903.pdf)
+[^combinearg1]: [Hybrid Key Exchange Security](https://eprint.iacr.org/2018/024)
+[^combinearg2]: [TLS Hybrid Design Draft](https://datatracker.ietf.org/doc/draft-ietf-tls-hybrid-design/)
+[^combinearg3]: [RFC 9370 - IKEv2 Post-quantum Hybrid Key Exchange](https://datatracker.ietf.org/doc/html/rfc9370)
+[^combinearg4]: [Hybrid Key Exchange Security (2024)](https://eprint.iacr.org/2024/039)
+[^combinearg7]: [On the Security of Dual-PRF Combiners](https://eprint.iacr.org/2023/861)
+[^keycommit2]: [Key Commitment in AEAD](https://eprint.iacr.org/2019/016.pdf)
+[^weaknessgcm]: [Authentication weaknesses in GCM](https://csrc.nist.gov/csrc/media/projects/block-cipher-techniques/documents/bcm/comments/cwc-gcm/ferguson2.pdf)
+[^reviewncc]: [NCC Group Review of RustCrypto AES-GCM](https://research.nccgroup.com/wp-content/uploads/2020/02/NCC_Group_MobileCoin_RustCrypto_AESGCM_ChaCha20Poly1305_Implementation_Review_2020-02-12_v1.0.pdf)
+[^reviewqb]: [Quarkslab Security Audit of Dalek Libraries](https://blog.quarkslab.com/security-audit-of-dalek-libraries.html)
+[^reviewcloudflare]: [Cloudflare on HPKE](https://blog.cloudflare.com/using-hpke-to-encrypt-request-payloads/)
+[^issuezeroize]: [MLA GitHub Issue #46](https://github.com/ANSSI-FR/MLA/issues/46)
+[^issueallowunauth]: [MLA GitHub Issue #167](https://github.com/ANSSI-FR/MLA/issues/167)
