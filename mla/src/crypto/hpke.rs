@@ -199,10 +199,10 @@ pub(crate) fn compute_nonce(base_nonce: &Nonce, seq: u64) -> Nonce {
 
 #[cfg(test)]
 mod tests {
+    use crate::BINCODE_CONFIG;
     use std::io;
     use std::io::{BufReader, Cursor};
 
-    use crate::BINCODE_CONFIG;
     use crate::crypto::aesgcm::AesGcm256;
 
     use super::*;
