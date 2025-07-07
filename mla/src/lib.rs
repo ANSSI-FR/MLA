@@ -2425,7 +2425,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    #[ignore]
+    #[ignore = "As it is costly, avoid running it by default. But run it with the CI, only on Linux target (Windows target ends with memory allocation error)"]
     fn more_than_u32_file() {
         const MORE_THAN_U32: u64 = 0x0001_0001_0000; // U32_max + 0x10000
         const MAX_SIZE: u64 = 5 * 1024 * 1024 * 1024; // 5 GB
