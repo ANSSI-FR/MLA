@@ -1,6 +1,6 @@
-use std::io::{ErrorKind, Read, Seek, SeekFrom};
+use std::io::{ErrorKind, Read, Seek, SeekFrom, Write};
 
-use crate::{errors::Error, format::ArchiveEntryBlock};
+use crate::{MLADeserialize, MLASerialize, errors::Error, format::ArchiveEntryBlock};
 
 /// Represents a unique identifier for an entry in the archive.
 /// Used to maintain references to entries while writing an archive.
@@ -13,7 +13,7 @@ mod entryname {
         path::{Component, Path, PathBuf},
     };
 
-    use crate::helpers::mla_percent_escape;
+    use crate::{FILENAME_MAX_SIZE, helpers::mla_percent_escape};
 
     /// Allowed bytes in `EntryName::to_pathbuf_escaped_string` output. Documented there.
     pub static ENTRY_NAME_PATHBUF_ESCAPED_STRING_ALLOWED_BYTES: [u8; 64] =
@@ -26,6 +26,7 @@ mod entryname {
     pub enum EntryNameError {
         ForbiddenPathTraversalComponent,
         InvalidPathComponentContent,
+        EntryNameTooLong,
     }
 
     impl fmt::Display for EntryNameError {
@@ -37,6 +38,7 @@ mod entryname {
                     EntryNameError::ForbiddenPathTraversalComponent =>
                         "forbidden path traversal component",
                     EntryNameError::InvalidPathComponentContent => "invalid path component",
+                    EntryNameError::EntryNameTooLong => "entry name is too long",
                 }
             )
         }
@@ -70,12 +72,19 @@ mod entryname {
         ///
         /// This function returns an `EntryNameError::InvalidPathComponentContent` when given an empty slice.
         pub fn from_arbitrary_bytes(bytes: &[u8]) -> Result<Self, EntryNameError> {
+            Self::from_arbitrary_bytes_vec(bytes.to_vec())
+        }
+
+        /// Owned version of `Self::from_arbitrary_bytes`
+        pub fn from_arbitrary_bytes_vec(bytes: Vec<u8>) -> Result<Self, EntryNameError> {
+            let u64len =
+                u64::try_from(bytes.len()).map_err(|_| EntryNameError::EntryNameTooLong)?;
             if bytes.is_empty() {
                 Err(EntryNameError::InvalidPathComponentContent)
+            } else if u64len > FILENAME_MAX_SIZE {
+                Err(EntryNameError::EntryNameTooLong)
             } else {
-                Ok(Self {
-                    name: bytes.to_vec(),
-                })
+                Ok(Self { name: bytes })
             }
         }
 
@@ -302,6 +311,21 @@ pub use entryname::{
     ENTRY_NAME_PATHBUF_ESCAPED_STRING_ALLOWED_BYTES, ENTRY_NAME_RAW_CONTENT_ALLOWED_BYTES,
     EntryName, EntryNameError,
 };
+
+pub(crate) fn serialize_entry_name(name: &EntryName, mut dst: impl Write) -> Result<u64, Error> {
+    let slice = name.as_arbitrary_bytes();
+    let mut serialization_length = slice.len().serialize(&mut dst)?;
+    serialization_length += slice.serialize(&mut dst)?;
+    Ok(serialization_length)
+}
+pub(crate) fn deserialize_entry_name(mut src: impl Read) -> Result<EntryName, Error> {
+    let n = MLADeserialize::deserialize(&mut src)?;
+    let mut name = Vec::new();
+    src.take(n)
+        .read_to_end(&mut name)
+        .map_err(|_| Error::DeserializationError)?;
+    EntryName::from_arbitrary_bytes_vec(name).map_err(|_| Error::DeserializationError)
+}
 
 /// Represents an entry in the archive.
 pub struct ArchiveEntry<'a, T> {
@@ -669,7 +693,7 @@ mod tests {
         .dump(&mut buf)
         .unwrap();
 
-        let offsets = [0, 23, 44, 65].as_slice();
+        let offsets = [0, 24, 46, 68].as_slice();
 
         (std::io::Cursor::new(buf), offsets)
     }

@@ -166,15 +166,17 @@ use std::io::{Read, Seek, SeekFrom, Write};
 #[macro_use]
 extern crate bitflags;
 use bincode::config::{Fixint, Limit};
-use bincode::{Decode, Encode};
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
+use byteorder::{LittleEndian, ReadBytesExt};
 use config::{ArchivePersistentConfig, InternalConfig};
 use crypto::hybrid::HybridPublicKey;
 use layers::encrypt::EncryptionConfig;
 use layers::traits::InnerReaderTrait;
 
 pub mod entry;
-use entry::{ArchiveEntry, ArchiveEntryDataReader, ArchiveEntryId, EntryName, EntryNameError};
+use entry::{
+    ArchiveEntry, ArchiveEntryDataReader, ArchiveEntryId, EntryName, deserialize_entry_name,
+    serialize_entry_name,
+};
 
 /// As the name spoils it, an MLA is made of several, independent, layers. The following section introduces the design ideas behind MLA. Please refer to [FORMAT.md](FORMAT.md) for a more formal description.
 ///
@@ -399,7 +401,9 @@ impl Opts {
         match discriminant {
             0 => (),
             1 => {
-                let n = src.read_u64::<LittleEndian>()?;
+                let mut n = [0; 8];
+                src.read_exact(&mut n)?;
+                let n = u64::from_le_bytes(n);
                 let mut v = Vec::new();
                 src.take(n).read_to_end(&mut v)?;
             }
@@ -442,16 +446,17 @@ impl ArchiveFooter {
                     "[ArchiveFooter seriliaze] Unable to find the ID".to_string(),
                 )
             })?;
-            tmp.push((k.as_arbitrary_bytes(), v));
+            tmp.push((k, v));
         }
         tmp.sort_by_key(|(k, _)| *k);
 
-        let serialization_len = bincode::encode_into_std_write(&tmp, &mut dest, BINCODE_CONFIG)
-            .or(Err(Error::SerializationError))?;
-
-        let footer_len = u64::try_from(serialization_len).or(Err(Error::SerializationError))?;
-
-        dest.write_u64::<LittleEndian>(footer_len)?;
+        tmp.len().serialize(&mut dest)?;
+        let mut footer_serialization_length = 8;
+        for (k, i) in tmp {
+            footer_serialization_length += serialize_entry_name(k, &mut dest)?;
+            footer_serialization_length += i.serialize(&mut dest)?;
+        }
+        footer_serialization_length.serialize(&mut dest)?;
         Ok(())
     }
 
@@ -468,22 +473,15 @@ impl ArchiveFooter {
         src.seek(SeekFrom::Start(pos - len))?;
 
         // Read files_info
-        // A Vec can be deserialized into a HashMap in bincode 2
-        let files_info_bytes_names: HashMap<Vec<u8>, EntryInfo> =
-            match bincode::decode_from_std_read(&mut src.take(len), BINCODE_CONFIG) {
-                Ok(finfo) => finfo,
-                _ => {
-                    return Err(Error::DeserializationError);
-                }
-            };
-        let files_info = files_info_bytes_names
-            .into_iter()
-            .map(|(k, v)| {
-                let name = EntryName::from_arbitrary_bytes(&k)?;
-                Ok((name, v))
+        let n = u64::deserialize(&mut src)?;
+        let files_info = (0..n)
+            .map(|_| {
+                let name = deserialize_entry_name(&mut src)?;
+                let info = EntryInfo::deserialize(&mut src)?;
+                Ok::<_, Error>((name, info))
             })
-            .collect::<Result<HashMap<EntryName, EntryInfo>, EntryNameError>>();
-        let files_info = files_info.map_err(|_| Error::SerializationError)?;
+            .collect::<Result<HashMap<_, _>, Error>>()?;
+
         Ok(ArchiveFooter {
             entries_info: files_info,
         })
@@ -930,9 +928,117 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
     }
 }
 
+trait MLASerialize<W: Write> {
+    fn serialize(&self, dest: &mut W) -> Result<u64, Error>;
+}
+
+trait MLADeserialize<R: Read> {
+    fn deserialize(src: &mut R) -> Result<Self, Error>
+    where
+        Self: std::marker::Sized;
+}
+
+impl<W: Write> MLASerialize<W> for u8 {
+    fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
+        dest.write_all(&[*self])?;
+        Ok(1)
+    }
+}
+
+impl<W: Write> MLASerialize<W> for u64 {
+    fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
+        dest.write_all(&self.to_le_bytes())?;
+        Ok(8)
+    }
+}
+
+impl<R: Read> MLADeserialize<R> for u64 {
+    fn deserialize(src: &mut R) -> Result<Self, Error> {
+        let mut n = [0; 8];
+        src.read_exact(&mut n)
+            .map_err(|_| Error::DeserializationError)?;
+        Ok(u64::from_le_bytes(n))
+    }
+}
+
+impl<W: Write> MLASerialize<W> for usize {
+    fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
+        let u64self = u64::try_from(*self).map_err(|_| Error::SerializationError)?;
+        dest.write_all(&u64self.to_le_bytes())?;
+        Ok(8)
+    }
+}
+
+impl<W: Write> MLASerialize<W> for u16 {
+    fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
+        dest.write_all(&self.to_le_bytes())?;
+        Ok(2)
+    }
+}
+
+impl<R: Read> MLADeserialize<R> for u16 {
+    fn deserialize(src: &mut R) -> Result<Self, Error> {
+        let mut n = [0; 2];
+        src.read_exact(&mut n)
+            .map_err(|_| Error::DeserializationError)?;
+        Ok(u16::from_le_bytes(n))
+    }
+}
+
+impl<R: Read> MLADeserialize<R> for u8 {
+    fn deserialize(src: &mut R) -> Result<Self, Error> {
+        let mut n = [0; 1];
+        src.read_exact(&mut n)
+            .map_err(|_| Error::DeserializationError)?;
+        Ok(u8::from_le_bytes(n))
+    }
+}
+
+impl<W: Write, T: MLASerialize<W>> MLASerialize<W> for Vec<T> {
+    fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
+        let u64len = u64::try_from(self.len()).map_err(|_| Error::SerializationError)?;
+        let mut serialization_length = u64len.serialize(dest)?;
+        serialization_length += self.as_slice().serialize(dest)?;
+        Ok(serialization_length)
+    }
+}
+
+impl<W: Write, T: MLASerialize<W>> MLASerialize<W> for &[T] {
+    fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
+        let mut serialization_length = 0;
+        for e in *self {
+            serialization_length += e.serialize(dest)?;
+        }
+        Ok(serialization_length)
+    }
+}
+
+impl<R: Read, T: MLADeserialize<R>> MLADeserialize<R> for Vec<T> {
+    fn deserialize(src: &mut R) -> Result<Self, Error> {
+        let n = u64::deserialize(src)?;
+        let v: Result<Vec<T>, Error> = (0..n).map(|_| T::deserialize(src)).collect();
+        v
+    }
+}
+
+impl<R: Read, const N: usize> MLADeserialize<R> for [u8; N] {
+    fn deserialize(src: &mut R) -> Result<Self, Error> {
+        let mut a = [0; N];
+        for e in a.iter_mut() {
+            *e = u8::deserialize(src)?;
+        }
+        Ok(a)
+    }
+}
+
+impl<R: Read, T1: MLADeserialize<R>, T2: MLADeserialize<R>> MLADeserialize<R> for (T1, T2) {
+    fn deserialize(src: &mut R) -> Result<Self, Error> {
+        Ok((T1::deserialize(src)?, T2::deserialize(src)?))
+    }
+}
+
 // -------- Reader --------
 
-#[derive(Encode, Decode)]
 #[cfg_attr(test, derive(PartialEq, Eq, Debug, Clone))]
 pub(crate) struct EntryInfo {
     /// Entry information to save in the footer
@@ -946,6 +1052,29 @@ pub(crate) struct EntryInfo {
     /// This offset is used to retrieve information from the EndOfEntry tag, such as
     /// the file hash
     eof_offset: u64,
+}
+
+impl<W: Write> MLASerialize<W> for EntryInfo {
+    fn serialize(&self, mut dest: &mut W) -> Result<u64, Error> {
+        let mut serialization_length = self.offsets.serialize(&mut dest)?;
+        serialization_length += self.size.serialize(&mut dest)?;
+        serialization_length += self.eof_offset.serialize(&mut dest)?;
+        Ok(serialization_length)
+    }
+}
+
+impl<R: Read> MLADeserialize<R> for EntryInfo {
+    fn deserialize(src: &mut R) -> Result<Self, Error> {
+        let offsets = MLADeserialize::deserialize(src)?;
+        let size = u64::deserialize(src)?;
+        let eof_offset = u64::deserialize(src)?;
+
+        Ok(Self {
+            offsets,
+            size,
+            eof_offset,
+        })
+    }
 }
 
 /// Use this to read an archive
