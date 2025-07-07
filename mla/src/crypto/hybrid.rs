@@ -1,7 +1,10 @@
+use std::io::{Read, Write};
+
 use crate::crypto::aesgcm::{ConstantTimeEq, KEY_SIZE, Key, TAG_LENGTH};
 use crate::crypto::hpke::{DHKEMCiphertext, dhkem_decap, key_schedule_base_hybrid_kem_recipient};
-use crate::errors::ConfigError;
+use crate::errors::{ConfigError, Error};
 use crate::layers::encrypt::get_crypto_rng;
+use crate::{MLADeserialize, MLASerialize};
 use bincode::{
     BorrowDecode, Decode, Encode,
     de::{BorrowDecoder, Decoder},
@@ -132,6 +135,18 @@ pub struct HybridRecipientEncapsulatedKey {
     tag: [u8; TAG_LENGTH],
 }
 
+// TODO: Remove this
+impl Clone for HybridRecipientEncapsulatedKey {
+    fn clone(&self) -> Self {
+        Self {
+            ct_ml: self.ct_ml,
+            ct_ecc: DHKEMCiphertext::from_bytes(&self.ct_ecc.to_bytes()).unwrap(),
+            wrapped_ss: self.wrapped_ss,
+            tag: self.tag,
+        }
+    }
+}
+
 impl Encode for HybridRecipientEncapsulatedKey {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
         self.ct_ml.encode(encoder)?;
@@ -139,6 +154,37 @@ impl Encode for HybridRecipientEncapsulatedKey {
         self.wrapped_ss.encode(encoder)?;
         self.tag.encode(encoder)?;
         Ok(())
+    }
+}
+
+impl<W: Write> MLASerialize<W> for HybridRecipientEncapsulatedKey {
+    fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
+        let mut serialization_length = 0;
+        serialization_length += self.ct_ml.as_slice().serialize(dest)?;
+        let mut ct_ecc_bytes = self.ct_ecc.to_bytes();
+        serialization_length += ct_ecc_bytes.as_slice().serialize(dest)?;
+        ct_ecc_bytes.zeroize();
+        serialization_length += self.wrapped_ss.as_slice().serialize(dest)?;
+        serialization_length += self.tag.as_slice().serialize(dest)?;
+        Ok(serialization_length)
+    }
+}
+
+impl<R: Read> MLADeserialize<R> for HybridRecipientEncapsulatedKey {
+    fn deserialize(src: &mut R) -> Result<Self, Error> {
+        let ct_ml = MLADeserialize::deserialize(src)?;
+        let mut ct_ecc_bytes = <[u8; 32]>::deserialize(src)?;
+        let ct_ecc =
+            DHKEMCiphertext::from_bytes(&ct_ecc_bytes).or(Err(Error::DeserializationError))?;
+        ct_ecc_bytes.zeroize();
+        let wrapped_ss = MLADeserialize::deserialize(src)?;
+        let tag = MLADeserialize::deserialize(src)?;
+        Ok(Self {
+            ct_ml,
+            ct_ecc,
+            wrapped_ss,
+            tag,
+        })
     }
 }
 
@@ -178,9 +224,23 @@ impl<'de, Context> BorrowDecode<'de, Context> for HybridRecipientEncapsulatedKey
 
 /// Key encapsulated for multiple recipient with hybrid cryptography
 /// Will be store in and load from the header
+#[derive(Clone)]
 pub struct HybridMultiRecipientEncapsulatedKey {
     /// Key wrapping for each recipient
     pub recipients: Vec<HybridRecipientEncapsulatedKey>,
+}
+
+impl<W: Write> MLASerialize<W> for HybridMultiRecipientEncapsulatedKey {
+    fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
+        self.recipients.serialize(dest)
+    }
+}
+
+impl<R: Read> MLADeserialize<R> for HybridMultiRecipientEncapsulatedKey {
+    fn deserialize(src: &mut R) -> Result<Self, Error> {
+        let recipients = MLADeserialize::deserialize(src)?;
+        Ok(Self { recipients })
+    }
 }
 
 impl Encode for HybridMultiRecipientEncapsulatedKey {
