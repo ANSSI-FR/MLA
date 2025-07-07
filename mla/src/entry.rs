@@ -129,11 +129,7 @@ mod entryname {
                 stack
             };
             let name = components.join(&b'/');
-            if name.is_empty() {
-                Err(EntryNameError::InvalidPathComponentContent)
-            } else {
-                Ok(Self { name })
-            }
+            Self::from_arbitrary_bytes_vec(name)
         }
 
         /// Escaped String representation of an `EntryName` raw content bytes
