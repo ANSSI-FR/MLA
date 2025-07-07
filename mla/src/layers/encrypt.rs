@@ -90,7 +90,7 @@ const FIRST_DATA_CHUNK_NUMBER: u64 = 1;
 const HPKE_INFO_LAYER: &[u8] = b"MLA Encrypt Layer";
 
 /// Encrypted Key commitment and associated tag
-#[derive(Clone, Decode, Encode)]
+#[derive(Decode, Encode)]
 struct KeyCommitmentAndTag {
     key_commitment: [u8; KEY_COMMITMENT_SIZE],
     tag: [u8; TAG_LENGTH],
@@ -155,7 +155,7 @@ impl InternalEncryptionConfig {
 }
 
 /// Configuration stored in the header, to be reloaded
-#[derive(Clone, Encode)]
+#[derive(Encode)]
 pub struct EncryptionPersistentConfig {
     /// Key-wrapping for each recipients
     pub hybrid_multi_recipient_encapsulate_key: HybridMultiRecipientEncapsulatedKey,

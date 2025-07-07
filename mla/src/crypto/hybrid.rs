@@ -135,18 +135,6 @@ pub struct HybridRecipientEncapsulatedKey {
     tag: [u8; TAG_LENGTH],
 }
 
-// TODO: Remove this
-impl Clone for HybridRecipientEncapsulatedKey {
-    fn clone(&self) -> Self {
-        Self {
-            ct_ml: self.ct_ml,
-            ct_ecc: DHKEMCiphertext::from_bytes(&self.ct_ecc.to_bytes()).unwrap(),
-            wrapped_ss: self.wrapped_ss,
-            tag: self.tag,
-        }
-    }
-}
-
 impl Encode for HybridRecipientEncapsulatedKey {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
         self.ct_ml.encode(encoder)?;
@@ -224,7 +212,6 @@ impl<'de, Context> BorrowDecode<'de, Context> for HybridRecipientEncapsulatedKey
 
 /// Key encapsulated for multiple recipient with hybrid cryptography
 /// Will be store in and load from the header
-#[derive(Clone)]
 pub struct HybridMultiRecipientEncapsulatedKey {
     /// Key wrapping for each recipient
     pub recipients: Vec<HybridRecipientEncapsulatedKey>,
