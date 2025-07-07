@@ -109,12 +109,12 @@ To encrypt to a target recipient $i$, knowing $pk_{ecc}^i$ and $pk_{mlkem}^i$:
 
 1. Compute shared secrets and ciphertexts for both KEM:
 
-```math
+$$
 \begin{align}
 (ss_{ecc}^i, ct_{ecc}^i) &= \textrm{DHKEM.Encapsulate}(pk_{ecc}^i) \\
 (ss_{mlkem}^i, ct_{mlkem}^i) &= \textrm{MLKEM.Encapsulate}(pk_{mlkem}^i)
 \end{align}
-```
+$$
 
 2. Combine the shared secrets (implemented in `mla::crypto::hybrid::combine`):
 
@@ -132,13 +132,13 @@ def combine(ss1, ss2, ct1, ct2):
     return key
 ```
 
-```math
+$$
 ss_{recipient}^i = \textrm{combine}(ss_{ecc}^i, ss_{mlkem}^i, ct_{ecc}^i, ct_{mlkem}^i)
-```
+$$
 
 3. Wrap the recipients' shared secret:
 
-```math
+$$
 \begin{align}
 (key^i, nonce^i) &= \textrm{KeySchedule}_{recipient}(
         shared\_secret=ss_{recipient}^i,
@@ -147,7 +147,7 @@ ss_{recipient}^i = \textrm{combine}(ss_{ecc}^i, ss_{mlkem}^i, ct_{ecc}^i, ct_{ml
 ct_{wrap}^i &= \textrm{Encrypt}_{AES\ 256\ GCM}(\textrm{key}=key^i, \textrm{nonce}=nonce^i, \textrm{data}=ss_{recipients})\\
 ct_{recipient}^i &= \textrm{Serialize}(ct_{wrap}^i, ct_{ecc}^i, ct_{mlkem}^i)
 \end{align}
-```
+$$
 
 Informally, this process can be viewed as a per-recipient KEM taking a shared secret $ss_{recipients}$, the recipient public key (made of the elliptic curve and the PQC public keys) and returning a ciphertext $ct_{recipient}^i$.
 
@@ -157,18 +157,18 @@ To obtain the shared secret from $ct_{recipient}^i$ for a recipient $i$ knowing 
 
 1. Compute the recipient's shared secret:
 
-```math
+$$
 \begin{align}
 (ct_{wrap}^i, ct_{ecc}^i, ct_{mlkem}^i) &= \textrm{Deserialize}(ct_{recipient}^i)\\
 ss_{ecc}^i &= \textrm{DHKEM.Decapsulate}(sk_{ecc}^i, ct_{ecc}^i) \\
 ss_{mlkem}^i &= \textrm{MLKEM.Decapsulate}(sk_{mlkem}^i, ct_{mlkem}^i)\\
 ss_{recipient}^i &= \textrm{combine}(ss_{ecc}^i, ss_{mlkem}^i, ct_{ecc}^i, ct_{mlkem}^i)
 \end{align}
-```
+$$
 
 2. Try to decrypt the secret shared among recipients:
 
-```math
+$$
 \begin{align}
 (key^i, nonce^i) &= \textrm{KeySchedule}_{recipient}(
         shared\_secret=ss_{recipient}^i,
@@ -176,7 +176,7 @@ ss_{recipient}^i &= \textrm{combine}(ss_{ecc}^i, ss_{mlkem}^i, ct_{ecc}^i, ct_{m
 )\\
 ss_{recipients} &= \textrm{Decrypt}_{AES\ 256\ GCM}(\textrm{key}=key^i, \textrm{nonce}=nonce^i, \textrm{data}=ct_{wrap}^i)
 \end{align}
-```
+$$
 
 If the decryption is a success, returns $ss_{recipients}$. Otherwise, returns an error.
 
@@ -224,7 +224,7 @@ $\mathrm{CSPRNG(n)}$ is a cryptographically secured RNG producing a n-bytes secr
 
 To encapsulate to a list of recipient $[(pk_{ecc}^0, pk_{mlkem}^0), ..., (pk_{ecc}^{n-1}, pk_{mlkem}^{n-1})]$:
 
-```math
+$$
 \begin{align*}
 \mathtt{def\ } & \mathrm{HybridKEM.Encapsulate}([(pk_{ecc}^0, pk_{mlkem}^0), ..., (pk_{ecc}^{n-1}, pk_{mlkem}^{n-1})])\\
 & ss_{recipients} = \mathrm{CSPRNG(32)}\\
@@ -234,8 +234,9 @@ To encapsulate to a list of recipient $[(pk_{ecc}^0, pk_{mlkem}^0), ..., (pk_{ec
 & ct_{recipients} = \mathrm{Serialize}(ct_{recipient}^0, \dots, ct_{recipient}^{n-1})\\
 & \mathtt{return}\ ss_{recipients},\ ct_{recipients}
 \end{align*}
-```
-----
+$$
+
+---
 
 To decapsulate from a ciphertext $ct_{recipients}$, knowing a recipient private key $(sk_{ecc}^i,sk_{mlkem}^i)$:
 
@@ -281,22 +282,22 @@ To encrypt n-bytes `data` to a list of public keys $[(pk_{ecc}^0, pk_{mlkem}^0),
 
 1. Compute a shared secret and the corresponding ciphertext:
 
-```math
+$$
 ss_{recipients},\ ct_{recipients} = \mathrm{MultiRecipientHybridKEM.Encapsulate}([(pk_{ecc}^0, pk_{mlkem}^0), ..., (pk_{ecc}^{n-1}, pk_{mlkem}^{n-1})])
-```
+$$
 
 2. Derive the key and base nonce using HPKE
 
-```math
+$$
 (key, base\_nonce) = \textrm{KeySchedule}_{hybrid}(
         shared\_secret=ss_{recipients},
     \textrm{info}=\mathtt{"MLA\ Encrypt\ Layer"}
 )
-```
+$$
 
 3. Ensure key-commitment
 
-```math
+$$
 \begin{align*}
 keycommit& = \textrm{Encrypt}_{AES\ 256\ GCM}(\\
     &\textrm{key}=key,\\
@@ -304,11 +305,11 @@ keycommit& = \textrm{Encrypt}_{AES\ 256\ GCM}(\\
     &\textrm{data}=\textrm{KeyCommitmentChain}\\
 )&
 \end{align*}
-```
+$$
 
 4. For each 128KB $chunk_j$ of data:
 
-```math
+$$
 \begin{align*}
 enc_j& = \textrm{Encrypt}_{AES\ 256\ GCM}(\\
     &\textrm{key}=key,\\
@@ -316,7 +317,7 @@ enc_j& = \textrm{Encrypt}_{AES\ 256\ GCM}(\\
     &\textrm{data}=chunk_j\\
 )&
 \end{align*}
-```
+$$
 
 Note: $j$ starts at 0. $j+1$ is used because the sequence numbered 0 has already been used by the Key commitment.
 
@@ -324,7 +325,7 @@ Note: $j$ starts at 0. $j+1$ is used because the sequence numbered 0 has already
 
 6. Finally, a final chunk with sequence number $n+1$ (where $n$ is the number of data chunks) and special content and additional authenticated data is appended:
 
-```math
+$$
 \begin{align*}
 final\_chunk& = \textrm{Encrypt}_{AES\ 256\ GCM}(\\
     &\textrm{key}=key,\\
@@ -333,7 +334,7 @@ final\_chunk& = \textrm{Encrypt}_{AES\ 256\ GCM}(\\
     &\textrm{aad}="FINALAAD"\\
 )&
 \end{align*}
-```
+$$
 
 The resulting layer is composed of:
 
@@ -351,7 +352,7 @@ To decrypt the data at position $pos$:
 
 1. Once for the whole session, get the cryptographic materials
 
-```math
+$$
 \begin{align}
 ss_{recipients} &= \mathrm{MultiRecipientHybridKEM.Decapsulate}((sk_{ecc}^i, sk_{mlkem}^i), ct_{recipients})\\
 (key, base\_nonce) &= \textrm{KeySchedule}_{hybrid}(
@@ -359,11 +360,11 @@ ss_{recipients} &= \mathrm{MultiRecipientHybridKEM.Decapsulate}((sk_{ecc}^i, sk_
     \textrm{info}=\mathtt{"MLA\ Encrypt\ Layer"}
 )
 \end{align}
-```
+$$
 
 2. Once for the whole session, check the key commitment
 
-```math
+$$
 \begin{align*}
 commit& = \textrm{Decrypt}_{AES\ 256\ GCM}(\\
     &\textrm{key}=key,\\
@@ -371,25 +372,25 @@ commit& = \textrm{Decrypt}_{AES\ 256\ GCM}(\\
     &\textrm{data}=keycommit\\
 )&
 \end{align*}
-```
+$$
 
-```math
+$$
 \mathtt{assert\ }commit = \textrm{KeyCommitmentChain}
-```
+$$
 
 3. Retrieve the encrypted chunk of data
 
-```math
+$$
 \begin{align}
 start &= pos - \mathtt{sizeof}(keycommit)\\
 j &= pos \div 128KiB\\
 \end{align}
-```
+$$
 
 Where $\div$ is the Euclidian division.
 
 Then:
-```math
+$$
 \begin{align*}
 chunk_j& = \textrm{Decrypt}_{AES\ 256\ GCM}(\\
     &\textrm{key}=key,\\
@@ -397,7 +398,7 @@ chunk_j& = \textrm{Decrypt}_{AES\ 256\ GCM}(\\
     &\textrm{data}=enc_j\\
 )&
 \end{align*}
-```
+$$
 
 ##### Arguments
 
@@ -431,7 +432,7 @@ The derivation scheme is based on the same ideas than `mla::crypto::hybrid::comb
 
 From a private key ($sk_{ecc}^i$ and $sk_{mlkem}^i$), the secret is derived from the path component $pc$ through:
 
-```math
+$$
 \begin{align}
 ecc\_rnd &= \mathrm{HKDF.Extract_{SHA512}}(\mathrm{salt}=0, \mathrm{ikm}=sk_{ecc}^i)\\
 seed &= \mathrm{HKDF_{SHA512}}(
@@ -440,7 +441,7 @@ seed &= \mathrm{HKDF_{SHA512}}(
     \mathrm{info}=\mathtt{"PATH\ DERIVATION"}\ .\ pc
 )
 \end{align}
-```
+$$
 
 To derive a key using a `seed`, a `ChaChaRng` is used.
 If a `seed` is provided, the `ChaChaRng` is seeded with the first 32-bytes of $\mathrm{SHA512}(seed)$. Otherwise, the `ChaChaRng::from_entropy` is used, wrapping OS Cryptographic RNG sources.
