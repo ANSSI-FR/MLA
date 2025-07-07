@@ -455,18 +455,21 @@ impl<T: Read + Seek> Read for ArchiveEntryDataReader<'_, T> {
                         if id != self.id {
                             self.move_to_next_block_in_entry()?;
                             return self.read(into);
+                        } else {
+                            self.current_offsets_index += 1;
+                            let count = self.src.by_ref().take(length).read(into)?;
+                            let count_as_u64 = usize_as_u64(count)?;
+                            (length - count_as_u64, count)
                         }
-                        let count = self.src.by_ref().take(length).read(into)?;
-                        let count_as_u64 = usize_as_u64(count)?;
-                        (length - count_as_u64, count)
                     }
                     ArchiveEntryBlock::EndOfEntry { id, .. } => {
                         if id != self.id {
                             self.move_to_next_block_in_entry()?;
                             return self.read(into);
+                        } else {
+                            self.state = ArchiveEntryDataReaderState::Finish;
+                            return Ok(0);
                         }
-                        self.state = ArchiveEntryDataReaderState::Finish;
-                        return Ok(0);
                     }
                     ArchiveEntryBlock::EntryStart { id, .. } => {
                         if id != self.id {
