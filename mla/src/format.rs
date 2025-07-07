@@ -6,6 +6,7 @@ use std::io::{Read, Write};
 use bincode::{Decode, Encode};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
+use crate::deserialize_entry_name;
 use crate::{
     ArchiveEntryBlockType, ArchiveEntryId, BINCODE_CONFIG, FILENAME_MAX_SIZE, MLA_FORMAT_VERSION,
     MLA_MAGIC, Opts, Sha256Hash, config::ArchivePersistentConfig, entry::EntryName, errors::Error,
@@ -170,26 +171,19 @@ where
         }
     }
 
-    pub(crate) fn from(src: &mut T) -> Result<Self, Error> {
+    pub(crate) fn from(mut src: &mut T) -> Result<Self, Error> {
         let byte = src.read_u8()?;
         match ArchiveEntryBlockType::try_from(byte)? {
             ArchiveEntryBlockType::EntryStart => {
                 let id = src.read_u64::<LittleEndian>()?;
-                let length = src.read_u64::<LittleEndian>()?;
-                if length > FILENAME_MAX_SIZE {
-                    return Err(Error::FilenameTooLong);
-                }
-                let mut name = vec![0u8; length as usize];
-                src.read_exact(&mut name)?;
-                Ok(ArchiveEntryBlock::EntryStart {
-                    id,
-                    name: EntryName::from_arbitrary_bytes(&name)
-                        .map_err(|_| Error::DeserializationError)?,
-                    opts: Opts,
-                })
+                let name = deserialize_entry_name(&mut src)?;
+                let opts = Opts::from_reader(&mut src)?;
+
+                Ok(ArchiveEntryBlock::EntryStart { id, name, opts })
             }
             ArchiveEntryBlockType::EntryContent => {
                 let id = src.read_u64::<LittleEndian>()?;
+                let opts = Opts::from_reader(&mut src)?;
                 let length = src.read_u64::<LittleEndian>()?;
                 // /!\ WARNING: to avoid loading this entire subfileblock's contents
                 // in-memory, the `data` reader is None; the `src` now starts at the
@@ -198,18 +192,15 @@ where
                     length,
                     data: None,
                     id,
-                    opts: Opts,
+                    opts,
                 })
             }
             ArchiveEntryBlockType::EndOfEntry => {
                 let id = src.read_u64::<LittleEndian>()?;
+                let opts = Opts::from_reader(&mut src)?;
                 let mut hash = Sha256Hash::default();
                 src.read_exact(&mut hash)?;
-                Ok(ArchiveEntryBlock::EndOfEntry {
-                    id,
-                    hash,
-                    opts: Opts,
-                })
+                Ok(ArchiveEntryBlock::EndOfEntry { id, hash, opts })
             }
             ArchiveEntryBlockType::EndOfArchiveData => Ok(ArchiveEntryBlock::EndOfArchiveData),
         }
