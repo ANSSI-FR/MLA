@@ -165,7 +165,6 @@ use std::io;
 use std::io::{Read, Seek, SeekFrom, Write};
 #[macro_use]
 extern crate bitflags;
-use bincode::config::{Fixint, Limit};
 use byteorder::ReadBytesExt;
 use crypto::hybrid::HybridPublicKey;
 use layers::compress::COMPRESSION_LAYER_MAGIC;
@@ -377,17 +376,6 @@ const END_MLA_MAGIC: &[u8; 8] = b"EMLAAAAA";
 const FILENAME_MAX_SIZE: u64 = 65536;
 
 const ENTRIES_LAYER_MAGIC: &[u8; 8] = b"MLAENAAA";
-
-/// Maximum allowed object size (in bytes) to decode in-memory, to avoid DoS on
-/// malformed files
-const BINCODE_MAX_DECODE: usize = 512 * 1024 * 1024;
-pub(crate) const BINCODE_CONFIG: bincode::config::Configuration<
-    bincode::config::LittleEndian,
-    Fixint,
-    Limit<{ BINCODE_MAX_DECODE }>,
-> = bincode::config::standard()
-    .with_limit::<{ BINCODE_MAX_DECODE }>()
-    .with_fixed_int_encoding();
 
 const EMPTY_OPTS_SERIALIZATION: &[u8; 1] = &[0];
 const EMPTY_TAIL_OPTS_SERIALIZATION: &[u8; 9] = &[0, 1, 0, 0, 0, 0, 0, 0, 0];
