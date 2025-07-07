@@ -100,7 +100,7 @@ The implementation also includes tests (including some test vectors) and comment
     - AEAD: AES-256-GCM
     - KEM: a custom KEM ID, numbered 0x1120
 - $\textrm{Encrypt}_{AES\ 256\ GCM}$: AES-256-GCM encryption, returning the encrypted data concatened with the associated tag
-- $\textrm{Decrypt}_{AES\ 256\ GCM}$ AES-256-GCM decryption, returning the decrypted data after verifying the tag
+- $\textrm{Decrypt}_{AES\ 256\ GCM}$: AES-256-GCM decryption, returning the decrypted data after verifying the tag
 - $\textrm{Serialize}$ and $\textrm{Deserialize}$: respectively produce a byte string encoding the data in argument, and produce the data from the byte string in argument
 
 ##### Process
