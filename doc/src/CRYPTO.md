@@ -192,7 +192,7 @@ If the decryption is a success, returns $ss_{recipients}$. Otherwise, returns an
 - FIPS 203 is used as, at the time of writing:
     - It is the only KEM algorithm standardized by the NIST [^nist]
     - It is in line with the French suggestions [^frsuggest] for PQ cryptography
-- The MLKEM-1024 mode is used for stronger security, and to limit consequence of future advances [^mlkemcon1][^mlkemcon2]. This is also the choice of other industry standards [^signal][^imessage]
+- The MLKEM-1024 mode is used for stronger security, and to limit consequence of future advances [^mlkemcon1] [^mlkemcon2]. This is also the choice of other industry standards [^signal] [^imessage]
 - The shared secret from the two-KEM is produced using a "Nested Dual-PRF Combiner", proved in [^dualnest] (3.3):
     - The use of concatenation scheme **including ciphertexts** keeps IND-CCA2 if one of the two underlying scheme is IND-CCA2, as proved in [^combinearg1] and explained in [^combinearg4]
     - TLS [^combinearg2] uses a similar scheme, and IKE [^combinearg3] also uses a concatenation scheme
@@ -549,7 +549,6 @@ This is an intentional privacy feature.
 [^fips203]: [FIPS 203 - MLKEM Standard](https://doi.org/10.6028/NIST.FIPS.203)
 [^issuehpke]: [MLA GitHub Issue #211](https://github.com/ANSSI-FR/MLA/issues/211)
 [^hpkeanalysis]: [A Formal Analysis of HPKE](https://eprint.iacr.org/2020/1499.pdf)
-[^issuepqc]: [MLA GitHub Issue #195](https://github.com/ANSSI-FR/MLA/issues/195)
 [^frsuggest]: [ANSSI Position Paper on Post-Quantum Cryptography](https://cyber.gouv.fr/en/publications/follow-position-paper-post-quantum-cryptography)
 [^nist]: [NIST PQC Standardization News](https://csrc.nist.gov/News/2022/pqc-candidates-to-be-standardized-and-round-4)
 [^mlkemcon1]: [Counting Correctly in MLKEM](https://blog.cr.yp.to/20231003-countcorrectly.html)
