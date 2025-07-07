@@ -290,8 +290,8 @@ $$
 
 $$
 (key, base\_nonce) = \textrm{KeySchedule}_{hybrid}(
-        shared\_secret=ss_{recipients},
-    \textrm{info}=\mathtt{"MLA\ Encrypt\ Layer"}
+        \text{shared\_secret} = ss_{\text{recipients}},
+    \textrm{info} = \mathtt{"MLA\ Encrypt\ Layer"}
 )
 $$
 
@@ -329,7 +329,7 @@ $$
 \begin{align*}
 final\_chunk& = \textrm{Encrypt}_{AES\ 256\ GCM}(\\
     &\textrm{key}=key,\\
-    &\textrm{nonce}=\mathrm{ComputeNonce}(base\_nonce, n + 1),\\
+    &\textrm{nonce}=\mathrm{ComputeNonce}(\text{base\_nonce}, n + 1),\\
     &\textrm{data}="FINALBLOCK"\\
     &\textrm{aad}="FINALAAD"\\
 )&
@@ -339,12 +339,12 @@ $$
 The resulting layer is composed of:
 
 - header: $ct_{recipients}$
-- data: $keycommit \ .\ enc_0\ . \dots\ enc_n \ .$ $`final\_chunk`$
+- data: $keycommit \ .\ enc_0\ . \dots\ enc_n \ .$ $final\_chunk$
 
 Special care must be taken not to reuse a sequence number in implementations as this would be catastrophic given GCM properties. For $n$ chunks of data:
 * sequence 0: key commitment
 * sequence 1 to $n$: data
-* sequence $n+1$: $`final\_chunk`$ with only the 10 bytes "FINALBLOCK" as content
+* sequence $n+1$: $final\_chunk$ with only the 10 bytes "FINALBLOCK" as content
 
 ----
 
@@ -355,7 +355,7 @@ To decrypt the data at position $pos$:
 $$
 \begin{align*}
 ss_{recipients} &= \mathrm{MultiRecipientHybridKEM.Decapsulate}((sk_{ecc}^i, sk_{mlkem}^i), ct_{recipients})\\
-(key, base\_nonce) &= \textrm{KeySchedule}_{hybrid}(
+(key, \text{base\_nonce}) &= \textrm{KeySchedule}_{hybrid}(
         shared\_secret=ss_{recipients},
     \textrm{info}=\mathtt{"MLA\ Encrypt\ Layer"}
 )
@@ -436,7 +436,7 @@ $$
 \begin{align*}
 ecc\_rnd &= \mathrm{HKDF.Extract_{SHA512}}(\mathrm{salt}=0, \mathrm{ikm}=sk_{ecc}^i)\\
 seed &= \mathrm{HKDF_{SHA512}}(
-    \mathrm{salt}=ecc\_rnd,
+    \mathrm{salt}=\text{ecc\_rnd},
     \mathrm{ikm}=sk_{mlkem}^i,
     \mathrm{info}=\mathtt{"PATH\ DERIVATION"}\ .\ pc
 )
