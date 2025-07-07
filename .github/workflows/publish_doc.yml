@@ -6,7 +6,6 @@ permissions:
 on:
   push:
     branches:
-      - add-mla-book
       - formatv2
 
 jobs:
