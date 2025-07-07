@@ -8,7 +8,7 @@ class MDBookSidebarScrollbox extends HTMLElement {
         super();
     }
     connectedCallback() {
-        this.innerHTML = '<ol class="chapter"><li class="chapter-item expanded "><a href="DESIGN.html"><strong aria-hidden="true">1.</strong> Design</a></li><li class="chapter-item expanded "><a href="FORMAT.html"><strong aria-hidden="true">2.</strong> Format</a></li><li class="chapter-item expanded "><a href="ENTRY_NAME.html"><strong aria-hidden="true">3.</strong> Entry Name</a></li><li class="chapter-item expanded "><a href="CRYPTO.html"><strong aria-hidden="true">4.</strong> Crypto</a></li><li class="chapter-item expanded "><a href="KEY_DERIVATION.html"><strong aria-hidden="true">5.</strong> Key Derivation</a></li><li class="chapter-item expanded "><a href="FUZZING.html"><strong aria-hidden="true">6.</strong> Fuzzing</a></li></ol>';
+        this.innerHTML = '<ol class="chapter"><li class="chapter-item expanded "><a href="../../index.html"><strong aria-hidden="true">1.</strong> Introduction</a></li><li class="chapter-item expanded "><a href="FORMAT.html"><strong aria-hidden="true">2.</strong> Format</a></li><li class="chapter-item expanded "><a href="ENTRY_NAME.html"><strong aria-hidden="true">3.</strong> Entry Name</a></li><li class="chapter-item expanded "><a href="CRYPTO.html"><strong aria-hidden="true">4.</strong> Cryptography</a></li><li class="chapter-item expanded "><a href="KEY_DERIVATION.html"><strong aria-hidden="true">5.</strong> Key Derivation</a></li></ol>';
         // Set the current, active page, and reveal it if it's hidden
         let current_page = document.location.href.toString().split("#")[0].split("?")[0];
         if (current_page.endsWith("/")) {

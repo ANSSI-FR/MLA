@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Design - Multi Layer Archive</title>
+        <title>Introduction - Multi Layer Archive</title>
 
 
         <!-- Custom HTML head -->
@@ -166,94 +166,173 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="design"><a class="header" href="#design">Design</a></h1>
-<p>As the name spoils it, an MLA is made of several, independent, layers. The following section introduces the design ideas behind MLA. Please refer to <a href="FORMAT.html">FORMAT.md</a> for a more formal description.</p>
-<h2 id="layers"><a class="header" href="#layers">Layers</a></h2>
-<p>Each layer acts as a <em>Unix PIPE</em>, taking bytes in input and outputting in the next
-layer.
-A layer is made of:</p>
+                        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.4/dist/katex.min.css">
+<p><a href="https://github.com/ANSSI-FR/MLA/actions"><img src="https://github.com/ANSSI-FR/MLA/workflows/Build%20&amp;%20test/badge.svg" alt="Build &amp; test" /></a>
+<a href="https://crates.io/crates/mla"><img src="https://img.shields.io/badge/crates.io-mla-red" alt="Cargo MLA" /></a>
+<a href="https://docs.rs/mla"><img src="https://img.shields.io/badge/docs.rs-mla-blue" alt="Documentation MLA" /></a>
+<a href="https://crates.io/crates/mlar"><img src="https://img.shields.io/badge/crates.io-mlar-red" alt="Cargo MLAR" /></a></p>
+<h1 id="multi-layer-archive-mla"><a class="header" href="#multi-layer-archive-mla">Multi Layer Archive (MLA)</a></h1>
+<p>MLA is an archive file format with the following features:</p>
 <ul>
-<li>a <code>Writer</code>, implementing the <code>Write</code> trait. It is responsible for emitting bytes while creating a new archive</li>
-<li>a <code>Reader</code>, implementing both <code>Read</code> and <code>Seek</code> traits. It is responsible for reading bytes while reading an archive</li>
-<li>a <code>FailSafeReader</code>, implementing only the <code>Read</code> trait. It is responsible for reading bytes while repairing an archive</li>
+<li>Support for traditional and post-quantum encryption hybridation with asymmetric keys (HPKE with AES256-GCM and a KEM based on an hybridation of X25519 and post-quantum ML-KEM 1024)</li>
+<li>Support for compression (based on <a href="https://github.com/dropbox/rust-brotli/"><code>rust-brotli</code></a>)</li>
+<li>Streamable archive creation:
+<ul>
+<li>An archive can be built even over a data-diode</li>
+<li>An entry can be added through chunks of data, without initially knowing the final size</li>
+<li>Entry chunks can be interleaved (one can add the beginning of an entry, start a second one, and then continue adding the first entry's parts)</li>
 </ul>
-<p>Layers are made with the <em>repairable</em> property in mind. Reading them must never need information from the footer, but a footer can be used to optimize the reading. For example, accessing a file inside the archive can be optimized using the footer to seek to the file beginning, but it is still possible to get information by reading the whole archive until the file is found.</p>
-<p>Layers are optional, but their order is enforced. Users can choose to enable or disable them.
-Current order is the following:</p>
-<ol>
-<li><em>File storage abstraction (not a layer)</em></li>
-<li>Raw layer (mandatory)</li>
-<li>Compression layer</li>
-<li>Encryption layer</li>
-<li>Position layer (mandatory)</li>
-<li><em>Stored bytes</em></li>
-</ol>
-<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
-<pre><code>+----------------+-------------------------------------------------------------------------------------------------------------+
-| Archive Header |                                                                                                             | =&gt; Final container (File / Buffer / etc.)
-+------------------------------------------------------------------------------------------------------------------------------+
-                 +-------------------------------------------------------------------------------------------------------------+
-                 |                                                                                                             | =&gt; Raw layer
-                 +-------------------------------------------------------------------------------------------------------------+
-                 +-----------+---------+------+---------+------+---------------------------------------------------------------+
-                 | E. header | Block 1 | TAG1 | Block 2 | TAG2 | Block 3 | TAG3 | ...                                          | =&gt; Encryption layer
-                 +-----------+---------+------+---------+------+---------------------------------------------------------------+
-                             |         |      |         |      |         |      |                                              |
-                             +-------+--      --+-------       -----------      ----+---------+------+---------+ +-------------+
-                             | Blk 1 |          | Blk 2                             | Block 3 | ...  | Block n | |    Footer   | =&gt; Compression Layer
-                             +-------+--      --+-------       -----------      ----+---------+------+---------+ +-------------+
-                            /         \                                                             /           \
-                           /           \                                                           /             \
-                          /             \                                                         /               \
-                         +-----------------------------------------------------------------------------------------+
-                         |                                                                                         |             =&gt; Position layer
-                         +-----------------------------------------------------------------------------------------+
-                         +-------------+-------------+-------------+-------------+-----------+-------+-------------+
-                         | File1 start | File1 data1 | File2 start | File1 data2 | File1 end |  ...  | Files index |             =&gt; Files information and content
-                         +-------------+-------------+-------------+-------------+-----------+-------+-------------+
+</li>
+<li>Architecture agnostic and portable to some extent (written entirely in Rust)</li>
+<li>Archive reading is seekable, even if compressed or encrypted. An entry can be accessed in the middle of the archive without reading from the beginning</li>
+<li>If truncated, archives can be repaired to some extent. Two modes are available:
+<ul>
+<li>Authenticated repair (default): only authenticated encrypted chunks of data are retrieved</li>
+<li>Unauthenticated repair: authenticated and unauthenticated encrypted chunks of data are retrieved. Use at your own risk.</li>
+</ul>
+</li>
+<li>Arguably less prone to bugs, especially while parsing an untrusted archive (Rust safety)</li>
+</ul>
+<h1 id="repository"><a class="header" href="#repository">Repository</a></h1>
+<p>This repository contains:</p>
+<ul>
+<li><code>mla</code>: the Rust library implementing MLA reader and writer</li>
+<li><code>mlar</code>: a Rust cli utility wrapping <code>mla</code> for common actions (create, list, extract...)</li>
+<li><code>doc</code> : advanced documentation related to MLA (e.g. format specification)</li>
+<li><code>bindings</code> : bindings for other languages</li>
+<li><code>samples</code> : test assets</li>
+<li><code>mla-fuzz-afl</code> : a Rust utility to fuzz <code>mla</code></li>
+<li><code>.github</code>: Continuous Integration needs</li>
+</ul>
+<h1 id="quick-command-line-usage"><a class="header" href="#quick-command-line-usage">Quick command-line usage</a></h1>
+<p>Here are some commands to use <code>mlar</code> in order to work with archives in MLA format.</p>
+<pre><code class="language-sh"># Generate an MLA key pair {key, key.pub}
+mlar keygen key
+
+# Create an archive with some files, using the public key
+mlar create -p key.pub -o my_archive.mla /etc/./os-release /etc/security/../issue ../file.txt
+
+# List the content of the archive, using the private key.
+# Note that order may vary, root dir are stripped,
+# paths are normalized and listing is encoded as described in
+# `doc/ESCAPING.md`.
+# This outputs:
+# ```
+# etc/issue
+# etc/os%2drelease
+# file.txt
+# ```
+mlar list -k key -i my_archive.mla
+
+# Extract the content of the archive into a new directory.
+# In this example, this creates two files:
+# extracted_content/etc/issue and extracted_content/etc/os-release
+mlar extract -k key -i my_archive.mla -o extracted_content
+
+# Display the content of a file in the archive
+mlar cat -k key -i my_archive.mla etc/os-release
+
+# Convert the archive to a long-term one, removing encryption and using the best
+# and slower compression level
+mlar convert -k key -i my_archive.mla -o longterm.mla -l compress -q 11
+
+# Create an archive with multiple recipient
+mlar create -p archive.pub -p client1.pub -o my_archive.mla ...
+
+# List an archive containing an entry with a name that cannot be interpreted as path.
+# This outputs:
+# `c%3a%2f%00%3b%e2%80%ae%0ac%0dd%1b%5b1%3b31ma%3cscript%3eevil%5c..%2f%d8%01%c2%85%e2%88%95`
+# corresponding to an entry name containing: ASCII chars, c:, /, .., \,
+# NUL, RTLO, newline, terminal escape sequence, carriage return,
+# HTML, surrogate code unit, U+0085 weird newline, fake unicode slash.
+# Please note that some of these characters may appear in valid a path.
+mlar list -k test_mlakey.priv -i archive_weird.mla --raw-escaped-names
+
+# Get its content.
+# This displays:
+# `' OR 1=1`
+mlar cat -k test_mlakey.priv -i archive_weird.mla --raw-escaped-names c%3a%2f%00%3b%e2%80%ae%0ac%0dd%1b%5b1%3b31ma%3cscript%3eevil%5c..%2f%d8%01%c2%85%e2%88%95
 </code></pre>
-<h2 id="layers-description"><a class="header" href="#layers-description">Layers description</a></h2>
-<h3 id="raw-layer"><a class="header" href="#raw-layer">Raw Layer</a></h3>
-<p>Implemented in <code>RawLayer*</code> (i.e. <code>RawLayerWriter</code>, <code>RawLayerReader</code> and <code>RawLayerFailSafeReader</code>).</p>
-<p>This is the simplest layer. It is required to provide an API between layers and
-final output worlds. It is also used to keep the position of data's start.</p>
-<h3 id="position-layer"><a class="header" href="#position-layer">Position Layer</a></h3>
-<p>Implemented in <code>PositionLayer*</code>.</p>
-<p>Similar to the <code>RawLayer</code>, this is a very simple, utility, layer. It keeps
-track of how many bytes have been written to the sub-layers.</p>
-<p>For instance, it is required by the file storage layer to keep track of the
-position in the flow of files, for indexing purpose.</p>
-<h3 id="encryption-layer"><a class="header" href="#encryption-layer">Encryption Layer</a></h3>
-<p>Implemented in <code>EncryptionLayer*</code>.</p>
-<p>This layer encrypts data as explained in <code>CRYPTO.md</code> and <code>FORMAT.md</code>.</p>
-<h3 id="compression-layer"><a class="header" href="#compression-layer">Compression Layer</a></h3>
-<p>Implemented in <code>CompressionLayer*</code>.</p>
-<p>This layer is based on the Brotli compression algorithm (<a href="https://tools.ietf.org/html/rfc7932">RFC 7932</a>).
-Each 4MB of cleartext data is stored in a separately compressed chunk.</p>
-<p>This algorithm, used with a <em>window</em> of size 1, is able to read each chunk and
-stop when 4MB of cleartext has been obtained. It is then reset, and starts
-decompressing the next chunk.</p>
-<p>To speed up the decompression, and to make the layer seekable, a footer is used. It
-saves the compressed size. Knowing the decompressed size, a seek at a cleartext
-position can be performed by seeking to the beginning of the correct compressed
-block, then decompressing the first bytes until the desired position is reached.</p>
-<p>The footer is also used to allow for a wider <em>window</em>, enabling faster
-decompression. Finally, it also records the size of the last block, to compute the
-frontier between compressed data and the footer.</p>
-<p>The 4MB size is a trade-off between a better compression (higher value) and faster seeking (smaller value). It has been chosen based on benchmarking of representative data. Better compression can also be achieved by setting the compression quality parameter to a higher value (leading to a slower process).</p>
-<h2 id="file-storage"><a class="header" href="#file-storage">File storage</a></h2>
-<p>Files are saved as series of archive-file blocks. A first special type of block
-indicates the start of a file, along with its filename and a file ID. A second special type of
-block indicates the end of the current file.</p>
-<p>Blocks contain file data, prepended with the current block size and the corresponding file ID. Even if the
-format handles streaming files, the size of a file chunk must be known before
-writing it. The file ID enables blocks from different files to be interleaved.</p>
-<p>The file-ending block marks the end of data for a given file, and includes its
-full content SHA256. Thus, the integrity of files can be checked, even on repair
-operations.</p>
-<p>The layer footer contains for each file its size, its ending block offset and an index of its block locations. Block location index enables direct access. The ending block offset enables fast hash retrieval and the file size eases the conversion to formats needing the size of the file before the data, such as Tar.</p>
-<p>If this footer is unavailable, the archive is read from the beginning to recover
-file information.</p>
+<p><code>mlar</code> can be obtained:</p>
+<ul>
+<li>through Cargo: <code>cargo install mlar</code></li>
+<li>using the <a href="https://github.com/ANSSI-FR/MLA/releases">latest release</a> for supported operating systems</li>
+</ul>
+<h1 id="api-usage"><a class="header" href="#api-usage">API usage</a></h1>
+<p>See <a href="https://docs.rs/mla">https://docs.rs/mla</a></p>
+<h1 id="using-mla-with-others-languages"><a class="header" href="#using-mla-with-others-languages">Using MLA with others languages</a></h1>
+<p>Bindings are available for:</p>
+<ul>
+<li><a href="bindings/C/README.html">C/CPP</a></li>
+<li><a href="bindings/python/README.html">Python</a></li>
+</ul>
+<h2 id="security"><a class="header" href="#security">Security</a></h2>
+<ul>
+<li>Please keep in mind, it is generally not safe to extract in a place where at least one ancestor is writable by others (symbolic link attacks).</li>
+<li>Even if encrypted with an authenticated cipher, if you receive an unsigned archive , it may have been crafted by anyone having your public key and thus can contain arbitrary data.</li>
+<li>Read API documentation and mlar help before using their functionnalities. They sometimes provide important security warnings. <code>doc/ENTRY_NAME.md</code> is also of particular interest.</li>
+<li>mlar escapes entry names on output to avoid security issues.</li>
+<li>Except for symbolic link attacks, mlar will not extract outside given output directory.</li>
+</ul>
+<h2 id="faq"><a class="header" href="#faq">FAQ</a></h2>
+<p><strong>Is <code>MLAArchiveWriter</code> <code>Send</code>?</strong></p>
+<p>By default, <code>MLAArchiveWriter</code> is not <code>Send</code>. If the inner writable type is also <code>Send</code>, one can enable the feature <code>send</code> for <code>mla</code> in <code>Cargo.toml</code>, such as:</p>
+<pre><code class="language-toml">[dependencies]
+mla = { version = "...", default-features = false, features = ["send"]}
+</code></pre>
+<p><strong>Was a new format really required?</strong></p>
+<p>As existing archive formats are numerous, probably not.</p>
+<p>But to the best of the authors' knowledge, none of them support the aforementioned
+features (but, of course, are better suitable for others purposes).</p>
+<p>For instance (from the understanding of the author):</p>
+<ul>
+<li><code>tar</code> format needs to know the size of files before adding them, and is not
+seekable</li>
+<li><code>zip</code> format could lose information about files if the footer is removed</li>
+<li><code>7zip</code> format requires to rebuild the entire archive while adding files to it
+(not streamable). It is also quite complex, and so harder to audit / trust
+when unpacking unknown archive</li>
+<li><code>journald</code> format is not streamable. Also, one writter / multiple reader is
+not needed here, thus releasing some constraints <code>journald</code> format have</li>
+<li>any archive + <code>age</code>: <a href="https://age-encryption.org/">age</a> does not yet support post quantum encryption</li>
+<li>Backup formats are generally written to avoid things such as duplication,
+hence their need to keep bigger structures in memory, or not being
+streamable</li>
+</ul>
+<p>Tweaking these formats would likely have resulted in similar properties. The
+choice has been made to keep a better control over what the format is capable
+of, and to (try to) KISS.</p>
+<h2 id="performance"><a class="header" href="#performance">Performance</a></h2>
+<p>One can evaluate the performance through embedded benchmark, based on <a href="https://github.com/bheisler/criterion.rs">Criterion</a>.</p>
+<p>Several scenarios are already embedded, such as:</p>
+<ul>
+<li>File addition, with different size and layer configurations</li>
+<li>File addition, varying the compression quality</li>
+<li>File reading, with different size and layer configurations</li>
+<li>Random file read, with different size and layer configurations</li>
+<li>Linear archive extraction, with different size and layer configurations</li>
+</ul>
+<p>On an "Intel(R) Core(TM) i5-7200U CPU @ 2.50GHz":</p>
+<pre><code class="language-sh">$ cd mla/
+$ cargo bench
+...
+multiple_layers_multiple_block_size/Layers ENCRYPT | COMPRESS | DEFAULT/1048576                                                                           
+                        time:   [28.091 ms 28.259 ms 28.434 ms]
+                        thrpt:  [35.170 MiB/s 35.388 MiB/s 35.598 MiB/s]
+...
+chunk_size_decompress_mutilfiles_random/Layers ENCRYPT | COMPRESS | DEFAULT/4194304                                                                          
+                        time:   [126.46 ms 129.54 ms 133.42 ms]
+                        thrpt:  [29.980 MiB/s 30.878 MiB/s 31.630 MiB/s]
+...
+linear_vs_normal_extract/LINEAR / Layers DEBUG | EMPTY/2097152                        
+                        time:   [145.19 us 150.13 us 153.69 us]
+                        thrpt:  [12.708 GiB/s 13.010 GiB/s 13.453 GiB/s]
+...
+</code></pre>
+<p>Criterion.rs documentation explains how to get back HTML reports, compare results, etc.</p>
+<p>The AES-NI extension is enabled in the compilation toolchain for the supported architectures, leading to massive performance gain for the encryption layer, especially in reading operations. Because the crate <code>aesni</code> statically enables it, it might lead to errors if the user's architecture does not support it. It could be disabled at the compilation time, or by commenting the associated section in <code>.cargo/config</code>.</p>
+<h1 id="contributing"><a class="header" href="#contributing">Contributing</a></h1>
+<p>We appreciate your help! To contribute, please read our <a href=".github/CONTRIBUTING.html">contributing instructions</a>.</p>
 
                     </main>
 

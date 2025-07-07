@@ -1,8 +1,8 @@
 [book]
-authors = ["extiop"]
+authors = ["ANSSI <opensource@ssi.gouv.fr>"]
 language = "en"
 src = "src"
 title = "Multi Layer Archive"
 
-[output.html]
-mathjax-support = true
+[preprocessor.katex]
+after = ["links"]
