@@ -110,7 +110,11 @@ pub fn linear_extract<W1: InnerWriterTrait, R: InnerReaderTrait, S: BuildHasher>
 
     'read_block: loop {
         match ArchiveEntryBlock::from(&mut src)? {
-            ArchiveEntryBlock::EntryStart { name: filename, id } => {
+            ArchiveEntryBlock::EntryStart {
+                name: filename,
+                id,
+                opts: _,
+            } => {
                 // If the starting file is meant to be extracted, get the
                 // corresponding writer
                 if export.contains_key(&filename) {

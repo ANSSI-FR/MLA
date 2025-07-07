@@ -1,5 +1,6 @@
 // -------- MLA Format Header --------
 
+use std::borrow::BorrowMut;
 use std::io::{Read, Write};
 
 use bincode::{Decode, Encode};
@@ -7,7 +8,7 @@ use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
 use crate::{
     ArchiveEntryBlockType, ArchiveEntryId, BINCODE_CONFIG, FILENAME_MAX_SIZE, MLA_FORMAT_VERSION,
-    MLA_MAGIC, Sha256Hash, config::ArchivePersistentConfig, entry::EntryName, errors::Error,
+    MLA_MAGIC, Opts, Sha256Hash, config::ArchivePersistentConfig, entry::EntryName, errors::Error,
 };
 pub struct ArchiveHeader {
     pub format_version: u32,
@@ -83,7 +84,11 @@ pub enum ArchiveEntryBlock<T: Read> {
     /// The `id` is used to keep track internally of which file a `ArchiveEntryBlock` belongs to
     ///
     /// Start of an entry
-    EntryStart { name: EntryName, id: ArchiveEntryId },
+    EntryStart {
+        name: EntryName,
+        id: ArchiveEntryId,
+        opts: Opts,
+    },
     /// Entry content.
     /// (length, data) is used instead of a Vec to avoid having the whole data
     /// in memory. On parsing, the data can be set to None. It indicates to the
@@ -93,11 +98,13 @@ pub enum ArchiveEntryBlock<T: Read> {
         length: u64,
         data: Option<T>,
         id: ArchiveEntryId,
+        opts: Opts,
     },
     /// End of file (last block) - contains the SHA256 of the whole file
     EndOfEntry {
         id: ArchiveEntryId,
         hash: Sha256Hash,
+        opts: Opts,
     },
     /// End of archive data (no more files after that)
     EndOfArchiveData,
@@ -109,7 +116,11 @@ where
 {
     pub(crate) fn dump<U: Write>(&mut self, dest: &mut U) -> Result<(), Error> {
         match self {
-            ArchiveEntryBlock::EntryStart { name: filename, id } => {
+            ArchiveEntryBlock::EntryStart {
+                name: filename,
+                id,
+                opts,
+            } => {
                 dest.write_u8(ArchiveEntryBlockType::EntryStart as u8)?;
                 dest.write_u64::<LittleEndian>(*id)?;
                 let bytes = filename.as_arbitrary_bytes();
@@ -119,11 +130,18 @@ where
                 }
                 dest.write_u64::<LittleEndian>(length)?;
                 dest.write_all(bytes)?;
+                let _ = opts.dump(dest.borrow_mut())?;
                 Ok(())
             }
-            ArchiveEntryBlock::EntryContent { length, data, id } => {
+            ArchiveEntryBlock::EntryContent {
+                length,
+                data,
+                id,
+                opts,
+            } => {
                 dest.write_u8(ArchiveEntryBlockType::EntryContent as u8)?;
                 dest.write_u64::<LittleEndian>(*id)?;
+                let _ = opts.dump(dest.borrow_mut())?;
                 dest.write_u64::<LittleEndian>(*length)?;
                 match data {
                     None => {
@@ -138,9 +156,10 @@ where
                 }
                 Ok(())
             }
-            ArchiveEntryBlock::EndOfEntry { id, hash } => {
+            ArchiveEntryBlock::EndOfEntry { id, hash, opts } => {
                 dest.write_u8(ArchiveEntryBlockType::EndOfEntry as u8)?;
                 dest.write_u64::<LittleEndian>(*id)?;
+                let _ = opts.dump(dest.borrow_mut())?;
                 dest.write_all(hash)?;
                 Ok(())
             }
@@ -166,6 +185,7 @@ where
                     id,
                     name: EntryName::from_arbitrary_bytes(&name)
                         .map_err(|_| Error::DeserializationError)?,
+                    opts: Opts,
                 })
             }
             ArchiveEntryBlockType::EntryContent => {
@@ -178,13 +198,18 @@ where
                     length,
                     data: None,
                     id,
+                    opts: Opts,
                 })
             }
             ArchiveEntryBlockType::EndOfEntry => {
                 let id = src.read_u64::<LittleEndian>()?;
                 let mut hash = Sha256Hash::default();
                 src.read_exact(&mut hash)?;
-                Ok(ArchiveEntryBlock::EndOfEntry { id, hash })
+                Ok(ArchiveEntryBlock::EndOfEntry {
+                    id,
+                    hash,
+                    opts: Opts,
+                })
             }
             ArchiveEntryBlockType::EndOfArchiveData => Ok(ArchiveEntryBlock::EndOfArchiveData),
         }

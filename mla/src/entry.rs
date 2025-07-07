@@ -626,7 +626,7 @@ mod tests {
     use std::path::Path;
 
     use crate::{
-        Sha256Hash,
+        Opts, Sha256Hash,
         entry::{ArchiveEntryDataReader, ArchiveEntryDataReaderState, EntryName},
         format::ArchiveEntryBlock,
     };
@@ -642,25 +642,32 @@ mod tests {
         let mut block = ArchiveEntryBlock::EntryStart::<&[u8]> {
             id,
             name: EntryName::from_arbitrary_bytes(b"foobar").unwrap(),
+            opts: Opts,
         };
         block.dump(&mut buf).unwrap();
         let mut block = ArchiveEntryBlock::EntryContent {
             id,
             length: FAKE_CONTENT1.len() as u64,
+            opts: Opts,
             data: Some(FAKE_CONTENT1.as_slice()),
         };
         block.dump(&mut buf).unwrap();
         let mut block = ArchiveEntryBlock::EntryContent {
             id,
             length: FAKE_CONTENT2.len() as u64,
+            opts: Opts,
             data: Some(FAKE_CONTENT2.as_slice()),
         };
         block.dump(&mut buf).unwrap();
 
         // std::io::Empty is used because a type with Read is needed
-        ArchiveEntryBlock::EndOfEntry::<Empty> { id, hash }
-            .dump(&mut buf)
-            .unwrap();
+        ArchiveEntryBlock::EndOfEntry::<Empty> {
+            id,
+            hash,
+            opts: Opts,
+        }
+        .dump(&mut buf)
+        .unwrap();
 
         let offsets = [0, 23, 44, 65].as_slice();
 
