@@ -1,14 +1,24 @@
 # Cryptography in MLA
 
-MLA uses cryptographic primitives essentially for the purpose of the `Encrypt` layer.
+MLA uses cryptographic primitives essentially for the purpose of the Encrytion and Signature layers.
 
 This document introduces the primitives used, arguments for the choice made and some security considerations.
 
-## High-level overview
+Keys used for encryption and signature are generated and used separately.
 
-### Objectives
+### Signature
 
-The purpose of the `Encrypt` layer is to provide confidentiality and data integrity of the inner layer.
+As described in `FORMAT.md` an archive can be signed. Implementation must ensure users explicitely choose if signature is made and verified. Two methods are available and must be used together. Method input is called `m`. The SHA-512 hash `h` of `m` may be computed in a first step.
+
+For method `MLAEd25519SigMethod`, `signature_data` is the Ed25519ph (as described in RFC 8032 [^rfc8032]) signature of `m` (not `h` even though it can be used for computing the result). The context given as parameter to Ed25519ph is the ASCII `MLAEd25519SigMethod`. Signature verification and key generation are done as described in RFC 8032. Key storage is described in `KEY_FORMAT.md`.
+
+For method `MLAMLDSA87SigMethod`, `signature_data` is the ML-DSA-87 signature (as described in FIPS 204 [^fips204], not HashMLA-DSA) of `h` (not `m` this time) with the ASCII `MLAMLDSA87SigMethod` as context. Signature verification and key generation are done as described in FIPS 204. Key storage is described in `KEY_FORMAT.md`.
+
+### Encryption high-level overview
+
+#### Objectives
+
+The purpose of the Encryption layer is to provide confidentiality and data integrity of the inner layer.
 
 These objectives are obtained using:
 
@@ -17,7 +27,7 @@ These objectives are obtained using:
 
 This layer **does not provide signature**.
 
-### General design guidelines
+#### General design guidelines
 
 1. The size and the initial computation time used for the encryption needs are not a big issue, if kept reasonable. Indeed, in the author understanding, MLA archives are usually several MB long and the computation time is primarily spent in compression/decompression and encryption/decryption of the data
 
@@ -27,7 +37,7 @@ As a result, some optimization have not been performed -- which help keeping an 
 
 3. When possible, use audited code and test vectors
 
-### Main bricks: Encryption
+#### Main bricks: Encryption
 
 The data is encrypted using AES-256-GCM, an AEAD algorithm.
 To offer a *seekable* layer, data is encrypted using chunks of 128KB each, except for the last one. These encrypted chunks are all present with their associated tag. Tags are checked during decryption before returning data to the upper layer.
@@ -48,13 +58,13 @@ Full details are available below.
 
 Additionally, "key commitment" is included using a method described in [^keycommit] and detailed in [^issuekeycommit].
 
-### Main bricks: Asymmetric encryption
+#### Main bricks: Asymmetric encryption
 
 Since the format `v2`, the `Encrypt` layer is using post-quantum cryptography (PQC) through an hybrid approach, to avoid "Harvest now, decrypt later" attacks.
 
 The algorithms used are:
 
-- Curve 25519 for pre-quantum cryptography, using DHKEM (RFC 9180) [^hpke]
+- X25519 for pre-quantum cryptography, using DHKEM (RFC 9180) [^hpke]
 - FIPS 203[^fips203] (CRYSTALS Kyber) MLKEM-1024 for post-quantum cryptography
 
 The two keys are mixed together (see below) in a manner keeping the IND-CCA2 properties of the two algorithms.
@@ -68,7 +78,7 @@ Sending to multiple recipients is achieved using a two-step process:
 This final secret is the one later used as an input to the encryption layer.
 The whole process can be viewed as a KEM encapsulation for multiple recipients.
 
-## Details
+### Encryption Details
 
 The following sections describe the whole process for data encryption and seed derivation.
 They are meant to ease the understanding of the code and MLA format re-implementation. 
@@ -76,12 +86,12 @@ They are meant to ease the understanding of the code and MLA format re-implement
 The interested reader could also look at the Rust implementation in this repository for more details.
 The implementation also includes tests (including some test vectors) and comments.
 
-### Asymmetric encryption - Per-recipient KEM
+#### Asymmetric encryption - Per-recipient KEM
 
-#### Notations
+##### Notations
 
-- $pk_{ecc}^i$, $sk_{ecc}^i$, $pk_{mlkem}^i$ and $sk_{mlkem}^i$: respectively the curve 25519 public key and secret key, and the MLKEM-1024 (FIPS 203 [^fips203]) encapsulating key and decapsulating key
-- $\textrm{DHKEM.Encapsulate}$ and $\textrm{DHKEM.Decapsulate}$: key encapsulation methods on the curve 25519, as defined in RFC 9180, section 4 [^hpke]
+- $pk_{ecc}^i$, $sk_{ecc}^i$, $pk_{mlkem}^i$ and $sk_{mlkem}^i$: respectively the X25519 public key and secret key, and the MLKEM-1024 (FIPS 203 [^fips203]) encapsulating key and decapsulating key
+- $\textrm{DHKEM.Encapsulate}$ and $\textrm{DHKEM.Decapsulate}$: key encapsulation methods with X25519, as defined in RFC 9180, section 4 [^hpke]
 - $\textrm{MLKEM.Encapsulate}$ and $\textrm{MLKEM.Decapsulate}$: key encapsulation methods on MLKEM-1024, as defined in FIPS 203 [^fips203]
 - $ss_{recipients}$: a 32-bytes secret, produced by a cryptographic RNG. Informally, this is the secret shared among recipients, encapsulated separately for each recipient
 - $\textrm{KeySchedule}_{recipient}$: `KeySchedule` function from RFC 9180 [^hpke], instanciated with:
@@ -90,21 +100,21 @@ The implementation also includes tests (including some test vectors) and comment
     - AEAD: AES-256-GCM
     - KEM: a custom KEM ID, numbered 0x1120
 - $\textrm{Encrypt}_{AES\ 256\ GCM}$: AES-256-GCM encryption, returning the encrypted data concatened with the associated tag
-- $\textrm{Decrypt}_{AES\ 256\ GCM}$ AES-256-GCM decryption, returning the decrypted data after verifying the tag
+- $\textrm{Decrypt}_{AES\ 256\ GCM}$: AES-256-GCM decryption, returning the decrypted data after verifying the tag
 - $\textrm{Serialize}$ and $\textrm{Deserialize}$: respectively produce a byte string encoding the data in argument, and produce the data from the byte string in argument
 
-#### Process
+##### Process
 
 To encrypt to a target recipient $i$, knowing $pk_{ecc}^i$ and $pk_{mlkem}^i$:
 
 1. Compute shared secrets and ciphertexts for both KEM:
 
-```math
-\begin{align}
+$$
+\begin{align*}
 (ss_{ecc}^i, ct_{ecc}^i) &= \textrm{DHKEM.Encapsulate}(pk_{ecc}^i) \\
 (ss_{mlkem}^i, ct_{mlkem}^i) &= \textrm{MLKEM.Encapsulate}(pk_{mlkem}^i)
-\end{align}
-```
+\end{align*}
+$$
 
 2. Combine the shared secrets (implemented in `mla::crypto::hybrid::combine`):
 
@@ -122,22 +132,22 @@ def combine(ss1, ss2, ct1, ct2):
     return key
 ```
 
-```math
+$$
 ss_{recipient}^i = \textrm{combine}(ss_{ecc}^i, ss_{mlkem}^i, ct_{ecc}^i, ct_{mlkem}^i)
-```
+$$
 
 3. Wrap the recipients' shared secret:
 
-```math
-\begin{align}
+$$
+\begin{align*}
 (key^i, nonce^i) &= \textrm{KeySchedule}_{recipient}(
         shared\_secret=ss_{recipient}^i,
     \textrm{info}=\mathtt{"MLA\ Recipient"}
 )\\
 ct_{wrap}^i &= \textrm{Encrypt}_{AES\ 256\ GCM}(\textrm{key}=key^i, \textrm{nonce}=nonce^i, \textrm{data}=ss_{recipients})\\
 ct_{recipient}^i &= \textrm{Serialize}(ct_{wrap}^i, ct_{ecc}^i, ct_{mlkem}^i)
-\end{align}
-```
+\end{align*}
+$$
 
 Informally, this process can be viewed as a per-recipient KEM taking a shared secret $ss_{recipients}$, the recipient public key (made of the elliptic curve and the PQC public keys) and returning a ciphertext $ct_{recipient}^i$.
 
@@ -147,30 +157,30 @@ To obtain the shared secret from $ct_{recipient}^i$ for a recipient $i$ knowing 
 
 1. Compute the recipient's shared secret:
 
-```math
-\begin{align}
+$$
+\begin{align*}
 (ct_{wrap}^i, ct_{ecc}^i, ct_{mlkem}^i) &= \textrm{Deserialize}(ct_{recipient}^i)\\
 ss_{ecc}^i &= \textrm{DHKEM.Decapsulate}(sk_{ecc}^i, ct_{ecc}^i) \\
 ss_{mlkem}^i &= \textrm{MLKEM.Decapsulate}(sk_{mlkem}^i, ct_{mlkem}^i)\\
 ss_{recipient}^i &= \textrm{combine}(ss_{ecc}^i, ss_{mlkem}^i, ct_{ecc}^i, ct_{mlkem}^i)
-\end{align}
-```
+\end{align*}
+$$
 
 2. Try to decrypt the secret shared among recipients:
 
-```math
-\begin{align}
+$$
+\begin{align*}
 (key^i, nonce^i) &= \textrm{KeySchedule}_{recipient}(
         shared\_secret=ss_{recipient}^i,
     \textrm{info}=\mathtt{"MLA\ Recipient"}
 )\\
 ss_{recipients} &= \textrm{Decrypt}_{AES\ 256\ GCM}(\textrm{key}=key^i, \textrm{nonce}=nonce^i, \textrm{data}=ct_{wrap}^i)
-\end{align}
-```
+\end{align*}
+$$
 
 If the decryption is a success, returns $ss_{recipients}$. Otherwise, returns an error.
 
-#### Arguments
+##### Arguments
 
 - Using HPKE (RFC 9180 [^hpke]) for both elliptic curve encryption (DHKEM) and post-quantum encryption (MLKEM) offers several benefits[^issuehpke]:
     - Easier re-implementation of the format MLA, thanks to the availability of HPKE in cryptographic libraries
@@ -182,7 +192,7 @@ If the decryption is a success, returns $ss_{recipients}$. Otherwise, returns an
 - FIPS 203 is used as, at the time of writing:
     - It is the only KEM algorithm standardized by the NIST [^nist]
     - It is in line with the French suggestions [^frsuggest] for PQ cryptography
-- The MLKEM-1024 mode is used for stronger security, and to limit consequence of future advances [^mlkemcon1][^mlkemcon2]. This is also the choice of other industry standards [^signal][^imessage]
+- The MLKEM-1024 mode is used for stronger security, and to limit consequence of future advances [^mlkemcon1] [^mlkemcon2]. This is also the choice of other industry standards [^signal] [^imessage]
 - The shared secret from the two-KEM is produced using a "Nested Dual-PRF Combiner", proved in [^dualnest] (3.3):
     - The use of concatenation scheme **including ciphertexts** keeps IND-CCA2 if one of the two underlying scheme is IND-CCA2, as proved in [^combinearg1] and explained in [^combinearg4]
     - TLS [^combinearg2] uses a similar scheme, and IKE [^combinearg3] also uses a concatenation scheme
@@ -190,9 +200,9 @@ If the decryption is a success, returns $ss_{recipients}$. Otherwise, returns an
     - HKDF can be considered as a Dual-PRF if both inputs are uniformly random [^combinearg7]. In MLA, the `combine` method is called with a shared secret from ML-KEM, and the resulting ECC key derivation -- both are uniformly random
     - To avoid potential mistake in the future, or a mis-reuse of this method, the "Nested Dual-PRF Combiner" is used instead of the "Dual-PRF Combiner" (also from [^dualnest]). Indeed, this combiner force the "salt" part of HKDF to be uniformly random using an additional PRF use, ensuring the following HKDF is indeed a Dual-PRF
 
-### Asymmetric encryption - Multi-Recipient Hybrid KEM
+#### Asymmetric encryption - Multi-Recipient Hybrid KEM
 
-#### Intuition
+##### Intuition
 
 KEM, such as the one described above, returns a fresh and distinct secret for each recipient.
 
@@ -204,7 +214,7 @@ To avoid marking which per-recipient ciphertext correspond to which recipient pu
 
 Key commitment, to avoid rather unlikely mismatch, is further ensured inside the `Encrypt` layer (see below).
 
-#### Process
+##### Process
 
 The "Per-recipient KEM" process described above is noted:
 - $\mathrm{PerRecipientKEM.Encapsulate}$, taking a couple of public key ($pk_{ecc}^i$ and $pk_{mlkem}^i$), a shared secret $ss_{recipients}$ and returning a recipient ciphertext $ct_{recipient}^i$
@@ -214,7 +224,7 @@ $\mathrm{CSPRNG(n)}$ is a cryptographically secured RNG producing a n-bytes secr
 
 To encapsulate to a list of recipient $[(pk_{ecc}^0, pk_{mlkem}^0), ..., (pk_{ecc}^{n-1}, pk_{mlkem}^{n-1})]$:
 
-```math
+$$
 \begin{align*}
 \mathtt{def\ } & \mathrm{HybridKEM.Encapsulate}([(pk_{ecc}^0, pk_{mlkem}^0), ..., (pk_{ecc}^{n-1}, pk_{mlkem}^{n-1})])\\
 & ss_{recipients} = \mathrm{CSPRNG(32)}\\
@@ -224,8 +234,9 @@ To encapsulate to a list of recipient $[(pk_{ecc}^0, pk_{mlkem}^0), ..., (pk_{ec
 & ct_{recipients} = \mathrm{Serialize}(ct_{recipient}^0, \dots, ct_{recipient}^{n-1})\\
 & \mathtt{return}\ ss_{recipients},\ ct_{recipients}
 \end{align*}
-```
-----
+$$
+
+---
 
 To decapsulate from a ciphertext $ct_{recipients}$, knowing a recipient private key $(sk_{ecc}^i,sk_{mlkem}^i)$:
 
@@ -239,16 +250,16 @@ $\hspace{2cm}\mathtt{error:}$\
 $\hspace{3cm}\mathtt{continue}$\
 $\hspace{1cm}\mathtt{throw\ KeyNotFoundError}$
 
-#### Arguments
+##### Arguments
 
 - The shared secret is cryptographically generated, so it can later be used as a shared secret in HPKE encryption
 - This secret is unique per archive, as it is generated on archive creation. Even "converting" or "repairing" an archive in `mlar` CLI will force a newly fresh secret. It is a new secret as there is no edit feature implemented, even if it is doable. Hence, a new random symetric key is used to encrypt its content while "converting" or "repairing" an archive. 
 - Even if the AEAD decryption worked for an non legitimate recipient, for instance following an intentional manipulation, the shared secret obtained will later be checked using Key commitment before decrypting actual data (see below)
 - Optimization would have been possible here, such as sharing a common ephemeral key for the DHKEM. But the size gain is not worth enough regarding the ciphertext size of MLKEM and would move the implementation away from the DHKEM in RFC 9180
 
-### Encryption
+#### Encryption
 
-#### Notation
+##### Notation
 
 The "Multi-Recipient Hybrid KEM" process described above is noted:
 - $\mathrm{MultiRecipientHybridKEM.Encapsulate}$, taking a list of public keys $[(pk_{ecc}^0, pk_{mlkem}^0), ..., (pk_{ecc}^{n-1}, pk_{mlkem}^{n-1})]$ and returing a shared secret $ss_{recipients}$ and a ciphertext $ct_{recipients}$
@@ -265,28 +276,28 @@ $\textrm{KeySchedule}_{hybrid}$: `KeySchedule` function from RFC 9180 [^hpke], i
 
 $\mathrm{ComputeNonce}$: function from RFC 9180 [^hpke].
 
-#### Process
+##### Process
 
 To encrypt n-bytes `data` to a list of public keys $[(pk_{ecc}^0, pk_{mlkem}^0), ..., (pk_{ecc}^{n-1}, pk_{mlkem}^{n-1})]$:
 
 1. Compute a shared secret and the corresponding ciphertext:
 
-```math
+$$
 ss_{recipients},\ ct_{recipients} = \mathrm{MultiRecipientHybridKEM.Encapsulate}([(pk_{ecc}^0, pk_{mlkem}^0), ..., (pk_{ecc}^{n-1}, pk_{mlkem}^{n-1})])
-```
+$$
 
 2. Derive the key and base nonce using HPKE
 
-```math
+$$
 (key, base\_nonce) = \textrm{KeySchedule}_{hybrid}(
-        shared\_secret=ss_{recipients},
-    \textrm{info}=\mathtt{"MLA\ Encrypt\ Layer"}
+        \text{shared\_secret} = ss_{\text{recipients}},
+    \textrm{info} = \mathtt{"MLA\ Encrypt\ Layer"}
 )
-```
+$$
 
 3. Ensure key-commitment
 
-```math
+$$
 \begin{align*}
 keycommit& = \textrm{Encrypt}_{AES\ 256\ GCM}(\\
     &\textrm{key}=key,\\
@@ -294,11 +305,11 @@ keycommit& = \textrm{Encrypt}_{AES\ 256\ GCM}(\\
     &\textrm{data}=\textrm{KeyCommitmentChain}\\
 )&
 \end{align*}
-```
+$$
 
 4. For each 128KB $chunk_j$ of data:
 
-```math
+$$
 \begin{align*}
 enc_j& = \textrm{Encrypt}_{AES\ 256\ GCM}(\\
     &\textrm{key}=key,\\
@@ -306,7 +317,7 @@ enc_j& = \textrm{Encrypt}_{AES\ 256\ GCM}(\\
     &\textrm{data}=chunk_j\\
 )&
 \end{align*}
-```
+$$
 
 Note: $j$ starts at 0. $j+1$ is used because the sequence numbered 0 has already been used by the Key commitment.
 
@@ -314,26 +325,26 @@ Note: $j$ starts at 0. $j+1$ is used because the sequence numbered 0 has already
 
 6. Finally, a final chunk with sequence number $n+1$ (where $n$ is the number of data chunks) and special content and additional authenticated data is appended:
 
-```math
+$$
 \begin{align*}
 final\_chunk& = \textrm{Encrypt}_{AES\ 256\ GCM}(\\
     &\textrm{key}=key,\\
-    &\textrm{nonce}=\mathrm{ComputeNonce}(base\_nonce, n + 1),\\
+    &\textrm{nonce}=\mathrm{ComputeNonce}(\text{base\_nonce}, n + 1),\\
     &\textrm{data}="FINALBLOCK"\\
     &\textrm{aad}="FINALAAD"\\
 )&
 \end{align*}
-```
+$$
 
 The resulting layer is composed of:
 
 - header: $ct_{recipients}$
-- data: $keycommit \ .\ enc_0\ . \dots\ enc_n \ .$ $`final\_chunk`$
+- data: $keycommit \ .\ enc_0\ . \dots\ enc_n \ .$ $final\_chunk$
 
 Special care must be taken not to reuse a sequence number in implementations as this would be catastrophic given GCM properties. For $n$ chunks of data:
 * sequence 0: key commitment
 * sequence 1 to $n$: data
-* sequence $n+1$: $`final\_chunk`$ with only the 10 bytes "FINALBLOCK" as content
+* sequence $n+1$: $final\_chunk$ with only the 10 bytes "FINALBLOCK" as content
 
 ----
 
@@ -341,19 +352,19 @@ To decrypt the data at position $pos$:
 
 1. Once for the whole session, get the cryptographic materials
 
-```math
-\begin{align}
+$$
+\begin{align*}
 ss_{recipients} &= \mathrm{MultiRecipientHybridKEM.Decapsulate}((sk_{ecc}^i, sk_{mlkem}^i), ct_{recipients})\\
-(key, base\_nonce) &= \textrm{KeySchedule}_{hybrid}(
+(key, \text{base\_nonce}) &= \textrm{KeySchedule}_{hybrid}(
         shared\_secret=ss_{recipients},
     \textrm{info}=\mathtt{"MLA\ Encrypt\ Layer"}
 )
-\end{align}
-```
+\end{align*}
+$$
 
 2. Once for the whole session, check the key commitment
 
-```math
+$$
 \begin{align*}
 commit& = \textrm{Decrypt}_{AES\ 256\ GCM}(\\
     &\textrm{key}=key,\\
@@ -361,25 +372,25 @@ commit& = \textrm{Decrypt}_{AES\ 256\ GCM}(\\
     &\textrm{data}=keycommit\\
 )&
 \end{align*}
-```
+$$
 
-```math
+$$
 \mathtt{assert\ }commit = \textrm{KeyCommitmentChain}
-```
+$$
 
 3. Retrieve the encrypted chunk of data
 
-```math
-\begin{align}
+$$
+\begin{align*}
 start &= pos - \mathtt{sizeof}(keycommit)\\
 j &= pos \div 128KiB\\
-\end{align}
-```
+\end{align*}
+$$
 
 Where $\div$ is the Euclidian division.
 
 Then:
-```math
+$$
 \begin{align*}
 chunk_j& = \textrm{Decrypt}_{AES\ 256\ GCM}(\\
     &\textrm{key}=key,\\
@@ -387,9 +398,9 @@ chunk_j& = \textrm{Decrypt}_{AES\ 256\ GCM}(\\
     &\textrm{data}=enc_j\\
 )&
 \end{align*}
-```
+$$
 
-#### Arguments
+##### Arguments
 
 - Key commitment is always checked before returning clear-text data to the caller
 - AEAD tag of a chunk is always checked before returning the corresponding clear-text data to the caller
@@ -403,7 +414,7 @@ chunk_j& = \textrm{Decrypt}_{AES\ 256\ GCM}(\\
     - the tag size is 128-bits (standard one), avoiding attacks described in [^weaknessgcm]
     - 128KiB is lower than the maximum plaintext length for a single message in AES-GCM (64 GiB)[^weaknessgcm]
 
-### Seed derivation
+#### Seed derivation
 
 The asymmetric encryption in MLA, particularly the KEMs, provides deterministic API.
 
@@ -421,16 +432,16 @@ The derivation scheme is based on the same ideas than `mla::crypto::hybrid::comb
 
 From a private key ($sk_{ecc}^i$ and $sk_{mlkem}^i$), the secret is derived from the path component $pc$ through:
 
-```math
-\begin{align}
+$$
+\begin{align*}
 ecc\_rnd &= \mathrm{HKDF.Extract_{SHA512}}(\mathrm{salt}=0, \mathrm{ikm}=sk_{ecc}^i)\\
 seed &= \mathrm{HKDF_{SHA512}}(
-    \mathrm{salt}=ecc\_rnd,
+    \mathrm{salt}=\text{ecc\_rnd},
     \mathrm{ikm}=sk_{mlkem}^i,
     \mathrm{info}=\mathtt{"PATH\ DERIVATION"}\ .\ pc
 )
-\end{align}
-```
+\end{align*}
+$$
 
 To derive a key using a `seed`, a `ChaChaRng` is used.
 If a `seed` is provided, the `ChaChaRng` is seeded with the first 32-bytes of $\mathrm{SHA512}(seed)$. Otherwise, the `ChaChaRng::from_entropy` is used, wrapping OS Cryptographic RNG sources.
@@ -487,7 +498,7 @@ For now, it is therefore accepted by the author (as a trade-off) to use a MLKEM 
 
 If a reviewed implementation with acceptable dependency emerges in the future, it can be easily swapped in MLA. Thus, MLA would also satisfy the requirements to get a security visa evaluation in the second and third phases of these guidelines by including its PQC implementation.
 
-## Security consideration
+## Security considerations
 
 ### Absence of signature
 
@@ -530,29 +541,30 @@ Only the owner of a recipient's private key can determine that they are a recipi
 
 This is an intentional privacy feature.
 
-[^keycommit]: ["How to Abuse and Fix Authenticated Encryption Without Key Commitment", Usenix'22](https://www.usenix.org/conference/usenixsecurity22/presentation/albertini)
-[^issuekeycommit]: https://github.com/ANSSI-FR/MLA/issues/206
+[^rfc8032]: [RFC 8032 - Ed25519 Signature Algorithm](https://datatracker.ietf.org/doc/html/rfc8032)
+[^fips204]: [NIST FIPS 204](https://doi.org/10.6028/NIST.FIPS.204)
+[^keycommit]: [How to Abuse and Fix Authenticated Encryption Without Key Commitment, Usenix'22](https://www.usenix.org/conference/usenixsecurity22/presentation/albertini)
+[^issuekeycommit]: [MLA GitHub Issue #206](https://github.com/ANSSI-FR/MLA/issues/206)
 [^hpke]: [Hybrid Public Key Encryption, RFC 9180](https://datatracker.ietf.org/doc/rfc9180/)
-[^fips203]: [FIPS 203 - MLKEM Standard](https://csrc.nist.gov/pubs/fips/203/ipd)
-[^issuehpke]: https://github.com/ANSSI-FR/MLA/issues/211
-[^hpkeanalysis]: https://eprint.iacr.org/2020/1499.pdf
-[^issuepqc]: https://github.com/ANSSI-FR/MLA/issues/195
-[^frsuggest]: https://cyber.gouv.fr/en/publications/follow-position-paper-post-quantum-cryptography
-[^nist]: https://csrc.nist.gov/News/2022/pqc-candidates-to-be-standardized-and-round-4
-[^mlkemcon1]: https://blog.cr.yp.to/20231003-countcorrectly.html
-[^mlkemcon2]: https://kyberslash.cr.yp.to/
-[^signal]: https://signal.org/docs/specifications/pqxdh/
-[^imessage]: https://security.apple.com/blog/imessage-pq3/
-[^dualnest]: https://eprint.iacr.org/2018/903.pdf
-[^combinearg1]: https://eprint.iacr.org/2018/024
-[^combinearg2]: https://datatracker.ietf.org/doc/draft-ietf-tls-hybrid-design/
-[^combinearg3]: https://datatracker.ietf.org/doc/html/rfc9370
-[^combinearg4]: https://eprint.iacr.org/2024/039 
-[^combinearg7]: https://eprint.iacr.org/2023/861
-[^keycommit2]: https://eprint.iacr.org/2019/016.pdf
-[^weaknessgcm]: ["Authentication weaknesses in GCM"](https://csrc.nist.gov/csrc/media/projects/block-cipher-techniques/documents/bcm/comments/cwc-gcm/ferguson2.pdf)
-[^reviewncc]: https://research.nccgroup.com/wp-content/uploads/2020/02/NCC_Group_MobileCoin_RustCrypto_AESGCM_ChaCha20Poly1305_Implementation_Review_2020-02-12_v1.0.pdf
-[^reviewqb]: https://blog.quarkslab.com/security-audit-of-dalek-libraries.html
-[^reviewcloudflare]: https://blog.cloudflare.com/using-hpke-to-encrypt-request-payloads/
-[^issuezeroize]: https://github.com/ANSSI-FR/MLA/issues/46
-[^issueallowunauth]: https://github.com/ANSSI-FR/MLA/issues/167
+[^fips203]: [FIPS 203 - MLKEM Standard](https://doi.org/10.6028/NIST.FIPS.203)
+[^issuehpke]: [MLA GitHub Issue #211](https://github.com/ANSSI-FR/MLA/issues/211)
+[^hpkeanalysis]: [A Formal Analysis of HPKE](https://eprint.iacr.org/2020/1499.pdf)
+[^frsuggest]: [ANSSI Position Paper on Post-Quantum Cryptography](https://cyber.gouv.fr/en/publications/follow-position-paper-post-quantum-cryptography)
+[^nist]: [NIST PQC Standardization News](https://csrc.nist.gov/News/2022/pqc-candidates-to-be-standardized-and-round-4)
+[^mlkemcon1]: [Counting Correctly in MLKEM](https://blog.cr.yp.to/20231003-countcorrectly.html)
+[^mlkemcon2]: [KyberSlash](https://kyberslash.cr.yp.to/)
+[^signal]: [Signal PQXDH Specification](https://signal.org/docs/specifications/pqxdh/)
+[^imessage]: [Apple iMessage PQ3 Security Blog](https://security.apple.com/blog/imessage-pq3/)
+[^dualnest]: [Dual-PRF Combiners](https://eprint.iacr.org/2018/903.pdf)
+[^combinearg1]: [Hybrid Key Exchange Security](https://eprint.iacr.org/2018/024)
+[^combinearg2]: [TLS Hybrid Design Draft](https://datatracker.ietf.org/doc/draft-ietf-tls-hybrid-design/)
+[^combinearg3]: [RFC 9370 - IKEv2 Post-quantum Hybrid Key Exchange](https://datatracker.ietf.org/doc/html/rfc9370)
+[^combinearg4]: [Hybrid Key Exchange Security (2024)](https://eprint.iacr.org/2024/039)
+[^combinearg7]: [On the Security of Dual-PRF Combiners](https://eprint.iacr.org/2023/861)
+[^keycommit2]: [Key Commitment in AEAD](https://eprint.iacr.org/2019/016.pdf)
+[^weaknessgcm]: [Authentication weaknesses in GCM](https://csrc.nist.gov/csrc/media/projects/block-cipher-techniques/documents/bcm/comments/cwc-gcm/ferguson2.pdf)
+[^reviewncc]: [NCC Group Review of RustCrypto AES-GCM](https://research.nccgroup.com/wp-content/uploads/2020/02/NCC_Group_MobileCoin_RustCrypto_AESGCM_ChaCha20Poly1305_Implementation_Review_2020-02-12_v1.0.pdf)
+[^reviewqb]: [Quarkslab Security Audit of Dalek Libraries](https://blog.quarkslab.com/security-audit-of-dalek-libraries.html)
+[^reviewcloudflare]: [Cloudflare on HPKE](https://blog.cloudflare.com/using-hpke-to-encrypt-request-payloads/)
+[^issuezeroize]: [MLA GitHub Issue #46](https://github.com/ANSSI-FR/MLA/issues/46)
+[^issueallowunauth]: [MLA GitHub Issue #167](https://github.com/ANSSI-FR/MLA/issues/167)

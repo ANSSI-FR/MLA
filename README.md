@@ -32,6 +32,7 @@ This repository contains:
 * `mla`: the Rust library implementing MLA reader and writer
 * `mlar`: a Rust cli utility wrapping `mla` for common actions (create, list, extract...)
 * `doc` : advanced documentation related to MLA (e.g. format specification)
+  * [Advanced MLA book](https://anssi-fr.github.io/MLA)
 * `bindings` : bindings for other languages
 * `samples` : test assets
 * `mla-fuzz-afl` : a Rust utility to fuzz `mla`
@@ -113,8 +114,8 @@ Bindings are available for:
 Security
 -
 
-* There is currently no signature mechanism implemented: an encrypted archive may have been crafted by anyone having your public key and thus can contain arbitrary data.
 * Please keep in mind, it is generally not safe to extract in a place where at least one ancestor is writable by others (symbolic link attacks).
+* Even if encrypted with an authenticated cipher, if you receive an unsigned archive , it may have been crafted by anyone having your public key and thus can contain arbitrary data.
 * Read API documentation and mlar help before using their functionnalities. They sometimes provide important security warnings. `doc/ENTRY_NAME.md` is also of particular interest.
 * mlar escapes entry names on output to avoid security issues.
 * Except for symbolic link attacks, mlar will not extract outside given output directory.
