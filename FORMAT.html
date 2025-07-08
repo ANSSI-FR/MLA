@@ -1,0 +1,315 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Format - Multi Layer Archive</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Multi Layer Archive</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.4/dist/katex.min.css">
+<h1 id="mla-format"><a class="header" href="#mla-format">MLA FORMAT</a></h1>
+<p>Relation between the MLA library version and the file format version:</p>
+<div class="table-wrapper"><table><thead><tr><th>MLA Version</th><th>Supported file format</th></tr></thead><tbody>
+<tr><td>2.X</td><td>2</td></tr>
+<tr><td>1.X</td><td>1</td></tr>
+</tbody></table>
+</div>
+<p>This document introduces the MLA file format in its current version, 2.
+For a more comprehensive introduction of the ideas behind it, please refer to <a href="README.html">README.md</a>.</p>
+<h2 id="types-and-their-serialization-format"><a class="header" href="#types-and-their-serialization-format">Types and their serialization format</a></h2>
+<ul>
+<li>Integers are unsigned and serialized as bytes in little endian. They are called u64 for 64 bits integers, u32 for 32 bits ones, u16 for 16 bits ones and u8 for 8 bits ones. Serialization length in bytes are: 8 for u64, 4 for u32, 2 for u16 and 1 for u8.</li>
+<li><code>Vec&lt;T&gt;</code> is a sequence of elements of type <code>T</code>. It is serialized with its length in number of elements (not necessarily bytes) as a u64 and the sequence of serialized elements of type <code>T</code>.</li>
+<li><code>Opts</code> represents MLA options. It is serialized with a tag of value 0 as a u8 if no option is present. Otherwise it is serialized with a tag of value 1 as u8 followed by a yet unspecified Vec<u8>. Multiple fields in this file format are of type <code>Opts</code> for future proofing reasons, but no option is defined at the moment. For future proofing, implementers of this file format version must still handle the tag of value 1 and read the <code>Vec&lt;u8&gt;</code> even if not using this values. Thus, if an option is specified in the future, pre-dating implementations will be able to work with new archives containing the optional value.</li>
+<li><code>Tail&lt;T&gt;</code> is a <code>T</code> followed by its <code>tail_length</code> length in bytes as a u64. This enables extracting the <code>T</code> when reading from the end. Note that a <code>Tail&lt;Vec&lt;T&gt;&gt;</code> contains two lengths which may differ in units and always differ in values as <code>Tail</code>'s length includes <code>Vec</code>'s serialization of its own length. For example, serialization of a <code>Tail&lt;Vec&lt;u16&gt;&gt;</code> containing 0 and 1, leads to <code>02 00 00 00 00 00 00 00 00 00 01 00 0c 00 00 00 00 00 00 00</code>. As a second example, serialization of <code>Tail&lt;Vec&lt;u8&gt;&gt;</code> containing 0 and 1, leads to <code>02 00 00 00 00 00 00 00 00 01 0a 00 00 00 00 00 00 00</code>.</li>
+</ul>
+<h2 id="mla-header"><a class="header" href="#mla-header">MLA Header</a></h2>
+<ul>
+<li>An MLA file begins with the <code>mla_header_magic</code> ASCII magic: "MLAFAAAA".</li>
+<li><code>mla_header_magic</code> is followed by the <code>format_version</code> format version number as a u32.</li>
+<li><code>format_version</code> is followed by an <code>header_options</code> field of type <code>Opts</code>.</li>
+<li><code>header_options</code> is followed by archive content <code>archive_content</code>, described below.</li>
+<li><code>archive_content</code> is followed by an <code>footer_options</code> field of type <code>Tail&lt;Opts&gt;</code> to enable determining <code>archive_content</code>'s end when reading from the end of the MLA file.</li>
+<li><code>footer_options</code> is followed by the <code>footer_magic</code> ASCII magic "EMLAAAAA", terminating the archive.</li>
+</ul>
+<p><code>archive_content</code> consists of a serialized MLA entries layer documented below, transformed with zero or more layers, documented below too. A layer consists of a u64 layer magic followed by its data. Layer order plays an important security role, so the signature layer has to be above the encryption layer which has to be above the compression layer. This must be enforced by writers and readers. Readers should ensure users explicitly choose if they allow an archive without signature or without encryption.</p>
+<h2 id="signature-layer"><a class="header" href="#signature-layer">Signature layer</a></h2>
+<ul>
+<li>The layer <code>signature_layer_magic</code> ASCII magic is "SIGMLAAA".</li>
+<li><code>signature_layer_magic</code> is followed by an <code>signature_header_options</code> of type <code>Opts</code>.</li>
+<li><code>signature_header_options</code> is followed by <code>sig_inner_layer</code>, consisting of the inner layer bytes.</li>
+<li><code>sig_inner_layer</code> is followed by <code>signature_footer_options</code> of type <code>Tail&lt;Opts&gt;</code>.</li>
+<li><code>signature_footer_options</code> is followed by <code>signature_data</code> serialized as a <code>Tail&lt;Vec&lt;u8&gt;&gt;</code> which content is described below.</li>
+</ul>
+<p><code>signature_data</code> is a <code>Vec&lt;u8&gt;</code> whose content bytes consist of a sequence of <code>SignatureDataWHdr</code>. A <code>SignatureDataWHdr</code> is a <code>signature_method_id</code> u16, followed by a <code>signature_data</code> sequence of bytes depending of the tag value. For the moment, there are two valid <code>signature_method_id</code>: 0 and 1. 0 maps to <code>MLAEd25519SigMethod</code>, 1 maps to <code>MLAMLDSA87SigMethod</code>. These methods are described in <code>doc/CRYPTO.md</code>. Their input starts and includes <code>mla_header_magic</code>, up to and including <code>sig_inner_layer</code>.  In the current version, for the signature layer to be considered verified, the reader must verify that at least one <code>SignatureDataWHdr</code> of each <code>signature_method_id</code> is verified.</p>
+<h2 id="encryption-layer"><a class="header" href="#encryption-layer">Encryption layer</a></h2>
+<p>The layer <code>encryption_layer_magic</code> ASCII magic is "ENCMLAAA".
+<code>encryption_layer_magic</code> is followed by <code>encryption_header_options</code> of type <code>Opts</code>.
+<code>encryption_header_options</code> is followed by a <code>encryption_method_id</code> u16, described below.
+<code>encryption_method_id</code> is followed by <code>encryption_metadata</code>, a sequence of bytes described below.
+<code>encryption_metadata</code> is followed by <code>encrypted_inner_layer</code>, a sequence of bytes described below.
+<code>encrypted_inner_layer</code> is followed by one <code>encryption_footer_options</code> of type <code>Tail&lt;Opts&gt;</code>.</p>
+<p>The only <code>encryption_method_id</code> valid <code>encryption_method_id</code> for the moment is 0. It is the encryption method described in <code>CRYPTO.md</code>.</p>
+<p><code>encryption_metadata</code> depends on the previous <code>encryption_method_id</code> value. For <code>encryption_method_id</code> 0, <code>encryption_metadata</code> is a <code>Vec&lt;PerRecipientEncapsulatedKey&gt;</code> followed by a <code>KeyCommitmentAndTag</code>.</p>
+<p>A <code>PerRecipientEncapsulatedKey</code> is an <code>mlkem1024_encapsulated_s</code> field followed by an <code>ed25519_encapsulated_s</code> field, followed by an <code>m0_encrypted_ss</code> field and a <code>prkem_tag</code> field. As described in more detail in <code>CRYPTO.md</code>, <code>m0_encrypted_ss</code> is the AES-256-GCM encrypted <code>global_secret</code>. The AES key used to encrypt this <code>global_secret</code> is recovered from <code>mlkem1024_encapsulated_s</code> and <code>ed25519_encapsulated_s</code>. <code>prkem_tag</code> is the GCM tag associated with <code>m0_encrypted_ss</code>.</p>
+<p><code>mlkem1024_encapsulated_s</code> is a sequence of 1568 bytes corresponding to the ciphertext output of ML-KEM.Encaps as described in FIPS 203. <code>ed25519_encapsulated_s</code> is a sequence of 32 bytes corresponding to the output of the X25519 as described in RFC 7748. <code>m0_encrypted_ss</code> is a 32 bytes sequence. <code>prkem_tag</code> is a 16 bytes sequence.</p>
+<p><code>KeyCommitmentAndTag</code> is the key commitment described in <code>CRYPTO.md</code>. It is a 64-bytes ciphertext followed by a 16-bytes tag.</p>
+<p><code>encrypted_inner_layer</code> is the AES-256-GCM encrypted inner layer with the <code>global_secret</code> key. <code>encrypted_inner_layer</code> is a sequence of <code>M0EncryptedChunk</code> followed by one <code>M0FinalEncryptedChunk</code>. Each <code>M0EncryptedChunk</code> has an <code>encrypted_content</code> (128*1024)-bytes field (last <code>M0EncryptedChunk</code> may be smaller) followed by a <code>tag</code> 16-bytes field. <code>encrypted_content</code> is the inner_layer encrypted chunk, and <code>tag</code> its GCM tag. <code>M0FinalEncryptedChunk</code> has a 10-bytes <code>encrypted_content</code> field followed by a 16-bytes <code>tag</code>.</p>
+<p>The last <code>M0EncryptedChunk</code>'s <code>encrypted_content</code> size is the remainder of inner layer size divided by (128*1024).</p>
+<p>To protect from a truncation attack, before using an archive, it must be checked that the <code>tag</code> of the <code>M0FinalEncryptedChunk</code> is correct and that its decrypted <code>encrypted_content</code> is the ASCII <code>FINALBLOCK</code>.</p>
+<h2 id="compression-layer"><a class="header" href="#compression-layer">Compression layer</a></h2>
+<p>The layer <code>compression_layer_magic</code> ASCII magic is "COMLAAAA".
+<code>compression_layer_magic</code> if followed by <code>compression_header_options</code> of type <code>Opts</code>.
+<code>compression_header_options</code> is followed by <code>compressed_data</code>, a sequence of bytes explained below.
+<code>compressed_data</code> is followed by <code>compression_footer_options</code> of type <code>Tail&lt;Opts&gt;</code>.
+<code>compressed_footer_options</code> is followed by <code>sizes_info</code> of type <code>Tail&lt;SizesInfo&gt;</code>, where <code>SizesInfo</code> is explained below.</p>
+<p>The inner layer, is split in <code>4 * 1024 * 1024</code>-bytes chunks, except for the last chunk which may be smaller. Each chunk is compressed with <a href="https://tools.ietf.org/html/rfc7932">brotli</a>. The resulting size of each compressed chunk is recorded in <code>sizes_info</code>. <code>SizesInfo</code> has a first field <code>compressed_sizes</code>, which is a <code>Vec&lt;u32&gt;</code> corresponding to an ordered list of compressed chunk sizes and a second field <code>last_block_uncompresed_size</code> as a u32 indicating the uncompressed size of last inner layer chunk.</p>
+<p><code>compressed_data</code> is the concatenation of each compressed chunk.</p>
+<p>The compression layer footer information can be retrieved by first reading the value of <code>sizes_info.tail_length</code> at the end of the layer, then reading the preceding <code>sizes_info.tail_length</code>-bytes.</p>
+<h2 id="mla-entries-layer"><a class="header" href="#mla-entries-layer">MLA entries layer</a></h2>
+<p>The layer <code>entries_layer_magic</code> ASCII magic is "MLAENAAA".
+<code>entries_layer_magic</code> is followed by <code>entries_header_options</code> of type <code>Opts</code>.
+<code>entries_header_options</code> is followed by <code>entries_data</code>, a sequence of bytes described below.
+<code>entries_data</code> is followed by <code>entries_footer</code> of type <code>Tail&lt;EntriesFooter&gt;</code>, where <code>EntriesFooter</code> is described below.
+<code>entries_footer</code> is followed by <code>entries_footer_options</code> of type <code>Tail&lt;Opts&gt;</code>.</p>
+<p><code>entries_data</code> is a succession of <code>ArchiveEntryBlock</code> of different type. An <code>ArchiveEntryBlock</code> begins with an <code>ArchiveEntryBlockType</code> u8 determining the type of <code>ArchiveEntryBlock</code>:</p>
+<ul>
+<li>0x00 means <code>EntryStart</code></li>
+<li>0x01 means <code>EntryContentChunk</code></li>
+<li>0xFE means <code>EndOfArchiveData</code></li>
+<li>0xFF means <code>EndOfEntry</code></li>
+</ul>
+<p>If the <code>ArchiveEntryBlockType</code> is <code>EntryStart</code>, it is followed by an <code>ArchiveEntryId</code> u64, an <code>EntryName</code> and an <code>entry_start_options</code> of type <code>Opts</code>. An <code>EntryName</code> is a <code>Vec&lt;u8&gt;</code> described in <code>doc/ENTRY_NAME.md</code>.</p>
+<p>If the <code>ArchiveEntryBlockType</code> is <code>EntryContentChunk</code>, it is followed by an <code>ArchiveEntryId</code>, a <code>content_options</code> of type <code>Opts</code> and a <code>Vec&lt;u8&gt;</code> <code>entry_content_data</code>.</p>
+<p>If the <code>ArchiveEntryBlockType</code> is <code>EndOfEntry</code>, it is followed by an <code>ArchiveEntryId</code>, a <code>end_options</code> of type <code>Opts</code> and a <code>hash</code> serialized as 32 u8.</p>
+<p>If the <code>ArchiveEntryBlockType</code> is <code>EndOfArchiveData</code>, it is followed by nothing.</p>
+<p><code>EntriesFooter</code> is a <code>Vec&lt;EntryNameInfoMapElt&gt;</code>. An <code>EntryNameInfoMapElt</code> is an <code>EntryName</code> followed by an <code>entry_blocks_offsets</code> which is a <code>Vec&lt;EntryBlockOffset&gt;</code> explained after, followed by an <code>entry_size</code> as u64. <code>entry_size</code> is the whole size of the content of the entry with the corresponding <code>EntryName</code>. For reproducibility, the <code>EntriesFooter</code> <code>Vec</code> is sorted by entry name (lexicographically by bytes values) before being serialized.</p>
+<p><code>EntryBlockOffset</code> is a u64 indicating at which offset from the begining of the MLA entries layer an <code>ArchiveEntryBlock</code> can be found for the given <code>EntryName</code>. All <code>EntryBlockOffset</code>s for each entry are recorded in <code>entry_blocks_offsets</code> and they are so in ascending order of offset.</p>
+<h3 id="explanations"><a class="header" href="#explanations">Explanations</a></h3>
+<p>An archive entry <code>entry_i</code> in the archive always starts with an <code>EntryStart</code>, giving its name and unique ID i.</p>
+<p><code>entry_i</code> content is the concatenation of all <code>EntryContentChunk</code>s <code>entry_content_data</code> fields with <code>ArchiveEntryId</code> value <code>i</code>.</p>
+<p>Once the <code>EndOfEntry</code> for <code>entry_i</code> is reached, the entry is completely read. Its content SHA-256 hash can be verified with the <code>EndOfEntry.hash</code>.</p>
+<p>Between the last <code>EndOfEntry</code> block and <code>entries_footer</code>, there is the only <code>EndOfArchiveData</code> block. It is used when trying to read a truncated archive, to correctly separate the actual archive data from the footer.</p>
+<p>As blocks from different entries can be interleaved, the <code>entry_block_offsets</code> for an entry are the offsets in <code>entries_data</code> of its blocks.</p>
+<p>For instance, if the blocks are:</p>
+<pre><code>Off0: [EntryStart ID 1]
+Off1: [EntryStart ID 2]
+Off2: [EntryContentChunk ID 1]
+Off3: [EntryContentChunk ID 1]
+Off4: [EntryContentChunk ID 2]
+Off5: [EndOfEntry ID 1]
+...
+</code></pre>
+<p>The <code>offsets</code> for the entry with ID 1 will be <code>Off0</code>, <code>Off2</code>, <code>Off3</code> and <code>Off5</code>.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../index.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="ENTRY_NAME.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../index.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="ENTRY_NAME.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>
