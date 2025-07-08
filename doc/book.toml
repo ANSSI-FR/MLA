@@ -1,0 +1,8 @@
+[book]
+authors = ["ANSSI <opensource@ssi.gouv.fr>"]
+language = "en"
+src = "src"
+title = "Multi Layer Archive"
+
+[preprocessor.katex]
+after = ["links"]
