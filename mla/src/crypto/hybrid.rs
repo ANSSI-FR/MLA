@@ -195,19 +195,21 @@ impl HybridMultiRecipientEncapsulatedKey {
 ///
 /// Supports KEM decapsulation
 #[derive(Clone)]
-pub struct HybridPrivateKey {
+pub struct MLADecryptionPrivateKey {
     pub(crate) private_key_ecc: X25519StaticSecret,
     pub(crate) private_key_ml: MLKEMDecapsulationKey,
 }
 
-impl Drop for HybridPrivateKey {
+impl Drop for MLADecryptionPrivateKey {
     fn drop(&mut self) {
         self.private_key_ecc.zeroize();
         // ml-kem zeroization is done natively on drop cf. https://github.com/RustCrypto/KEMs/commit/a75d842b697aa54477d017c0c7c5da661e689be3
     }
 }
 
-impl Decapsulate<HybridMultiRecipientEncapsulatedKey, HybridKemSharedSecret> for HybridPrivateKey {
+impl Decapsulate<HybridMultiRecipientEncapsulatedKey, HybridKemSharedSecret>
+    for MLADecryptionPrivateKey
+{
     type Error = ConfigError;
 
     fn decapsulate(
@@ -260,7 +262,7 @@ impl Decapsulate<HybridMultiRecipientEncapsulatedKey, HybridKemSharedSecret> for
 /// - an X25519 key, for ECC (pre-quantum) cryptography
 /// - an ML-KEM 1024 key, for post-quantum cryptography
 #[derive(Clone)]
-pub struct HybridPublicKey {
+pub struct MLAEncryptionPublicKey {
     pub(crate) public_key_ecc: X25519PublicKey,
     pub(crate) public_key_ml: MLKEMEncapsulationKey,
 }
@@ -270,7 +272,7 @@ pub struct HybridPublicKey {
 /// Support KEM encapsulation
 #[derive(Default)]
 pub(crate) struct HybridMultiRecipientsPublicKeys {
-    pub(crate) keys: Vec<HybridPublicKey>,
+    pub(crate) keys: Vec<MLAEncryptionPublicKey>,
 }
 
 impl Encapsulate<HybridMultiRecipientEncapsulatedKey, HybridKemSharedSecret>
@@ -336,7 +338,9 @@ impl Encapsulate<HybridMultiRecipientEncapsulatedKey, HybridKemSharedSecret>
 /// You should probably rather use the `generate_keypair` function.
 ///
 /// Generate an Hybrid key pair using the provided seed
-pub fn generate_keypair_from_seed(seed: [u8; 32]) -> (HybridPrivateKey, HybridPublicKey) {
+pub fn generate_keypair_from_seed(
+    seed: [u8; 32],
+) -> (MLADecryptionPrivateKey, MLAEncryptionPublicKey) {
     let mut csprng = ChaCha20Rng::from_seed(seed);
     generate_keypair_from_rng(&mut csprng)
 }
@@ -344,16 +348,16 @@ pub fn generate_keypair_from_seed(seed: [u8; 32]) -> (HybridPrivateKey, HybridPu
 /// Generate an Hybrid key pair using the provided csprng
 fn generate_keypair_from_rng(
     mut csprng: impl CryptoRngCore,
-) -> (HybridPrivateKey, HybridPublicKey) {
+) -> (MLADecryptionPrivateKey, MLAEncryptionPublicKey) {
     let private_key_ecc = X25519StaticSecret::random_from_rng(&mut csprng);
     let public_key_ecc = X25519PublicKey::from(&private_key_ecc);
     let (private_key_ml, public_key_ml) = MlKem1024::generate(&mut csprng);
     (
-        HybridPrivateKey {
+        MLADecryptionPrivateKey {
             private_key_ecc,
             private_key_ml,
         },
-        HybridPublicKey {
+        MLAEncryptionPublicKey {
             public_key_ecc,
             public_key_ml,
         },
@@ -361,7 +365,7 @@ fn generate_keypair_from_rng(
 }
 
 /// Generate an Hybrid key pair using a CSPRNG
-pub fn generate_keypair() -> (HybridPrivateKey, HybridPublicKey) {
+pub fn generate_keypair() -> (MLADecryptionPrivateKey, MLAEncryptionPublicKey) {
     generate_keypair_from_rng(get_crypto_rng())
 }
 
@@ -473,11 +477,11 @@ mod tests {
         let (private_key_ml, public_key_ml) = MlKem1024::generate(&mut csprng);
 
         // Create hybrid public and private keys
-        let hybrid_private_key = HybridPrivateKey {
+        let hybrid_private_key = MLADecryptionPrivateKey {
             private_key_ecc,
             private_key_ml,
         };
-        let hybrid_public_key = HybridPublicKey {
+        let hybrid_public_key = MLAEncryptionPublicKey {
             public_key_ecc,
             public_key_ml,
         };
@@ -515,11 +519,11 @@ mod tests {
             let (private_key_ml, public_key_ml) = MlKem1024::generate(&mut csprng);
 
             // Create hybrid public and private keys
-            let hybrid_private_key = HybridPrivateKey {
+            let hybrid_private_key = MLADecryptionPrivateKey {
                 private_key_ecc,
                 private_key_ml,
             };
-            let hybrid_public_key = HybridPublicKey {
+            let hybrid_public_key = MLAEncryptionPublicKey {
                 public_key_ecc,
                 public_key_ml,
             };
@@ -553,7 +557,7 @@ mod tests {
         let private_key_ecc = X25519StaticSecret::from(csprng.r#gen::<[u8; 32]>());
         let public_key_ecc = X25519PublicKey::from(&private_key_ecc);
         let (_private_key_ml, public_key_ml) = MlKem1024::generate(&mut csprng);
-        let hybrid_public_key = HybridPublicKey {
+        let hybrid_public_key = MLAEncryptionPublicKey {
             public_key_ecc,
             public_key_ml,
         };

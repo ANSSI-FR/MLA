@@ -165,7 +165,7 @@ use std::io;
 use std::io::{Read, Seek, SeekFrom, Write};
 #[macro_use]
 extern crate bitflags;
-use crypto::hybrid::HybridPublicKey;
+use crypto::hybrid::MLAEncryptionPublicKey;
 use layers::compress::COMPRESSION_LAYER_MAGIC;
 use layers::encrypt::ENCRYPTION_LAYER_MAGIC;
 use layers::strip_head_tail::StripHeadTailReader;
@@ -671,7 +671,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
     }
 
     /// Create an `ArchiveWriter` with a default config (encryption and compression with default level).
-    pub fn new(dest: W, public_keys: &[HybridPublicKey]) -> Result<Self, Error> {
+    pub fn new(dest: W, public_keys: &[MLAEncryptionPublicKey]) -> Result<Self, Error> {
         let config = ArchiveWriterConfig::with_public_keys(public_keys);
         Self::from_config(dest, config)
     }
@@ -1527,7 +1527,7 @@ pub mod info;
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crypto::hybrid::{HybridPrivateKey, generate_keypair_from_seed};
+    use crypto::hybrid::{MLADecryptionPrivateKey, generate_keypair_from_seed};
     // use curve25519_parser::{parse_openssl_25519_privkey, parse_openssl_25519_pubkey};
     use rand::distributions::{Distribution, Standard};
     use rand::{RngCore, SeedableRng};
@@ -1644,8 +1644,8 @@ pub(crate) mod tests {
         interleaved: bool,
     ) -> (
         Vec<u8>,
-        HybridPrivateKey,
-        HybridPublicKey,
+        MLADecryptionPrivateKey,
+        MLAEncryptionPublicKey,
         Vec<(EntryName, Vec<u8>)>,
     ) {
         let (written_archive, privkey, pubkey, files_content, _, _) =
@@ -1660,8 +1660,8 @@ pub(crate) mod tests {
         interleaved: bool,
     ) -> (
         Vec<u8>,
-        HybridPrivateKey,
-        HybridPublicKey,
+        MLADecryptionPrivateKey,
+        MLAEncryptionPublicKey,
         Vec<(EntryName, Vec<u8>)>,
         HashMap<EntryName, ArchiveEntryId>,
         HashMap<ArchiveEntryId, EntryInfo>,
