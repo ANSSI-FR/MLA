@@ -1082,13 +1082,27 @@ mod tests {
 
     #[test]
     fn check_derive_paths() {
-        let der_priv: &'static [u8] = include_bytes!("../../../samples/test_mlakey.mlapriv");
-        let der_derived_priv: &'static [u8] =
+        let ser_priv: &'static [u8] = include_bytes!("../../../samples/test_mlakey.mlapriv");
+        let ser_derived_priv: &'static [u8] =
             include_bytes!("../../../samples/test_mlakey_derived.mlapriv");
-        let secret = crate::crypto::mlakey::parse_mlakey_privkey_der(der_priv).unwrap();
+        let secret =
+            crate::crypto::mlakey::MLAPrivateKey::deserialize_private_key(ser_priv).unwrap();
         // Safe to unwrap, there is at least one derivation path
         let path = [b"pathcomponent1".as_slice(), b"pathcomponent2".as_slice()];
-        let (privkey, _) = derive_keypair_from_path(path.into_iter(), secret).unwrap();
-        assert_eq!(privkey.to_der().as_slice(), der_derived_priv);
+        let (decryption_private_key, _) = derive_keypair_from_path(
+            path.into_iter(),
+            secret.get_decryption_private_key().clone(),
+        )
+        .unwrap();
+        let privkey = MLAPrivateKey::from_decryption_and_signature_keys(
+            decryption_private_key,
+            MLASignaturePrivateKey {},
+        );
+        let mut computed_ser_derived_priv = Vec::new();
+        privkey
+            .serialize_private_key(&mut computed_ser_derived_priv)
+            .unwrap();
+
+        assert_eq!(computed_ser_derived_priv.as_slice(), ser_derived_priv);
     }
 }
