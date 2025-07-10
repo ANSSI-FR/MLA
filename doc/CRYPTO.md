@@ -12,7 +12,7 @@ As described in `FORMAT.md` an archive can be signed. Implementation must ensure
 
 For method `MLAEd25519SigMethod`, `signature_data` is the Ed25519ph (as described in RFC 8032 [^rfc8032]) signature of `m` (not `h` even though it can be used for computing the result). The context given as parameter to Ed25519ph is the ASCII `MLAEd25519SigMethod`. Signature verification and key generation are done as described in RFC 8032. Key storage is described in `KEY_FORMAT.md`.
 
-For method `MLAMLDSA87SigMethod`, `signature_data` is the ML-DSA-87 signature (as described in FIPS 204 [^fips204], not HashMLA-DSA) of `h` (not `m` this time) with the ASCII `MLAMLDSA87SigMethod` as context. Signature verification and key generation are done as described in FIPS 204. Key storage is described in `KEY_FORMAT.md`.
+For method `MLAMLDSA87SigMethod`, `signature_data` is the ML-DSA-87 signature (as described in FIPS 204 [^fips204], not HashML-DSA) of `h` (not `m` this time) with the ASCII `MLAMLDSA87SigMethod` as context. Signature verification and key generation are done as described in FIPS 204. Key storage is described in `KEY_FORMAT.md`.
 
 ### Encryption high-level overview
 
