@@ -127,7 +127,7 @@ int test_reader_extract()
 {
     FILE *kf;
 
-    if (fopen_s(&kf, "../../../../samples/test_mlakey_archive_v2.der", "rb") != 0)
+    if (fopen_s(&kf, "../../../../samples/test_mlakey_archive_v2.mlapriv", "rb") != 0)
     {
         fprintf(stderr, " [!] Could not open private key file\n");
         return errno;
@@ -150,7 +150,7 @@ int test_reader_extract()
 
     rewind(kf);
 
-    uint8_t *keyData = malloc((size_t)keySize);
+    char *keyData = malloc((size_t)keySize);
     if (!keyData) {
         fprintf(stderr, " [!] Memory allocation failed\n");
         fclose(kf);
@@ -167,8 +167,8 @@ int test_reader_extract()
     fclose(kf);
 
     MLAReaderConfigHandle hConfig = NULL;
-    const uint8_t *const keys[] = {(const uint8_t *const) keyData};
-    MLAStatus status = create_mla_reader_config_with_private_keys_der(&hConfig, keys, 1);
+    const char *const keys[] = {(const char *const) keyData};
+    MLAStatus status = create_mla_reader_config_with_private_keys(&hConfig, keys, 1);
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
     {
         fprintf(stderr, " [!] Private key set failed with code %" PRIX64 "\n", (uint64_t)status);

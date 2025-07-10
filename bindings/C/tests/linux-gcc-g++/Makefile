@@ -8,12 +8,11 @@ tests: test_create test_create_manykeys test_create_set_compression_level test_c
 
 test_create: $(MLAR) create.elf
 	./create.elf
-	$(MLAR) cat test.txt --input ./test.mla -k ../../../../samples/test_mlakey.pem | grep -E '^Hello, World!$$'
+	$(MLAR) cat test.txt --input ./test.mla -k ../../../../samples/test_mlakey.mlapriv | grep -E '^Hello, World!$$'
 
 test_create_manykeys: $(MLAR) create_manykeys.elf
 	./create_manykeys.elf
-	$(MLAR) cat test.txt --input ./test.mla -k ../../../../samples/test_mlakey.pem | grep -E '^Hello, World!$$'
-	$(MLAR) cat test.txt --input ./test.mla -k ../../../../samples/test_mlakey_rev.pem | grep -E '^Hello, World!$$'
+	$(MLAR) cat test.txt --input ./test.mla -k ../../../../samples/test_mlakey.mlapriv | grep -E '^Hello, World!$$'
 
 test_create_set_compression_level: $(MLAR) create_set_compression_level.elf
 	./create_set_compression_level.elf
@@ -26,25 +25,25 @@ test_create_fail_no_key: $(MLAR) create_fail_no_key.elf
 
 test_create_interleaved: $(MLAR) create_interleaved.elf
 	./create_interleaved.elf
-	$(MLAR) cat test1.txt --input ./test.mla -k ../../../../samples/test_mlakey.pem | grep -E '^Hello, World!$$'
-	$(MLAR) cat test2.txt --input ./test.mla -k ../../../../samples/test_mlakey.pem | grep -E '^Hello, World!$$'
+	$(MLAR) cat test1.txt --input ./test.mla -k ../../../../samples/test_mlakey.mlapriv | grep -E '^Hello, World!$$'
+	$(MLAR) cat test2.txt --input ./test.mla -k ../../../../samples/test_mlakey.mlapriv | grep -E '^Hello, World!$$'
 
 test_create_no_early_close: $(MLAR) create_no_early_close.elf
 	./create_no_early_close.elf
 
 test_create_unicode: $(MLAR) create_unicode.elf
 	./create_unicode.elf
-	$(MLAR) cat $(shell printf 'test\xE2\x98\xA0.txt') --input ./test.mla -k ../../../../samples/test_mlakey.pem | grep -E '^Hello, World!$$'
+	$(MLAR) cat $(shell printf 'test\xE2\x98\xA0.txt') --input ./test.mla -k ../../../../samples/test_mlakey.mlapriv | grep -E '^Hello, World!$$'
 
 test_create_stream: $(MLAR) create_stream.elf
 	yes "All work and no play makes Jack a dull boy" | dd bs=1M count=2 iflag=fullblock | ./create_stream.elf
-	bash -c "$(MLAR) cat test.txt --input ./test.mla -k ../../../../samples/test_mlakey.pem | sha256sum -c <(echo \"132f5f1a403697b63eec77930cb1ab38414c82ca4c7d415d8dc6e3d3eb6a8b98 -\")"
+	bash -c "$(MLAR) cat test.txt --input ./test.mla -k ../../../../samples/test_mlakey.mlapriv | sha256sum -c <(echo \"132f5f1a403697b63eec77930cb1ab38414c82ca4c7d415d8dc6e3d3eb6a8b98 -\")"
 	yes "All work and no play makes Jack a dull boy" | dd bs=1M count=20 iflag=fullblock | ./create_stream.elf
-	bash -c "$(MLAR) cat test.txt --input ./test.mla -k ../../../../samples/test_mlakey.pem | sha256sum -c <(echo \"e667ca14e52cbea16f6e0413e5fdfb7e789a3f1af80c2a795c36e2523195a20d -\")"
+	bash -c "$(MLAR) cat test.txt --input ./test.mla -k ../../../../samples/test_mlakey.mlapriv | sha256sum -c <(echo \"e667ca14e52cbea16f6e0413e5fdfb7e789a3f1af80c2a795c36e2523195a20d -\")"
 
 test_create_write_byte_by_byte: $(MLAR) create_write_byte_by_byte.elf
 	./create_write_byte_by_byte.elf
-	$(MLAR) cat test.txt --input ./test.mla -k ../../../../samples/test_mlakey.pem | grep -E '^Hello, World!$$'
+	$(MLAR) cat test.txt --input ./test.mla -k ../../../../samples/test_mlakey.mlapriv | grep -E '^Hello, World!$$'
 
 test_open: $(MLAR) open.elf
 	./open.elf
@@ -54,7 +53,11 @@ test_info: $(MLAR) info.elf
 	./info.elf
 
 %.expanded.c: %.c
-	awk -v file="../../../../samples/test_mlakey_pub.pem" 'BEGIN{c = ""; while ((getline line < file) > 0){c = c line "\\n";}}/REPLACE WITH PUBLIC KEY FROM SAMPLE/{gsub("REPLACE WITH PUBLIC KEY FROM SAMPLE",c)}1' $< | awk -v file="../../../../samples/test_mlakey_many_pub.pem" 'BEGIN{c = ""; while ((getline line < file) > 0){c = c line "\\n";}}/REPLACE WITH MANY PUBLIC KEY FROM SAMPLE/{gsub("REPLACE WITH MANY PUBLIC KEY FROM SAMPLE",c)}1' > $@
+	sh -c 'k=`tr -d "\r" <../../../../samples/test_mlakey.mlapub|tr "\n" "!"|sed "s#!#\\\\\\\\\\\\\\\\r\\\\\\\\\\\\\\\\n#g"`; sed -e "s#REPLACE WITH PUBLIC KEY FROM SAMPLE#$$k#"' < $< > /tmp/a
+	sh -c 'k=`tr -d "\r" <../../../../samples/test_mlakey_2.mlapub|tr "\n" "!"|sed "s#!#\\\\\\\\\\\\\\\\r\\\\\\\\\\\\\\\\n#g"`; sed -e "s#REPLACE WITH PUBLIC KEY 2 FROM SAMPLE#$$k#"' < /tmp/a > /tmp/b
+	sh -c 'k=`tr -d "\r" <../../../../samples/test_mlakey_archive_v2.mlapriv|tr "\n" "!"|sed "s#!#\\\\\\\\\\\\\\\\r\\\\\\\\\\\\\\\\n#g"`; sed -e "s#REPLACE WITH PRIVATE KEY FROM SAMPLE#$$k#"' < /tmp/b > $@
+#	sh -c 'k=`tr -d "\r" <../../../../samples/test_mlakey_2.mlapub|tr "\n" "!"`; sed -e "s#REPLACE WITH PUBLIC KEY 2 FROM SAMPLE#$$k#" -e "s#!#\\\\r\\\\n#g"' < /tmp/a > /tmp/b
+#	sh -c 'k=`tr -d "\r" <../../../../samples/test_mlakey.mlapub|tr "\n" "!"`; sed -e "s#REPLACE WITH PRIVATE KEY FROM SAMPLE#$$k#" -e "s#!#\\\\r\\\\n#g"' < /tmp/b > $@
 
 %.elf: %.expanded.c $(BUILDDIR)/$(TARGET)/debug/libmla.a
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)

@@ -38,7 +38,7 @@ int test_writer()
 {
     FILE *kf;
 
-    if (fopen_s(&kf, "../../../../samples/test_mlakey_pub.pem", "r") != 0)
+    if (fopen_s(&kf, "../../../../samples/test_mlakey.mlapub", "r") != 0)
     {
         fprintf(stderr, " [!] Could not open public key file\n");
         return errno;
@@ -69,7 +69,8 @@ int test_writer()
 
     MLAStatus status;
     MLAWriterConfigHandle hConfig = NULL;
-    status = create_mla_writer_config_with_public_keys_pem(&hConfig, szPubkey);
+    const char *const keys[] = {szPubkey};
+    status = create_mla_writer_config_with_public_keys(&hConfig, keys, 1);
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
     {
         fprintf(stderr, " [!] Public key set failed with code %" PRIX64 "\n", (uint64_t)status);
