@@ -872,11 +872,12 @@ fn convert(matches: &ArgMatches) -> Result<(), MlarError> {
 #[allow(clippy::unnecessary_wraps)]
 fn keygen(matches: &ArgMatches) -> Result<(), MlarError> {
     // Safe to use unwrap() because of the requirement
-    let output_base = matches.get_one::<PathBuf>("output").unwrap();
+    let output_base = matches.get_one::<PathBuf>("output-prefix").unwrap();
 
-    let mut output_pub = File::create(Path::new(output_base).with_extension("pub"))
+    let mut output_pub = File::create(output_base.with_extension("mlapub"))
         .expect("Unable to create the public file");
-    let mut output_priv = File::create(output_base).expect("Unable to create the private file");
+    let mut output_priv = File::create(output_base.with_extension("mlapriv"))
+        .expect("Unable to create the private file");
 
     // handle seed
     //
@@ -906,11 +907,12 @@ fn keygen(matches: &ArgMatches) -> Result<(), MlarError> {
 #[allow(clippy::unnecessary_wraps)]
 fn keyderive(matches: &ArgMatches) -> Result<(), MlarError> {
     // Safe to use unwrap() because of the requirement
-    let output_base = matches.get_one::<PathBuf>("output").unwrap();
+    let output_base = matches.get_one::<PathBuf>("output-prefix").unwrap();
 
-    let mut output_pub = File::create(Path::new(output_base).with_extension("pub"))
+    let mut output_pub = File::create(output_base.with_extension("mlapub"))
         .expect("Unable to create the public file");
-    let mut output_priv = File::create(output_base).expect("Unable to create the private file");
+    let mut output_priv = File::create(output_base.with_extension("mlapriv"))
+        .expect("Unable to create the private file");
 
     // Safe to use unwrap() because of the requirement
     let private_key_arg = matches.get_one::<PathBuf>("input").unwrap();
@@ -1144,8 +1146,8 @@ fn app() -> clap::Command {
                     "Generate a public/private MLA keypair",
                 )
                 .arg(
-                    Arg::new("output")
-                        .help("Output file for the private key. The public key will be in {output}.pub")
+                    Arg::new("output-prefix")
+                        .help("Output prefix for the keys. The private key will be in {output}.mlapriv and the public key will be in {output}.mlapub")
                         .num_args(1)
                         .value_parser(value_parser!(PathBuf))
                         .required(true)
@@ -1172,8 +1174,8 @@ fn app() -> clap::Command {
                         .required(true)
                 )
                 .arg(
-                    Arg::new("output")
-                        .help("Output file for the private key. The public key will be in {output}.pub")
+                    Arg::new("output-prefix")
+                        .help("Output prefix for the keys. The private key will be in {output}.mlapriv and the public key will be in {output}.mlapub")
                         .num_args(1)
                         .value_parser(value_parser!(PathBuf))
                         .required(true)
