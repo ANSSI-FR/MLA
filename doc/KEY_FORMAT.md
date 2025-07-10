@@ -8,8 +8,8 @@ The string `||` denotes concatenation.
 
 A private key file is an ASCII file, which may use `mlapriv` as file extension. The file (or whatever serialization medium) content is `PrivEncHdr||B64Priv4Enc||<CR><LF>||PrivSigHdr||B64Priv4Sig||<CR><LF>||B64PrivOpts||<CR><LF>` where `<CR>` is ASCII carriage return, `<LF>` is ASCII line feed, and `PrivEncHdr`, B64Priv4Enc`, `PrivSigHdr`, `B64Priv4Sig` and `B64PrivOpts` are described below.
 
-* `PrivEncHdr` is the ASCII string `MLA PRIVATE DECRYPTION KEY " (note the trailing space).
-* `PrivSigHdr` is the ASCII string `MLA PRIVATE SIGNATURE KEY " (note the trailing space).
+* `PrivEncHdr` is the ASCII string `DO NOT SEND THIS TO ANYONE - MLA PRIVATE DECRYPTION KEY ` (note the trailing space).
+* `PrivSigHdr` is the ASCII string `DO NOT SEND THIS TO ANYONE - MLA PRIVATE SIGNATURE KEY ` (note the trailing space).
 * `B64Priv4Enc` is the base64 encoding (RFC 4648) of `EncMethodId||PrivEncOpts||X25519PrivKey||MLKEM1024PrivKey` where `EncMethodId`, `PrivEncOpts`, `X25519PrivKey` and` MLKEM1024PrivKey` are described below.
 * `B64Priv4Sig` is the base64 encoding of `SigMethodId||PrivSigOpts||Ed25519PrivKey||MLDSA87PrivKey` where `MethodId`, `PrivEncOpts`, `Ed25519PrivKey` and` MLDSA87PrivKey` are described below.
 
