@@ -501,6 +501,7 @@ dependencies = [
  "cfg-if",
  "cpufeatures",
  "curve25519-dalek-derive",
+ "digest",
  "fiat-crypto",
  "rustc_version",
  "subtle",
@@ -578,6 +579,29 @@ name = "doc-comment"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fea41bba32d969b513997752735605054bc0dfa92b4c56bf1189f2e174be7a10"
+
+[[package]]
+name = "ed25519"
+version = "2.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "115531babc129696a58c64a4fef0a8bf9e9698629fb97e9e40767d235cfbcd53"
+dependencies = [
+ "signature",
+]
+
+[[package]]
+name = "ed25519-dalek"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "70e796c081cee67dc755e1a36a0a172b897fab85fc3f6bc48307991f64e4eca9"
+dependencies = [
+ "curve25519-dalek",
+ "ed25519",
+ "rand_core",
+ "sha2",
+ "subtle",
+ "zeroize",
+]
 
 [[package]]
 name = "either"
@@ -800,6 +824,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "hybrid-array"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "891d15931895091dea5c47afa5b3c9a01ba634b311919fd4d41388fa0e3d76af"
+dependencies = [
+ "typenum",
+]
+
+[[package]]
 name = "ignore"
 version = "0.4.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -932,12 +965,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
 
 [[package]]
+name = "ml-dsa"
+version = "0.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ac4a46643af2001eafebcc37031fc459eb72d45057aac5d7a15b00046a2ad6db"
+dependencies = [
+ "hybrid-array 0.3.1",
+ "num-traits",
+ "rand_core",
+ "sha3",
+ "signature",
+]
+
+[[package]]
 name = "ml-kem"
 version = "0.3.0-pre"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "44fde1200e61dd95a2c6143baa22dbab79d8dad2644f55e955dd8a3d535f5d9f"
 dependencies = [
- "hybrid-array",
+ "hybrid-array 0.2.3",
  "kem",
  "rand_core",
  "sha3",
@@ -982,6 +1028,7 @@ dependencies = [
  "ctr",
  "curve25519-dalek",
  "digest",
+ "ed25519-dalek",
  "generic-array",
  "ghash",
  "hex",
@@ -989,6 +1036,7 @@ dependencies = [
  "hkdf",
  "hpke",
  "kem",
+ "ml-dsa",
  "ml-kem",
  "rand",
  "rand_chacha",
@@ -1345,6 +1393,15 @@ checksum = "75872d278a8f37ef87fa0ddbda7802605cb18344497949862c0d4dcb291eba60"
 dependencies = [
  "digest",
  "keccak",
+]
+
+[[package]]
+name = "signature"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77549399552de45a898a580c1b41d445bf730df867cc44e6c0233bbc4b8329de"
+dependencies = [
+ "rand_core",
 ]
 
 [[package]]
