@@ -27,7 +27,7 @@ If it is to be interpreted as a Windows file path, in addition to previous rules
 * The eventual second byte of the whole path should not be an ASCII colon (`:`).
 * Every component must be encoded as UTF-8.
 
-These rules are checked by the accompanying Rust implmentation (`EntryName::to_pathbuf`).
+These rules are checked by the accompanying Rust implementation (`EntryName::to_pathbuf`).
 
 Even if respecting these rules, the OS may see the resulting path as invalid.
 
@@ -85,7 +85,7 @@ For each following entry name found serialized in an archive, here is how they a
 * ./b -> invalid path (not normalized)
 * a/. -> invalid path (not normalized)
 * aNULb (where NUL here represent an ASCII NUL byte) -> invalid path
-* m:abcd -> invalid path on Windows (`:` as second byte), m%3aabcd on UNIX like
-* a\b (where `\` represents an ASCII backslash, not an escaped b) -> invalid path on Windows (contains backslash), a%5cb on UNIX like
+* m:abcd -> invalid path on Windows (`:` as second byte), m%3aabcd on UNIX-like
+* a\b (where `\` represents an ASCII backslash, not an escaped b) -> invalid path on Windows (contains backslash), a%5cb on UNIX-like
 * a/b.txt -> a/b.txt
 * a/b!c -> a/b%21c
