@@ -71,7 +71,7 @@ The layer `compression_layer_magic` ASCII magic is "COMLAAAA".
 `compressed_data` is followed by `compression_footer_options` of type `Tail<Opts>`.
 `compressed_footer_options` is followed by `sizes_info` of type `Tail<SizesInfo>`, where `SizesInfo` is explained below.
 
-The inner layer, is split in `4 * 1024 * 1024`-bytes chunks, except for the last chunk which may be smaller. Each chunk is compressed with [brotli](https://tools.ietf.org/html/rfc7932). The resulting size of each compressed chunk is recorded in `sizes_info`. `SizesInfo` has a first field `compressed_sizes`, which is a `Vec<u32>` corresponding to an ordered list of compressed chunk sizes and a second field `last_block_uncompresed_size` as a u32 indicating the uncompressed size of last inner layer chunk.
+The inner layer, is split in `4 * 1024 * 1024`-bytes chunks, except for the last chunk which may be smaller. Each chunk is compressed with [brotli](https://tools.ietf.org/html/rfc7932). The resulting size of each compressed chunk is recorded in `sizes_info`. `SizesInfo` has a first field `compressed_sizes`, which is a `Vec<u32>` corresponding to an ordered list of compressed chunk sizes and a second field `last_block_uncompressed_size` as a u32 indicating the uncompressed size of last inner layer chunk.
 
 `compressed_data` is the concatenation of each compressed chunk.
 
