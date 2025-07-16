@@ -585,14 +585,14 @@ fn process_chunk(
             if err.kind() == std::io::ErrorKind::InvalidData {
                 let filename = filename_iterator
                     .next()
-                    .unwrap_or_else(|| format!("./chunk_{fallback_filename}.bin"));
+                    .unwrap_or_else(|| format!("chunk{fallback_filename}.bin"));
                 add_binary(mla, &filename, chunk)?;
             }
         }
     } else {
         let filename = filename_iterator
             .next()
-            .unwrap_or_else(|| format!("./chunk_{fallback_filename}.bin"));
+            .unwrap_or_else(|| format!("chunk{fallback_filename}.bin"));
         add_binary(mla, &filename, chunk)?;
     }
     Ok(())
