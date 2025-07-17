@@ -1523,7 +1523,7 @@ fn test_stdin() {
 
     let output_files = ["file.txt"];
 
-    // `ECHO "echo... echo... echo..." | mlar create -l -o output.mla --filenames file.txt -`
+    // `echo "echo... echo... echo..." | mlar create -l -o output.mla --filenames file.txt -`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-l")
@@ -1540,7 +1540,7 @@ fn test_stdin() {
         .success()
         .stdout((*output_files.first().unwrap()).to_string() + "\n");
 
-    // `mlar extract -v --accept-unencrypted -i output.mla -o ouput_dir`
+    // `mlar extract -v --accept-unencrypted -i output.mla -o output_dir`
     let output_dir = TempDir::new().unwrap();
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("extract")
@@ -1583,6 +1583,7 @@ fn test_consecutive_sep_stdin() {
 
     let output_files = ["chunk1.bin", "chunk2.bin"];
 
+    // `echo -n -e "SEP\xff\xfe\xad\xdeSEPSEPSEPecho... echo... echo...SEP" | mlar create -l -o output.mla --separator SEP -`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-l")
@@ -1597,7 +1598,7 @@ fn test_consecutive_sep_stdin() {
     let assert = cmd.assert();
     assert.success().stdout(output_files.join("\n") + "\n");
 
-    // `mlar extract -v --accept-unencrypted -i output.mla -o ouput_dir`
+    // `mlar extract -v --accept-unencrypted -i output.mla -o output_dir`
     let output_dir = TempDir::new().unwrap();
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("extract")
