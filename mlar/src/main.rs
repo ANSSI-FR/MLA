@@ -531,7 +531,7 @@ fn split_by_subsequence<'a>(buffer: &'a [u8], boundary: &[u8]) -> Vec<&'a [u8]> 
         parts.push(&buffer[start..]);
     }
 
-    parts
+    parts.into_iter().filter(|b| !b.is_empty()).collect()
 }
 
 fn add_binary(
