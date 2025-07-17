@@ -1558,7 +1558,4 @@ fn test_stdin() {
     let extracted_file_path = output_dir.path().join(output_files.first().unwrap());
     let content = fs::read_to_string(&extracted_file_path).unwrap();
     assert_eq!(content, msg);
-
-    // Esoteric.
-    // ensure_directory_content(output_dir.path(), &testfs.files);
 }
