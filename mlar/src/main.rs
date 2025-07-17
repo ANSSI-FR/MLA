@@ -186,7 +186,7 @@ fn config_from_matches(matches: &ArgMatches) -> Result<ArchiveWriterConfig, Mlar
         let public_keys = match open_public_keys(matches) {
             Ok(public_keys) => public_keys,
             Err(error) => {
-                panic!("[ERROR] Unable to open public keys: {}", error);
+                panic!("[ERROR] Unable to open public keys: {error}");
             }
         };
         ArchiveWriterConfig::with_public_keys(&public_keys)
@@ -252,7 +252,7 @@ fn readerconfig_from_matches(matches: &ArgMatches) -> ArchiveReaderConfig {
         let private_keys = match open_private_keys(matches) {
             Ok(private_keys) => private_keys,
             Err(error) => {
-                panic!("[ERROR] Unable to open private keys: {}", error);
+                panic!("[ERROR] Unable to open private keys: {error}");
             }
         };
         if matches.get_flag("accept_unencrypted") {
@@ -694,7 +694,7 @@ fn list(matches: &ArgMatches) -> Result<(), MlarError> {
                 .map_err(|_| MlarError::InvalidEntryNameToPath)?
         };
         if matches.get_count("verbose") == 0 {
-            println!("{}", name_to_display);
+            println!("{name_to_display}");
         } else {
             let mla_file = mla.get_entry(fname)?.expect("Unable to get the file");
             let filename = mla_file.name;
@@ -852,23 +852,20 @@ fn cat(matches: &ArgMatches) -> Result<(), MlarError> {
                 match mla.get_entry(archive_entry_name.clone()) {
                     Err(err) => {
                         eprintln!(
-                            " [!] Error while looking up file \"{}\" ({err:?})",
-                            displayable_entry_name
+                            " [!] Error while looking up file \"{displayable_entry_name}\" ({err:?})"
                         );
                         continue;
                     }
                     Ok(None) => {
                         eprintln!(
-                            " [!] Subfile \"{}\" indexed in metadata could not be found",
-                            displayable_entry_name
+                            " [!] Subfile \"{displayable_entry_name}\" indexed in metadata could not be found"
                         );
                         continue;
                     }
                     Ok(Some(mut subfile)) => {
                         if let Err(err) = io::copy(&mut subfile.data, &mut destination) {
                             eprintln!(
-                                " [!] Unable to extract \"{}\" ({err:?})",
-                                displayable_entry_name
+                                " [!] Unable to extract \"{displayable_entry_name}\" ({err:?})"
                             );
                         }
                     }
