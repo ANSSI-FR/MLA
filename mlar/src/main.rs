@@ -1203,7 +1203,7 @@ fn app() -> clap::Command {
                 .arg(
                     Arg::new("separator")
                     .long("separator")
-                    .help("A string used to delimit files when reading concatenated input from stdin (e.g., via a pipe).")
+                    .help("A string used to delimit files when reading concatenated input from stdin (e.g. via a pipe).")
                     .value_parser(value_parser!(String))
                     .num_args(1)
                 ),
