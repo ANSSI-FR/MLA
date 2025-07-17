@@ -50,6 +50,9 @@ mlar keygen key
 # Create an archive with some files, using the public key
 mlar create -p key.pub -o my_archive.mla /etc/./os-release /etc/security/../issue ../file.txt
 
+# Create an archive of a web file and utf-8 string, without encryption
+(curl https://raw.githubusercontent.com/ANSSI-FR/MLA/refs/heads/master/README.md; echo "SEP"; echo "All Hail MLA!") | mlar create -l -o my_archive.mla --separator "SEP" --filenames great_readme.md -
+
 # List the content of the archive, using the private key.
 # Note that order may vary, root dir are stripped,
 # paths are normalized and listing is encoded as described in

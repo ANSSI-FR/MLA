@@ -1515,3 +1515,107 @@ fn test_extract_lot_files() {
 
     ensure_directory_content(output_dir.path(), &one_file);
 }
+
+#[test]
+fn test_stdin() {
+    let msg = "echo... echo... echo...";
+    let mlar_file = NamedTempFile::new("output.mla").unwrap();
+
+    let output_files = ["file.txt"];
+
+    // `echo "echo... echo... echo..." | mlar create -l -o output.mla --filenames file.txt -`
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("create")
+        .arg("-l")
+        .arg("-o")
+        .arg(mlar_file.path())
+        .arg("--filenames")
+        .arg(output_files.first().unwrap())
+        .arg("-")
+        .write_stdin(msg);
+
+    println!("{cmd:?}");
+    let assert = cmd.assert();
+    assert
+        .success()
+        .stdout((*output_files.first().unwrap()).to_string() + "\n");
+
+    // `mlar extract -v --accept-unencrypted -i output.mla -o output_dir`
+    let output_dir = TempDir::new().unwrap();
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("extract")
+        .arg("-v")
+        .arg("--accept-unencrypted")
+        .arg("-i")
+        .arg(mlar_file.path())
+        .arg("-o")
+        .arg(output_dir.path());
+
+    println!("{cmd:?}");
+    let assert = cmd.assert();
+    assert.success();
+
+    let extracted_file_path = output_dir.path().join(output_files.first().unwrap());
+    let content = fs::read_to_string(&extracted_file_path).unwrap();
+    assert_eq!(content, msg);
+}
+
+#[test]
+fn test_consecutive_sep_stdin() {
+    let sep = "SEP";
+    let bytes: Vec<Vec<u8>> = [
+        b"\xff\xfe\xad\xde".into(),
+        b"echo... echo... echo...".into(),
+    ]
+    .into();
+
+    // Add three times the separator instead of one
+    let mut insert = bytes.clone();
+    insert.insert(1, sep.into());
+    insert.insert(1, sep.into());
+    insert.insert(1, sep.into());
+
+    // Add a separator at the start and end.
+    insert.insert(0, sep.into());
+    insert.push(sep.into());
+
+    let mlar_file = NamedTempFile::new("output.mla").unwrap();
+
+    let output_files = ["chunk1.bin", "chunk2.bin"];
+
+    // `echo -n -e "SEP\xff\xfe\xad\xdeSEPSEPSEPecho... echo... echo...SEP" | mlar create -l -o output.mla --separator SEP -`
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("create")
+        .arg("-l")
+        .arg("-o")
+        .arg(mlar_file.path())
+        .arg("--separator")
+        .arg(sep)
+        .arg("-")
+        .write_stdin(insert.concat());
+
+    println!("{cmd:?}");
+    let assert = cmd.assert();
+    assert.success().stdout(output_files.join("\n") + "\n");
+
+    // `mlar extract -v --accept-unencrypted -i output.mla -o output_dir`
+    let output_dir = TempDir::new().unwrap();
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("extract")
+        .arg("-v")
+        .arg("--accept-unencrypted")
+        .arg("-i")
+        .arg(mlar_file.path())
+        .arg("-o")
+        .arg(output_dir.path());
+
+    println!("{cmd:?}");
+    let assert = cmd.assert();
+    assert.success();
+
+    for (index, file) in output_files.iter().enumerate() {
+        let extracted_file_path = output_dir.path().join(file);
+        let content = fs::read(&extracted_file_path).unwrap();
+        assert_eq!(content, bytes[index]);
+    }
+}
