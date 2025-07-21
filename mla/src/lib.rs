@@ -1550,7 +1550,7 @@ pub(crate) mod tests {
         };
         let mut buf = Vec::new();
         header.serialize(&mut buf).unwrap();
-        println!("{:?}", buf);
+        println!("{buf:?}");
 
         let header_rebuild = ArchiveHeader::deserialize(&mut buf.as_slice()).unwrap();
         assert_eq!(header_rebuild.format_version_number, MLA_FORMAT_VERSION);
@@ -1589,7 +1589,7 @@ pub(crate) mod tests {
         .dump(&mut buf)
         .unwrap();
 
-        println!("{:?}", buf);
+        println!("{buf:?}");
     }
 
     #[test]
@@ -1917,7 +1917,7 @@ pub(crate) mod tests {
                 // read and we stop on the tag before the footer
             }
             status => {
-                panic!("Unexpected status: {}", status);
+                panic!("Unexpected status: {status}");
             }
         };
 
@@ -2114,12 +2114,12 @@ pub(crate) mod tests {
                 match *stopping_error {
                     TruncatedReadError::HashDiffers { .. } => {}
                     _ => {
-                        panic!("Unexpected stopping_error: {}", stopping_error);
+                        panic!("Unexpected stopping_error: {stopping_error}");
                     }
                 }
             }
             status => {
-                panic!("Unexpected status: {}", status);
+                panic!("Unexpected status: {status}");
             }
         };
     }
@@ -2169,7 +2169,7 @@ pub(crate) mod tests {
         // Some constant files
         for i in 0..=255 {
             files.insert(
-                EntryName::from_path(format!("file_{}", i)).unwrap(),
+                EntryName::from_path(format!("file_{i}")).unwrap(),
                 std::iter::repeat_n(i, 0x1000).collect::<Vec<u8>>(),
             );
         }
@@ -2220,7 +2220,7 @@ pub(crate) mod tests {
 
         // Second, add interleaved files
         let fnames: Vec<EntryName> = (0..=255)
-            .map(|i| format!("file_{}", i))
+            .map(|i| format!("file_{i}"))
             .map(|s| EntryName::from_path(&s).unwrap())
             .collect();
         let mut name2id: HashMap<_, _> = HashMap::new();
@@ -2282,8 +2282,7 @@ pub(crate) mod tests {
         let raw_mla = mla.finalize().unwrap();
 
         std::fs::File::create(std::path::Path::new(&format!(
-            "../samples/archive_v{}.mla",
-            MLA_FORMAT_VERSION
+            "../samples/archive_v{MLA_FORMAT_VERSION}.mla"
         )))
         .unwrap()
         .write_all(&raw_mla)
@@ -2464,7 +2463,7 @@ pub(crate) mod tests {
         // Complete up to MAX_SIZE
         while cur_size < MAX_SIZE {
             let id = mla
-                .start_entry(EntryName::from_path(format!("file_{:}", nb_file)).unwrap())
+                .start_entry(EntryName::from_path(format!("file_{nb_file:}")).unwrap())
                 .unwrap();
             let size = std::cmp::min(rng.next_u32() as u64, MAX_SIZE - cur_size);
             let data: Vec<u8> = Standard
@@ -2485,7 +2484,7 @@ pub(crate) mod tests {
         let mut mla_read = ArchiveReader::from_config(buf, config).expect("archive reader");
 
         let file_names: Vec<EntryName> = (0..nb_file)
-            .map(|nb| EntryName::from_path(format!("file_{:}", nb)).unwrap())
+            .map(|nb| EntryName::from_path(format!("file_{nb:}")).unwrap())
             .collect();
         let mut file_list = mla_read
             .list_entries()
