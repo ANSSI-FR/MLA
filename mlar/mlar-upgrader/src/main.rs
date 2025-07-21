@@ -5,7 +5,7 @@ use std::{
 };
 
 use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
-use mla::{config::ArchiveWriterConfig, entry::EntryName};
+use mla::{config::ArchiveWriterConfig, crypto::mlakey::MLAPublicKey, entry::EntryName};
 
 fn app() -> Command {
     Command::new(env!("CARGO_PKG_NAME"))
@@ -50,16 +50,15 @@ fn app() -> Command {
 
 fn writer_from_matches(matches: &ArgMatches) -> mla::ArchiveWriter<'static, File> {
     let config = if let Some(public_key_args) = matches.get_many::<PathBuf>("public_keys") {
-        let mut public_keys = Vec::new();
-        for public_key_arg in public_key_args {
-            let key_bytes = fs::read(public_key_arg).expect("Failed to read public key");
-            let parsed = mla::crypto::mlakey::parse_mlakey_pubkeys_pem_many(&key_bytes)
-                .map_err(|err| format!("Failed to parse public key as PEM: {err}"))
-                .unwrap();
-
-            public_keys.extend(parsed);
-        }
-        ArchiveWriterConfig::with_public_keys(&public_keys)
+        let (pub_encryption_keys, _) = public_key_args
+            .map(|pub_key_path| {
+                let mut key_file = File::open(pub_key_path).expect("Failed to open public key");
+                MLAPublicKey::deserialize_public_key(&mut key_file)
+                    .expect("Failed to parse public key")
+                    .get_public_keys()
+            })
+            .collect::<(Vec<_>, Vec<_>)>();
+        ArchiveWriterConfig::with_public_keys(&pub_encryption_keys)
     } else {
         ArchiveWriterConfig::without_encryption()
     };
