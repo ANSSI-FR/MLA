@@ -63,22 +63,22 @@ mlar create -p key.pub -o my_archive.mla /etc/./os-release /etc/security/../issu
 # etc/os%2drelease
 # file.txt
 # ```
-mlar list -k key -i my_archive.mla
+mlar list -k key.mlapriv -i my_archive.mla
 
 # Extract the content of the archive into a new directory.
 # In this example, this creates two files:
 # extracted_content/etc/issue and extracted_content/etc/os-release
-mlar extract -k key -i my_archive.mla -o extracted_content
+mlar extract -k key.mlapriv -i my_archive.mla -o extracted_content
 
 # Display the content of a file in the archive
-mlar cat -k key -i my_archive.mla etc/os-release
+mlar cat -k key.mlapriv -i my_archive.mla etc/os-release
 
 # Convert the archive to a long-term one, removing encryption and using the best
 # and slower compression level
-mlar convert -k key -i my_archive.mla -o longterm.mla -l compress -q 11
+mlar convert -k key.mlapriv -i my_archive.mla -o longterm.mla -l compress -q 11
 
 # Create an archive with multiple recipient
-mlar create -p archive.pub -p client1.pub -o my_archive.mla ...
+mlar create -p archive.mlapub -p client1.mlapub -o my_archive.mla ...
 
 # List an archive containing an entry with a name that cannot be interpreted as path.
 # This outputs:
@@ -87,12 +87,12 @@ mlar create -p archive.pub -p client1.pub -o my_archive.mla ...
 # NUL, RTLO, newline, terminal escape sequence, carriage return,
 # HTML, surrogate code unit, U+0085 weird newline, fake unicode slash.
 # Please note that some of these characters may appear in valid a path.
-mlar list -k test_mlakey.priv -i archive_weird.mla --raw-escaped-names
+mlar list -k test_mlakey.mlapriv -i archive_weird.mla --raw-escaped-names
 
 # Get its content.
 # This displays:
 # `' OR 1=1`
-mlar cat -k test_mlakey.priv -i archive_weird.mla --raw-escaped-names c%3a%2f%00%3b%e2%80%ae%0ac%0dd%1b%5b1%3b31ma%3cscript%3eevil%5c..%2f%d8%01%c2%85%e2%88%95
+mlar cat -k test_mlakey.mlapriv -i archive_weird.mla --raw-escaped-names c%3a%2f%00%3b%e2%80%ae%0ac%0dd%1b%5b1%3b31ma%3cscript%3eevil%5c..%2f%d8%01%c2%85%e2%88%95
 ```
 
 `mlar` can be obtained:
