@@ -184,17 +184,36 @@ impl MLASignaturePrivateKey {
     }
 }
 
+impl Drop for MLASignaturePrivateKey {
+    fn drop(&mut self) {
+        // TODO
+    }
+}
+
 #[derive(Clone)]
 pub struct MLAPrivateKey {
+    // zeroized on drop for both ecc and mlkem keys
     decryption_private_key: MLADecryptionPrivateKey,
+    // TODO: zeroize on drop
     signature_private_key: MLASignaturePrivateKey,
     opts: KeyOpts,
 }
 
 impl MLAPrivateKey {
-    /// If zeroizing key memory matters to you, ensure that the `Read`
-    /// implemenation of your argument does not use temporary buffers
+    /// Deserialize an MLA private key from a source implementing `Read`.
+    ///
+    /// The serialization format expects:
+    /// - The first line containing the MLA decryption private key in a PEM-like ASCII format,
+    ///   starting with the header `MLA PRIVATE DECRYPTION KEY ` followed by base64-encoded data.
+    /// - Optionally, subsequent lines for signature private key and key options.
+    ///
+    /// This function reads all content into a zeroizeable buffer for security,
+    /// then parses and zeroizes the buffer before returning the key.
+    ///
+    /// Security:
+    /// - Ensure the input source does not leak secrets in temporary buffers,
     /// and do not forget to zeroize the eventual backing data after this call.
+    /// - This method zeroizes the read buffer on completion.
     pub fn deserialize_private_key(src: impl Read) -> Result<Self, Error> {
         let mut content = zeroizeable_read_to_end(src)?;
         let (first_line, _second_line) = split_lines_zeroize(&content)?;
@@ -232,6 +251,14 @@ impl MLAPrivateKey {
         &self.signature_private_key
     }
 
+    /// Serialize the MLA private key into PEM-like format.
+    ///
+    /// Format:
+    /// - Write MLA decryption private key header and base64-encoded bytes.
+    /// - Write signature private key serialization.
+    /// - Write key options serialization (currently placeholder).
+    ///
+    /// This format allows safe storage and transmission of the private key.
     pub fn serialize_private_key<W: Write>(&self, mut dst: W) -> Result<(), Error> {
         self.decryption_private_key
             .serialize_decryption_private_key(&mut dst)?;
