@@ -1082,9 +1082,9 @@ mod tests {
 
     #[test]
     fn check_derive_paths() {
-        let der_priv: &'static [u8] = include_bytes!("../../../samples/test_mlakey.der");
+        let der_priv: &'static [u8] = include_bytes!("../../../samples/test_mlakey.mlapriv");
         let der_derived_priv: &'static [u8] =
-            include_bytes!("../../../samples/test_mlakey_derived.der");
+            include_bytes!("../../../samples/test_mlakey_derived.mlapriv");
         let secret = crate::crypto::mlakey::parse_mlakey_privkey_der(der_priv).unwrap();
         // Safe to unwrap, there is at least one derivation path
         let path = [b"pathcomponent1".as_slice(), b"pathcomponent2".as_slice()];

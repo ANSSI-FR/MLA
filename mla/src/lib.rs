@@ -38,7 +38,7 @@
 //! use mla::ArchiveWriter;
 //! use mla::entry::EntryName;
 //!
-//! const PUB_KEY: &[u8] = include_bytes!("../../samples/test_mlakey_pub.pem");
+//! const PUB_KEY: &[u8] = include_bytes!("../../samples/test_mlakey.mlapub");
 //!
 //! fn main() {
 //!     // Load the needed public key
@@ -68,7 +68,7 @@
 //! use mla::ArchiveWriter;
 //! use mla::entry::EntryName;
 //!
-//! const PUB_KEY: &[u8] = include_bytes!("../../samples/test_mlakey_pub.pem");
+//! const PUB_KEY: &[u8] = include_bytes!("../../samples/test_mlakey.mlapub");
 //!
 //! fn main() {
 //!     // Load the needed public key
@@ -123,7 +123,7 @@
 //! use std::io;
 //! use mla::entry::EntryName;
 //!
-//! const PRIV_KEY: &[u8] = include_bytes!("../../samples/test_mlakey_archive_v2.der");
+//! const PRIV_KEY: &[u8] = include_bytes!("../../samples/test_mlakey_archive_v2.mlapriv");
 //! const DATA: &[u8] = include_bytes!("../../samples/archive_v2.mla");
 //!
 //! fn main() {
@@ -2196,7 +2196,7 @@ pub(crate) mod tests {
         let file = Vec::new();
 
         // Use committed keys
-        let pem_pub: &'static [u8] = include_bytes!("../../samples/test_mlakey_archive_v2_pub.pem");
+        let pem_pub: &'static [u8] = include_bytes!("../../samples/test_mlakey_archive_v2.mlapub");
         let pub_key = crypto::mlakey::parse_mlakey_pubkey_pem(pem_pub).unwrap();
 
         let mut config = ArchiveWriterConfig::with_public_keys(&[pub_key]);
@@ -2298,7 +2298,8 @@ pub(crate) mod tests {
 
     #[test]
     fn check_archive_format_v2_content() {
-        let der_priv: &'static [u8] = include_bytes!("../../samples/test_mlakey_archive_v2.der");
+        let der_priv: &'static [u8] =
+            include_bytes!("../../samples/test_mlakey_archive_v2.mlapriv");
 
         let mla_data: &'static [u8] = include_bytes!("../../samples/archive_v2.mla");
         let files = make_format_regression_files();
@@ -2357,7 +2358,7 @@ pub(crate) mod tests {
     #[test]
     fn not_path_entry_name() {
         let mut file: Vec<u8> = Vec::new();
-        let pem_pub: &'static [u8] = include_bytes!("../../samples/test_mlakey_pub.pem");
+        let pem_pub: &'static [u8] = include_bytes!("../../samples/test_mlakey.mlapub");
         let pub_key = crypto::mlakey::parse_mlakey_pubkey_pem(pem_pub).unwrap();
 
         let mut config = ArchiveWriterConfig::with_public_keys(&[pub_key]).without_compression();
