@@ -4,7 +4,7 @@ use rand_chacha::ChaCha20Rng;
 use rand_chacha::rand_core::CryptoRngCore;
 use zeroize::Zeroize;
 
-use std::io::{BufRead, BufReader, Cursor, Read, Write};
+use std::io::{BufRead, BufReader, Cursor, ErrorKind, Read, Write};
 
 use curve25519_dalek::montgomery::MontgomeryPoint;
 use ml_kem::EncodedSizeUser;
@@ -32,6 +32,73 @@ const MLA_PUB_ENC_KEY_HEADER: &[u8] = b"MLA PUBLIC ENCRYPTION KEY ";
 const ENC_METHOD_ID_0_PUB: &[u8] = b"mla-kem-public-x25519-mlkem1024";
 //const SIGVERIF_METHOD_ID_0_PUB: &[u8] = b"mla-signature-verification-public-ed25519-mldsa87";
 
+#[allow(clippy::slow_vector_initialization, clippy::manual_memcpy)]
+fn zeroizeable_read_to_end(mut src: impl Read) -> Result<Vec<u8>, Error> {
+    let mut buf = Vec::new();
+    let mut min_capacity = 4096; // buf has always at least this capacity
+    buf.resize(min_capacity, 0);
+    let mut read_offset = 0; // up to where in buf we have read data
+    loop {
+        if read_offset == min_capacity {
+            // grow with zeroizing
+            min_capacity *= 2;
+            let mut new_buf = Vec::new();
+            new_buf.resize(min_capacity, 0);
+            for i in 0..buf.len() {
+                new_buf[i] = buf[i];
+            }
+            buf.zeroize();
+            buf = new_buf;
+        }
+        match src.read(&mut buf[read_offset..min_capacity]) {
+            Ok(n) => {
+                if n == 0 {
+                    buf.resize(read_offset, 0);
+                    return Ok(buf);
+                } else {
+                    read_offset += n;
+                }
+            }
+            Err(e) if e.kind() == ErrorKind::Interrupted => {}
+            Err(_) => {
+                buf.zeroize();
+                return Err(Error::DeserializationError);
+            }
+        }
+    }
+}
+
+#[allow(clippy::needless_range_loop)]
+fn split_lines_zeroize(content: &[u8]) -> Result<(&[u8], &[u8]), Error> {
+    let mut first_carriage_return_index = 0;
+    for i in 0..content.len() {
+        if content[i] == b'\r' {
+            first_carriage_return_index = i;
+            break;
+        }
+    }
+    if first_carriage_return_index == 0 {
+        return Err(Error::DeserializationError);
+    }
+    let (first_line, rest) = content.split_at(first_carriage_return_index);
+    if rest.len() < 2 || rest[0] != b'\r' && rest[1] != b'\n' {
+        return Err(Error::DeserializationError);
+    }
+    let rest = &rest[2..];
+    let mut second_carriage_return_index = 0;
+    for i in second_carriage_return_index..rest.len() {
+        if rest[i] == b'\r' {
+            second_carriage_return_index = i;
+            break;
+        }
+    }
+    if second_carriage_return_index == 0 {
+        return Err(Error::DeserializationError);
+    }
+    let (second_line, _) = rest.split_at(second_carriage_return_index);
+    Ok((first_line, second_line))
+}
+
 #[derive(Clone)]
 struct KeyOpts;
 
@@ -54,14 +121,9 @@ impl<R: Read> MLADeserialize<R> for KeyOpts {
 }
 
 impl MLADecryptionPrivateKey {
-    fn deserialize_decryption_private_key(src: impl Read) -> Result<Self, Error> {
-        let mut line = String::new();
-        BufReader::new(src).read_line(&mut line)?;
+    fn deserialize_decryption_private_key(line: &[u8]) -> Result<Self, Error> {
         let b64data = line
-            .as_bytes()
             .strip_prefix(MLA_PRIV_DEC_KEY_HEADER)
-            .ok_or(Error::DeserializationError)?
-            .strip_suffix(b"\r\n")
             .ok_or(Error::DeserializationError)?;
         let data = base64_decode(b64data).map_err(|_| Error::DeserializationError)?;
         let mut cursor = Cursor::new(data);
@@ -89,6 +151,7 @@ impl MLADecryptionPrivateKey {
                 .try_into()
                 .map_err(|_| Error::DeserializationError)?,
         );
+        cursor.into_inner().zeroize();
         serialized_mlkem_key.zeroize();
         Ok(Self {
             private_key_ecc,
@@ -103,7 +166,9 @@ impl MLADecryptionPrivateKey {
         b64data.extend_from_slice(&[0u8; 4]); // key opts, empty length for the moment
         b64data.extend_from_slice(&self.private_key_ecc.to_bytes());
         b64data.extend_from_slice(&self.private_key_ml.as_bytes());
-        dst.write_all(&base64_encode(&b64data))?;
+        let mut encoded = base64_encode(&b64data);
+        dst.write_all(&encoded)?;
+        encoded.zeroize();
         dst.write_all(b"\r\n")?;
         Ok(())
     }
@@ -127,10 +192,16 @@ pub struct MLAPrivateKey {
 }
 
 impl MLAPrivateKey {
-    pub fn deserialize_private_key(mut src: impl Read) -> Result<Self, Error> {
+    /// If zeroizing key memory matters to you, ensure that the `Read`
+    /// implemenation of your argument does not use temporary buffers
+    /// and do not forget to zeroize the eventual backing data after this call.
+    pub fn deserialize_private_key(src: impl Read) -> Result<Self, Error> {
+        let mut content = zeroizeable_read_to_end(src)?;
+        let (first_line, _second_line) = split_lines_zeroize(&content)?;
         let decryption_private_key =
-            MLADecryptionPrivateKey::deserialize_decryption_private_key(&mut src)?;
+            MLADecryptionPrivateKey::deserialize_decryption_private_key(first_line)?;
         let signature_private_key = MLASignaturePrivateKey {};
+        content.zeroize();
         Ok(Self {
             decryption_private_key,
             signature_private_key,

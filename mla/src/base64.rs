@@ -1,3 +1,5 @@
+use zeroize::Zeroize;
+
 use crate::errors::Error;
 
 const BASE64_CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -20,13 +22,16 @@ pub(crate) fn base64_encode(data: &[u8]) -> Vec<u8> {
         }
         for j in 0..4 {
             if j < (n + 1) {
-                let idx = ((val >> ((3 - j) * 6)) & 0x3F) as usize;
+                let mut idx = ((val >> ((3 - j) * 6)) & 0x3F) as usize;
                 encoded.push(BASE64_CHARS[idx]);
+                idx.zeroize();
             } else {
                 encoded.push(b'=');
             }
         }
+        val.zeroize();
     }
+
     encoded
 }
 
@@ -64,6 +69,7 @@ pub(crate) fn base64_decode(encoded: &[u8]) -> Result<Vec<u8>, Error> {
                 decoded.push(((val >> ((2 - j) * 8)) & 0xFF) as u8);
             }
         }
+        val.zeroize();
     }
     Ok(decoded)
 }

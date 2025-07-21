@@ -43,6 +43,8 @@
 //! fn main() {
 //!     // Load the needed public key
 //!     let pub_key = MLAPublicKey::deserialize_public_key(PUB_KEY).unwrap();
+//!     // In production, you may want to zeroize the real `PUB_KEY` or
+//!     // associated temporary values of its `Read` implementation here.
 //!
 //!     // Create an MLA Archive - Output only needs the Write trait.
 //!     // Here, a Vec is used but it would tipically be a `File` or a network socket.
