@@ -1064,19 +1064,21 @@ fn test_keygen() {
     // Gen a keypair, create and list an archive using them
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
     let output_dir = TempDir::new().unwrap();
-    let base_name = output_dir.path().join("key");
+    let base_path = output_dir.path().join("key");
+    let priv_path = base_path.with_extension("mlapriv");
+    let pub_path = base_path.with_extension("mlapub");
     let testfs = setup();
 
     // `mlar keygen tempdir/key`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
-    cmd.arg("keygen").arg(&base_name);
+    cmd.arg("keygen").arg(&base_path);
     cmd.assert().success();
 
     // `mlar create -p tempdir/key.pub -o output.mla file1 file2 file3`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-p")
-        .arg(base_name.with_extension("pub"))
+        .arg(&pub_path)
         .arg("-o")
         .arg(mlar_file.path());
 
@@ -1100,7 +1102,7 @@ fn test_keygen() {
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
         .arg("-k")
-        .arg(base_name)
+        .arg(&priv_path)
         .arg("-i")
         .arg(mlar_file.path());
 
@@ -1123,15 +1125,16 @@ const PRIVATE_KEY_TESTSEED2_SHA256: [u8; 32] = [
 fn test_keygen_seed() {
     // Gen deterministic keypairs
     let output_dir = TempDir::new().unwrap();
-    let base_name = output_dir.path().join("key");
+    let base_path = output_dir.path().join("key");
+    let priv_path = base_path.with_extension("mlapriv");
 
     // `mlar keygen tempdir/key -s TESTSEED`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
-    cmd.arg("keygen").arg(&base_name).arg("-s").arg("TESTSEED");
+    cmd.arg("keygen").arg(&base_path).arg("-s").arg("TESTSEED");
     cmd.assert().success();
 
     let mut pkey_testseed = vec![];
-    File::open(&base_name)
+    File::open(&priv_path)
         .unwrap()
         .read_to_end(&mut pkey_testseed)
         .unwrap();
@@ -1141,11 +1144,11 @@ fn test_keygen_seed() {
 
     // `mlar keygen tempdir/key -s TESTSEED2`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
-    cmd.arg("keygen").arg(&base_name).arg("-s").arg("TESTSEED2");
+    cmd.arg("keygen").arg(&base_path).arg("-s").arg("TESTSEED2");
     cmd.assert().success();
 
     let mut pkey_testseed2 = vec![];
-    File::open(&base_name)
+    File::open(&priv_path)
         .unwrap()
         .read_to_end(&mut pkey_testseed2)
         .unwrap();
@@ -1166,10 +1169,14 @@ fn test_keyderive() {
     └──["Child 2"]── key_child2
      */
     let output_dir = TempDir::new().unwrap();
-    let key_parent = output_dir.path().join("key_parent");
-    let key_child1 = output_dir.path().join("key_child1");
-    let key_child2 = output_dir.path().join("key_child2");
-    let key_child1_child1 = output_dir.path().join("key_child1_child1");
+    let key_parent_pfx = output_dir.path().join("key_parent");
+    let key_parent_priv = key_parent_pfx.with_extension("mlapriv");
+    let key_child1_pfx = output_dir.path().join("key_child1");
+    let key_child1_priv = key_child1_pfx.with_extension("mlapriv");
+    let key_child2_pfx = output_dir.path().join("key_child2");
+    let key_child2_priv = key_child2_pfx.with_extension("mlapriv");
+    let key_child1_child1_pfx = output_dir.path().join("key_child1_child1");
+    let key_child1_child1_priv = key_child1_child1_pfx.with_extension("mlapriv");
 
     //---------------- SETUP: Create and fill `keys` --------------
     struct Keys {
@@ -1187,43 +1194,43 @@ fn test_keyderive() {
 
     // `mlar keygen tempdir/key_parent`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
-    cmd.arg("keygen").arg(&key_parent);
+    cmd.arg("keygen").arg(&key_parent_pfx);
     cmd.assert().success();
 
-    keys.parent = fs::read(&key_parent).unwrap();
+    keys.parent = fs::read(&key_parent_priv).unwrap();
 
     // `mlar keyderive tempdir/key_parent tempdir/key_child1 --path "Child 1"`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("keyderive")
-        .arg(&key_parent)
-        .arg(&key_child1)
+        .arg(&key_parent_priv)
+        .arg(&key_child1_pfx)
         .arg("-p")
         .arg("Child 1");
     cmd.assert().success();
 
-    keys.child1 = fs::read(&key_child1).unwrap();
+    keys.child1 = fs::read(&key_child1_priv).unwrap();
 
     // `mlar keyderive tempdir/key_parent tempdir/key_child2 --path "Child 2"`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("keyderive")
-        .arg(&key_parent)
-        .arg(&key_child2)
+        .arg(&key_parent_priv)
+        .arg(&key_child2_pfx)
         .arg("-p")
         .arg("Child 2");
     cmd.assert().success();
 
-    keys.child2 = fs::read(&key_child2).unwrap();
+    keys.child2 = fs::read(&key_child2_priv).unwrap();
 
     // `mlar keyderive tempdir/key_child1 tempdir/key_child1_child1 --path "Child 1"`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("keyderive")
-        .arg(&key_child1)
-        .arg(&key_child1_child1)
+        .arg(&key_child1_priv)
+        .arg(&key_child1_child1_pfx)
         .arg("-p")
         .arg("Child 1");
     cmd.assert().success();
 
-    keys.child1child1 = fs::read(&key_child1_child1).unwrap();
+    keys.child1child1 = fs::read(&key_child1_child1_priv).unwrap();
 
     //---------------- END OF SETUP -----------------
 
@@ -1236,33 +1243,35 @@ fn test_keyderive() {
 
     // Ensure path is deterministic
 
-    let key_tmp = output_dir.path().join("key_tmp");
+    let key_tmp_pfx = output_dir.path().join("key_tmp");
+    let key_tmp_priv = key_tmp_pfx.with_extension("mlapriv");
     // `mlar keyderive tempdir/key_parent tempdir/key_tmp --path "Child 2"`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("keyderive")
-        .arg(&key_parent)
-        .arg(&key_tmp)
+        .arg(&key_parent_priv)
+        .arg(&key_tmp_pfx)
         .arg("-p")
         .arg("Child 2");
     cmd.assert().success();
 
-    assert_eq!(keys.child2, fs::read(&key_tmp).unwrap());
+    assert_eq!(keys.child2, fs::read(&key_tmp_priv).unwrap());
 
     // Ensure path is transitive
 
-    let key_tmp2 = output_dir.path().join("key_tmp2");
+    let key_tmp2_pfx = output_dir.path().join("key_tmp2");
+    let key_tmp2_priv = key_tmp2_pfx.with_extension("mlapriv");
     // `mlar keyderive tempdir/key_parent tempdir/key_tmp2 --path "Child 1" --path "Child 1"`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("keyderive")
-        .arg(&key_parent)
-        .arg(&key_tmp2)
+        .arg(&key_parent_priv)
+        .arg(&key_tmp2_pfx)
         .arg("-p")
         .arg("Child 1")
         .arg("-p")
         .arg("Child 1");
     cmd.assert().success();
 
-    assert_eq!(keys.child1child1, fs::read(&key_tmp2).unwrap());
+    assert_eq!(keys.child1child1, fs::read(&key_tmp2_priv).unwrap());
 }
 
 #[test]
