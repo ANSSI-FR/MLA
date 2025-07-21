@@ -948,8 +948,7 @@ fn test_extract() {
     println!("{cmd:?}");
     let assert = cmd.assert();
     let expected_output = format!(
-        "Extracting the whole archive using a linear extraction\n{}",
-        file_list,
+        "Extracting the whole archive using a linear extraction\n{file_list}",
     );
     assert.success().stdout(expected_output);
 
@@ -1399,7 +1398,7 @@ fn test_extract_lot_files() {
 
     // Create many files, filled with a few alphanumeric characters
     for i in 1..TEST_MANY_FILES_NB {
-        let tmp_file = NamedTempFile::new(format!("file{}.bin", i)).unwrap();
+        let tmp_file = NamedTempFile::new(format!("file{i}.bin")).unwrap();
         let data: Vec<u8> = Alphanumeric.sample_iter(&mut rng).take(SIZE_FILE).collect();
         tmp_file.write_binary(data.as_slice()).unwrap();
 
@@ -1439,7 +1438,7 @@ fn test_extract_lot_files() {
     }
     cmd.write_stdin(String::from(&file_list));
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     assert.success().stderr(String::from(&file_listing));
 
@@ -1458,7 +1457,7 @@ fn test_extract_lot_files() {
         .arg("-g")
         .arg("*");
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     assert.success().stdout(file_listing.clone());
 
@@ -1477,7 +1476,7 @@ fn test_extract_lot_files() {
         .arg("-o")
         .arg(output_dir.path());
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     let expected_output = format!(
         "Extracting the whole archive using a linear extraction\n{}",
@@ -1514,7 +1513,7 @@ fn test_extract_lot_files() {
         .arg(output_dir.path())
         .arg(normalize(one_filename));
 
-    println!("{:?}", cmd);
+    println!("{cmd:?}");
     let assert = cmd.assert();
     assert.success().stdout(format!(
         "{}\n",
