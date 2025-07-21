@@ -1039,191 +1039,27 @@ mod tests {
         // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
 
         // Check the created key is deterministic
-        let keypair1 = generate_keypair_from_seed([0; 32]);
-        let keypair2 = generate_keypair_from_seed([0; 32]);
-        assert_eq!(keypair1.0.to_der(), keypair2.0.to_der());
-        assert_eq!(keypair1.1.to_der(), keypair2.1.to_der());
+        let (priv1, pub1) = generate_mla_keypair_from_seed([0; 32]);
+        let (priv2, pub2) = generate_mla_keypair_from_seed([0; 32]);
+        let mut priv1s = Vec::new();
+        let mut pub1s = Vec::new();
+        let mut priv2s = Vec::new();
+        let mut pub2s = Vec::new();
+        priv1.serialize_private_key(&mut priv1s).unwrap();
+        pub1.serialize_public_key(&mut pub1s).unwrap();
+        priv2.serialize_private_key(&mut priv2s).unwrap();
+        pub2.serialize_public_key(&mut pub2s).unwrap();
+        assert_eq!(priv1s, priv2s);
+        assert_eq!(pub1s, pub2s);
 
         // Ensure it is not always the same
-        let keypair3 = generate_keypair_from_seed([1; 32]);
-        assert_ne!(keypair1.0.to_der(), keypair3.0.to_der());
-    }
-
-    /// Check PEM export from KeyPair
-    #[test]
-    fn keypair_export_pem() {
-        // Generate a KeyPair
-        let keypair = generate_keypair();
-
-        // Parse it as DER, then in PEM form
-        let priv_der = keypair.0.to_der();
-        let pub_der = keypair.1.to_der();
-        let priv_key = parse_mlakey_privkey_der(&priv_der).unwrap();
-        let pub_key = parse_mlakey_pubkey_der(&pub_der).unwrap();
-
-        let priv_pem = keypair.0.to_pem();
-        let pub_pem = keypair.1.to_pem();
-        assert_ne!(&priv_der, priv_pem.as_bytes());
-        assert_ne!(&pub_der, pub_pem.as_bytes());
-
-        let priv_key_pem = parse_mlakey_privkey_pem(priv_pem.as_bytes()).unwrap();
-        let pub_key_pem = parse_mlakey_pubkey_pem(pub_pem.as_bytes()).unwrap();
-
-        // Resulting key must be the same
-        assert_eq!(
-            priv_key.private_key_ecc.as_bytes(),
-            priv_key_pem.private_key_ecc.as_bytes()
-        );
-        assert_eq!(
-            priv_key.private_key_ml.as_bytes(),
-            priv_key_pem.private_key_ml.as_bytes()
-        );
-        assert_eq!(
-            pub_key.public_key_ecc.as_bytes(),
-            pub_key_pem.public_key_ecc.as_bytes()
-        );
-        assert_eq!(
-            pub_key.public_key_ml.as_bytes(),
-            pub_key_pem.public_key_ml.as_bytes()
-        );
-    }
-
-    /// Parse a DER public & private key, then check the keys correspond
-    #[test]
-    fn parse_and_check_mlakey_der() {
-        let priv_key = parse_mlakey_privkey_der(MLA_DER_PRIV).unwrap();
-        let pub_key = parse_mlakey_pubkey_der(MLA_DER_PUB).unwrap();
-
-        check_key_pair(&pub_key, &priv_key);
-    }
-
-    /// Parse the same public key in DER and PEM format
-    #[test]
-    fn parse_pub_der_pem() {
-        let pub_key_der = parse_mlakey_pubkey_der(MLA_DER_PUB).unwrap();
-        let pub_key_pem = parse_mlakey_pubkey_pem(MLA_PEM_PUB).unwrap();
-        assert_eq!(pub_key_der.public_key_ecc.as_bytes().len(), ECC_PUBKEY_SIZE);
-        assert_eq!(
-            pub_key_der.public_key_ml.as_bytes().len(),
-            MLKEM_1024_PUBKEY_SIZE
-        );
-        assert_eq!(
-            pub_key_der.public_key_ecc.as_bytes(),
-            pub_key_pem.public_key_ecc.as_bytes()
-        );
-        assert_eq!(
-            pub_key_der.public_key_ml.as_bytes(),
-            pub_key_pem.public_key_ml.as_bytes()
-        );
-    }
-
-    /// Parse the same private key in DER and PEM format
-    #[test]
-    fn parse_priv_der_pem() {
-        let priv_key_der = parse_mlakey_privkey_der(MLA_DER_PRIV).unwrap();
-        let priv_key_pem = parse_mlakey_privkey_pem(MLA_PEM_PRIV).unwrap();
-        assert_eq!(
-            priv_key_der.private_key_ecc.as_bytes().len(),
-            ECC_PRIVKEY_SIZE
-        );
-        assert_eq!(
-            priv_key_der.private_key_ml.as_bytes().len(),
-            MLKEM_1024_PRIVKEY_SIZE
-        );
-        assert_eq!(
-            priv_key_der.private_key_ecc.as_bytes(),
-            priv_key_pem.private_key_ecc.as_bytes()
-        );
-        assert_eq!(
-            priv_key_der.private_key_ml.as_bytes(),
-            priv_key_pem.private_key_ml.as_bytes()
-        );
-    }
-
-    /// Parse keys in DER with Ed25519 then MLKEM form
-    #[test]
-    fn parse_priv_der_ed() {
-        let priv_key_ed25519 = parse_mlakey_privkey_der(MLA_DER_PRIV_ED).unwrap();
-        let pub_key_ed25519 = parse_mlakey_pubkey_der(MLA_DER_PUB_ED).unwrap();
-        check_key_pair(&pub_key_ed25519, &priv_key_ed25519);
-    }
-
-    /// Parse a PEM file containning several public keys
-    #[test]
-    fn parse_many_mlakey_pubkeys() {
-        // Parse only one with `many` API
-        let pub_keys_pem = parse_mlakey_pubkeys_pem_many(MLA_PEM_PUB).unwrap();
-        assert_eq!(pub_keys_pem.len(), 1);
-        let pub_key = parse_mlakey_pubkey_der(MLA_DER_PUB).unwrap();
-        assert_eq!(pub_key.public_key_ecc.as_bytes().len(), ECC_PUBKEY_SIZE);
-        assert_eq!(
-            pub_key.public_key_ml.as_bytes().len(),
-            MLKEM_1024_PUBKEY_SIZE
-        );
-        assert_eq!(
-            pub_key.public_key_ecc.as_bytes(),
-            pub_keys_pem[0].public_key_ecc.as_bytes()
-        );
-        assert_eq!(
-            pub_key.public_key_ml.as_bytes(),
-            pub_keys_pem[0].public_key_ml.as_bytes()
-        );
-
-        // Parse several key in the same PEM file
-        let pub_keys_pem = parse_mlakey_pubkeys_pem_many(MLA_PEM_PUB_MANY).unwrap();
-        assert_eq!(pub_keys_pem.len(), 3);
-        assert_eq!(
-            pub_key.public_key_ecc.as_bytes(),
-            pub_keys_pem[0].public_key_ecc.as_bytes()
-        );
-        assert_ne!(
-            pub_key.public_key_ecc.as_bytes(),
-            pub_keys_pem[1].public_key_ecc.as_bytes()
-        );
-        assert_ne!(
-            pub_key.public_key_ecc.as_bytes(),
-            pub_keys_pem[2].public_key_ecc.as_bytes()
-        );
-        assert_eq!(
-            pub_key.public_key_ml.as_bytes(),
-            pub_keys_pem[0].public_key_ml.as_bytes()
-        );
-        assert_ne!(
-            pub_key.public_key_ml.as_bytes(),
-            pub_keys_pem[1].public_key_ml.as_bytes()
-        );
-        assert_ne!(
-            pub_key.public_key_ml.as_bytes(),
-            pub_keys_pem[2].public_key_ml.as_bytes()
-        );
-    }
-
-    /// Parse the (same) key in X25519 then MLKEM, and MLKEM then X25519 forms
-    #[test]
-    fn parse_der_rev() {
-        // Check private key
-        let priv_key = parse_mlakey_privkey_der(MLA_DER_PRIV).unwrap();
-        let priv_key_rev = parse_mlakey_privkey_der(MLA_DER_PRIV_REV).unwrap();
-        assert_eq!(
-            priv_key.private_key_ecc.as_bytes(),
-            priv_key_rev.private_key_ecc.as_bytes()
-        );
-        assert_eq!(
-            priv_key.private_key_ml.as_bytes(),
-            priv_key_rev.private_key_ml.as_bytes()
-        );
-
-        // Check public key
-        let pub_key = parse_mlakey_pubkey_der(MLA_DER_PUB).unwrap();
-        let pub_key_rev = parse_mlakey_pubkey_der(MLA_DER_PUB_REV).unwrap();
-        assert_eq!(
-            pub_key.public_key_ecc.as_bytes(),
-            pub_key_rev.public_key_ecc.as_bytes()
-        );
-        assert_eq!(
-            pub_key.public_key_ml.as_bytes(),
-            pub_key_rev.public_key_ml.as_bytes()
-        );
+        let (priv3, pub3) = generate_mla_keypair_from_seed([1; 32]);
+        let mut priv3s = Vec::new();
+        let mut pub3s = Vec::new();
+        priv3.serialize_private_key(&mut priv3s).unwrap();
+        pub3.serialize_public_key(&mut pub3s).unwrap();
+        assert_ne!(priv1s, priv3s);
+        assert_ne!(pub1s, pub3s);
     }
 
     #[test]
