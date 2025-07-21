@@ -1,8 +1,8 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 use mla::config::ArchiveReaderConfig;
 use mla::config::ArchiveWriterConfig;
-use mla::crypto::mlakey::HybridPrivateKey;
-use mla::crypto::mlakey::HybridPublicKey;
+use mla::crypto::mlakey::MLADecryptionPrivateKey;
+use mla::crypto::mlakey::MLAEncryptionPublicKey;
 use mla::crypto::mlakey::MLAKeyParserError;
 use mla::crypto::mlakey::MLAKEY_PRIVKEY_DER_SIZE;
 use mla::crypto::mlakey::MLAKEY_PUBKEY_DER_SIZE;
@@ -292,7 +292,7 @@ pub extern "C" fn create_mla_writer_config_with_public_keys_der(
                 unsafe { std::slice::from_raw_parts(*pointer, MLAKEY_PUBKEY_DER_SIZE) };
             parse_mlakey_pubkey_der(public_key_data)
         })
-        .collect::<Result<Vec<HybridPublicKey>, MLAKeyParserError>>();
+        .collect::<Result<Vec<MLAEncryptionPublicKey>, MLAKeyParserError>>();
     let public_keys = match public_keys {
         Ok(public_keys) => public_keys,
         Err(_) => return MLAStatus::MlaKeyParserError,
@@ -460,7 +460,7 @@ fn create_mla_reader_config_with_private_keys_der_generic<F>(
     f: F,
 ) -> MLAStatus
 where
-    F: FnOnce(&[HybridPrivateKey]) -> ArchiveReaderConfig,
+    F: FnOnce(&[MLADecryptionPrivateKey]) -> ArchiveReaderConfig,
 {
     if handle_out.is_null() || private_keys_pointers.is_null() || number_of_private_keys == 0 {
         return MLAStatus::BadAPIArgument;
@@ -482,7 +482,7 @@ where
                 unsafe { std::slice::from_raw_parts(*pointer, MLAKEY_PRIVKEY_DER_SIZE) };
             parse_mlakey_privkey_der(private_key_data)
         })
-        .collect::<Result<Vec<HybridPrivateKey>, MLAKeyParserError>>();
+        .collect::<Result<Vec<MLADecryptionPrivateKey>, MLAKeyParserError>>();
     let private_keys = match private_keys {
         Ok(private_keys) => private_keys,
         Err(_) => return MLAStatus::MlaKeyParserError,
@@ -529,7 +529,7 @@ fn create_mla_reader_config_with_private_key_pem_many_generic<F>(
     f: F,
 ) -> MLAStatus
 where
-    F: FnOnce(&[HybridPrivateKey]) -> ArchiveReaderConfig,
+    F: FnOnce(&[MLADecryptionPrivateKey]) -> ArchiveReaderConfig,
 {
     if handle_out.is_null() || private_keys_pem.is_null() {
         return MLAStatus::BadAPIArgument;

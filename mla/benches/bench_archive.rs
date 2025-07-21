@@ -5,7 +5,7 @@ use criterion::Throughput;
 
 use mla::TruncatedArchiveReader;
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
-use mla::crypto::mlakey::{HybridPublicKey, generate_keypair_from_seed};
+use mla::crypto::mlakey::{MLAEncryptionPublicKey, generate_keypair_from_seed};
 use mla::entry::EntryName;
 use mla::helpers::linear_extract;
 use mla::{ArchiveReader, ArchiveWriter};
@@ -83,7 +83,7 @@ fn build_archive_reader<'a>(
 
 fn layers_to_config(
     (compression, encryption): &(bool, bool),
-    public_key: &HybridPublicKey,
+    public_key: &MLAEncryptionPublicKey,
 ) -> ArchiveWriterConfig {
     let config = if *encryption {
         ArchiveWriterConfig::with_public_keys(&[public_key.clone()])

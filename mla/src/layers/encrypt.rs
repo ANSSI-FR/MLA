@@ -5,7 +5,7 @@ use crate::crypto::aesgcm::{
 use crate::crypto::hpke::{compute_nonce, key_schedule_base_hybrid_kem};
 use crate::crypto::hybrid::{
     HybridKemSharedSecret, HybridMultiRecipientEncapsulatedKey, HybridMultiRecipientsPublicKeys,
-    HybridPrivateKey, HybridPublicKey,
+    MLADecryptionPrivateKey, MLAEncryptionPublicKey,
 };
 use crate::layers::traits::{
     InnerWriterTrait, InnerWriterType, LayerFailSafeReader, LayerReader, LayerWriter,
@@ -240,7 +240,10 @@ impl EncryptionConfig {
         ))
     }
 
-    pub(crate) fn add_public_keys(&mut self, keys: &[HybridPublicKey]) -> &mut EncryptionConfig {
+    pub(crate) fn add_public_keys(
+        &mut self,
+        keys: &[MLAEncryptionPublicKey],
+    ) -> &mut EncryptionConfig {
         self.public_keys.keys.extend_from_slice(keys);
         self
     }
@@ -249,14 +252,14 @@ impl EncryptionConfig {
 #[derive(Default)]
 pub struct EncryptionReaderConfig {
     /// Private key(s) to use
-    private_keys: Vec<HybridPrivateKey>,
+    private_keys: Vec<MLADecryptionPrivateKey>,
     /// Symmetric encryption key and nonce, if decrypted successfully from header
     // TODO: split in two, like InternalEncryptionConfig
     encrypt_parameters: Option<(Key, Nonce)>,
 }
 
 impl EncryptionReaderConfig {
-    pub(crate) fn set_private_keys(&mut self, private_keys: &[HybridPrivateKey]) {
+    pub(crate) fn set_private_keys(&mut self, private_keys: &[MLADecryptionPrivateKey]) {
         self.private_keys = private_keys.to_vec();
     }
 

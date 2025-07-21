@@ -17,10 +17,24 @@ use x25519_dalek::{PublicKey, StaticSecret};
 
 use core::fmt;
 
-pub use crate::crypto::hybrid::{HybridPrivateKey, HybridPublicKey};
+pub use crate::crypto::hybrid::{MLADecryptionPrivateKey, MLAEncryptionPublicKey};
 pub use crate::crypto::hybrid::{generate_keypair, generate_keypair_from_seed};
 
 use crate::crypto::hybrid::{MLKEMDecapsulationKey, MLKEMEncapsulationKey};
+
+pub struct MLASignaturePrivateKey {}
+
+pub struct MLASignatureVerificationPublicKey {}
+
+pub struct MLAPrivateKey {
+    encryption_private_key: MLADecryptionPrivateKey,
+    signature_private_key: MLASignaturePrivateKey,
+}
+
+pub struct MLAPublicKey {
+    decryption_public_key: MLAEncryptionPublicKey,
+    signature_verification_public_key: MLASignatureVerificationPublicKey,
+}
 
 const ED_25519_OID: Oid<'static> = oid!(1.3.101.112);
 const X_25519_OID: Oid<'static> = oid!(1.3.101.110);
@@ -251,7 +265,7 @@ fn parse_mlkem_decapkey_internal(
 /// )
 ///
 /// Note: OID order can change (Ed/X 25519 then MLKEM, MLKEM then Ed/X 25519)
-pub fn parse_mlakey_privkey_der(data: &[u8]) -> Result<HybridPrivateKey, MLAKeyParserError> {
+pub fn parse_mlakey_privkey_der(data: &[u8]) -> Result<MLADecryptionPrivateKey, MLAKeyParserError> {
     let (_remain, (seq_25519, seq_mlkem)) = parse_der_container(|i: &[u8], hdr| {
         if hdr.tag() != Tag::Sequence {
             return Err(nom::Err::Error(BerError::InvalidTag));
@@ -282,7 +296,7 @@ pub fn parse_mlakey_privkey_der(data: &[u8]) -> Result<HybridPrivateKey, MLAKeyP
     // Parse X/Ed 25519 part
     let private_key_ecc = parse_openssl_25519_privkey_internal(seq_25519)?;
 
-    Ok(HybridPrivateKey {
+    Ok(MLADecryptionPrivateKey {
         private_key_ecc,
         private_key_ml,
     })
@@ -439,7 +453,7 @@ fn parse_mlkem_encapkey_internal(
 /// )
 ///
 /// Note: OID order can change (Ed/X 25519 then MLKEM, MLKEM then Ed/X 25519)
-pub fn parse_mlakey_pubkey_der(data: &[u8]) -> Result<HybridPublicKey, MLAKeyParserError> {
+pub fn parse_mlakey_pubkey_der(data: &[u8]) -> Result<MLAEncryptionPublicKey, MLAKeyParserError> {
     let (_remain, (seq_25519, seq_mlkem)) = parse_der_container(|i: &[u8], hdr| {
         if hdr.tag() != Tag::Sequence {
             return Err(nom::Err::Error(BerError::InvalidTag));
@@ -468,7 +482,7 @@ pub fn parse_mlakey_pubkey_der(data: &[u8]) -> Result<HybridPublicKey, MLAKeyPar
     // Parse X/Ed 25519 part
     let public_key_ecc = parse_openssl_25519_pubkey_internal(seq_25519)?;
 
-    Ok(HybridPublicKey {
+    Ok(MLAEncryptionPublicKey {
         public_key_ecc,
         public_key_ml,
     })
@@ -480,7 +494,7 @@ const PUBLIC_TAG: &[u8] = b"PUBLIC KEY";
 const PRIVATE_TAG: &[u8] = b"PRIVATE KEY";
 
 /// Parse an MLA private key in PEM format
-pub fn parse_mlakey_privkey_pem(data: &[u8]) -> Result<HybridPrivateKey, MLAKeyParserError> {
+pub fn parse_mlakey_privkey_pem(data: &[u8]) -> Result<MLADecryptionPrivateKey, MLAKeyParserError> {
     if let Ok(pem_data) = pem::parse(data) {
         // First, try as a PEM
         if pem_data.tag().as_bytes() != PRIVATE_TAG {
@@ -495,7 +509,7 @@ pub fn parse_mlakey_privkey_pem(data: &[u8]) -> Result<HybridPrivateKey, MLAKeyP
 /// Parse several contiguous MLA public keys in PEM format
 pub fn parse_mlakey_privkeys_pem_many(
     data: &[u8],
-) -> Result<Vec<HybridPrivateKey>, MLAKeyParserError> {
+) -> Result<Vec<MLADecryptionPrivateKey>, MLAKeyParserError> {
     let mut output = Vec::new();
     for pem_data in pem::parse_many(data)? {
         if pem_data.tag().as_bytes() != PRIVATE_TAG {
@@ -507,7 +521,7 @@ pub fn parse_mlakey_privkeys_pem_many(
 }
 
 /// Parse an MLA public key in PEM format
-pub fn parse_mlakey_pubkey_pem(data: &[u8]) -> Result<HybridPublicKey, MLAKeyParserError> {
+pub fn parse_mlakey_pubkey_pem(data: &[u8]) -> Result<MLAEncryptionPublicKey, MLAKeyParserError> {
     if let Ok(pem_data) = pem::parse(data) {
         // First, try as a PEM
         if pem_data.tag().as_bytes() != PUBLIC_TAG {
@@ -522,7 +536,7 @@ pub fn parse_mlakey_pubkey_pem(data: &[u8]) -> Result<HybridPublicKey, MLAKeyPar
 /// Parse several contiguous MLA public keys in PEM format
 pub fn parse_mlakey_pubkeys_pem_many(
     data: &[u8],
-) -> Result<Vec<HybridPublicKey>, MLAKeyParserError> {
+) -> Result<Vec<MLAEncryptionPublicKey>, MLAKeyParserError> {
     let mut output = Vec::new();
     for pem_data in pem::parse_many(data)? {
         if pem_data.tag().as_bytes() != PUBLIC_TAG {
@@ -556,7 +570,7 @@ const PUB_DER_LEN: usize =
 const PRIV_KEY_TAG: &str = "PRIVATE KEY";
 const PUB_KEY_TAG: &str = "PUBLIC KEY";
 
-impl HybridPublicKey {
+impl MLAEncryptionPublicKey {
     pub fn to_der(&self) -> [u8; PUB_DER_LEN] {
         let mut public_der = [0u8; PUB_DER_LEN];
         public_der[..PUB_KEY_PREFIX1.len()].copy_from_slice(PUB_KEY_PREFIX1);
@@ -576,7 +590,7 @@ impl HybridPublicKey {
     }
 }
 
-impl HybridPrivateKey {
+impl MLADecryptionPrivateKey {
     pub fn to_der(&self) -> [u8; PRIV_DER_LEN] {
         let mut private_der = [0u8; PRIV_DER_LEN];
         private_der[..PRIV_KEY_PREFIX1.len()].copy_from_slice(PRIV_KEY_PREFIX1);
@@ -613,7 +627,7 @@ const DERIVE_PATH_SALT: &[u8; 15] = b"PATH DERIVATION";
 /// Note: the secret is consumed on call
 ///
 /// \[1\] <https://eprint.iacr.org/2023/861>
-fn apply_derive(path: &[u8], src: HybridPrivateKey) -> [u8; 32] {
+fn apply_derive(path: &[u8], src: MLADecryptionPrivateKey) -> [u8; 32] {
     // Force uniform-randomness on ECC-key, used as the future HKDF "salt" argument
     let (dprf_salt, _hkdf) = Hkdf::<Sha512>::extract(None, src.private_key_ecc.as_bytes());
 
@@ -628,8 +642,8 @@ fn apply_derive(path: &[u8], src: HybridPrivateKey) -> [u8; 32] {
 
 fn derive_one_path_component(
     path: &[u8],
-    privkey: HybridPrivateKey,
-) -> (HybridPrivateKey, HybridPublicKey) {
+    privkey: MLADecryptionPrivateKey,
+) -> (MLADecryptionPrivateKey, MLAEncryptionPublicKey) {
     let seed = apply_derive(path, privkey);
     generate_keypair_from_seed(seed)
 }
@@ -640,8 +654,8 @@ fn derive_one_path_component(
 /// See `doc/KEY_DERIVATION.md`.
 pub fn derive_keypair_from_path<'a>(
     path_components: impl Iterator<Item = &'a [u8]>,
-    src: HybridPrivateKey,
-) -> Option<(HybridPrivateKey, HybridPublicKey)> {
+    src: MLADecryptionPrivateKey,
+) -> Option<(MLADecryptionPrivateKey, MLAEncryptionPublicKey)> {
     // None for public key: we do not have one at the beginning
     let initial_keypair = (src, None);
     // Use a fold to feed each newly generated keypair into next derive_one_path_component
@@ -682,7 +696,7 @@ mod tests {
     static MLA_PEM_PUB_MANY: &[u8] = include_bytes!("../../../samples/test_mlakey_many_pub.pem");
 
     /// Check key coherence
-    fn check_key_pair(pub_key: HybridPublicKey, priv_key: HybridPrivateKey) {
+    fn check_key_pair(pub_key: MLAEncryptionPublicKey, priv_key: MLADecryptionPrivateKey) {
         // Check the public ECC key rebuilt from the private ECC key is the expected one
         let computed_ecc_pubkey = PublicKey::from(&priv_key.private_key_ecc);
         assert_eq!(pub_key.public_key_ecc.as_bytes().len(), ECC_PUBKEY_SIZE);
@@ -932,7 +946,7 @@ mod tests {
         let mut priv_keys = vec![];
         for i in 0..1 {
             for j in 0..1 {
-                priv_keys.push(HybridPrivateKey {
+                priv_keys.push(MLADecryptionPrivateKey {
                     private_key_ecc: StaticSecret::from([i as u8; 32]),
                     private_key_ml: MLKEMDecapsulationKey::from_bytes(&[j as u8; 3168].into()),
                 });

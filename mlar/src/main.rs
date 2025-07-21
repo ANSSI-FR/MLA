@@ -4,7 +4,7 @@ use humansize::{DECIMAL, FormatSize};
 use lru::LruCache;
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
 use mla::crypto::mlakey::{
-    HybridPrivateKey, HybridPublicKey, derive_keypair_from_path, generate_keypair,
+    MLADecryptionPrivateKey, MLAEncryptionPublicKey, derive_keypair_from_path, generate_keypair,
     generate_keypair_from_seed, parse_mlakey_privkey_pem, parse_mlakey_pubkey_pem,
 };
 use mla::entry::{ENTRY_NAME_RAW_CONTENT_ALLOWED_BYTES, EntryName, EntryNameError};
@@ -119,7 +119,7 @@ impl Write for OutputTypes {
 }
 
 /// Return the parsed version of private keys from arguments `private_keys`
-fn open_private_keys(matches: &ArgMatches) -> Result<Vec<HybridPrivateKey>, Error> {
+fn open_private_keys(matches: &ArgMatches) -> Result<Vec<MLADecryptionPrivateKey>, Error> {
     let mut private_keys = Vec::new();
     if let Some(private_key_args) = matches.get_many::<PathBuf>("private_keys") {
         for private_key_arg in private_key_args {
@@ -137,7 +137,7 @@ fn open_private_keys(matches: &ArgMatches) -> Result<Vec<HybridPrivateKey>, Erro
 }
 
 /// Return the parsed version of public keys from arguments `public_keys`
-fn open_public_keys(matches: &ArgMatches) -> Result<Vec<HybridPublicKey>, Error> {
+fn open_public_keys(matches: &ArgMatches) -> Result<Vec<MLAEncryptionPublicKey>, Error> {
     let mut public_keys = Vec::new();
 
     if let Some(public_key_args) = matches.get_many::<PathBuf>("public_keys") {
