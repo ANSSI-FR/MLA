@@ -1324,7 +1324,7 @@ fn app() -> clap::Command {
                 )
                 .arg(
                     Arg::new("output-prefix")
-                        .help("Output prefix for the keys. The private key will be in {output}.mlapriv and the public key will be in {output}.mlapub")
+                        .help("Output prefix for the keys. The private key will be in {output-prefix}.mlapriv and the public key will be in {output-prefix}.mlapub")
                         .num_args(1)
                         .value_parser(value_parser!(PathBuf))
                         .required(true)
