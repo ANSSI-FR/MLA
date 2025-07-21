@@ -201,7 +201,7 @@ The rules for each component are:</p>
 <li>The eventual second byte of the whole path should not be an ASCII colon (<code>:</code>).</li>
 <li>Every component must be encoded as UTF-8.</li>
 </ul>
-<p>These rules are checked by the accompanying Rust implmentation (<code>EntryName::to_pathbuf</code>).</p>
+<p>These rules are checked by the accompanying Rust implementation (<code>EntryName::to_pathbuf</code>).</p>
 <p>Even if respecting these rules, the OS may see the resulting path as invalid.</p>
 <p>Please keep in mind that two different names, may map to same path on OS
 (e.g. Windows case insensitivity).</p>
@@ -247,8 +247,8 @@ in <code>Generic escaping</code>.</p>
 <li>./b -&gt; invalid path (not normalized)</li>
 <li>a/. -&gt; invalid path (not normalized)</li>
 <li>aNULb (where NUL here represent an ASCII NUL byte) -&gt; invalid path</li>
-<li>m:abcd -&gt; invalid path on Windows (<code>:</code> as second byte), m%3aabcd on UNIX like</li>
-<li>a\b (where <code>\</code> represents an ASCII backslash, not an escaped b) -&gt; invalid path on Windows (contains backslash), a%5cb on UNIX like</li>
+<li>m:abcd -&gt; invalid path on Windows (<code>:</code> as second byte), m%3aabcd on UNIX-like</li>
+<li>a\b (where <code>\</code> represents an ASCII backslash, not an escaped b) -&gt; invalid path on Windows (contains backslash), a%5cb on UNIX-like</li>
 <li>a/b.txt -&gt; a/b.txt</li>
 <li>a/b!c -&gt; a/b%21c</li>
 </ul>

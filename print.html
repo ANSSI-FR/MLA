@@ -471,7 +471,7 @@ The rules for each component are:</p>
 <li>The eventual second byte of the whole path should not be an ASCII colon (<code>:</code>).</li>
 <li>Every component must be encoded as UTF-8.</li>
 </ul>
-<p>These rules are checked by the accompanying Rust implmentation (<code>EntryName::to_pathbuf</code>).</p>
+<p>These rules are checked by the accompanying Rust implementation (<code>EntryName::to_pathbuf</code>).</p>
 <p>Even if respecting these rules, the OS may see the resulting path as invalid.</p>
 <p>Please keep in mind that two different names, may map to same path on OS
 (e.g. Windows case insensitivity).</p>
@@ -517,8 +517,8 @@ in <code>Generic escaping</code>.</p>
 <li>./b -&gt; invalid path (not normalized)</li>
 <li>a/. -&gt; invalid path (not normalized)</li>
 <li>aNULb (where NUL here represent an ASCII NUL byte) -&gt; invalid path</li>
-<li>m:abcd -&gt; invalid path on Windows (<code>:</code> as second byte), m%3aabcd on UNIX like</li>
-<li>a\b (where <code>\</code> represents an ASCII backslash, not an escaped b) -&gt; invalid path on Windows (contains backslash), a%5cb on UNIX like</li>
+<li>m:abcd -&gt; invalid path on Windows (<code>:</code> as second byte), m%3aabcd on UNIX-like</li>
+<li>a\b (where <code>\</code> represents an ASCII backslash, not an escaped b) -&gt; invalid path on Windows (contains backslash), a%5cb on UNIX-like</li>
 <li>a/b.txt -&gt; a/b.txt</li>
 <li>a/b!c -&gt; a/b%21c</li>
 </ul>
@@ -530,7 +530,7 @@ in <code>Generic escaping</code>.</p>
 <h3 id="signature"><a class="header" href="#signature">Signature</a></h3>
 <p>As described in <code>FORMAT.md</code> an archive can be signed. Implementation must ensure users explicitely choose if signature is made and verified. Two methods are available and must be used together. Method input is called <code>m</code>. The SHA-512 hash <code>h</code> of <code>m</code> may be computed in a first step.</p>
 <p>For method <code>MLAEd25519SigMethod</code>, <code>signature_data</code> is the Ed25519ph (as described in RFC 8032 <sup class="footnote-reference" id="fr-rfc8032-1"><a href="#footnote-rfc8032">1</a></sup>) signature of <code>m</code> (not <code>h</code> even though it can be used for computing the result). The context given as parameter to Ed25519ph is the ASCII <code>MLAEd25519SigMethod</code>. Signature verification and key generation are done as described in RFC 8032. Key storage is described in <code>KEY_FORMAT.md</code>.</p>
-<p>For method <code>MLAMLDSA87SigMethod</code>, <code>signature_data</code> is the ML-DSA-87 signature (as described in FIPS 204 <sup class="footnote-reference" id="fr-fips204-1"><a href="#footnote-fips204">2</a></sup>, not HashMLA-DSA) of <code>h</code> (not <code>m</code> this time) with the ASCII <code>MLAMLDSA87SigMethod</code> as context. Signature verification and key generation are done as described in FIPS 204. Key storage is described in <code>KEY_FORMAT.md</code>.</p>
+<p>For method <code>MLAMLDSA87SigMethod</code>, <code>signature_data</code> is the ML-DSA-87 signature (as described in FIPS 204 <sup class="footnote-reference" id="fr-fips204-1"><a href="#footnote-fips204">2</a></sup>, not HashML-DSA) of <code>h</code> (not <code>m</code> this time) with the ASCII <code>MLAMLDSA87SigMethod</code> as context. Signature verification and key generation are done as described in FIPS 204. Key storage is described in <code>KEY_FORMAT.md</code>.</p>
 <h3 id="encryption-high-level-overview"><a class="header" href="#encryption-high-level-overview">Encryption high-level overview</a></h3>
 <h4 id="objectives"><a class="header" href="#objectives">Objectives</a></h4>
 <p>The purpose of the Encryption layer is to provide confidentiality and data integrity of the inner layer.</p>
