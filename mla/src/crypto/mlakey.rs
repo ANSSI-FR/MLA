@@ -33,8 +33,8 @@ use crate::layers::encrypt::get_crypto_rng;
 
 use super::hybrid::generate_keypair_from_rng;
 
-const MLA_PRIV_DEC_KEY_HEADER: &[u8] = b"MLA PRIVATE DECRYPTION KEY ";
-//const MLA_PRIV_SIG_KEY_HEADER: &[u8] = b"MLA PRIVATE SIGNATURE KEY ";
+const MLA_PRIV_DEC_KEY_HEADER: &[u8] = b"DO NOT SEND THIS TO ANYONE - MLA PRIVATE DECRYPTION KEY ";
+//const MLA_PRIV_SIG_KEY_HEADER: &[u8] = b"DO NOT SEND THIS TO ANYONE - MLA PRIVATE SIGNATURE KEY ";
 const DEC_METHOD_ID_0_PRIV: &[u8] = b"mla-kem-private-x25519-mlkem1024";
 //const SIG_METHOD_ID_0_PRIV: &[u8] = b"mla-signature-private-ed25519-mldsa87";
 
