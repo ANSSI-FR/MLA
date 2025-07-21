@@ -21,9 +21,9 @@ For a more comprehensive introduction of the ideas behind it, please refer to [R
 
 * An MLA file begins with the `mla_header_magic` ASCII magic: "MLAFAAAA".
 * `mla_header_magic` is followed by the `format_version` format version number as a u32.
-* `format_version` is followed by a `header_options` field of type `Opts`.
+* `format_version` is followed by an `header_options` field of type `Opts`.
 * `header_options` is followed by archive content `archive_content`, described below.
-* `archive_content` is followed by a `footer_options` field of type `Tail<Opts>` to enable determining `archive_content`'s end when reading from the end of the MLA file.
+* `archive_content` is followed by an `footer_options` field of type `Tail<Opts>` to enable determining `archive_content`'s end when reading from the end of the MLA file.
 * `footer_options` is followed by the `footer_magic` ASCII magic "EMLAAAAA", terminating the archive.
 
 `archive_content` consists of a serialized MLA entries layer documented below, transformed with zero or more layers, documented below too. A layer consists of a u64 layer magic followed by its data. Layer order plays an important security role, so the signature layer has to be above the encryption layer which has to be above the compression layer. This must be enforced by writers and readers. Readers should ensure users explicitly choose if they allow an archive without signature or without encryption.
@@ -71,7 +71,7 @@ The layer `compression_layer_magic` ASCII magic is "COMLAAAA".
 `compressed_data` is followed by `compression_footer_options` of type `Tail<Opts>`.
 `compressed_footer_options` is followed by `sizes_info` of type `Tail<SizesInfo>`, where `SizesInfo` is explained below.
 
-The inner layer, is split in `4 * 1024 * 1024`-bytes chunks, except for the last chunk which may be smaller. Each chunk is compressed with [brotli](https://tools.ietf.org/html/rfc7932). The resulting size of each compressed chunk is recorded in `sizes_info`. `SizesInfo` has a first field `compressed_sizes`, which is a `Vec<u32>` corresponding to an ordered list of compressed chunk sizes and a second field `last_block_uncompressed_size` as a u32 indicating the uncompressed size of last inner layer chunk.
+The inner layer, is split in `4 * 1024 * 1024`-bytes chunks, except for the last chunk which may be smaller. Each chunk is compressed with [brotli](https://tools.ietf.org/html/rfc7932). The resulting size of each compressed chunk is recorded in `sizes_info`. `SizesInfo` has a first field `compressed_sizes`, which is a `Vec<u32>` corresponding to an ordered list of compressed chunk sizes and a second field `last_block_uncompresed_size` as a u32 indicating the uncompressed size of last inner layer chunk.
 
 `compressed_data` is the concatenation of each compressed chunk.
 
@@ -103,7 +103,7 @@ If the `ArchiveEntryBlockType` is `EndOfArchiveData`, it is followed by nothing.
 
 `EntryBlockOffset` is a u64 indicating at which offset from the begining of the MLA entries layer an `ArchiveEntryBlock` can be found for the given `EntryName`. All `EntryBlockOffset`s for each entry are recorded in `entry_blocks_offsets` and they are so in ascending order of offset.
 
-### Explainations
+### Explanations
 
 An archive entry `entry_i` in the archive always starts with an `EntryStart`, giving its name and unique ID i.
 
