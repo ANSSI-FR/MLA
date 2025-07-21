@@ -1128,6 +1128,7 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
         src.seek(SeekFrom::Current(start_of_entries_footer_from_current))?;
         let metadata = Some(ArchiveFooter::deserialize_from(&mut src)?);
 
+        // Reset the position for further uses
         src.rewind()?;
 
         read_mla_entries_header(&mut src)?;
