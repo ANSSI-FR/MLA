@@ -1,5 +1,4 @@
-use std::io;
-use std::io::Write;
+use std::io::{self, Read, Write};
 
 use crate::Error;
 use crate::layers::traits::{InnerWriterTrait, InnerWriterType, LayerWriter};
@@ -50,5 +49,31 @@ impl<'a, W: 'a + InnerWriterTrait> Write for PositionLayerWriter<'a, W> {
     /// Wrapper on inner
     fn flush(&mut self) -> io::Result<()> {
         self.inner.flush()
+    }
+}
+
+/// Layer used to track how many bytes have been read
+pub(crate) struct PositionLayerReader<R> {
+    inner: R,
+    pos: u64,
+}
+
+impl<R> PositionLayerReader<R> {
+    pub(crate) fn new(inner: R) -> Self {
+        Self { inner, pos: 0 }
+    }
+
+    /// Get the current position (ie, how many bytes read since last position
+    /// reset)
+    pub(crate) fn position(&self) -> u64 {
+        self.pos
+    }
+}
+
+impl<R: Read> Read for PositionLayerReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let n = self.inner.read(buf)?;
+        self.pos += u64::try_from(n).or(Err(io::Error::other("Failed to convert usize to u64")))?;
+        Ok(n)
     }
 }

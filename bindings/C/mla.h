@@ -7,10 +7,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#define ENCRYPT 1
-
-#define COMPRESS 2
-
 enum MLAStatus {
   MLA_STATUS_SUCCESS = 0,
   MLA_STATUS_IO_ERROR = 65536,
@@ -48,6 +44,7 @@ enum MLAStatus {
   MLA_STATUS_HPKE_ERROR = 98304,
   MLA_STATUS_INVALID_LAST_TAG = 102400,
   MLA_STATUS_ENCRYPTION_ASKED_BUT_NOT_MARKED_PRESENT = 1572864,
+  MLA_STATUS_WRONG_END_MAGIC = 1638400,
   MLA_STATUS_MLA_KEY_PARSER_ERROR = 15859712,
 };
 typedef uint64_t MLAStatus;
@@ -116,7 +113,7 @@ typedef int32_t (*MLAFileCallBack)(void *context,
  */
 typedef struct ArchiveInfo {
   uint32_t version;
-  uint8_t layers;
+  uint8_t is_encryption_enabled;
 } ArchiveInfo;
 
 /**

@@ -2,7 +2,6 @@ use crate::crypto::aesgcm::{
     AesGcm256, ConstantTimeEq, KEY_COMMITMENT_SIZE, Key, Nonce, TAG_LENGTH, Tag,
 };
 
-use crate::Error;
 use crate::crypto::hpke::{compute_nonce, key_schedule_base_hybrid_kem};
 use crate::crypto::hybrid::{
     HybridKemSharedSecret, HybridMultiRecipientEncapsulatedKey, HybridMultiRecipientsPublicKeys,
@@ -11,21 +10,19 @@ use crate::crypto::hybrid::{
 use crate::layers::traits::{
     InnerWriterTrait, InnerWriterType, LayerFailSafeReader, LayerReader, LayerWriter,
 };
+use crate::{EMPTY_TAIL_OPTS_SERIALIZATION, Error, MLADeserialize, MLASerialize, Opts};
 use std::io;
 use std::io::{BufReader, Cursor, Read, Seek, SeekFrom, Write};
 
 use crate::errors::ConfigError;
-use bincode::{
-    BorrowDecode, Decode, Encode,
-    de::{BorrowDecoder, Decoder},
-    error::DecodeError,
-};
 use kem::{Decapsulate, Encapsulate};
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
+use super::position::PositionLayerReader;
+use super::strip_head_tail::StripHeadTailReader;
 use super::traits::InnerReaderTrait;
 
 const CIPHER_BUF_SIZE: u64 = 4096;
@@ -36,6 +33,8 @@ const FINAL_ASSOCIATED_DATA: &[u8; 8] = b"FINALAAD";
 const FINAL_BLOCK_CONTENT: &[u8; 10] = b"FINALBLOCK";
 
 const FINAL_BLOCK_SIZE: usize = FINAL_BLOCK_CONTENT.len() + TAG_LENGTH;
+
+pub const ENCRYPTION_LAYER_MAGIC: &[u8; 8] = b"ENCMLAAA";
 
 // ---------- Key commitment ----------
 
@@ -86,10 +85,29 @@ const FIRST_DATA_CHUNK_NUMBER: u64 = 1;
 const HPKE_INFO_LAYER: &[u8] = b"MLA Encrypt Layer";
 
 /// Encrypted Key commitment and associated tag
-#[derive(Decode, Encode)]
 struct KeyCommitmentAndTag {
     key_commitment: [u8; KEY_COMMITMENT_SIZE],
     tag: [u8; TAG_LENGTH],
+}
+
+impl<W: Write> MLASerialize<W> for KeyCommitmentAndTag {
+    fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
+        let mut serialization_length = 0;
+        serialization_length += self.key_commitment.as_slice().serialize(dest)?;
+        serialization_length += self.tag.as_slice().serialize(dest)?;
+        Ok(serialization_length)
+    }
+}
+
+impl<R: Read> MLADeserialize<R> for KeyCommitmentAndTag {
+    fn deserialize(src: &mut R) -> Result<Self, Error> {
+        let key_commitment = MLADeserialize::deserialize(src)?;
+        let tag = MLADeserialize::deserialize(src)?;
+        Ok(Self {
+            key_commitment,
+            tag,
+        })
+    }
 }
 
 /// Return a Cryptographic random number generator
@@ -131,7 +149,6 @@ impl InternalEncryptionConfig {
 }
 
 /// Configuration stored in the header, to be reloaded
-#[derive(Encode)]
 pub struct EncryptionPersistentConfig {
     /// Key-wrapping for each recipients
     pub hybrid_multi_recipient_encapsulate_key: HybridMultiRecipientEncapsulatedKey,
@@ -139,23 +156,24 @@ pub struct EncryptionPersistentConfig {
     key_commitment: KeyCommitmentAndTag,
 }
 
-impl<Context> Decode<Context> for EncryptionPersistentConfig {
-    fn decode<D: Decoder<Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        Ok(Self {
-            hybrid_multi_recipient_encapsulate_key: HybridMultiRecipientEncapsulatedKey::decode(
-                decoder,
-            )?,
-            key_commitment: KeyCommitmentAndTag::decode(decoder)?,
-        })
+impl<W: Write> MLASerialize<W> for EncryptionPersistentConfig {
+    fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
+        let mut serialization_length = 0;
+        serialization_length += self
+            .hybrid_multi_recipient_encapsulate_key
+            .serialize(dest)?;
+        serialization_length += self.key_commitment.serialize(dest)?;
+        Ok(serialization_length)
     }
 }
 
-impl<'de, Context> BorrowDecode<'de, Context> for EncryptionPersistentConfig {
-    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
+impl<R: Read> MLADeserialize<R> for EncryptionPersistentConfig {
+    fn deserialize(src: &mut R) -> Result<Self, Error> {
+        let hybrid_multi_recipient_encapsulate_key = MLADeserialize::deserialize(src)?;
+        let key_commitment = MLADeserialize::deserialize(src)?;
         Ok(Self {
-            hybrid_multi_recipient_encapsulate_key:
-                HybridMultiRecipientEncapsulatedKey::borrow_decode(decoder)?,
-            key_commitment: KeyCommitmentAndTag::borrow_decode(decoder)?,
+            hybrid_multi_recipient_encapsulate_key,
+            key_commitment,
         })
     }
 }
@@ -271,8 +289,48 @@ impl EncryptionReaderConfig {
 }
 
 // ---------- Writer ----------
+pub(crate) struct EncryptionLayerWriter<'a, W: 'a + InnerWriterTrait>(
+    InternalEncryptionLayerWriter<'a, W>,
+);
 
-pub(crate) struct EncryptionLayerWriter<'a, W: 'a + InnerWriterTrait> {
+impl<'a, W: 'a + InnerWriterTrait> EncryptionLayerWriter<'a, W> {
+    pub fn new(
+        mut inner: InnerWriterType<'a, W>,
+        encryption_config: &EncryptionConfig,
+    ) -> Result<Self, Error> {
+        let (persistent_config, internal_config) =
+            EncryptionConfig::to_persistent(encryption_config)?;
+        inner.write_all(ENCRYPTION_LAYER_MAGIC)?;
+        let _ = Opts.dump(&mut inner)?;
+        let encryption_method_id = 0u16;
+        encryption_method_id.serialize(&mut inner)?;
+        persistent_config.serialize(&mut inner)?;
+        Ok(Self(InternalEncryptionLayerWriter::new(
+            inner,
+            &internal_config,
+        )?))
+    }
+}
+
+impl<'a, W: 'a + InnerWriterTrait> Write for EncryptionLayerWriter<'a, W> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.0.write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.0.flush()
+    }
+}
+
+impl<'a, W: 'a + InnerWriterTrait> LayerWriter<'a, W> for EncryptionLayerWriter<'a, W> {
+    fn finalize(self: Box<Self>) -> Result<W, Error> {
+        let mut out = Box::new(self.0).finalize()?;
+        out.write_all(EMPTY_TAIL_OPTS_SERIALIZATION)?;
+        Ok(out)
+    }
+}
+
+struct InternalEncryptionLayerWriter<'a, W: 'a + InnerWriterTrait> {
     inner: InnerWriterType<'a, W>,
     cipher: AesGcm256,
     /// Symmetric encryption Key
@@ -283,7 +341,7 @@ pub(crate) struct EncryptionLayerWriter<'a, W: 'a + InnerWriterTrait> {
     current_ctr: u64,
 }
 
-impl<'a, W: 'a + InnerWriterTrait> EncryptionLayerWriter<'a, W> {
+impl<'a, W: 'a + InnerWriterTrait> InternalEncryptionLayerWriter<'a, W> {
     pub fn new(
         inner: InnerWriterType<'a, W>,
         internal_config: &InternalEncryptionConfig,
@@ -324,7 +382,7 @@ impl<'a, W: 'a + InnerWriterTrait> EncryptionLayerWriter<'a, W> {
     }
 }
 
-impl<'a, W: 'a + InnerWriterTrait> LayerWriter<'a, W> for EncryptionLayerWriter<'a, W> {
+impl<'a, W: 'a + InnerWriterTrait> LayerWriter<'a, W> for InternalEncryptionLayerWriter<'a, W> {
     fn finalize(mut self: Box<Self>) -> Result<W, Error> {
         // Write the tag of the current chunk
         // Get previous chunk tag and initialize final block content cipher context with specific AAD
@@ -343,7 +401,7 @@ impl<'a, W: 'a + InnerWriterTrait> LayerWriter<'a, W> for EncryptionLayerWriter<
     }
 }
 
-impl<W: InnerWriterTrait> Write for EncryptionLayerWriter<'_, W> {
+impl<W: InnerWriterTrait> Write for InternalEncryptionLayerWriter<'_, W> {
     #[allow(clippy::comparison_chain)]
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         if self.current_chunk_offset > CHUNK_SIZE {
@@ -379,9 +437,82 @@ impl<W: InnerWriterTrait> Write for EncryptionLayerWriter<'_, W> {
 
 // ---------- Reader ----------
 
+fn read_encryption_header_after_magic<R: Read>(
+    src: &mut R,
+) -> Result<(EncryptionPersistentConfig, u64), Error> {
+    let mut src = PositionLayerReader::new(src);
+    let _ = Opts::from_reader(&mut src)?; // No option handled at the moment
+    let _encryption_method_id = u16::deserialize(&mut src)?;
+    let read_encryption_metadata = EncryptionPersistentConfig::deserialize(&mut src)?;
+    let encryption_header_length = src
+        .position()
+        .checked_add(8)
+        .ok_or(Error::DeserializationError)?;
+
+    Ok((read_encryption_metadata, encryption_header_length))
+}
+
+pub(crate) struct EncryptionLayerReader<'a, R: 'a + InnerReaderTrait>(
+    InternalEncryptionLayerReader<'a, R>,
+);
+
+impl<'a, R: 'a + InnerReaderTrait> EncryptionLayerReader<'a, R> {
+    pub(crate) fn new_skip_magic(
+        mut inner: Box<dyn 'a + LayerReader<'a, R>>,
+        mut reader_config: EncryptionReaderConfig,
+        persistent_config: Option<EncryptionPersistentConfig>,
+    ) -> Result<Self, Error> {
+        let (read_encryption_metadata, encryption_header_length) =
+            read_encryption_header_after_magic(&mut inner)?;
+        let persistent_config = persistent_config.unwrap_or(read_encryption_metadata); // this lets us ensure we use previously verified encryption context if given (e.g. by signature layer)
+
+        let raw_encryption_layer_length = inner.seek(SeekFrom::End(0))?;
+        inner.seek(SeekFrom::Current(-8))?;
+        let encryption_footer_options_length = u64::deserialize(&mut inner)?;
+        // skip reading them as there are none for the moment
+        let encryption_footer_length = encryption_footer_options_length
+            .checked_add(8)
+            .ok_or(Error::DeserializationError)?;
+        inner.seek(SeekFrom::Start(encryption_header_length))?;
+        reader_config.load_persistent(persistent_config)?;
+
+        let inner = Box::new(StripHeadTailReader::new(
+            inner,
+            encryption_header_length,
+            encryption_footer_length,
+            raw_encryption_layer_length,
+            0,
+        )?);
+        let inner = InternalEncryptionLayerReader::new(inner, reader_config)?;
+        Ok(Self(inner))
+    }
+}
+
+impl<'a, R: 'a + InnerReaderTrait> Read for EncryptionLayerReader<'a, R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.0.read(buf)
+    }
+}
+
+impl<'a, R: 'a + InnerReaderTrait> Seek for EncryptionLayerReader<'a, R> {
+    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+        self.0.seek(pos)
+    }
+}
+
+impl<'a, R: 'a + InnerReaderTrait> LayerReader<'a, R> for EncryptionLayerReader<'a, R> {
+    fn into_raw(self: Box<Self>) -> R {
+        Box::new(self.0).into_raw()
+    }
+
+    fn initialize(&mut self) -> Result<(), Error> {
+        self.0.initialize()
+    }
+}
+
 // In the case of stream cipher, encrypting is the same that decrypting. Here, we
 // keep the struct separated for any possible future difference
-pub struct EncryptionLayerReader<'a, R: Read + Seek> {
+struct InternalEncryptionLayerReader<'a, R: InnerReaderTrait> {
     inner: Box<dyn 'a + LayerReader<'a, R>>,
     cipher: AesGcm256,
     key: Key,
@@ -394,10 +525,10 @@ pub struct EncryptionLayerReader<'a, R: Read + Seek> {
     current_position: u64,
 }
 
-impl<'a, R: 'a + Read + Seek> EncryptionLayerReader<'a, R> {
-    pub fn new(
+impl<'a, R: 'a + InnerReaderTrait> InternalEncryptionLayerReader<'a, R> {
+    fn new(
         inner: Box<dyn 'a + LayerReader<'a, R>>,
-        config: &EncryptionReaderConfig,
+        config: EncryptionReaderConfig,
     ) -> Result<Self, Error> {
         match config.encrypt_parameters {
             Some((key, nonce)) => Ok(Self {
@@ -456,8 +587,8 @@ impl<'a, R: 'a + Read + Seek> EncryptionLayerReader<'a, R> {
         }
 
         let mut tag = [0u8; TAG_LENGTH];
-        tag.copy_from_slice(&data_and_tag[data_and_tag_read - TAG_LENGTH..]);
-        data_and_tag.resize(data_and_tag_read - TAG_LENGTH, 0);
+        tag.copy_from_slice(&data_and_tag[FINAL_BLOCK_CONTENT.len()..FINAL_BLOCK_SIZE]);
+        data_and_tag.resize(FINAL_BLOCK_CONTENT.len(), 0);
         let mut data = data_and_tag;
 
         // Decrypt and verify the current chunk
@@ -535,15 +666,12 @@ impl<'a, R: 'a + Read + Seek> EncryptionLayerReader<'a, R> {
     }
 }
 
-impl<'a, R: 'a + InnerReaderTrait> LayerReader<'a, R> for EncryptionLayerReader<'a, R> {
+impl<'a, R: 'a + InnerReaderTrait> LayerReader<'a, R> for InternalEncryptionLayerReader<'a, R> {
     fn into_raw(self: Box<Self>) -> R {
         self.inner.into_raw()
     }
 
     fn initialize(&mut self) -> Result<(), Error> {
-        // Recursive call
-        self.inner.initialize()?;
-
         // Check last block to prevent truncation attacks
         self.set_all_plaintext_size()?;
         self.check_last_block()?;
@@ -554,7 +682,7 @@ impl<'a, R: 'a + InnerReaderTrait> LayerReader<'a, R> for EncryptionLayerReader<
     }
 }
 
-impl<'a, R: 'a + Read + Seek> Read for EncryptionLayerReader<'a, R> {
+impl<'a, R: 'a + InnerReaderTrait> Read for InternalEncryptionLayerReader<'a, R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let cache_to_consume = CHUNK_SIZE - self.chunk_cache.position();
         if cache_to_consume == 0 {
@@ -590,7 +718,7 @@ fn _tag_position_to_no_tag_position(position: u64) -> u64 {
     cur_chunk * CHUNK_SIZE + std::cmp::min(cur_chunk_pos, CHUNK_SIZE)
 }
 
-impl<'a, R: 'a + Read + Seek> Seek for EncryptionLayerReader<'a, R> {
+impl<'a, R: 'a + InnerReaderTrait> Seek for InternalEncryptionLayerReader<'a, R> {
     fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
         // `pos` is the position without considering tags
         match pos {
@@ -634,7 +762,7 @@ impl<'a, R: 'a + Read + Seek> Seek for EncryptionLayerReader<'a, R> {
 
 // ---------- Fail-Safe Reader ----------
 
-pub struct EncryptionLayerFailSafeReader<'a, R: Read> {
+pub(crate) struct EncryptionLayerFailSafeReader<'a, R: Read> {
     inner: Box<dyn 'a + LayerFailSafeReader<'a, R>>,
     cipher: AesGcm256,
     key: Key,
@@ -644,9 +772,9 @@ pub struct EncryptionLayerFailSafeReader<'a, R: Read> {
 }
 
 impl<'a, R: 'a + Read> EncryptionLayerFailSafeReader<'a, R> {
-    pub fn new(
+    fn new_skip_header(
         inner: Box<dyn 'a + LayerFailSafeReader<'a, R>>,
-        config: &EncryptionReaderConfig,
+        config: EncryptionReaderConfig,
     ) -> Result<Self, Error> {
         match config.encrypt_parameters {
             Some((key, nonce)) => Ok(Self {
@@ -663,6 +791,17 @@ impl<'a, R: 'a + Read> EncryptionLayerFailSafeReader<'a, R> {
             }),
             None => Err(Error::PrivateKeyNeeded),
         }
+    }
+
+    pub(crate) fn new_skip_magic(
+        mut inner: Box<dyn 'a + LayerFailSafeReader<'a, R>>,
+        mut reader_config: EncryptionReaderConfig,
+        persistent_config: Option<EncryptionPersistentConfig>,
+    ) -> Result<Self, Error> {
+        let (read_encryption_metadata, _) = read_encryption_header_after_magic(&mut inner)?;
+        let persistent_config = persistent_config.unwrap_or(read_encryption_metadata); // this lets us ensure we use previously verified encryption context if given (e.g. by signature layer)
+        reader_config.load_persistent(persistent_config)?;
+        Self::new_skip_header(inner, reader_config)
     }
 }
 
@@ -714,7 +853,7 @@ mod tests {
     use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 
     use crate::crypto::aesgcm::{KEY_SIZE, NONCE_AES_SIZE};
-    use crate::layers::encrypt::{EncryptionLayerReader, EncryptionLayerWriter};
+    use crate::layers::encrypt::{InternalEncryptionLayerReader, InternalEncryptionLayerWriter};
     use crate::layers::raw::{RawLayerFailSafeReader, RawLayerReader, RawLayerWriter};
 
     static FAKE_FILE: [u8; 26] = *b"abcdefghijklmnopqrstuvwxyz";
@@ -724,7 +863,7 @@ mod tests {
     fn encrypt_write(file: Vec<u8>) -> Vec<u8> {
         // Instantiate a EncryptionLayerWriter and fill it with FAKE_FILE
         let mut encrypt_w = Box::new(
-            EncryptionLayerWriter::new(
+            InternalEncryptionLayerWriter::new(
                 Box::new(RawLayerWriter::new(file)),
                 &InternalEncryptionConfig {
                     key: KEY,
@@ -753,7 +892,7 @@ mod tests {
             encrypt_parameters: Some((KEY, NONCE)),
         };
         let mut encrypt_r =
-            EncryptionLayerReader::new(Box::new(RawLayerReader::new(buf)), &config).unwrap();
+            InternalEncryptionLayerReader::new(Box::new(RawLayerReader::new(buf)), config).unwrap();
         encrypt_r.initialize().unwrap();
         let mut output = Vec::new();
         encrypt_r.read_to_end(&mut output).unwrap();
@@ -769,9 +908,9 @@ mod tests {
             private_keys: Vec::new(),
             encrypt_parameters: Some((KEY, NONCE)),
         };
-        let mut encrypt_r = EncryptionLayerFailSafeReader::new(
+        let mut encrypt_r = EncryptionLayerFailSafeReader::new_skip_header(
             Box::new(RawLayerFailSafeReader::new(out.as_slice())),
-            &config,
+            config,
         )
         .unwrap();
         let mut output = Vec::new();
@@ -794,9 +933,9 @@ mod tests {
             private_keys: Vec::new(),
             encrypt_parameters: Some((KEY, NONCE)),
         };
-        let mut encrypt_r = EncryptionLayerFailSafeReader::new(
+        let mut encrypt_r = EncryptionLayerFailSafeReader::new_skip_header(
             Box::new(RawLayerFailSafeReader::new(&out[..stop])),
-            &config,
+            config,
         )
         .unwrap();
         let mut output = Vec::new();
@@ -818,7 +957,7 @@ mod tests {
             encrypt_parameters: Some((KEY, NONCE)),
         };
         let mut encrypt_r =
-            EncryptionLayerReader::new(Box::new(RawLayerReader::new(buf)), &config).unwrap();
+            InternalEncryptionLayerReader::new(Box::new(RawLayerReader::new(buf)), config).unwrap();
         encrypt_r.initialize().unwrap();
         let mut output = Vec::new();
         encrypt_r.read_to_end(&mut output).unwrap();
@@ -847,7 +986,7 @@ mod tests {
         // Instantiate a EncryptionLayerWriter and fill it with at least CHUNK_SIZE data
         let file = Vec::new();
         let mut encrypt_w = Box::new(
-            EncryptionLayerWriter::new(
+            InternalEncryptionLayerWriter::new(
                 Box::new(RawLayerWriter::new(file)),
                 &InternalEncryptionConfig {
                     key: KEY,
@@ -872,7 +1011,7 @@ mod tests {
             encrypt_parameters: Some((KEY, NONCE)),
         };
         let mut encrypt_r =
-            EncryptionLayerReader::new(Box::new(RawLayerReader::new(buf)), &config).unwrap();
+            InternalEncryptionLayerReader::new(Box::new(RawLayerReader::new(buf)), config).unwrap();
         encrypt_r.initialize().unwrap();
         let mut output = Vec::new();
         encrypt_r.read_to_end(&mut output).unwrap();

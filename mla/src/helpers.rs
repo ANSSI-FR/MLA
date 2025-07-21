@@ -1,4 +1,5 @@
 use crate::entry::EntryName;
+use crate::read_mla_entries_header;
 
 pub use super::layers::traits::{InnerReaderTrait, InnerWriterTrait};
 
@@ -96,6 +97,9 @@ pub fn linear_extract<W1: InnerWriterTrait, R: InnerReaderTrait, S: BuildHasher>
     // Seek at the beginning
     archive.src.rewind()?;
 
+    // Skip the header, already checked in ArchiveReader::from_config
+    read_mla_entries_header(&mut archive.src)?;
+
     // Use a BufReader to cache, by merging them into one bigger read, small
     // read calls (like the ones on ArchiveEntryBlock reading)
     let mut src = io::BufReader::new(&mut archive.src);
@@ -106,7 +110,11 @@ pub fn linear_extract<W1: InnerWriterTrait, R: InnerReaderTrait, S: BuildHasher>
 
     'read_block: loop {
         match ArchiveEntryBlock::from(&mut src)? {
-            ArchiveEntryBlock::EntryStart { name: filename, id } => {
+            ArchiveEntryBlock::EntryStart {
+                name: filename,
+                id,
+                opts: _,
+            } => {
                 // If the starting file is meant to be extracted, get the
                 // corresponding writer
                 if export.contains_key(&filename) {

@@ -1,6 +1,6 @@
-use std::io::{ErrorKind, Read, Seek, SeekFrom};
+use std::io::{ErrorKind, Read, Seek, SeekFrom, Write};
 
-use crate::{errors::Error, format::ArchiveEntryBlock};
+use crate::{MLADeserialize, MLASerialize, errors::Error, format::ArchiveEntryBlock};
 
 /// Represents a unique identifier for an entry in the archive.
 /// Used to maintain references to entries while writing an archive.
@@ -13,7 +13,7 @@ mod entryname {
         path::{Component, Path, PathBuf},
     };
 
-    use crate::helpers::mla_percent_escape;
+    use crate::{FILENAME_MAX_SIZE, helpers::mla_percent_escape};
 
     /// Allowed bytes in `EntryName::to_pathbuf_escaped_string` output. Documented there.
     pub static ENTRY_NAME_PATHBUF_ESCAPED_STRING_ALLOWED_BYTES: [u8; 64] =
@@ -26,6 +26,7 @@ mod entryname {
     pub enum EntryNameError {
         ForbiddenPathTraversalComponent,
         InvalidPathComponentContent,
+        EntryNameTooLong,
     }
 
     impl fmt::Display for EntryNameError {
@@ -37,6 +38,7 @@ mod entryname {
                     EntryNameError::ForbiddenPathTraversalComponent =>
                         "forbidden path traversal component",
                     EntryNameError::InvalidPathComponentContent => "invalid path component",
+                    EntryNameError::EntryNameTooLong => "entry name is too long",
                 }
             )
         }
@@ -61,21 +63,33 @@ mod entryname {
     }
 
     impl EntryName {
-        /// Use with caution, arbitrary bytes are stored as is.
-        /// See `EntryName::from_path`, `EntryName::as_arbitrary_bytes`
-        /// and `EntryName::to_pathbuf`.
+        /// Constructs an `EntryName` from a borrowed byte slice.
         ///
-        /// If you want the entry name be used as a file path you may prefer
-        /// using `EntryName::from_path`.
+        /// Use with caution: arbitrary bytes are stored as-is, without checking for nulls,
+        /// slashes, path traversal (`..`), or encoding. This function is useful when reading
+        /// raw archive entries or crafting low-level names.
         ///
-        /// This function returns an `EntryNameError::InvalidPathComponentContent` when given an empty slice.
+        /// Prefer using [`EntryName::from_path`] if you're working with real filesystem paths.
+        ///
+        /// Returns an `EntryNameError::InvalidPathComponentContent` if the slice is empty,
+        /// or `EntryNameError::EntryNameTooLong` if it exceeds `FILENAME_MAX_SIZE`.
         pub fn from_arbitrary_bytes(bytes: &[u8]) -> Result<Self, EntryNameError> {
+            Self::from_arbitrary_bytes_vec(bytes.to_vec())
+        }
+
+        /// Like [`EntryName::from_arbitrary_bytes`], but takes ownership of the byte vector.
+        ///
+        /// Stores the bytes directly with no validation for slashes, nulls, control characters, or encoding.
+        /// Useful for low-level operations. Returns an error if the input is empty or too long.
+        pub fn from_arbitrary_bytes_vec(bytes: Vec<u8>) -> Result<Self, EntryNameError> {
+            let u64len =
+                u64::try_from(bytes.len()).map_err(|_| EntryNameError::EntryNameTooLong)?;
             if bytes.is_empty() {
                 Err(EntryNameError::InvalidPathComponentContent)
+            } else if u64len > FILENAME_MAX_SIZE {
+                Err(EntryNameError::EntryNameTooLong)
             } else {
-                Ok(Self {
-                    name: bytes.to_vec(),
-                })
+                Ok(Self { name: bytes })
             }
         }
 
@@ -87,20 +101,27 @@ mod entryname {
             self.name.as_slice()
         }
 
-        /// `path` is first normalized by keeping only `Normal`
-        /// `std::path::Component`s and popping an eventual previous
-        /// component when a `..` is encountered.
+        /// Converts a `Path` into an `EntryName`, with normalization and platform-aware encoding.
         ///
-        /// On Windows, `path` is then converted from UTF-16LE to UTF-8 and backslashes are
-        /// converted to slash before being serialized inside archive.
-        /// On UNIX family, `path` is then serialized as is.
-        /// This way, a `Path` P converted with `EntryName::from_path` on an OS and
-        /// converted back with `EntryName::to_pathbuf` on
-        /// another OS have good chance to have the same meaning.
-        /// On Windows, invalid UTF-16 in `path` make this function
-        /// return an `Err(EntryNameError::InvalidPathComponentContent)`.
+        /// The path is first normalized:
+        /// - Only `Component::Normal` parts are kept.
+        /// - Each `..` removes the previous component, if any.
         ///
-        /// This function returns an `EntryNameError::InvalidPathComponentContent` when the resulting `EntryName` would be empty.
+        /// On Windows:
+        /// - The path is converted from UTF-16LE to UTF-8.
+        /// - Backslashes are replaced with slashes (`/`) before serialization.
+        ///
+        /// On Unix:
+        /// - The path is serialized as-is.
+        ///
+        /// This normalization ensures that a path converted with [`EntryName::from_path`] on one OS
+        /// and converted back using [`EntryName::to_pathbuf`] on another OS will likely retain the
+        /// intended structure.
+        ///
+        /// Errors:
+        /// - Returns `EntryNameError::InvalidPathComponentContent` if the resulting path is empty
+        ///   or contains invalid characters (on Windows).
+        /// - Returns `EntryNameError::EntryNameTooLong` if the resulting name exceeds `FILENAME_MAX_SIZE`.
         pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Self, EntryNameError> {
             let components = {
                 let mut stack = Vec::new();
@@ -120,11 +141,7 @@ mod entryname {
                 stack
             };
             let name = components.join(&b'/');
-            if name.is_empty() {
-                Err(EntryNameError::InvalidPathComponentContent)
-            } else {
-                Ok(Self { name })
-            }
+            Self::from_arbitrary_bytes_vec(name)
         }
 
         /// Escaped String representation of an `EntryName` raw content bytes
@@ -303,6 +320,21 @@ pub use entryname::{
     EntryName, EntryNameError,
 };
 
+pub(crate) fn serialize_entry_name(name: &EntryName, mut dst: impl Write) -> Result<u64, Error> {
+    let slice = name.as_arbitrary_bytes();
+    let mut serialization_length = slice.len().serialize(&mut dst)?;
+    serialization_length += slice.serialize(&mut dst)?;
+    Ok(serialization_length)
+}
+pub(crate) fn deserialize_entry_name(mut src: impl Read) -> Result<EntryName, Error> {
+    let n = MLADeserialize::deserialize(&mut src)?;
+    let mut name = Vec::new();
+    src.take(n)
+        .read_to_end(&mut name)
+        .map_err(|_| Error::DeserializationError)?;
+    EntryName::from_arbitrary_bytes_vec(name).map_err(|_| Error::DeserializationError)
+}
+
 /// Represents an entry in the archive.
 pub struct ArchiveEntry<'a, T> {
     pub name: EntryName,
@@ -354,19 +386,24 @@ impl<'a, R: Read + Seek> ArchiveEntryDataReader<'a, R> {
             src,
             state: ArchiveEntryDataReaderState::Ready,
             id,
-            current_offsets_index: 0,
+            current_offsets_index: 1,
             offsets_in_src: offsets,
         })
     }
 
-    /// Move `self.src` to the next continuous block
-    fn move_to_next_block_in_entry(&mut self) -> Result<(), Error> {
+    fn increment_current_offsets_index(&mut self) -> Result<(), Error> {
         self.current_offsets_index += 1;
         if self.current_offsets_index >= self.offsets_in_src.len() {
-            return Err(Error::WrongReaderState(
+            Err(Error::WrongReaderState(
                 "[BlocksToFileReader] No more continuous blocks".to_string(),
-            ));
+            ))
+        } else {
+            Ok(())
         }
+    }
+
+    /// Move `self.src` to the next continuous block
+    fn move_to_block_at_current_offsets_index(&mut self) -> Result<(), Error> {
         self.src.seek(SeekFrom::Start(
             self.offsets_in_src[self.current_offsets_index],
         ))?;
@@ -394,7 +431,8 @@ impl<'a, R: Read + Seek> ArchiveEntryDataReader<'a, R> {
                 )),
             }?;
             total += content_len;
-            self.move_to_next_block_in_entry()?;
+            self.increment_current_offsets_index()?;
+            self.move_to_block_at_current_offsets_index()?;
         }
         let offset_in_content_chunk_at_function_entry = match self.state {
             ArchiveEntryDataReaderState::InEntryContent(remaining) => {
@@ -429,24 +467,27 @@ impl<T: Read + Seek> Read for ArchiveEntryDataReader<'_, T> {
                 match ArchiveEntryBlock::from(&mut self.src)? {
                     ArchiveEntryBlock::EntryContent { length, id, .. } => {
                         if id != self.id {
-                            self.move_to_next_block_in_entry()?;
+                            self.move_to_block_at_current_offsets_index()?;
                             return self.read(into);
+                        } else {
+                            let count = self.src.by_ref().take(length).read(into)?;
+                            self.increment_current_offsets_index()?;
+                            let count_as_u64 = usize_as_u64(count)?;
+                            (length - count_as_u64, count)
                         }
-                        let count = self.src.by_ref().take(length).read(into)?;
-                        let count_as_u64 = usize_as_u64(count)?;
-                        (length - count_as_u64, count)
                     }
                     ArchiveEntryBlock::EndOfEntry { id, .. } => {
                         if id != self.id {
-                            self.move_to_next_block_in_entry()?;
+                            self.move_to_block_at_current_offsets_index()?;
                             return self.read(into);
+                        } else {
+                            self.state = ArchiveEntryDataReaderState::Finish;
+                            return Ok(0);
                         }
-                        self.state = ArchiveEntryDataReaderState::Finish;
-                        return Ok(0);
                     }
                     ArchiveEntryBlock::EntryStart { id, .. } => {
                         if id != self.id {
-                            self.move_to_next_block_in_entry()?;
+                            self.move_to_block_at_current_offsets_index()?;
                             return self.read(into);
                         }
                         return Err(Error::WrongReaderState(
@@ -509,11 +550,13 @@ impl<T: Read + Seek> Seek for ArchiveEntryDataReader<'_, T> {
                         self.src.seek(SeekFrom::Start(current_src_offset))?;
                         match ArchiveEntryBlock::from(&mut self.src)? {
                             ArchiveEntryBlock::EntryStart { .. } => {
-                                self.move_to_next_block_in_entry()?;
+                                self.increment_current_offsets_index()?;
+                                self.move_to_block_at_current_offsets_index()?;
                             }
                             ArchiveEntryBlock::EntryContent { length, .. } => {
                                 if asked_seek_offset > total_skipped + length {
-                                    self.move_to_next_block_in_entry()?;
+                                    self.increment_current_offsets_index()?;
+                                    self.move_to_block_at_current_offsets_index()?;
                                     total_skipped += length;
                                 } else {
                                     let remaining_to_skip = asked_seek_offset - total_skipped;
@@ -626,7 +669,7 @@ mod tests {
     use std::path::Path;
 
     use crate::{
-        Sha256Hash,
+        Opts, Sha256Hash,
         entry::{ArchiveEntryDataReader, ArchiveEntryDataReaderState, EntryName},
         format::ArchiveEntryBlock,
     };
@@ -642,27 +685,34 @@ mod tests {
         let mut block = ArchiveEntryBlock::EntryStart::<&[u8]> {
             id,
             name: EntryName::from_arbitrary_bytes(b"foobar").unwrap(),
+            opts: Opts,
         };
         block.dump(&mut buf).unwrap();
         let mut block = ArchiveEntryBlock::EntryContent {
             id,
             length: FAKE_CONTENT1.len() as u64,
+            opts: Opts,
             data: Some(FAKE_CONTENT1.as_slice()),
         };
         block.dump(&mut buf).unwrap();
         let mut block = ArchiveEntryBlock::EntryContent {
             id,
             length: FAKE_CONTENT2.len() as u64,
+            opts: Opts,
             data: Some(FAKE_CONTENT2.as_slice()),
         };
         block.dump(&mut buf).unwrap();
 
         // std::io::Empty is used because a type with Read is needed
-        ArchiveEntryBlock::EndOfEntry::<Empty> { id, hash }
-            .dump(&mut buf)
-            .unwrap();
+        ArchiveEntryBlock::EndOfEntry::<Empty> {
+            id,
+            hash,
+            opts: Opts,
+        }
+        .dump(&mut buf)
+        .unwrap();
 
-        let offsets = [0, 23, 44, 65].as_slice();
+        let offsets = [0, 24, 46, 68].as_slice();
 
         (std::io::Cursor::new(buf), offsets)
     }
