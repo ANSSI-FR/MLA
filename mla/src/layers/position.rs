@@ -1,5 +1,4 @@
-use std::io::Write;
-use std::io::{self, Read};
+use std::io::{self, Read, Write};
 
 use crate::Error;
 use crate::layers::traits::{InnerWriterTrait, InnerWriterType, LayerWriter};
@@ -53,6 +52,7 @@ impl<'a, W: 'a + InnerWriterTrait> Write for PositionLayerWriter<'a, W> {
     }
 }
 
+/// Layer used to track how many bytes have been read
 pub(crate) struct PositionLayerReader<R> {
     inner: R,
     pos: u64,
