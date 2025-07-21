@@ -969,28 +969,6 @@ mod tests {
     use kem::{Decapsulate, Encapsulate};
     use x25519_dalek::PublicKey;
 
-    /// MLA private key, DER, X25519 then MLKEM
-    static MLA_DER_PRIV: &[u8] = include_bytes!("../../../samples/test_mlakey.der");
-    /// MLA public key, DER, X25519 then MLKEM
-    static MLA_DER_PUB: &[u8] = include_bytes!("../../../samples/test_mlakey_pub.der");
-    /// MLA private key, PEM, X25519 then MLKEM
-    static MLA_PEM_PRIV: &[u8] = include_bytes!("../../../samples/test_mlakey.pem");
-    /// MLA public key, PEM, X25519 then MLKEM
-    static MLA_PEM_PUB: &[u8] = include_bytes!("../../../samples/test_mlakey_pub.pem");
-    /// MLA private key, DER, ED25519 then MLKEM
-    static MLA_DER_PRIV_ED: &[u8] = include_bytes!("../../../samples/test_mlakey_ed.der");
-    /// MLA public key, DER, ED25519 then MLKEM
-    static MLA_DER_PUB_ED: &[u8] = include_bytes!("../../../samples/test_mlakey_ed_pub.der");
-    /// MLA private key, DER, MLKEM then X25519
-    /// Note: This is the same as MLA_DER_PRIV
-    static MLA_DER_PRIV_REV: &[u8] = include_bytes!("../../../samples/test_mlakey_rev.der");
-    /// MLA public key, DER, MLKEM then X25519
-    /// Note: This is the same as MLA_DER_PUB
-    static MLA_DER_PUB_REV: &[u8] = include_bytes!("../../../samples/test_mlakey_rev_pub.der");
-    /// Several PEM, X25519 then MLKEM, keys in the same file
-    /// Note: Many[0] is MLA_PEM_PUB
-    static MLA_PEM_PUB_MANY: &[u8] = include_bytes!("../../../samples/test_mlakey_many_pub.pem");
-
     /// Check key coherence
     fn check_key_pair(pub_key: &MLAEncryptionPublicKey, priv_key: &MLADecryptionPrivateKey) {
         // Check the public ECC key rebuilt from the private ECC key is the expected one
