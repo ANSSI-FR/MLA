@@ -212,13 +212,14 @@ impl MLAPrivateKey {
     ///
     /// Security:
     /// - Ensure the input source does not leak secrets in temporary buffers,
-    /// and do not forget to zeroize the eventual backing data after this call.
+    ///   and do not forget to zeroize the eventual backing data after this call.
     /// - This method zeroizes the read buffer on completion.
     pub fn deserialize_private_key(src: impl Read) -> Result<Self, Error> {
         let mut content = zeroizeable_read_to_end(src)?;
         let (first_line, _second_line) = split_lines_zeroize(&content)?;
         let decryption_private_key =
             MLADecryptionPrivateKey::deserialize_decryption_private_key(first_line)?;
+        // TODO: deserialize signature private key when implemented
         let signature_private_key = MLASignaturePrivateKey {};
         content.zeroize();
         Ok(Self {
@@ -400,6 +401,7 @@ pub fn generate_mla_keypair_from_seed(seed: [u8; 32]) -> (MLAPrivateKey, MLAPubl
 
 fn generate_mla_keypair_from_rng(mut csprng: impl CryptoRngCore) -> (MLAPrivateKey, MLAPublicKey) {
     let (decryption_private_key, encryption_public_key) = generate_keypair_from_rng(&mut csprng);
+    // TODO: generate a real signature keypair
     let (signature_private_key, signature_verification_public_key) = (
         MLASignaturePrivateKey {},
         MLASignatureVerificationPublicKey {},
@@ -613,6 +615,7 @@ mod tests {
         .unwrap();
         let privkey = MLAPrivateKey::from_decryption_and_signature_keys(
             decryption_private_key,
+            // TODO: fix MLASignaturePrivateKey after implementing it
             MLASignaturePrivateKey {},
         );
         let mut computed_ser_derived_priv = Vec::new();
