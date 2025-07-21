@@ -1,54 +1,50 @@
 // -------- MLA Format Header --------
 
+use std::borrow::BorrowMut;
 use std::io::{Read, Write};
 
-use bincode::{Decode, Encode};
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
-
 use crate::{
-    ArchiveEntryBlockType, ArchiveEntryId, BINCODE_CONFIG, FILENAME_MAX_SIZE, MLA_FORMAT_VERSION,
-    MLA_MAGIC, Sha256Hash, config::ArchivePersistentConfig, entry::EntryName, errors::Error,
+    ArchiveEntryBlockType, ArchiveEntryId, Opts, Sha256Hash, entry::EntryName, errors::Error,
 };
-pub struct ArchiveHeader {
-    pub format_version: u32,
-    pub config: ArchivePersistentConfig,
+use crate::{
+    MLA_FORMAT_VERSION, MLA_MAGIC, MLADeserialize, MLASerialize, deserialize_entry_name,
+    read_layer_magic, serialize_entry_name,
+};
+
+pub(crate) struct ArchiveHeader {
+    pub(crate) format_version_number: u32,
 }
 
-impl ArchiveHeader {
-    pub fn from<T: Read>(src: &mut T) -> Result<Self, Error> {
-        let mut buf = vec![00u8; MLA_MAGIC.len()];
-        src.read_exact(buf.as_mut_slice())?;
-        if buf != MLA_MAGIC {
+impl<W: Write> MLASerialize<W> for ArchiveHeader {
+    fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
+        dest.write_all(MLA_MAGIC)?;
+        let mut len = 8;
+        len += MLA_FORMAT_VERSION.serialize(dest)?;
+        len += Opts.dump(dest)?;
+        Ok(len)
+    }
+}
+
+impl<R: Read> MLADeserialize<R> for ArchiveHeader {
+    fn deserialize(src: &mut R) -> Result<Self, Error> {
+        let mla_magic = read_layer_magic(src)?;
+        if &mla_magic != MLA_MAGIC {
             return Err(Error::WrongMagic);
         }
-        let format_version = src.read_u32::<LittleEndian>()?;
-        if format_version != MLA_FORMAT_VERSION {
+
+        let format_version_number = u32::deserialize(src)?;
+        if format_version_number != MLA_FORMAT_VERSION {
             return Err(Error::UnsupportedVersion);
         }
-        let config: ArchivePersistentConfig =
-            match bincode::decode_from_std_read(src, BINCODE_CONFIG) {
-                Ok(config) => config,
-                _ => {
-                    return Err(Error::DeserializationError);
-                }
-            };
-        Ok(ArchiveHeader {
-            format_version,
-            config,
-        })
-    }
 
-    pub(crate) fn dump<T: Write>(&self, dest: &mut T) -> Result<(), Error> {
-        dest.write_all(MLA_MAGIC)?;
-        dest.write_u32::<LittleEndian>(self.format_version)?;
-        if bincode::encode_into_std_write(&self.config, dest, BINCODE_CONFIG).is_err() {
-            return Err(Error::SerializationError);
-        }
-        Ok(())
+        let _ = Opts::from_reader(src)?; // No option handled at the moment
+        Ok(Self {
+            format_version_number,
+        })
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Encode, Decode)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Layers(u8);
 
 bitflags! {
@@ -83,7 +79,11 @@ pub enum ArchiveEntryBlock<T: Read> {
     /// The `id` is used to keep track internally of which file a `ArchiveEntryBlock` belongs to
     ///
     /// Start of an entry
-    EntryStart { name: EntryName, id: ArchiveEntryId },
+    EntryStart {
+        name: EntryName,
+        id: ArchiveEntryId,
+        opts: Opts,
+    },
     /// Entry content.
     /// (length, data) is used instead of a Vec to avoid having the whole data
     /// in memory. On parsing, the data can be set to None. It indicates to the
@@ -93,11 +93,13 @@ pub enum ArchiveEntryBlock<T: Read> {
         length: u64,
         data: Option<T>,
         id: ArchiveEntryId,
+        opts: Opts,
     },
     /// End of file (last block) - contains the SHA256 of the whole file
     EndOfEntry {
         id: ArchiveEntryId,
         hash: Sha256Hash,
+        opts: Opts,
     },
     /// End of archive data (no more files after that)
     EndOfArchiveData,
@@ -109,22 +111,23 @@ where
 {
     pub(crate) fn dump<U: Write>(&mut self, dest: &mut U) -> Result<(), Error> {
         match self {
-            ArchiveEntryBlock::EntryStart { name: filename, id } => {
-                dest.write_u8(ArchiveEntryBlockType::EntryStart as u8)?;
-                dest.write_u64::<LittleEndian>(*id)?;
-                let bytes = filename.as_arbitrary_bytes();
-                let length = bytes.len() as u64;
-                if length > FILENAME_MAX_SIZE {
-                    return Err(Error::FilenameTooLong);
-                }
-                dest.write_u64::<LittleEndian>(length)?;
-                dest.write_all(bytes)?;
+            ArchiveEntryBlock::EntryStart { name, id, opts } => {
+                ArchiveEntryBlockType::EntryStart.serialize(dest)?;
+                id.serialize(dest)?;
+                serialize_entry_name(name, dest.borrow_mut())?;
+                let _ = opts.dump(dest.borrow_mut())?;
                 Ok(())
             }
-            ArchiveEntryBlock::EntryContent { length, data, id } => {
-                dest.write_u8(ArchiveEntryBlockType::EntryContent as u8)?;
-                dest.write_u64::<LittleEndian>(*id)?;
-                dest.write_u64::<LittleEndian>(*length)?;
+            ArchiveEntryBlock::EntryContent {
+                length,
+                data,
+                id,
+                opts,
+            } => {
+                ArchiveEntryBlockType::EntryContent.serialize(dest)?;
+                id.serialize(dest)?;
+                let _ = opts.dump(dest.borrow_mut())?;
+                length.serialize(dest)?;
                 match data {
                     None => {
                         return Err(Error::AssertionError(String::from(
@@ -138,39 +141,34 @@ where
                 }
                 Ok(())
             }
-            ArchiveEntryBlock::EndOfEntry { id, hash } => {
-                dest.write_u8(ArchiveEntryBlockType::EndOfEntry as u8)?;
-                dest.write_u64::<LittleEndian>(*id)?;
+            ArchiveEntryBlock::EndOfEntry { id, hash, opts } => {
+                ArchiveEntryBlockType::EndOfEntry.serialize(dest)?;
+                id.serialize(dest)?;
+                let _ = opts.dump(dest.borrow_mut())?;
                 dest.write_all(hash)?;
                 Ok(())
             }
             ArchiveEntryBlock::EndOfArchiveData => {
-                dest.write_u8(ArchiveEntryBlockType::EndOfArchiveData as u8)?;
+                ArchiveEntryBlockType::EndOfArchiveData.serialize(dest)?;
                 Ok(())
             }
         }
     }
 
-    pub(crate) fn from(src: &mut T) -> Result<Self, Error> {
-        let byte = src.read_u8()?;
-        match ArchiveEntryBlockType::try_from(byte)? {
+    pub(crate) fn from(mut src: &mut T) -> Result<Self, Error> {
+        let block_type = ArchiveEntryBlockType::deserialize(&mut src)?;
+        match block_type {
             ArchiveEntryBlockType::EntryStart => {
-                let id = src.read_u64::<LittleEndian>()?;
-                let length = src.read_u64::<LittleEndian>()?;
-                if length > FILENAME_MAX_SIZE {
-                    return Err(Error::FilenameTooLong);
-                }
-                let mut name = vec![0u8; length as usize];
-                src.read_exact(&mut name)?;
-                Ok(ArchiveEntryBlock::EntryStart {
-                    id,
-                    name: EntryName::from_arbitrary_bytes(&name)
-                        .map_err(|_| Error::DeserializationError)?,
-                })
+                let id = u64::deserialize(&mut src)?;
+                let name = deserialize_entry_name(&mut src)?;
+                let opts = Opts::from_reader(&mut src)?;
+
+                Ok(ArchiveEntryBlock::EntryStart { id, name, opts })
             }
             ArchiveEntryBlockType::EntryContent => {
-                let id = src.read_u64::<LittleEndian>()?;
-                let length = src.read_u64::<LittleEndian>()?;
+                let id = u64::deserialize(&mut src)?;
+                let opts = Opts::from_reader(&mut src)?;
+                let length = u64::deserialize(&mut src)?;
                 // /!\ WARNING: to avoid loading this entire subfileblock's contents
                 // in-memory, the `data` reader is None; the `src` now starts at the
                 // beginning of the data
@@ -178,13 +176,15 @@ where
                     length,
                     data: None,
                     id,
+                    opts,
                 })
             }
             ArchiveEntryBlockType::EndOfEntry => {
-                let id = src.read_u64::<LittleEndian>()?;
+                let id = u64::deserialize(&mut src)?;
+                let opts = Opts::from_reader(&mut src)?;
                 let mut hash = Sha256Hash::default();
                 src.read_exact(&mut hash)?;
-                Ok(ArchiveEntryBlock::EndOfEntry { id, hash })
+                Ok(ArchiveEntryBlock::EndOfEntry { id, hash, opts })
             }
             ArchiveEntryBlockType::EndOfArchiveData => Ok(ArchiveEntryBlock::EndOfArchiveData),
         }

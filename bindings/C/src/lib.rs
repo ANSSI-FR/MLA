@@ -69,6 +69,7 @@ pub enum MLAStatus {
     HPKEError = 0x18000,
     InvalidLastTag = 0x19000,
     EncryptionAskedButNotMarkedPresent = 0x180000,
+    WrongEndMagic = 0x190000,
     // Keep 0xF10000 slot for backward compatibility
     // Curve25519ParserError = 0xF10000,
     MlaKeyParserError = 0xF20000,
@@ -213,6 +214,7 @@ impl From<MLAError> for MLAStatus {
             MLAError::EncryptionAskedButNotMarkedPresent => {
                 MLAStatus::EncryptionAskedButNotMarkedPresent
             }
+            MLAError::WrongEndMagic => MLAStatus::WrongEndMagic,
         }
     }
 }
@@ -981,11 +983,8 @@ fn _mla_roarchive_extract<'a, R: Read + Seek + 'a>(
 #[repr(C)]
 pub struct ArchiveInfo {
     version: u32,
-    layers: u8,
+    is_encryption_enabled: u8,
 }
-
-pub const ENCRYPT: u8 = 0b0000_0001;
-pub const COMPRESS: u8 = 0b0000_0010;
 
 /// Get info on an existing MLA archive
 #[no_mangle]
@@ -1011,22 +1010,16 @@ pub extern "C" fn mla_roarchive_info(
 }
 
 fn _mla_roarchive_info<R: Read>(src: &mut R, info_out: *mut ArchiveInfo) -> MLAStatus {
-    let info = match mla::info::read_header_info(src) {
+    let info = match mla::info::read_info(src) {
         Ok(info) => info,
         Err(e) => return MLAStatus::from(e),
     };
     let version = info.get_format_version();
-    let mut layers = 0;
-    if info.is_compression_enabled() {
-        layers |= COMPRESS;
-    }
-    if info.is_encryption_enabled() {
-        layers |= ENCRYPT;
-    }
+    let is_encryption_enabled = info.is_encryption_enabled();
 
     unsafe {
         (*info_out).version = version;
-        (*info_out).layers = layers;
+        (*info_out).is_encryption_enabled = if is_encryption_enabled { 1 } else { 0 };
     }
     MLAStatus::Success
 }

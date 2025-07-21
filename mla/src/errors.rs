@@ -8,7 +8,7 @@ use std::io;
 pub enum Error {
     /// IO Error (not enough data, etc.)
     IOError(io::Error),
-    /// Wrong magic, must be "MLA"
+    /// Wrong magic, must be "MLAFAAA"
     WrongMagic,
     /// Unsupported version, must be 2
     UnsupportedVersion,
@@ -63,6 +63,8 @@ pub enum Error {
     InvalidLastTag,
     /// User asked for encryption but archive was not marked as encrypted
     EncryptionAskedButNotMarkedPresent,
+    /// MLA archive must be terminated by EMLAAAAA
+    WrongEndMagic,
 }
 
 impl fmt::Display for Error {

@@ -1,9 +1,3 @@
-use bincode::{
-    Decode, Encode,
-    de::Decoder,
-    enc::Encoder,
-    error::{DecodeError, EncodeError},
-};
 /// Implements RFC 9180 for MLA needs
 use hpke::aead::{Aead as HPKEAeadTrait, AesGcm256 as HPKEAesGcm256};
 use hpke::kdf::{HkdfSha512, Kdf as HpkeKdfTrait, LabeledExpand, labeled_extract};
@@ -34,23 +28,6 @@ impl DHKEMCiphertext {
     }
     pub(crate) fn to_bytes(&self) -> [u8; 32] {
         self.0.to_bytes().into()
-    }
-}
-
-impl Encode for DHKEMCiphertext {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> core::result::Result<(), EncodeError> {
-        Encode::encode(&self.to_bytes(), encoder)
-    }
-}
-
-impl<Context> Decode<Context> for DHKEMCiphertext {
-    fn decode<D: Decoder<Context = Context>>(
-        decoder: &mut D,
-    ) -> core::result::Result<Self, DecodeError> {
-        let bytes: [u8; 32] = Decode::decode(decoder)?;
-        let dhkemct = DHKEMCiphertext::from_bytes(&bytes)
-            .or(Err(DecodeError::Other("Invalid DHKEMCiphertext")))?;
-        Ok(dhkemct)
     }
 }
 
@@ -199,10 +176,10 @@ pub(crate) fn compute_nonce(base_nonce: &Nonce, seq: u64) -> Nonce {
 
 #[cfg(test)]
 mod tests {
+    use crate::{MLADeserialize, MLASerialize};
     use std::io;
     use std::io::{BufReader, Cursor};
 
-    use crate::BINCODE_CONFIG;
     use crate::crypto::aesgcm::AesGcm256;
 
     use super::*;
@@ -274,14 +251,14 @@ mod tests {
 
     /// Test Serialization and Deserialization of DHKEMCiphertext
     #[test]
-    fn dhkem_ciphertext_bincode() {
+    fn dhkem_ciphertext_serialization() {
         // from_bytes / to_bytes
         let ciphertext = DHKEMCiphertext::from_bytes(&RFC_PKRM).unwrap();
         assert_eq!(ciphertext.to_bytes(), RFC_PKRM);
         // encode / decode
-        let encoded: &mut [u8] = &mut [0u8; 32];
-        bincode::encode_into_slice(RFC_PKRM, encoded, BINCODE_CONFIG).unwrap();
-        let (data, _) = bincode::decode_from_slice::<[u8; 32], _>(encoded, BINCODE_CONFIG).unwrap();
+        let mut encoded = Vec::<u8>::new();
+        RFC_PKRM.as_slice().serialize(&mut encoded).unwrap();
+        let data: [u8; 32] = MLADeserialize::deserialize(&mut Cursor::new(encoded)).unwrap();
         assert_eq!(RFC_PKRM, data);
     }
 

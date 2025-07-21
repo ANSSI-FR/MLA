@@ -165,16 +165,17 @@ use std::io;
 use std::io::{Read, Seek, SeekFrom, Write};
 #[macro_use]
 extern crate bitflags;
-use bincode::config::{Fixint, Limit};
-use bincode::{Decode, Encode};
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
-use config::{ArchivePersistentConfig, InternalConfig};
 use crypto::hybrid::HybridPublicKey;
-use layers::encrypt::EncryptionConfig;
+use layers::compress::COMPRESSION_LAYER_MAGIC;
+use layers::encrypt::ENCRYPTION_LAYER_MAGIC;
+use layers::strip_head_tail::StripHeadTailReader;
 use layers::traits::InnerReaderTrait;
 
 pub mod entry;
-use entry::{ArchiveEntry, ArchiveEntryDataReader, ArchiveEntryId, EntryName, EntryNameError};
+use entry::{
+    ArchiveEntry, ArchiveEntryDataReader, ArchiveEntryId, EntryName, deserialize_entry_name,
+    serialize_entry_name,
+};
 
 /// As the name spoils it, an MLA is made of several, independent, layers. The following section introduces the design ideas behind MLA. Please refer to [FORMAT.md](FORMAT.md) for a more formal description.
 ///
@@ -365,24 +366,46 @@ extern crate hex_literal;
 
 // -------- Constants --------
 
-const MLA_MAGIC: &[u8; 3] = b"MLA";
+const MLA_MAGIC: &[u8; 8] = b"MLAFAAAA";
 const MLA_FORMAT_VERSION: u32 = 2;
+const END_MLA_MAGIC: &[u8; 8] = b"EMLAAAAA";
 /// Maximum number of UTF-8 characters supported in each file's "name" (which is free
 /// to be used as a filename, an absolute path, or... ?). 32KiB was chosen because it
 /// supports any path a Windows NT, Linux, FreeBSD, OpenBSD, or NetBSD kernel supports.
 const FILENAME_MAX_SIZE: u64 = 65536;
-/// Maximum allowed object size (in bytes) to decode in-memory, to avoid DoS on
-/// malformed files
-const BINCODE_MAX_DECODE: usize = 512 * 1024 * 1024;
-pub(crate) const BINCODE_CONFIG: bincode::config::Configuration<
-    bincode::config::LittleEndian,
-    Fixint,
-    Limit<{ BINCODE_MAX_DECODE }>,
-> = bincode::config::standard()
-    .with_limit::<{ BINCODE_MAX_DECODE }>()
-    .with_fixed_int_encoding();
 
-use format::Layers;
+const ENTRIES_LAYER_MAGIC: &[u8; 8] = b"MLAENAAA";
+
+const EMPTY_OPTS_SERIALIZATION: &[u8; 1] = &[0];
+const EMPTY_TAIL_OPTS_SERIALIZATION: &[u8; 9] = &[0, 1, 0, 0, 0, 0, 0, 0, 0];
+
+#[derive(Debug)]
+struct Opts;
+
+impl Opts {
+    fn from_reader(mut src: impl Read) -> Result<Self, Error> {
+        let discriminant = u8::deserialize(&mut src)?;
+        match discriminant {
+            0 => (),
+            1 => {
+                let mut n = [0; 8];
+                src.read_exact(&mut n)?;
+                let n = u64::from_le_bytes(n);
+                let mut v = Vec::new();
+                src.take(n).read_to_end(&mut v)?;
+                // no action implemented for the moment, hence no further use
+            }
+            _ => return Err(Error::DeserializationError),
+        }
+        Ok(Opts)
+    }
+
+    fn dump(&mut self, mut src: impl Write) -> Result<u64, Error> {
+        // No option for the moment
+        src.write_all(EMPTY_OPTS_SERIALIZATION)?;
+        Ok(1)
+    }
+}
 
 // -------- MLA Format Footer --------
 
@@ -411,45 +434,32 @@ impl ArchiveFooter {
                     "[ArchiveFooter seriliaze] Unable to find the ID".to_string(),
                 )
             })?;
-            tmp.push((k.as_arbitrary_bytes(), v));
+            tmp.push((k, v));
         }
         tmp.sort_by_key(|(k, _)| *k);
 
-        let serialization_len = bincode::encode_into_std_write(&tmp, &mut dest, BINCODE_CONFIG)
-            .or(Err(Error::SerializationError))?;
-
-        let footer_len = u64::try_from(serialization_len).or(Err(Error::SerializationError))?;
-
-        dest.write_u64::<LittleEndian>(footer_len)?;
+        tmp.len().serialize(&mut dest)?;
+        let mut footer_serialization_length = 8;
+        for (k, i) in tmp {
+            footer_serialization_length += serialize_entry_name(k, &mut dest)?;
+            footer_serialization_length += i.serialize(&mut dest)?;
+        }
+        footer_serialization_length.serialize(&mut dest)?;
         Ok(())
     }
 
     /// Parses and instantiates a footer from serialized data
     pub fn deserialize_from<R: Read + Seek>(mut src: R) -> Result<ArchiveFooter, Error> {
-        // Read the footer length
-        let pos = src.seek(SeekFrom::End(-8))?;
-        let len = src.read_u64::<LittleEndian>()?;
-
-        // Prepare for deserialization
-        src.seek(SeekFrom::Start(pos - len))?;
-
         // Read files_info
-        // A Vec can be deserialized into a HashMap in bincode 2
-        let files_info_bytes_names: HashMap<Vec<u8>, EntryInfo> =
-            match bincode::decode_from_std_read(&mut src.take(len), BINCODE_CONFIG) {
-                Ok(finfo) => finfo,
-                _ => {
-                    return Err(Error::DeserializationError);
-                }
-            };
-        let files_info = files_info_bytes_names
-            .into_iter()
-            .map(|(k, v)| {
-                let name = EntryName::from_arbitrary_bytes(&k)?;
-                Ok((name, v))
+        let n = u64::deserialize(&mut src)?;
+        let files_info = (0..n)
+            .map(|_| {
+                let name = deserialize_entry_name(&mut src)?;
+                let info = EntryInfo::deserialize(&mut src)?;
+                Ok::<_, Error>((name, info))
             })
-            .collect::<Result<HashMap<EntryName, EntryInfo>, EntryNameError>>();
-        let files_info = files_info.map_err(|_| Error::SerializationError)?;
+            .collect::<Result<HashMap<_, _>, Error>>()?;
+
         Ok(ArchiveFooter {
             entries_info: files_info,
         })
@@ -460,29 +470,35 @@ impl ArchiveFooter {
 
 /// Tags used in each ArchiveEntryBlock to indicate the type of block that follows
 #[derive(Debug)]
-#[repr(u8)]
 enum ArchiveEntryBlockType {
-    EntryStart = 0x00,
-    EntryContent = 0x01,
+    EntryStart,
+    EntryContent,
 
-    EndOfArchiveData = 0xFE,
-    EndOfEntry = 0xFF,
+    EndOfArchiveData,
+    EndOfEntry,
 }
 
-impl TryFrom<u8> for ArchiveEntryBlockType {
-    type Error = Error;
+impl<W: Write> MLASerialize<W> for ArchiveEntryBlockType {
+    fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
+        let byte: u8 = match self {
+            ArchiveEntryBlockType::EntryStart => 0,
+            ArchiveEntryBlockType::EntryContent => 1,
+            ArchiveEntryBlockType::EndOfArchiveData => 0xFE,
+            ArchiveEntryBlockType::EndOfEntry => 0xFF,
+        };
+        byte.serialize(dest)
+    }
+}
 
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        if value == ArchiveEntryBlockType::EntryStart as u8 {
-            Ok(ArchiveEntryBlockType::EntryStart)
-        } else if value == ArchiveEntryBlockType::EntryContent as u8 {
-            Ok(ArchiveEntryBlockType::EntryContent)
-        } else if value == ArchiveEntryBlockType::EndOfEntry as u8 {
-            Ok(ArchiveEntryBlockType::EndOfEntry)
-        } else if value == ArchiveEntryBlockType::EndOfArchiveData as u8 {
-            Ok(ArchiveEntryBlockType::EndOfArchiveData)
-        } else {
-            Err(Error::WrongBlockSubFileType)
+impl<R: Read> MLADeserialize<R> for ArchiveEntryBlockType {
+    fn deserialize(src: &mut R) -> Result<Self, Error> {
+        let serialized_block_type = u8::deserialize(src)?;
+        match serialized_block_type {
+            0 => Ok(ArchiveEntryBlockType::EntryStart),
+            1 => Ok(ArchiveEntryBlockType::EntryContent),
+            0xFE => Ok(ArchiveEntryBlockType::EndOfArchiveData),
+            0xFF => Ok(ArchiveEntryBlockType::EndOfEntry),
+            _ => Err(Error::WrongBlockSubFileType),
         }
     }
 }
@@ -578,11 +594,6 @@ macro_rules! check_state_file_opened {
 pub struct ArchiveWriter<'a, W: 'a + InnerWriterTrait> {
     /// MLA Archive format writer
     ///
-    /// Configuration
-    // config is not used for now after archive creation,
-    // but it could in the future
-    #[allow(dead_code)]
-    internal_config: InternalConfig,
     ///
     /// Internals part:
     ///
@@ -620,40 +631,21 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
     /// Create an `ArchiveWriter` from config.
     pub fn from_config(dest: W, config: ArchiveWriterConfig) -> Result<Self, Error> {
         let mut dest: InnerWriterType<W> = Box::new(RawLayerWriter::new(dest));
-        let ArchiveWriterConfig {
-            compression_config,
-            encryption_config,
-        } = config;
-        let (encryption_persistent_config, encryption_internal_config) = match encryption_config {
-            Some(encryption_config) => Some(EncryptionConfig::to_persistent(&encryption_config)?),
-            None => None,
-        }
-        .unzip();
-        let mut layers_enabled = Layers::EMPTY;
-        if compression_config.is_some() {
-            layers_enabled |= Layers::COMPRESS;
-        }
-        if encryption_persistent_config.is_some() {
-            layers_enabled |= Layers::ENCRYPT;
-        }
 
-        // Write archive header
-        ArchiveHeader {
-            format_version: MLA_FORMAT_VERSION,
-            config: ArchivePersistentConfig {
-                layers_enabled,
-                encrypt: encryption_persistent_config,
-            },
-        }
-        .dump(&mut dest)?;
+        let archive_header = ArchiveHeader {
+            format_version_number: MLA_FORMAT_VERSION,
+        };
+        archive_header.serialize(&mut dest)?;
 
         // Enable layers depending on user option
-        dest = match encryption_internal_config.as_ref() {
-            Some(cfg) => Box::new(EncryptionLayerWriter::new(dest, cfg)?),
+        dest = match config.encryption_config {
+            Some(encryption_config) => {
+                Box::new(EncryptionLayerWriter::new(dest, &encryption_config)?)
+            }
             None => dest,
         };
-        dest = match compression_config {
-            Some(cfg) => Box::new(CompressionLayerWriter::new(dest, &cfg)),
+        dest = match config.compression_config {
+            Some(cfg) => Box::new(CompressionLayerWriter::new(dest, &cfg)?),
             None => dest,
         };
 
@@ -661,11 +653,12 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         let mut final_dest = Box::new(PositionLayerWriter::new(dest));
         final_dest.reset_position();
 
+        // Write the magic
+        final_dest.write_all(ENTRIES_LAYER_MAGIC)?;
+        let _ = Opts.dump(&mut final_dest)?;
+
         // Build initial archive
         Ok(ArchiveWriter {
-            internal_config: InternalConfig {
-                encrypt: encryption_internal_config,
-            },
             dest: final_dest,
             state: ArchiveWriterState::OpenedFiles {
                 ids: Vec::new(),
@@ -714,39 +707,28 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
 
         ArchiveFooter::serialize_into(&mut self.dest, &self.files_info, &self.ids_info)?;
 
+        self.dest.write_all(EMPTY_TAIL_OPTS_SERIALIZATION)?; // No option for the moment
+
         // Recursive call
-        self.dest.finalize()
+        let mut final_dest = self.dest.finalize()?;
+        final_dest.write_all(EMPTY_TAIL_OPTS_SERIALIZATION)?; // No option for the moment
+        final_dest.write_all(END_MLA_MAGIC)?;
+        Ok(final_dest)
     }
 
     /// Add the current offset to the corresponding list if the file id is not
     /// the current one, ie. if blocks are not continuous
-    fn mark_continuous_block(&mut self, id: ArchiveEntryId) -> Result<(), Error> {
-        if id != self.current_id {
-            let offset = self.dest.position();
-            match self.ids_info.get_mut(&id) {
-                Some(file_info) => file_info.offsets.push(offset),
-                None => {
-                    return Err(Error::WrongWriterState(
-                        "[mark_continuous_block] Unable to find the ID".to_string(),
-                    ));
-                }
-            };
-            self.current_id = id;
-        }
-        Ok(())
-    }
-
-    /// Set the EoF offset to the current offset for the corresponding file id
-    fn mark_eof(&mut self, id: ArchiveEntryId) -> Result<(), Error> {
+    fn record_offset_in_index(&mut self, id: ArchiveEntryId) -> Result<(), Error> {
         let offset = self.dest.position();
         match self.ids_info.get_mut(&id) {
-            Some(file_info) => file_info.eof_offset = offset,
+            Some(file_info) => file_info.offsets.push(offset),
             None => {
                 return Err(Error::WrongWriterState(
-                    "[mark_eof] Unable to find the ID".to_string(),
+                    "[mark_continuous_block] Unable to find the ID".to_string(),
                 ));
             }
-        }
+        };
+        self.current_id = id;
         Ok(())
     }
 
@@ -787,11 +769,15 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
             EntryInfo {
                 offsets: vec![self.dest.position()],
                 size: 0,
-                eof_offset: 0,
             },
         );
         // Use std::io::Empty as a readable placeholder type
-        ArchiveEntryBlock::EntryStart::<std::io::Empty> { name, id }.dump(&mut self.dest)?;
+        ArchiveEntryBlock::EntryStart::<std::io::Empty> {
+            name,
+            id,
+            opts: Opts,
+        }
+        .dump(&mut self.dest)?;
 
         match &mut self.state {
             ArchiveWriterState::OpenedFiles { ids, hashes } => {
@@ -825,7 +811,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
             return Ok(());
         }
 
-        self.mark_continuous_block(id)?;
+        self.record_offset_in_index(id)?;
         self.extend_file_size(id, size)?;
         let src = self.state.wrap_with_hash(id, src)?;
 
@@ -833,6 +819,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
             id,
             length: size,
             data: Some(src),
+            opts: Opts,
         }
         .dump(&mut self.dest)
     }
@@ -857,10 +844,14 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
             }
         };
 
-        self.mark_continuous_block(id)?;
-        self.mark_eof(id)?;
+        self.record_offset_in_index(id)?;
         // Use std::io::Empty as a readable placeholder type
-        ArchiveEntryBlock::EndOfEntry::<std::io::Empty> { id, hash }.dump(&mut self.dest)?;
+        ArchiveEntryBlock::EndOfEntry::<std::io::Empty> {
+            id,
+            hash,
+            opts: Opts,
+        }
+        .dump(&mut self.dest)?;
 
         Ok(())
     }
@@ -879,22 +870,164 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
     }
 }
 
+trait MLASerialize<W: Write> {
+    fn serialize(&self, dest: &mut W) -> Result<u64, Error>;
+}
+
+trait MLADeserialize<R: Read> {
+    fn deserialize(src: &mut R) -> Result<Self, Error>
+    where
+        Self: std::marker::Sized;
+}
+
+impl<W: Write> MLASerialize<W> for u8 {
+    fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
+        dest.write_all(&[*self])?;
+        Ok(1)
+    }
+}
+
+impl<W: Write> MLASerialize<W> for u64 {
+    fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
+        dest.write_all(&self.to_le_bytes())?;
+        Ok(8)
+    }
+}
+
+impl<R: Read> MLADeserialize<R> for u64 {
+    fn deserialize(src: &mut R) -> Result<Self, Error> {
+        let mut n = [0; 8];
+        src.read_exact(&mut n)
+            .map_err(|_| Error::DeserializationError)?;
+        Ok(u64::from_le_bytes(n))
+    }
+}
+
+impl<W: Write> MLASerialize<W> for usize {
+    fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
+        let u64self = u64::try_from(*self).map_err(|_| Error::SerializationError)?;
+        dest.write_all(&u64self.to_le_bytes())?;
+        Ok(8)
+    }
+}
+
+impl<W: Write> MLASerialize<W> for u32 {
+    fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
+        dest.write_all(&self.to_le_bytes())?;
+        Ok(4)
+    }
+}
+
+impl<R: Read> MLADeserialize<R> for u32 {
+    fn deserialize(src: &mut R) -> Result<Self, Error> {
+        let mut n = [0; 4];
+        src.read_exact(&mut n)
+            .map_err(|_| Error::DeserializationError)?;
+        Ok(u32::from_le_bytes(n))
+    }
+}
+
+impl<W: Write> MLASerialize<W> for u16 {
+    fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
+        dest.write_all(&self.to_le_bytes())?;
+        Ok(2)
+    }
+}
+
+impl<R: Read> MLADeserialize<R> for u16 {
+    fn deserialize(src: &mut R) -> Result<Self, Error> {
+        let mut n = [0; 2];
+        src.read_exact(&mut n)
+            .map_err(|_| Error::DeserializationError)?;
+        Ok(u16::from_le_bytes(n))
+    }
+}
+
+impl<R: Read> MLADeserialize<R> for u8 {
+    fn deserialize(src: &mut R) -> Result<Self, Error> {
+        let mut n = [0; 1];
+        src.read_exact(&mut n)
+            .map_err(|_| Error::DeserializationError)?;
+        Ok(u8::from_le_bytes(n))
+    }
+}
+
+impl<W: Write, T: MLASerialize<W>> MLASerialize<W> for Vec<T> {
+    fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
+        let u64len = u64::try_from(self.len()).map_err(|_| Error::SerializationError)?;
+        let mut serialization_length = u64len.serialize(dest)?;
+        serialization_length += self.as_slice().serialize(dest)?;
+        Ok(serialization_length)
+    }
+}
+
+impl<W: Write, T: MLASerialize<W>> MLASerialize<W> for &[T] {
+    fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
+        let mut serialization_length = 0;
+        for e in *self {
+            serialization_length += e.serialize(dest)?;
+        }
+        Ok(serialization_length)
+    }
+}
+
+impl<R: Read, T: MLADeserialize<R>> MLADeserialize<R> for Vec<T> {
+    fn deserialize(src: &mut R) -> Result<Self, Error> {
+        let n = u64::deserialize(src)?;
+        let v: Result<Vec<T>, Error> = (0..n).map(|_| T::deserialize(src)).collect();
+        v
+    }
+}
+
+impl<R: Read, const N: usize> MLADeserialize<R> for [u8; N] {
+    fn deserialize(src: &mut R) -> Result<Self, Error> {
+        let mut a = [0; N];
+        for e in a.iter_mut() {
+            *e = u8::deserialize(src)?;
+        }
+        Ok(a)
+    }
+}
+
+impl<R: Read, T1: MLADeserialize<R>, T2: MLADeserialize<R>> MLADeserialize<R> for (T1, T2) {
+    fn deserialize(src: &mut R) -> Result<Self, Error> {
+        Ok((T1::deserialize(src)?, T2::deserialize(src)?))
+    }
+}
+
 // -------- Reader --------
 
-#[derive(Encode, Decode)]
 #[cfg_attr(test, derive(PartialEq, Eq, Debug, Clone))]
 pub(crate) struct EntryInfo {
     /// Entry information to save in the footer
     ///
-    /// Offsets of continuous chunks of `ArchiveEntryBlock`
+    /// Offsets of chunks of `ArchiveEntryBlock`
     offsets: Vec<u64>,
     /// Size of the file, in bytes
     size: u64,
-    /// Offset of the ArchiveEntryBlock::EndOfEntry
-    ///
-    /// This offset is used to retrieve information from the EndOfEntry tag, such as
-    /// the file hash
-    eof_offset: u64,
+}
+
+impl<W: Write> MLASerialize<W> for EntryInfo {
+    fn serialize(&self, mut dest: &mut W) -> Result<u64, Error> {
+        let mut serialization_length = self.offsets.serialize(&mut dest)?;
+        serialization_length += self.size.serialize(&mut dest)?;
+        Ok(serialization_length)
+    }
+}
+
+impl<R: Read> MLADeserialize<R> for EntryInfo {
+    fn deserialize(src: &mut R) -> Result<Self, Error> {
+        let offsets = MLADeserialize::deserialize(src)?;
+        let size = u64::deserialize(src)?;
+
+        Ok(Self { offsets, size })
+    }
+}
+
+fn read_layer_magic<R: Read>(src: &mut R) -> Result<[u8; 8], Error> {
+    let mut buf = [0; 8];
+    src.read_exact(&mut buf)?;
+    Ok(buf)
 }
 
 /// Use this to read an archive
@@ -907,36 +1040,98 @@ pub struct ArchiveReader<'a, R: 'a + InnerReaderTrait> {
     metadata: Option<ArchiveFooter>,
 }
 
+fn read_mla_entries_header(mut src: impl Read) -> Result<(), Error> {
+    // Read the magic
+    let mut magic = [0u8; 8];
+    src.read_exact(&mut magic)?;
+    if magic != *ENTRIES_LAYER_MAGIC {
+        return Err(Error::WrongMagic);
+    }
+    read_mla_entries_header_skip_magic(src)
+}
+
+fn read_mla_entries_header_skip_magic(mut src: impl Read) -> Result<(), Error> {
+    let _ = Opts::from_reader(&mut src)?; // No option handled at the moment
+    Ok(())
+}
+
 impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
     /// Create an `ArchiveReader`.
-    pub fn from_config(mut src: R, mut config: ArchiveReaderConfig) -> Result<Self, Error> {
+    pub fn from_config(mut src: R, config: ArchiveReaderConfig) -> Result<Self, Error> {
         // Make sure we read the archive header from the start
         src.rewind()?;
-        let header = ArchiveHeader::from(&mut src)?;
-        let layers_enabled = header.config.layers_enabled;
-        config.load_persistent(header.config)?;
+
+        ArchiveHeader::deserialize(&mut src)?;
 
         // Pin the current position (after header) as the new 0
         let mut raw_src = Box::new(RawLayerReader::new(src));
         raw_src.reset_position()?;
+        let mut src: Box<dyn 'b + LayerReader<'b, R>> = raw_src;
+
+        // Read and strip tail (end magic, tail options)
+        let end_magic_position = src.seek(SeekFrom::End(-8))?;
+        let end_magic = read_layer_magic(&mut src)?;
+        if &end_magic != END_MLA_MAGIC {
+            return Err(Error::WrongEndMagic);
+        }
+        src.seek(SeekFrom::End(-16))?;
+        let mla_footer_options_length = u64::deserialize(&mut src)?;
+        let mla_tail_len = mla_footer_options_length + 16;
+        let inner_len = end_magic_position + 8;
+        src.seek(SeekFrom::Start(0))?;
+        src = Box::new(StripHeadTailReader::new(
+            src,
+            0,
+            mla_tail_len,
+            inner_len,
+            0,
+        )?);
 
         // Enable layers depending on user option. Order is relevant
-        let mut src: Box<dyn 'b + LayerReader<'b, R>> = raw_src;
-        if layers_enabled.contains(Layers::ENCRYPT) {
-            src = Box::new(EncryptionLayerReader::new(src, &config.encrypt)?);
-        } else if !config.accept_unencrypted {
+
+        let accept_unencrypted = config.accept_unencrypted;
+        let mut magic = read_layer_magic(&mut src)?;
+        if &magic == ENCRYPTION_LAYER_MAGIC {
+            src = Box::new(EncryptionLayerReader::new_skip_magic(
+                src,
+                config.encrypt,
+                None,
+            )?);
+            src.initialize()?;
+            magic = read_layer_magic(&mut src)?;
+        } else if !accept_unencrypted {
             return Err(Error::EncryptionAskedButNotMarkedPresent);
         }
-        if layers_enabled.contains(Layers::COMPRESS) {
-            src = Box::new(CompressionLayerReader::new(src)?);
+
+        if &magic == COMPRESSION_LAYER_MAGIC {
+            src = Box::new(CompressionLayerReader::new_skip_magic(src)?);
+            src.initialize()?;
         }
-        src.initialize()?;
+
+        // read `entries_footer_options`
+        src.seek(SeekFrom::End(-8))?;
+        let entries_footer_options_length = u64::deserialize(&mut src)?;
+        // skip reading them as there are none for the moment
 
         // Read the footer
+        let entries_footer_length_offset_from_end =
+            (-16i64) // -8 for Tail<Opts>'s length, -8 for `Tail<EntriesFooter>`'s length field
+                .checked_sub_unsigned(entries_footer_options_length)
+                .ok_or(Error::DeserializationError)?;
+        // Read the footer length
+        src.seek(SeekFrom::End(entries_footer_length_offset_from_end))?;
+        let entries_footer_length = u64::deserialize(&mut src)?;
+        // Prepare for deserialization
+        let start_of_entries_footer_from_current = (-8i64)
+            .checked_sub_unsigned(entries_footer_length)
+            .ok_or(Error::DeserializationError)?;
+        src.seek(SeekFrom::Current(start_of_entries_footer_from_current))?;
         let metadata = Some(ArchiveFooter::deserialize_from(&mut src)?);
 
         // Reset the position for further uses
         src.rewind()?;
+
+        read_mla_entries_header(&mut src)?;
 
         Ok(ArchiveReader { src, metadata })
     }
@@ -967,14 +1162,18 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
                 None => return Ok(None),
                 Some(finfo) => finfo,
             };
-            // Set the inner layer at the start of the EoF tag
-            self.src.seek(SeekFrom::Start(file_info.eof_offset))?;
+            // Set the inner layer at the start of the EoE tag
+            let eoe_offset = file_info
+                .offsets
+                .last()
+                .ok_or(Error::DeserializationError)?;
+            self.src.seek(SeekFrom::Start(*eoe_offset))?;
 
             // Return the file hash
             match ArchiveEntryBlock::from(&mut self.src)? {
                 ArchiveEntryBlock::EndOfEntry { hash, .. } => Ok(Some(hash)),
                 _ => Err(Error::WrongReaderState(
-                    "[ArchiveReader] eof_offset must point to a EoF".to_string(),
+                    "[ArchiveReader] last offset must point to a EndOfEntry".to_string(),
                 )),
             }
         } else {
@@ -1025,11 +1224,6 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
 pub struct TruncatedArchiveReader<'a, R: 'a + Read> {
     /// MLA Archive format Reader (fail-safe)
     //
-    /// User's reading configuration
-    // config is not used for now after reader creation,
-    // but it could in the future
-    #[allow(dead_code)]
-    config: ArchiveReaderConfig,
     /// Source
     src: Box<dyn 'a + LayerFailSafeReader<'a, R>>,
 }
@@ -1055,24 +1249,37 @@ macro_rules! update_error {
 
 impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
     /// Create a `TruncatedArchiveReader` with given config.
-    pub fn from_config(mut src: R, mut config: ArchiveReaderConfig) -> Result<Self, Error> {
-        let header = ArchiveHeader::from(&mut src)?;
-        let layers_enabled = header.config.layers_enabled;
-        config.load_persistent(header.config)?;
+    pub fn from_config(mut src: R, config: ArchiveReaderConfig) -> Result<Self, Error> {
+        ArchiveHeader::deserialize(&mut src)?;
 
         // Enable layers depending on user option. Order is relevant
         let mut src: Box<dyn 'b + LayerFailSafeReader<'b, R>> =
             Box::new(RawLayerFailSafeReader::new(src));
-        if layers_enabled.contains(Layers::ENCRYPT) {
-            src = Box::new(EncryptionLayerFailSafeReader::new(src, &config.encrypt)?);
-        } else if !config.accept_unencrypted {
+        let accept_unencrypted = config.accept_unencrypted;
+        let mut magic = read_layer_magic(&mut src)?;
+        if &magic == ENCRYPTION_LAYER_MAGIC {
+            src = Box::new(EncryptionLayerFailSafeReader::new_skip_magic(
+                src,
+                config.encrypt,
+                None,
+            )?);
+            magic = read_layer_magic(&mut src)?;
+        } else if !accept_unencrypted {
             return Err(Error::EncryptionAskedButNotMarkedPresent);
         }
-        if layers_enabled.contains(Layers::COMPRESS) {
-            src = Box::new(CompressionLayerFailSafeReader::new(src)?);
+        if &magic == COMPRESSION_LAYER_MAGIC {
+            src = Box::new(CompressionLayerFailSafeReader::new_skip_magic(src)?);
+            magic = read_layer_magic(&mut src)?;
         }
 
-        Ok(Self { config, src })
+        if &magic != ENTRIES_LAYER_MAGIC {
+            return Err(Error::DeserializationError);
+        }
+
+        // Read the magic
+        read_mla_entries_header_skip_magic(&mut src)?;
+
+        Ok(Self { src })
     }
 
     /// Best-effort conversion of the current archive to a correct
@@ -1111,7 +1318,11 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
                 }
                 Ok(block) => {
                     match block {
-                        ArchiveEntryBlock::EntryStart { name: filename, id } => {
+                        ArchiveEntryBlock::EntryStart {
+                            name: filename,
+                            id,
+                            opts: _,
+                        } => {
                             if let Some(_id_output) = id_failsafe2id_output.get(&id) {
                                 update_error!(error = TruncatedReadError::ArchiveFileIDReuse(id));
                                 break 'read_block;
@@ -1227,7 +1438,11 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
                                 }
                             }
                         }
-                        ArchiveEntryBlock::EndOfEntry { id, hash } => {
+                        ArchiveEntryBlock::EndOfEntry {
+                            id,
+                            hash,
+                            opts: Opts,
+                        } => {
                             let id_output = match id_failsafe2id_output.get(&id) {
                                 Some(id_output) => *id_output,
                                 None => {
@@ -1313,8 +1528,6 @@ pub mod info;
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use crate::config::ArchivePersistentConfig;
-
     use super::*;
     use crypto::hybrid::{HybridPrivateKey, generate_keypair_from_seed};
     // use curve25519_parser::{parse_openssl_25519_privkey, parse_openssl_25519_pubkey};
@@ -1330,18 +1543,14 @@ pub(crate) mod tests {
     #[test]
     fn read_dump_header() {
         let header = ArchiveHeader {
-            format_version: MLA_FORMAT_VERSION,
-            config: ArchivePersistentConfig {
-                layers_enabled: Layers::default(),
-                encrypt: None,
-            },
+            format_version_number: MLA_FORMAT_VERSION,
         };
         let mut buf = Vec::new();
-        header.dump(&mut buf).unwrap();
+        header.serialize(&mut buf).unwrap();
         println!("{:?}", buf);
 
-        let header_rebuild = ArchiveHeader::from(&mut buf.as_slice()).unwrap();
-        assert_eq!(header_rebuild.config.layers_enabled, Layers::default());
+        let header_rebuild = ArchiveHeader::deserialize(&mut buf.as_slice()).unwrap();
+        assert_eq!(header_rebuild.format_version_number, MLA_FORMAT_VERSION);
     }
 
     #[test]
@@ -1354,6 +1563,7 @@ pub(crate) mod tests {
         ArchiveEntryBlock::EntryStart::<Empty> {
             id,
             name: EntryName::from_path("foobaré.exe").unwrap(),
+            opts: Opts,
         }
         .dump(&mut buf)
         .unwrap();
@@ -1363,13 +1573,18 @@ pub(crate) mod tests {
             id,
             length: fake_content.len() as u64,
             data: Some(fake_content.as_slice()),
+            opts: Opts,
         };
         block.dump(&mut buf).unwrap();
 
         // std::io::Empty is used because a type with Read is needed
-        ArchiveEntryBlock::EndOfEntry::<Empty> { id, hash }
-            .dump(&mut buf)
-            .unwrap();
+        ArchiveEntryBlock::EndOfEntry::<Empty> {
+            id,
+            hash,
+            opts: Opts,
+        }
+        .dump(&mut buf)
+        .unwrap();
 
         println!("{:?}", buf);
     }
@@ -1731,22 +1946,14 @@ pub(crate) mod tests {
     fn convert_trunc_failsafe() {
         for interleaved in &[false, true] {
             // Build an archive with 3 files, without compressing to truncate at the correct place
-            let (dest, key, pubkey, files, files_info, _) =
+            let (dest, key, pubkey, files, files_info, ids_info) =
                 build_archive2(false, true, *interleaved);
             // Truncate the resulting file (before the footer, hopefully after the header), and prepare the failsafe reader
-            let mut buffer: &mut [u8] = &mut vec![0; BINCODE_MAX_DECODE];
-            let serializable_files_info = files_info
-                .iter()
-                .map(|(k, v)| (k.as_arbitrary_bytes(), v))
-                .collect::<Vec<_>>();
-            let footer_size = bincode::encode_into_std_write::<_, _, &mut [u8]>(
-                serializable_files_info,
-                &mut buffer,
-                BINCODE_CONFIG,
-            )
-            .or(Err(Error::SerializationError))
-            .unwrap()
-                + 4;
+            let footer_size = {
+                let mut cursor = Cursor::new(Vec::new());
+                ArchiveFooter::serialize_into(&mut cursor, &files_info, &ids_info).unwrap();
+                cursor.position() as usize
+            };
 
             for remove in &[1, 10, 30, 50, 70, 95, 100] {
                 let config = ArchiveReaderConfig::with_private_keys(&[key.clone()]);
@@ -2081,8 +2288,8 @@ pub(crate) mod tests {
         assert_eq!(
             Sha256::digest(&raw_mla).as_slice(),
             [
-                246, 209, 86, 99, 226, 71, 217, 183, 250, 34, 251, 49, 153, 220, 242, 55, 189, 236,
-                172, 48, 234, 191, 10, 98, 39, 161, 236, 110, 243, 80, 232, 212
+                249, 25, 27, 204, 78, 17, 100, 189, 202, 248, 50, 116, 61, 231, 59, 145, 62, 104,
+                191, 191, 237, 103, 0, 119, 39, 253, 168, 37, 204, 177, 89, 166
             ]
         )
     }
@@ -2174,8 +2381,8 @@ pub(crate) mod tests {
         assert_eq!(
             Sha256::digest(&file).as_slice(),
             [
-                115, 247, 179, 135, 231, 123, 5, 70, 220, 151, 55, 4, 141, 174, 226, 206, 16, 143,
-                47, 138, 97, 5, 12, 171, 82, 24, 102, 169, 207, 22, 244, 19
+                52, 219, 175, 82, 41, 98, 122, 173, 85, 164, 89, 183, 67, 234, 87, 12, 78, 9, 45,
+                247, 74, 237, 34, 45, 17, 218, 232, 209, 234, 17, 150, 165
             ]
         )
     }

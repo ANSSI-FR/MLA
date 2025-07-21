@@ -38,7 +38,7 @@ enum WrappedError {
 // Add a dedicated MLA Exception (mla.MLAError) and associated sub-Exception
 // IOError and AssertionError are not mapped, as they already map to Python Exception
 create_exception!(mla, MLAError, pyo3::exceptions::PyException);
-create_exception!(mla, WrongMagic, MLAError, "Wrong magic, must be \"MLA\"");
+create_exception!(mla, WrongMagic, MLAError, "Wrong magic, must be \"MLAFAAAA\"");
 create_exception!(
     mla,
     UnsupportedVersion,
@@ -152,6 +152,7 @@ create_exception!(mla, HPKEError, MLAError, "Error during HPKE computation");
 create_exception!(mla, InvalidLastTag, MLAError, "Wrong last block tag");
 create_exception!(mla, EncryptionAskedButNotMarkedPresent, MLAError, "User asked for encryption but archive was not marked as encrypted");
 create_exception!(mla, EntryNameError, MLAError, "An MLA entry name is invalid for the given operation");
+create_exception!(mla, WrongEndMagic, MLAError, "Wrong end magic, must be \"EMLAAAAA\"");
 
 // Convert potentials errors to the wrapped type
 
@@ -197,7 +198,7 @@ impl From<WrappedError> for PyErr {
                     PyErr::new::<pyo3::exceptions::PyAssertionError, _>(msg)
                 }
                 mla::errors::Error::WrongMagic => {
-                    PyErr::new::<WrongMagic, _>("Wrong magic, must be \"MLA\"")
+                    PyErr::new::<WrongMagic, _>("Wrong magic, must be \"MLAFAAAA\"")
                 }
                 mla::errors::Error::UnsupportedVersion => {
                     PyErr::new::<UnsupportedVersion, _>("Unsupported version, must be 1")
@@ -266,6 +267,9 @@ impl From<WrappedError> for PyErr {
                 }
                 mla::errors::Error::EncryptionAskedButNotMarkedPresent => {
                     PyErr::new::<EncryptionAskedButNotMarkedPresent, _>("User asked for encryption but archive was not marked as encrypted")
+                }
+                mla::errors::Error::WrongEndMagic => {
+                    PyErr::new::<WrongEndMagic, _>("Wrong magic, must be \"EMLAAAAA\"")
                 }
             },
             WrappedError::WrappedPy(inner_err) => inner_err,
@@ -1264,6 +1268,7 @@ fn pymla(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     )?;
     m.add("HPKEError", py.get_type::<HPKEError>())?;
     m.add("InvalidLastTag", py.get_type::<InvalidLastTag>())?;
+    m.add("WrongEndMagic", py.get_type::<WrongEndMagic>())?;
 
     // Add constants
     m.add("DEFAULT_COMPRESSION_LEVEL", DEFAULT_COMPRESSION_LEVEL)?;
