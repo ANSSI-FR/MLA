@@ -16,8 +16,7 @@ use std::collections::{HashMap, HashSet};
 use std::error;
 use std::fmt;
 use std::fs::{self, File, read_dir};
-use std::io::{self, BufRead, Seek};
-use std::io::{Read, Write};
+use std::io::{self, BufReader, Read, Seek, Write};
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -187,7 +186,7 @@ fn config_from_matches(matches: &ArgMatches) -> Result<ArchiveWriterConfig, Mlar
         let public_keys = match open_public_keys(matches) {
             Ok(public_keys) => public_keys,
             Err(error) => {
-                panic!("[ERROR] Unable to open public keys: {}", error);
+                panic!("[ERROR] Unable to open public keys: {error}");
             }
         };
         ArchiveWriterConfig::with_public_keys(&public_keys)
@@ -253,7 +252,7 @@ fn readerconfig_from_matches(matches: &ArgMatches) -> ArchiveReaderConfig {
         let private_keys = match open_private_keys(matches) {
             Ok(private_keys) => private_keys,
             Err(error) => {
-                panic!("[ERROR] Unable to open private keys: {}", error);
+                panic!("[ERROR] Unable to open private keys: {error}");
             }
         };
         if matches.get_flag("accept_unencrypted") {
@@ -486,10 +485,171 @@ fn add_dir(mla: &mut ArchiveWriter<OutputTypes>, dir: &Path) -> Result<(), MlarE
     Ok(())
 }
 
-fn add_from_stdin(mla: &mut ArchiveWriter<OutputTypes>) -> Result<(), MlarError> {
-    for line in io::stdin().lock().lines() {
-        add_file_or_dir(mla, Path::new(&line?))?;
+/// Split a buffer into chunks according to a custom separator, removing
+/// any immediately following newline characters from the start of the next chunk.
+fn split_by_subsequence<'a>(buffer: &'a [u8], boundary: &[u8]) -> Vec<&'a [u8]> {
+    let mut parts = Vec::new();
+    let mut start = 0;
+    let mut i = 0;
+
+    // If boundary is empty, avoid doing search
+    if boundary.is_empty() {
+        parts.push(buffer);
+        return parts;
     }
+
+    let boundary_len = boundary.len();
+    let buffer_len = buffer.len();
+
+    while i + boundary_len <= buffer_len {
+        if &buffer[i..i + boundary_len] == boundary {
+            parts.push(&buffer[start..i]);
+            i += boundary_len;
+            start = i;
+
+            // Skip any immediate newline characters (LF or CRLF) after the separator
+            while start < buffer_len {
+                if buffer[start] == b'\n' {
+                    start += 1;
+                } else if buffer[start] == b'\r'
+                    && start + 1 < buffer_len
+                    && buffer[start + 1] == b'\n'
+                {
+                    start += 2; // Consume both CR and LF
+                } else {
+                    break;
+                }
+            }
+            i = start;
+        } else {
+            i += 1;
+        }
+    }
+
+    // Add last chunk (no separator)
+    if start <= buffer_len {
+        parts.push(&buffer[start..]);
+    }
+
+    parts.into_iter().filter(|b| !b.is_empty()).collect()
+}
+
+fn add_binary(
+    mla: &mut ArchiveWriter<OutputTypes>,
+    filename: &str,
+    buffer: &[u8],
+) -> Result<(), MlarError> {
+    println!("{filename}");
+    let name = EntryName::from_arbitrary_bytes(filename.as_bytes())
+        .map_err(|_| MlarError::InvalidEntryNameToPath)?;
+    Ok(mla.add_entry(name, buffer.len() as u64, buffer)?)
+}
+
+fn add_string_file(
+    mla: &mut ArchiveWriter<OutputTypes>,
+    file_content: &str,
+) -> Result<(), MlarError> {
+    let mut total_lines = 0;
+    let mut invalid_paths_count = 0;
+
+    for (index, line) in file_content.lines().enumerate() {
+        total_lines += 1;
+        let path = Path::new(line.trim());
+
+        if path.exists() {
+            if add_file_or_dir(mla, path).is_err() {
+                eprintln!(" [!] Line {} cannot be read as text (UTF-8)", index + 1);
+            }
+        } else {
+            invalid_paths_count += 1;
+        }
+    }
+
+    if total_lines > 0 && invalid_paths_count == total_lines {
+        return Err(MlarError::IO(std::io::ErrorKind::InvalidData.into()));
+    } else if total_lines == 0 {
+        eprintln!(" [!] One given file is empty and haven't been added to MLA");
+    }
+
+    Ok(())
+}
+
+fn process_chunk(
+    mla: &mut ArchiveWriter<OutputTypes>,
+    chunk: &[u8],
+    filename_iterator: &mut impl Iterator<Item = String>,
+    fallback_filename: usize,
+) -> Result<(), MlarError> {
+    if let Ok(text) = std::str::from_utf8(chunk) {
+        if let Err(MlarError::IO(err)) = add_string_file(mla, text) {
+            if err.kind() == std::io::ErrorKind::InvalidData {
+                let filename = filename_iterator
+                    .next()
+                    .unwrap_or_else(|| format!("chunk{fallback_filename}.bin"));
+                add_binary(mla, &filename, chunk)?;
+            }
+        }
+    } else {
+        let filename = filename_iterator
+            .next()
+            .unwrap_or_else(|| format!("chunk{fallback_filename}.bin"));
+        add_binary(mla, &filename, chunk)?;
+    }
+    Ok(())
+}
+
+fn add_from_stdin(
+    mla: &mut ArchiveWriter<OutputTypes>,
+    filenames: &mut impl Iterator<Item = String>,
+    sep: Option<&String>,
+) -> Result<(), MlarError> {
+    const BUFFER_CAPACITY: usize = 4096;
+
+    // If no separator is provided, it's assumed that the file is a single
+    if sep.is_none() {
+        let mut buffer = Vec::new();
+        io::stdin().lock().read_to_end(&mut buffer)?;
+
+        process_chunk(mla, &buffer, filenames, 0)?;
+
+        return Ok(());
+    }
+
+    // `.unwrap()` is safe error since we checked it before
+    let sep = sep.unwrap().as_bytes();
+
+    let mut chunk = Vec::with_capacity(BUFFER_CAPACITY);
+    let mut buffer = [0; BUFFER_CAPACITY];
+
+    let mut processed_file = 0;
+
+    let mut reader = BufReader::new(io::stdin());
+    loop {
+        let bytes_read = reader.read(&mut buffer)?;
+
+        if bytes_read == 0 {
+            // EOF, process remaining chunk if not empty
+            if !chunk.is_empty() {
+                processed_file += 1;
+                process_chunk(mla, &chunk, filenames, processed_file)?;
+            }
+            break;
+        }
+
+        chunk.extend_from_slice(&buffer[..bytes_read]);
+
+        let chunks = split_by_subsequence(&chunk, sep);
+
+        if chunks.len() > 1 {
+            for part in &chunks[..chunks.len() - 1] {
+                processed_file += 1;
+                process_chunk(mla, part, filenames, processed_file)?;
+            }
+
+            chunk = chunks[chunks.len() - 1].to_vec();
+        }
+    }
+
     Ok(())
 }
 
@@ -501,13 +661,20 @@ fn create(matches: &ArgMatches) -> Result<(), MlarError> {
     if let Some(files) = matches.get_many::<PathBuf>("files") {
         for filename in files {
             if filename.as_os_str() == "-" {
-                add_from_stdin(&mut mla)?;
+                let mut filenames = matches
+                    .get_many::<String>("filenames")
+                    .map(|values_ref| values_ref.map(ToString::to_string).collect::<Vec<String>>())
+                    .unwrap_or_default()
+                    .into_iter();
+                let sep = matches.get_one::<String>("separator");
+
+                add_from_stdin(&mut mla, &mut filenames, sep)?;
             } else {
                 let path = Path::new(&filename);
                 add_file_or_dir(&mut mla, path)?;
             }
         }
-    };
+    }
 
     mla.finalize()?;
     Ok(())
@@ -527,7 +694,7 @@ fn list(matches: &ArgMatches) -> Result<(), MlarError> {
                 .map_err(|_| MlarError::InvalidEntryNameToPath)?
         };
         if matches.get_count("verbose") == 0 {
-            println!("{}", name_to_display);
+            println!("{name_to_display}");
         } else {
             let mla_file = mla.get_entry(fname)?.expect("Unable to get the file");
             let filename = mla_file.name;
@@ -685,23 +852,20 @@ fn cat(matches: &ArgMatches) -> Result<(), MlarError> {
                 match mla.get_entry(archive_entry_name.clone()) {
                     Err(err) => {
                         eprintln!(
-                            " [!] Error while looking up file \"{}\" ({err:?})",
-                            displayable_entry_name
+                            " [!] Error while looking up file \"{displayable_entry_name}\" ({err:?})"
                         );
                         continue;
                     }
                     Ok(None) => {
                         eprintln!(
-                            " [!] Subfile \"{}\" indexed in metadata could not be found",
-                            displayable_entry_name
+                            " [!] Subfile \"{displayable_entry_name}\" indexed in metadata could not be found"
                         );
                         continue;
                     }
                     Ok(Some(mut subfile)) => {
                         if let Err(err) = io::copy(&mut subfile.data, &mut destination) {
                             eprintln!(
-                                " [!] Unable to extract \"{}\" ({err:?})",
-                                displayable_entry_name
+                                " [!] Unable to extract \"{displayable_entry_name}\" ({err:?})"
                             );
                         }
                     }
@@ -1027,6 +1191,19 @@ fn app() -> clap::Command {
                     .help("Files to add")
                     .value_parser(value_parser!(PathBuf))
                     .action(ArgAction::Append)
+                )
+                .arg(
+                    Arg::new("filenames")
+                    .long("filenames")
+                    .help("When reading from stdin (pipeline), set names for files in the order they appear")
+                    .action(ArgAction::Append)
+                )
+                .arg(
+                    Arg::new("separator")
+                    .long("separator")
+                    .help("A string used to delimit files when reading concatenated input from stdin (e.g. via a pipe).")
+                    .value_parser(value_parser!(String))
+                    .num_args(1)
                 ),
         )
         .subcommand(

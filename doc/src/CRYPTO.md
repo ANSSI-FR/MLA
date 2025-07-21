@@ -100,7 +100,7 @@ The implementation also includes tests (including some test vectors) and comment
     - AEAD: AES-256-GCM
     - KEM: a custom KEM ID, numbered 0x1120
 - $\textrm{Encrypt}_{AES\ 256\ GCM}$: AES-256-GCM encryption, returning the encrypted data concatened with the associated tag
-- $\textrm{Decrypt}_{AES\ 256\ GCM}$ AES-256-GCM decryption, returning the decrypted data after verifying the tag
+- $\textrm{Decrypt}_{AES\ 256\ GCM}$: AES-256-GCM decryption, returning the decrypted data after verifying the tag
 - $\textrm{Serialize}$ and $\textrm{Deserialize}$: respectively produce a byte string encoding the data in argument, and produce the data from the byte string in argument
 
 ##### Process
@@ -109,12 +109,12 @@ To encrypt to a target recipient $i$, knowing $pk_{ecc}^i$ and $pk_{mlkem}^i$:
 
 1. Compute shared secrets and ciphertexts for both KEM:
 
-```math
-\begin{align}
+$$
+\begin{align*}
 (ss_{ecc}^i, ct_{ecc}^i) &= \textrm{DHKEM.Encapsulate}(pk_{ecc}^i) \\
 (ss_{mlkem}^i, ct_{mlkem}^i) &= \textrm{MLKEM.Encapsulate}(pk_{mlkem}^i)
-\end{align}
-```
+\end{align*}
+$$
 
 2. Combine the shared secrets (implemented in `mla::crypto::hybrid::combine`):
 
@@ -132,22 +132,22 @@ def combine(ss1, ss2, ct1, ct2):
     return key
 ```
 
-```math
+$$
 ss_{recipient}^i = \textrm{combine}(ss_{ecc}^i, ss_{mlkem}^i, ct_{ecc}^i, ct_{mlkem}^i)
-```
+$$
 
 3. Wrap the recipients' shared secret:
 
-```math
-\begin{align}
+$$
+\begin{align*}
 (key^i, nonce^i) &= \textrm{KeySchedule}_{recipient}(
         shared\_secret=ss_{recipient}^i,
     \textrm{info}=\mathtt{"MLA\ Recipient"}
 )\\
 ct_{wrap}^i &= \textrm{Encrypt}_{AES\ 256\ GCM}(\textrm{key}=key^i, \textrm{nonce}=nonce^i, \textrm{data}=ss_{recipients})\\
 ct_{recipient}^i &= \textrm{Serialize}(ct_{wrap}^i, ct_{ecc}^i, ct_{mlkem}^i)
-\end{align}
-```
+\end{align*}
+$$
 
 Informally, this process can be viewed as a per-recipient KEM taking a shared secret $ss_{recipients}$, the recipient public key (made of the elliptic curve and the PQC public keys) and returning a ciphertext $ct_{recipient}^i$.
 
@@ -157,26 +157,26 @@ To obtain the shared secret from $ct_{recipient}^i$ for a recipient $i$ knowing 
 
 1. Compute the recipient's shared secret:
 
-```math
-\begin{align}
+$$
+\begin{align*}
 (ct_{wrap}^i, ct_{ecc}^i, ct_{mlkem}^i) &= \textrm{Deserialize}(ct_{recipient}^i)\\
 ss_{ecc}^i &= \textrm{DHKEM.Decapsulate}(sk_{ecc}^i, ct_{ecc}^i) \\
 ss_{mlkem}^i &= \textrm{MLKEM.Decapsulate}(sk_{mlkem}^i, ct_{mlkem}^i)\\
 ss_{recipient}^i &= \textrm{combine}(ss_{ecc}^i, ss_{mlkem}^i, ct_{ecc}^i, ct_{mlkem}^i)
-\end{align}
-```
+\end{align*}
+$$
 
 2. Try to decrypt the secret shared among recipients:
 
-```math
-\begin{align}
+$$
+\begin{align*}
 (key^i, nonce^i) &= \textrm{KeySchedule}_{recipient}(
         shared\_secret=ss_{recipient}^i,
     \textrm{info}=\mathtt{"MLA\ Recipient"}
 )\\
 ss_{recipients} &= \textrm{Decrypt}_{AES\ 256\ GCM}(\textrm{key}=key^i, \textrm{nonce}=nonce^i, \textrm{data}=ct_{wrap}^i)
-\end{align}
-```
+\end{align*}
+$$
 
 If the decryption is a success, returns $ss_{recipients}$. Otherwise, returns an error.
 
@@ -192,7 +192,7 @@ If the decryption is a success, returns $ss_{recipients}$. Otherwise, returns an
 - FIPS 203 is used as, at the time of writing:
     - It is the only KEM algorithm standardized by the NIST [^nist]
     - It is in line with the French suggestions [^frsuggest] for PQ cryptography
-- The MLKEM-1024 mode is used for stronger security, and to limit consequence of future advances [^mlkemcon1][^mlkemcon2]. This is also the choice of other industry standards [^signal][^imessage]
+- The MLKEM-1024 mode is used for stronger security, and to limit consequence of future advances [^mlkemcon1] [^mlkemcon2]. This is also the choice of other industry standards [^signal] [^imessage]
 - The shared secret from the two-KEM is produced using a "Nested Dual-PRF Combiner", proved in [^dualnest] (3.3):
     - The use of concatenation scheme **including ciphertexts** keeps IND-CCA2 if one of the two underlying scheme is IND-CCA2, as proved in [^combinearg1] and explained in [^combinearg4]
     - TLS [^combinearg2] uses a similar scheme, and IKE [^combinearg3] also uses a concatenation scheme
@@ -224,7 +224,7 @@ $\mathrm{CSPRNG(n)}$ is a cryptographically secured RNG producing a n-bytes secr
 
 To encapsulate to a list of recipient $[(pk_{ecc}^0, pk_{mlkem}^0), ..., (pk_{ecc}^{n-1}, pk_{mlkem}^{n-1})]$:
 
-```math
+$$
 \begin{align*}
 \mathtt{def\ } & \mathrm{HybridKEM.Encapsulate}([(pk_{ecc}^0, pk_{mlkem}^0), ..., (pk_{ecc}^{n-1}, pk_{mlkem}^{n-1})])\\
 & ss_{recipients} = \mathrm{CSPRNG(32)}\\
@@ -234,8 +234,9 @@ To encapsulate to a list of recipient $[(pk_{ecc}^0, pk_{mlkem}^0), ..., (pk_{ec
 & ct_{recipients} = \mathrm{Serialize}(ct_{recipient}^0, \dots, ct_{recipient}^{n-1})\\
 & \mathtt{return}\ ss_{recipients},\ ct_{recipients}
 \end{align*}
-```
-----
+$$
+
+---
 
 To decapsulate from a ciphertext $ct_{recipients}$, knowing a recipient private key $(sk_{ecc}^i,sk_{mlkem}^i)$:
 
@@ -281,22 +282,22 @@ To encrypt n-bytes `data` to a list of public keys $[(pk_{ecc}^0, pk_{mlkem}^0),
 
 1. Compute a shared secret and the corresponding ciphertext:
 
-```math
+$$
 ss_{recipients},\ ct_{recipients} = \mathrm{MultiRecipientHybridKEM.Encapsulate}([(pk_{ecc}^0, pk_{mlkem}^0), ..., (pk_{ecc}^{n-1}, pk_{mlkem}^{n-1})])
-```
+$$
 
 2. Derive the key and base nonce using HPKE
 
-```math
+$$
 (key, base\_nonce) = \textrm{KeySchedule}_{hybrid}(
-        shared\_secret=ss_{recipients},
-    \textrm{info}=\mathtt{"MLA\ Encrypt\ Layer"}
+        \text{shared\_secret} = ss_{\text{recipients}},
+    \textrm{info} = \mathtt{"MLA\ Encrypt\ Layer"}
 )
-```
+$$
 
 3. Ensure key-commitment
 
-```math
+$$
 \begin{align*}
 keycommit& = \textrm{Encrypt}_{AES\ 256\ GCM}(\\
     &\textrm{key}=key,\\
@@ -304,11 +305,11 @@ keycommit& = \textrm{Encrypt}_{AES\ 256\ GCM}(\\
     &\textrm{data}=\textrm{KeyCommitmentChain}\\
 )&
 \end{align*}
-```
+$$
 
 4. For each 128KB $chunk_j$ of data:
 
-```math
+$$
 \begin{align*}
 enc_j& = \textrm{Encrypt}_{AES\ 256\ GCM}(\\
     &\textrm{key}=key,\\
@@ -316,7 +317,7 @@ enc_j& = \textrm{Encrypt}_{AES\ 256\ GCM}(\\
     &\textrm{data}=chunk_j\\
 )&
 \end{align*}
-```
+$$
 
 Note: $j$ starts at 0. $j+1$ is used because the sequence numbered 0 has already been used by the Key commitment.
 
@@ -324,26 +325,26 @@ Note: $j$ starts at 0. $j+1$ is used because the sequence numbered 0 has already
 
 6. Finally, a final chunk with sequence number $n+1$ (where $n$ is the number of data chunks) and special content and additional authenticated data is appended:
 
-```math
+$$
 \begin{align*}
 final\_chunk& = \textrm{Encrypt}_{AES\ 256\ GCM}(\\
     &\textrm{key}=key,\\
-    &\textrm{nonce}=\mathrm{ComputeNonce}(base\_nonce, n + 1),\\
+    &\textrm{nonce}=\mathrm{ComputeNonce}(\text{base\_nonce}, n + 1),\\
     &\textrm{data}="FINALBLOCK"\\
     &\textrm{aad}="FINALAAD"\\
 )&
 \end{align*}
-```
+$$
 
 The resulting layer is composed of:
 
 - header: $ct_{recipients}$
-- data: $keycommit \ .\ enc_0\ . \dots\ enc_n \ .$ $`final\_chunk`$
+- data: $keycommit \ .\ enc_0\ . \dots\ enc_n \ .$ $final\_chunk$
 
 Special care must be taken not to reuse a sequence number in implementations as this would be catastrophic given GCM properties. For $n$ chunks of data:
 * sequence 0: key commitment
 * sequence 1 to $n$: data
-* sequence $n+1$: $`final\_chunk`$ with only the 10 bytes "FINALBLOCK" as content
+* sequence $n+1$: $final\_chunk$ with only the 10 bytes "FINALBLOCK" as content
 
 ----
 
@@ -351,19 +352,19 @@ To decrypt the data at position $pos$:
 
 1. Once for the whole session, get the cryptographic materials
 
-```math
-\begin{align}
+$$
+\begin{align*}
 ss_{recipients} &= \mathrm{MultiRecipientHybridKEM.Decapsulate}((sk_{ecc}^i, sk_{mlkem}^i), ct_{recipients})\\
-(key, base\_nonce) &= \textrm{KeySchedule}_{hybrid}(
+(key, \text{base\_nonce}) &= \textrm{KeySchedule}_{hybrid}(
         shared\_secret=ss_{recipients},
     \textrm{info}=\mathtt{"MLA\ Encrypt\ Layer"}
 )
-\end{align}
-```
+\end{align*}
+$$
 
 2. Once for the whole session, check the key commitment
 
-```math
+$$
 \begin{align*}
 commit& = \textrm{Decrypt}_{AES\ 256\ GCM}(\\
     &\textrm{key}=key,\\
@@ -371,25 +372,25 @@ commit& = \textrm{Decrypt}_{AES\ 256\ GCM}(\\
     &\textrm{data}=keycommit\\
 )&
 \end{align*}
-```
+$$
 
-```math
+$$
 \mathtt{assert\ }commit = \textrm{KeyCommitmentChain}
-```
+$$
 
 3. Retrieve the encrypted chunk of data
 
-```math
-\begin{align}
+$$
+\begin{align*}
 start &= pos - \mathtt{sizeof}(keycommit)\\
 j &= pos \div 128KiB\\
-\end{align}
-```
+\end{align*}
+$$
 
 Where $\div$ is the Euclidian division.
 
 Then:
-```math
+$$
 \begin{align*}
 chunk_j& = \textrm{Decrypt}_{AES\ 256\ GCM}(\\
     &\textrm{key}=key,\\
@@ -397,7 +398,7 @@ chunk_j& = \textrm{Decrypt}_{AES\ 256\ GCM}(\\
     &\textrm{data}=enc_j\\
 )&
 \end{align*}
-```
+$$
 
 ##### Arguments
 
@@ -431,16 +432,16 @@ The derivation scheme is based on the same ideas than `mla::crypto::hybrid::comb
 
 From a private key ($sk_{ecc}^i$ and $sk_{mlkem}^i$), the secret is derived from the path component $pc$ through:
 
-```math
-\begin{align}
+$$
+\begin{align*}
 ecc\_rnd &= \mathrm{HKDF.Extract_{SHA512}}(\mathrm{salt}=0, \mathrm{ikm}=sk_{ecc}^i)\\
 seed &= \mathrm{HKDF_{SHA512}}(
-    \mathrm{salt}=ecc\_rnd,
+    \mathrm{salt}=\text{ecc\_rnd},
     \mathrm{ikm}=sk_{mlkem}^i,
     \mathrm{info}=\mathtt{"PATH\ DERIVATION"}\ .\ pc
 )
-\end{align}
-```
+\end{align*}
+$$
 
 To derive a key using a `seed`, a `ChaChaRng` is used.
 If a `seed` is provided, the `ChaChaRng` is seeded with the first 32-bytes of $\mathrm{SHA512}(seed)$. Otherwise, the `ChaChaRng::from_entropy` is used, wrapping OS Cryptographic RNG sources.
@@ -540,31 +541,30 @@ Only the owner of a recipient's private key can determine that they are a recipi
 
 This is an intentional privacy feature.
 
-[^rfc8032]: https://datatracker.ietf.org/doc/html/rfc8032
-[^fips204]: https://doi.org/10.6028/NIST.FIPS.204
-[^keycommit]: ["How to Abuse and Fix Authenticated Encryption Without Key Commitment", Usenix'22](https://www.usenix.org/conference/usenixsecurity22/presentation/albertini)
-[^issuekeycommit]: https://github.com/ANSSI-FR/MLA/issues/206
+[^rfc8032]: [RFC 8032 - Ed25519 Signature Algorithm](https://datatracker.ietf.org/doc/html/rfc8032)
+[^fips204]: [NIST FIPS 204](https://doi.org/10.6028/NIST.FIPS.204)
+[^keycommit]: [How to Abuse and Fix Authenticated Encryption Without Key Commitment, Usenix'22](https://www.usenix.org/conference/usenixsecurity22/presentation/albertini)
+[^issuekeycommit]: [MLA GitHub Issue #206](https://github.com/ANSSI-FR/MLA/issues/206)
 [^hpke]: [Hybrid Public Key Encryption, RFC 9180](https://datatracker.ietf.org/doc/rfc9180/)
 [^fips203]: [FIPS 203 - MLKEM Standard](https://doi.org/10.6028/NIST.FIPS.203)
-[^issuehpke]: https://github.com/ANSSI-FR/MLA/issues/211
-[^hpkeanalysis]: https://eprint.iacr.org/2020/1499.pdf
-[^issuepqc]: https://github.com/ANSSI-FR/MLA/issues/195
-[^frsuggest]: https://cyber.gouv.fr/en/publications/follow-position-paper-post-quantum-cryptography
-[^nist]: https://csrc.nist.gov/News/2022/pqc-candidates-to-be-standardized-and-round-4
-[^mlkemcon1]: https://blog.cr.yp.to/20231003-countcorrectly.html
-[^mlkemcon2]: https://kyberslash.cr.yp.to/
-[^signal]: https://signal.org/docs/specifications/pqxdh/
-[^imessage]: https://security.apple.com/blog/imessage-pq3/
-[^dualnest]: https://eprint.iacr.org/2018/903.pdf
-[^combinearg1]: https://eprint.iacr.org/2018/024
-[^combinearg2]: https://datatracker.ietf.org/doc/draft-ietf-tls-hybrid-design/
-[^combinearg3]: https://datatracker.ietf.org/doc/html/rfc9370
-[^combinearg4]: https://eprint.iacr.org/2024/039 
-[^combinearg7]: https://eprint.iacr.org/2023/861
-[^keycommit2]: https://eprint.iacr.org/2019/016.pdf
-[^weaknessgcm]: ["Authentication weaknesses in GCM"](https://csrc.nist.gov/csrc/media/projects/block-cipher-techniques/documents/bcm/comments/cwc-gcm/ferguson2.pdf)
-[^reviewncc]: https://research.nccgroup.com/wp-content/uploads/2020/02/NCC_Group_MobileCoin_RustCrypto_AESGCM_ChaCha20Poly1305_Implementation_Review_2020-02-12_v1.0.pdf
-[^reviewqb]: https://blog.quarkslab.com/security-audit-of-dalek-libraries.html
-[^reviewcloudflare]: https://blog.cloudflare.com/using-hpke-to-encrypt-request-payloads/
-[^issuezeroize]: https://github.com/ANSSI-FR/MLA/issues/46
-[^issueallowunauth]: https://github.com/ANSSI-FR/MLA/issues/167
+[^issuehpke]: [MLA GitHub Issue #211](https://github.com/ANSSI-FR/MLA/issues/211)
+[^hpkeanalysis]: [A Formal Analysis of HPKE](https://eprint.iacr.org/2020/1499.pdf)
+[^frsuggest]: [ANSSI Position Paper on Post-Quantum Cryptography](https://cyber.gouv.fr/en/publications/follow-position-paper-post-quantum-cryptography)
+[^nist]: [NIST PQC Standardization News](https://csrc.nist.gov/News/2022/pqc-candidates-to-be-standardized-and-round-4)
+[^mlkemcon1]: [Counting Correctly in MLKEM](https://blog.cr.yp.to/20231003-countcorrectly.html)
+[^mlkemcon2]: [KyberSlash](https://kyberslash.cr.yp.to/)
+[^signal]: [Signal PQXDH Specification](https://signal.org/docs/specifications/pqxdh/)
+[^imessage]: [Apple iMessage PQ3 Security Blog](https://security.apple.com/blog/imessage-pq3/)
+[^dualnest]: [Dual-PRF Combiners](https://eprint.iacr.org/2018/903.pdf)
+[^combinearg1]: [Hybrid Key Exchange Security](https://eprint.iacr.org/2018/024)
+[^combinearg2]: [TLS Hybrid Design Draft](https://datatracker.ietf.org/doc/draft-ietf-tls-hybrid-design/)
+[^combinearg3]: [RFC 9370 - IKEv2 Post-quantum Hybrid Key Exchange](https://datatracker.ietf.org/doc/html/rfc9370)
+[^combinearg4]: [Hybrid Key Exchange Security (2024)](https://eprint.iacr.org/2024/039)
+[^combinearg7]: [On the Security of Dual-PRF Combiners](https://eprint.iacr.org/2023/861)
+[^keycommit2]: [Key Commitment in AEAD](https://eprint.iacr.org/2019/016.pdf)
+[^weaknessgcm]: [Authentication weaknesses in GCM](https://csrc.nist.gov/csrc/media/projects/block-cipher-techniques/documents/bcm/comments/cwc-gcm/ferguson2.pdf)
+[^reviewncc]: [NCC Group Review of RustCrypto AES-GCM](https://research.nccgroup.com/wp-content/uploads/2020/02/NCC_Group_MobileCoin_RustCrypto_AESGCM_ChaCha20Poly1305_Implementation_Review_2020-02-12_v1.0.pdf)
+[^reviewqb]: [Quarkslab Security Audit of Dalek Libraries](https://blog.quarkslab.com/security-audit-of-dalek-libraries.html)
+[^reviewcloudflare]: [Cloudflare on HPKE](https://blog.cloudflare.com/using-hpke-to-encrypt-request-payloads/)
+[^issuezeroize]: [MLA GitHub Issue #46](https://github.com/ANSSI-FR/MLA/issues/46)
+[^issueallowunauth]: [MLA GitHub Issue #167](https://github.com/ANSSI-FR/MLA/issues/167)
