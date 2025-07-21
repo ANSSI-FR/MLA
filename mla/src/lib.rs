@@ -393,6 +393,7 @@ impl Opts {
                 let n = u64::from_le_bytes(n);
                 let mut v = Vec::new();
                 src.take(n).read_to_end(&mut v)?;
+                // no action implemented for the moment, hence no further use
             }
             _ => return Err(Error::DeserializationError),
         }
@@ -1127,6 +1128,7 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
         src.seek(SeekFrom::Current(start_of_entries_footer_from_current))?;
         let metadata = Some(ArchiveFooter::deserialize_from(&mut src)?);
 
+        // Reset the position for further uses
         src.rewind()?;
 
         read_mla_entries_header(&mut src)?;
