@@ -177,6 +177,8 @@ use entry::{
     serialize_entry_name,
 };
 
+mod base64;
+
 /// As the name spoils it, an MLA is made of several, independent, layers. The following section introduces the design ideas behind MLA. Please refer to [FORMAT.md](FORMAT.md) for a more formal description.
 ///
 /// Layers

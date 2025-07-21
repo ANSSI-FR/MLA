@@ -346,7 +346,7 @@ pub fn generate_keypair_from_seed(
 }
 
 /// Generate an Hybrid key pair using the provided csprng
-fn generate_keypair_from_rng(
+pub(crate) fn generate_keypair_from_rng(
     mut csprng: impl CryptoRngCore,
 ) -> (MLADecryptionPrivateKey, MLAEncryptionPublicKey) {
     let private_key_ecc = X25519StaticSecret::random_from_rng(&mut csprng);

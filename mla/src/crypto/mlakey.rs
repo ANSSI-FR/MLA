@@ -6,8 +6,10 @@ use der_parser::*;
 use hkdf::Hkdf;
 use nom::IResult;
 use nom::combinator::{complete, eof};
+use zeroize::Zeroize;
 
 use core::convert::{From, TryInto};
+use std::io::{BufRead, BufReader, Cursor, Read, Write};
 
 use curve25519_dalek::edwards::CompressedEdwardsY;
 use curve25519_dalek::montgomery::MontgomeryPoint;
@@ -17,23 +19,312 @@ use x25519_dalek::{PublicKey, StaticSecret};
 
 use core::fmt;
 
+use crate::base64::{base64_decode, base64_encode};
 pub use crate::crypto::hybrid::{MLADecryptionPrivateKey, MLAEncryptionPublicKey};
 pub use crate::crypto::hybrid::{generate_keypair, generate_keypair_from_seed};
 
+use crate::MLADeserialize;
 use crate::crypto::hybrid::{MLKEMDecapsulationKey, MLKEMEncapsulationKey};
+use crate::errors::Error;
+use crate::layers::encrypt::get_crypto_rng;
 
-pub struct MLASignaturePrivateKey {}
+use super::hybrid::generate_keypair_from_rng;
 
-pub struct MLASignatureVerificationPublicKey {}
+const MLA_PRIV_DEC_KEY_HEADER: &[u8] = b"MLA PRIVATE DECRYPTION KEY ";
+//const MLA_PRIV_SIG_KEY_HEADER: &[u8] = b"MLA PRIVATE SIGNATURE KEY ";
+const DEC_METHOD_ID_0_PRIV: &[u8] = b"mla-kem-private-x25519-mlkem1024";
+//const SIG_METHOD_ID_0_PRIV: &[u8] = b"mla-signature-private-ed25519-mldsa87";
 
-pub struct MLAPrivateKey {
-    encryption_private_key: MLADecryptionPrivateKey,
-    signature_private_key: MLASignaturePrivateKey,
+const MLA_PUB_ENC_KEY_HEADER: &[u8] = b"MLA PUBLIC ENCRYPTION KEY ";
+//const MLA_PUB_SIGVERIF_KEY_HEADER: &[u8] = b"MLA PUBLIC SIGNATURE VERIFICATION KEY ";
+const ENC_METHOD_ID_0_PUB: &[u8] = b"mla-kem-public-x25519-mlkem1024";
+//const SIGVERIF_METHOD_ID_0_PUB: &[u8] = b"mla-signature-verification-public-ed25519-mldsa87";
+
+#[derive(Clone)]
+struct KeyOpts;
+
+impl KeyOpts {
+    fn serialize_key_opts<W: Write>(&self, mut dst: W) -> Result<(), Error> {
+        // nothing for the moment
+        dst.write_all(b"AAAAAA==\r\n")?;
+        Ok(())
+    }
 }
 
+impl<R: Read> MLADeserialize<R> for KeyOpts {
+    fn deserialize(src: &mut R) -> Result<Self, Error> {
+        let opts_len = u32::deserialize(src)?;
+        let mut opts = vec![0; opts_len as usize];
+        src.read_exact(opts.as_mut_slice())
+            .map_err(|_| Error::DeserializationError)?;
+        Ok(KeyOpts)
+    }
+}
+
+impl MLADecryptionPrivateKey {
+    fn deserialize_decryption_private_key(src: impl Read) -> Result<Self, Error> {
+        let mut line = String::new();
+        BufReader::new(src).read_line(&mut line)?;
+        let b64data = line
+            .as_bytes()
+            .strip_prefix(MLA_PRIV_DEC_KEY_HEADER)
+            .ok_or(Error::DeserializationError)?
+            .strip_suffix(b"\r\n")
+            .ok_or(Error::DeserializationError)?;
+        let data = base64_decode(b64data).map_err(|_| Error::DeserializationError)?;
+        let mut cursor = Cursor::new(data);
+        let mut method_id = [0; DEC_METHOD_ID_0_PRIV.len()];
+        cursor
+            .read_exact(&mut method_id)
+            .map_err(|_| Error::DeserializationError)?;
+        if method_id.as_slice() != DEC_METHOD_ID_0_PRIV {
+            return Err(Error::DeserializationError);
+        }
+        let _opts = KeyOpts::deserialize(&mut cursor)?;
+        let mut serialized_ecc_key = [0; ECC_PRIVKEY_SIZE];
+        cursor
+            .read_exact(&mut serialized_ecc_key)
+            .map_err(|_| Error::DeserializationError)?;
+        let private_key_ecc = StaticSecret::from(serialized_ecc_key);
+        serialized_ecc_key.zeroize();
+        let mut serialized_mlkem_key = Vec::new();
+        cursor
+            .read_to_end(&mut serialized_mlkem_key)
+            .map_err(|_| Error::DeserializationError)?;
+        let private_key_ml = MLKEMDecapsulationKey::from_bytes(
+            serialized_mlkem_key
+                .as_slice()
+                .try_into()
+                .map_err(|_| Error::DeserializationError)?,
+        );
+        serialized_mlkem_key.zeroize();
+        Ok(Self {
+            private_key_ecc,
+            private_key_ml,
+        })
+    }
+
+    fn serialize_decryption_private_key<W: Write>(&self, mut dst: W) -> Result<(), Error> {
+        dst.write_all(MLA_PRIV_DEC_KEY_HEADER)?;
+        let mut b64data = vec![];
+        b64data.extend_from_slice(DEC_METHOD_ID_0_PRIV);
+        b64data.extend_from_slice(&[0u8; 4]); // key opts, empty length for the moment
+        b64data.extend_from_slice(&self.private_key_ecc.to_bytes());
+        b64data.extend_from_slice(&self.private_key_ml.as_bytes());
+        dst.write_all(&base64_encode(&b64data))?;
+        dst.write_all(b"\r\n")?;
+        Ok(())
+    }
+}
+
+#[derive(Clone)]
+pub struct MLASignaturePrivateKey {}
+
+impl MLASignaturePrivateKey {
+    fn serialize_signature_private_key<W: Write>(&self, _dst: W) -> Result<(), Error> {
+        // TODO
+        Ok(())
+    }
+}
+
+#[derive(Clone)]
+pub struct MLAPrivateKey {
+    decryption_private_key: MLADecryptionPrivateKey,
+    signature_private_key: MLASignaturePrivateKey,
+    opts: KeyOpts,
+}
+
+impl MLAPrivateKey {
+    pub fn deserialize_private_key(mut src: impl Read) -> Result<Self, Error> {
+        let decryption_private_key =
+            MLADecryptionPrivateKey::deserialize_decryption_private_key(&mut src)?;
+        let signature_private_key = MLASignaturePrivateKey {};
+        Ok(Self {
+            decryption_private_key,
+            signature_private_key,
+            opts: KeyOpts,
+        })
+    }
+
+    pub fn from_decryption_and_signature_keys(
+        decryption_private_key: MLADecryptionPrivateKey,
+        signature_private_key: MLASignaturePrivateKey,
+    ) -> Self {
+        MLAPrivateKey {
+            decryption_private_key,
+            signature_private_key,
+            opts: KeyOpts,
+        }
+    }
+
+    pub fn get_decryption_private_key(&self) -> &MLADecryptionPrivateKey {
+        &self.decryption_private_key
+    }
+
+    pub fn get_private_keys(self) -> (MLADecryptionPrivateKey, MLASignaturePrivateKey) {
+        (self.decryption_private_key, self.signature_private_key)
+    }
+
+    pub fn get_signature_private_key(&self) -> &MLASignaturePrivateKey {
+        &self.signature_private_key
+    }
+
+    pub fn serialize_private_key<W: Write>(&self, mut dst: W) -> Result<(), Error> {
+        self.decryption_private_key
+            .serialize_decryption_private_key(&mut dst)?;
+        self.signature_private_key
+            .serialize_signature_private_key(&mut dst)?;
+        self.opts.serialize_key_opts(&mut dst)?;
+        Ok(())
+    }
+}
+
+impl MLAEncryptionPublicKey {
+    fn deserialize_encryption_public_key(src: impl Read) -> Result<Self, Error> {
+        let mut line = String::new();
+        BufReader::new(src).read_line(&mut line)?;
+        let b64data = line
+            .as_bytes()
+            .strip_prefix(MLA_PUB_ENC_KEY_HEADER)
+            .ok_or(Error::DeserializationError)?
+            .strip_suffix(b"\r\n")
+            .ok_or(Error::DeserializationError)?;
+        let data = base64_decode(b64data).map_err(|_| Error::DeserializationError)?;
+        let mut cursor = Cursor::new(data);
+        let mut method_id = [0; ENC_METHOD_ID_0_PUB.len()];
+        cursor
+            .read_exact(&mut method_id)
+            .map_err(|_| Error::DeserializationError)?;
+        if method_id.as_slice() != ENC_METHOD_ID_0_PUB {
+            return Err(Error::DeserializationError);
+        }
+        let _opts = KeyOpts::deserialize(&mut cursor)?;
+        let mut serialized_ecc_key = [0; ECC_PUBKEY_SIZE];
+        cursor
+            .read_exact(&mut serialized_ecc_key)
+            .map_err(|_| Error::DeserializationError)?;
+        let public_key_ecc = PublicKey::from(MontgomeryPoint(serialized_ecc_key).to_bytes());
+        let mut serialized_mlkem_key = Vec::new();
+        cursor
+            .read_to_end(&mut serialized_mlkem_key)
+            .map_err(|_| Error::DeserializationError)?;
+        let public_key_ml = MLKEMEncapsulationKey::from_bytes(
+            serialized_mlkem_key
+                .as_slice()
+                .try_into()
+                .map_err(|_| Error::DeserializationError)?,
+        );
+
+        Ok(Self {
+            public_key_ecc,
+            public_key_ml,
+        })
+    }
+
+    fn serialize_encryption_public_key<W: Write>(&self, mut dst: W) -> Result<(), Error> {
+        dst.write_all(MLA_PUB_ENC_KEY_HEADER)?;
+        let mut b64data = vec![];
+        b64data.extend_from_slice(ENC_METHOD_ID_0_PUB);
+        b64data.extend_from_slice(&[0u8; 4]); // key opts, empty length for the moment
+        b64data.extend_from_slice(&self.public_key_ecc.to_bytes());
+        b64data.extend_from_slice(&self.public_key_ml.as_bytes());
+        dst.write_all(&base64_encode(&b64data))?;
+        dst.write_all(b"\r\n")?;
+        Ok(())
+    }
+}
+
+#[derive(Clone)]
+pub struct MLASignatureVerificationPublicKey {}
+
+impl MLASignatureVerificationPublicKey {
+    fn serialize_signature_verification_public_key<W: Write>(&self, _dst: W) -> Result<(), Error> {
+        // TODO
+        Ok(())
+    }
+}
+
+#[derive(Clone)]
 pub struct MLAPublicKey {
-    decryption_public_key: MLAEncryptionPublicKey,
+    encryption_public_key: MLAEncryptionPublicKey,
     signature_verification_public_key: MLASignatureVerificationPublicKey,
+    opts: KeyOpts,
+}
+
+impl MLAPublicKey {
+    pub fn deserialize_public_key(mut src: impl Read) -> Result<Self, Error> {
+        let encryption_public_key =
+            MLAEncryptionPublicKey::deserialize_encryption_public_key(&mut src)?;
+        let signature_verification_public_key = MLASignatureVerificationPublicKey {};
+        Ok(Self {
+            encryption_public_key,
+            signature_verification_public_key,
+            opts: KeyOpts,
+        })
+    }
+
+    pub fn from_encryption_and_signature_verification_keys(
+        encryption_public_key: MLAEncryptionPublicKey,
+        signature_verification_public_key: MLASignatureVerificationPublicKey,
+    ) -> Self {
+        MLAPublicKey {
+            encryption_public_key,
+            signature_verification_public_key,
+            opts: KeyOpts,
+        }
+    }
+
+    pub fn get_encryption_public_key(&self) -> &MLAEncryptionPublicKey {
+        &self.encryption_public_key
+    }
+
+    pub fn get_public_keys(self) -> (MLAEncryptionPublicKey, MLASignatureVerificationPublicKey) {
+        (
+            self.encryption_public_key,
+            self.signature_verification_public_key,
+        )
+    }
+
+    pub fn get_signature_verification_public_key(&self) -> &MLASignatureVerificationPublicKey {
+        &self.signature_verification_public_key
+    }
+
+    pub fn serialize_public_key<W: Write>(&self, mut dst: W) -> Result<(), Error> {
+        self.encryption_public_key
+            .serialize_encryption_public_key(&mut dst)?;
+        self.signature_verification_public_key
+            .serialize_signature_verification_public_key(&mut dst)?;
+        self.opts.serialize_key_opts(&mut dst)?;
+        Ok(())
+    }
+}
+
+pub fn generate_mla_keypair() -> (MLAPrivateKey, MLAPublicKey) {
+    generate_mla_keypair_from_rng(get_crypto_rng())
+}
+
+pub fn generate_mla_keypair_from_seed(seed: [u8; 32]) -> (MLAPrivateKey, MLAPublicKey) {
+    let csprng = ChaCha20Rng::from_seed(seed);
+    generate_mla_keypair_from_rng(csprng)
+}
+
+fn generate_mla_keypair_from_rng(mut csprng: impl CryptoRngCore) -> (MLAPrivateKey, MLAPublicKey) {
+    let (decryption_private_key, encryption_public_key) = generate_keypair_from_rng(&mut csprng);
+    let (signature_private_key, signature_verification_public_key) = (
+        MLASignaturePrivateKey {},
+        MLASignatureVerificationPublicKey {},
+    );
+    let priv_key = MLAPrivateKey {
+        decryption_private_key,
+        signature_private_key,
+        opts: KeyOpts,
+    };
+    let pub_key = MLAPublicKey {
+        encryption_public_key,
+        signature_verification_public_key,
+        opts: KeyOpts,
+    };
+    (priv_key, pub_key)
 }
 
 const ED_25519_OID: Oid<'static> = oid!(1.3.101.112);
@@ -669,6 +960,8 @@ pub fn derive_keypair_from_path<'a>(
 
 #[cfg(test)]
 mod tests {
+    use std::io::{Seek, SeekFrom};
+
     use super::*;
     use kem::{Decapsulate, Encapsulate};
     use x25519_dalek::PublicKey;
@@ -696,7 +989,7 @@ mod tests {
     static MLA_PEM_PUB_MANY: &[u8] = include_bytes!("../../../samples/test_mlakey_many_pub.pem");
 
     /// Check key coherence
-    fn check_key_pair(pub_key: MLAEncryptionPublicKey, priv_key: MLADecryptionPrivateKey) {
+    fn check_key_pair(pub_key: &MLAEncryptionPublicKey, priv_key: &MLADecryptionPrivateKey) {
         // Check the public ECC key rebuilt from the private ECC key is the expected one
         let computed_ecc_pubkey = PublicKey::from(&priv_key.private_key_ecc);
         assert_eq!(pub_key.public_key_ecc.as_bytes().len(), ECC_PUBKEY_SIZE);
@@ -719,13 +1012,22 @@ mod tests {
 
     /// Ensure the generated keypair is coherent and re-readable
     #[test]
-    fn keypair_and_export() {
-        let keypair = generate_keypair();
+    fn keypair_serialize_deserialize_and_check() {
+        let (priv_key, pub_key) = generate_mla_keypair();
 
-        let priv_key = parse_mlakey_privkey_pem(keypair.0.to_pem().as_bytes()).unwrap();
-        let pub_key = parse_mlakey_pubkey_pem(keypair.1.to_pem().as_bytes()).unwrap();
+        let mut cursor = Cursor::new(Vec::new());
+        priv_key.serialize_private_key(&mut cursor).unwrap();
+        cursor.seek(SeekFrom::Start(0)).unwrap();
+        let priv_key = MLAPrivateKey::deserialize_private_key(&mut cursor).unwrap();
+        cursor.seek(SeekFrom::Start(0)).unwrap();
+        pub_key.serialize_public_key(&mut cursor).unwrap();
+        cursor.seek(SeekFrom::Start(0)).unwrap();
+        let pub_key = MLAPublicKey::deserialize_public_key(&mut cursor).unwrap();
 
-        check_key_pair(pub_key, priv_key);
+        check_key_pair(
+            pub_key.get_encryption_public_key(),
+            priv_key.get_decryption_private_key(),
+        );
     }
 
     /// Ensure the keypair generation is deterministic
@@ -789,7 +1091,7 @@ mod tests {
         let priv_key = parse_mlakey_privkey_der(MLA_DER_PRIV).unwrap();
         let pub_key = parse_mlakey_pubkey_der(MLA_DER_PUB).unwrap();
 
-        check_key_pair(pub_key, priv_key);
+        check_key_pair(&pub_key, &priv_key);
     }
 
     /// Parse the same public key in DER and PEM format
@@ -840,7 +1142,7 @@ mod tests {
     fn parse_priv_der_ed() {
         let priv_key_ed25519 = parse_mlakey_privkey_der(MLA_DER_PRIV_ED).unwrap();
         let pub_key_ed25519 = parse_mlakey_pubkey_der(MLA_DER_PUB_ED).unwrap();
-        check_key_pair(pub_key_ed25519, priv_key_ed25519);
+        check_key_pair(&pub_key_ed25519, &priv_key_ed25519);
     }
 
     /// Parse a PEM file containning several public keys
