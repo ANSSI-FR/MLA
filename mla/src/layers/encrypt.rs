@@ -17,7 +17,7 @@ use std::io::{BufReader, Cursor, Read, Seek, SeekFrom, Write};
 use crate::errors::ConfigError;
 use kem::{Decapsulate, Encapsulate};
 use rand::SeedableRng;
-use rand_chacha::ChaChaRng;
+use rand_chacha::ChaCha20Rng;
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -111,7 +111,7 @@ impl<R: Read> MLADeserialize<R> for KeyCommitmentAndTag {
 }
 
 /// Return a Cryptographic random number generator
-pub(crate) fn get_crypto_rng() -> ChaChaRng {
+pub(crate) fn get_crypto_rng() -> ChaCha20Rng {
     // Use OsRng from crate rand, that uses getrandom() from crate getrandom.
     // getrandom provides implementations for many systems, listed on
     // https://docs.rs/getrandom/0.1.14/getrandom/
@@ -129,7 +129,7 @@ pub(crate) fn get_crypto_rng() -> ChaChaRng {
     // https://docs.rs/rand/0.7.3/rand/trait.SeedableRng.html#method.from_entropy
     //
     // For the same reasons, force at compile time that the Rng implements CryptoRngCore
-    ChaChaRng::from_entropy()
+    ChaCha20Rng::from_entropy()
 }
 
 #[derive(Zeroize, ZeroizeOnDrop)]
@@ -193,10 +193,10 @@ pub(crate) enum EncapsulationRNG {
 }
 
 impl EncapsulationRNG {
-    fn get_rng(&self) -> ChaChaRng {
+    fn get_rng(&self) -> ChaCha20Rng {
         match self {
             EncapsulationRNG::System => get_crypto_rng(),
-            EncapsulationRNG::Seed(s) => ChaChaRng::from_seed(*s),
+            EncapsulationRNG::Seed(s) => ChaCha20Rng::from_seed(*s),
         }
     }
 }

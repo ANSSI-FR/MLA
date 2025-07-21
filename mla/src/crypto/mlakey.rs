@@ -1,11 +1,14 @@
 use der_parser::der::*;
 use der_parser::error::BerError;
+use rand::SeedableRng as _;
+use rand_chacha::rand_core::CryptoRngCore;
 
 use der_parser::oid::Oid;
 use der_parser::*;
 use hkdf::Hkdf;
 use nom::IResult;
 use nom::combinator::{complete, eof};
+use rand_chacha::ChaCha20Rng;
 use zeroize::Zeroize;
 
 use core::convert::{From, TryInto};
