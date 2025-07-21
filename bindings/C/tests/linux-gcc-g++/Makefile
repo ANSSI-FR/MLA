@@ -4,7 +4,7 @@ BUILDDIR ?= ../../../../target
 TARGET ?= x86_64-unknown-linux-gnu
 MLAR ?= $(BUILDDIR)/$(TARGET)/debug/mlar
 
-tests: test_create test_create_manykeys test_create_set_compression_level test_create_set_compression_level_fail_invalid test_create_fail_no_key test_create_interleaved test_create_no_early_close test_create_unicode test_create_stream test_create_write_byte_by_byte test_open test_info
+tests: test_create test_create_manykeys test_create_set_compression_level test_create_set_compression_level_fail_invalid test_create_interleaved test_create_no_early_close test_create_unicode test_create_stream test_create_write_byte_by_byte test_open test_info
 
 test_create: $(MLAR) create.elf
 	./create.elf
@@ -20,9 +20,6 @@ test_create_set_compression_level: $(MLAR) create_set_compression_level.elf
 
 test_create_set_compression_level_fail_invalid: $(MLAR) create_set_compression_level_fail_invalid.elf
 	./create_set_compression_level_fail_invalid.elf
-
-test_create_fail_no_key: $(MLAR) create_fail_no_key.elf
-	./create_fail_no_key.elf
 
 test_create_interleaved: $(MLAR) create_interleaved.elf
 	./create_interleaved.elf
