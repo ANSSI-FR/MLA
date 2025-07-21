@@ -393,6 +393,7 @@ impl Opts {
                 let n = u64::from_le_bytes(n);
                 let mut v = Vec::new();
                 src.take(n).read_to_end(&mut v)?;
+                // no action implemented for the moment, hence no further use
             }
             _ => return Err(Error::DeserializationError),
         }
