@@ -1,4 +1,4 @@
-use crate::crypto::hybrid::{HybridPrivateKey, HybridPublicKey};
+use crate::crypto::hybrid::{MLADecryptionPrivateKey, MLAEncryptionPublicKey};
 use crate::errors::ConfigError;
 use crate::layers::compress::CompressionConfig;
 use crate::layers::encrypt::{EncryptionConfig, EncryptionReaderConfig};
@@ -11,7 +11,7 @@ pub struct ArchiveWriterConfig {
 
 impl ArchiveWriterConfig {
     /// Will encrypt content with given public keys.
-    pub fn with_public_keys(keys: &[HybridPublicKey]) -> Self {
+    pub fn with_public_keys(keys: &[MLAEncryptionPublicKey]) -> Self {
         let mut encryption_config = EncryptionConfig::default();
         encryption_config.add_public_keys(keys);
         ArchiveWriterConfig {
@@ -59,7 +59,7 @@ pub struct ArchiveReaderConfig {
 
 impl ArchiveReaderConfig {
     /// Will refuse to open an archive without encryption.
-    pub fn with_private_keys(keys: &[HybridPrivateKey]) -> Self {
+    pub fn with_private_keys(keys: &[MLADecryptionPrivateKey]) -> Self {
         let mut encrypt = EncryptionReaderConfig::default();
         encrypt.set_private_keys(keys);
         Self {
@@ -69,7 +69,7 @@ impl ArchiveReaderConfig {
     }
 
     /// Will accept to open encrypted and unencrypted archives.
-    pub fn with_private_keys_accept_unencrypted(keys: &[HybridPrivateKey]) -> Self {
+    pub fn with_private_keys_accept_unencrypted(keys: &[MLADecryptionPrivateKey]) -> Self {
         let mut encrypt = EncryptionReaderConfig::default();
         encrypt.set_private_keys(keys);
         Self {
