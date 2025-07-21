@@ -978,7 +978,7 @@ mod tests {
         assert_eq!(pos, 5);
         let mut output = Vec::new();
         encrypt_r.read_to_end(&mut output).unwrap();
-        println!("{:?}", output);
+        println!("{output:?}");
         assert_eq!(output.as_slice(), &FAKE_FILE[5..]);
     }
 

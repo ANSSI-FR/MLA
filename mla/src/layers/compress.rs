@@ -958,7 +958,7 @@ mod tests {
         let mut reader = brotli::Decompressor::new(&mut src, 0);
         let mut buf = Vec::new();
         reader.read_to_end(&mut buf).unwrap();
-        println!("{:?}", buf);
+        println!("{buf:?}");
         fake_data.extend(fake_data2);
         assert_eq!(fake_data, buf);
     }
