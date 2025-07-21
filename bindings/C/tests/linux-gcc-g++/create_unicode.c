@@ -10,7 +10,7 @@
 #define MLA_STATUS(x) (x)
 #endif
 
-// from samples/test_mlakey_pub.pem
+// from samples/test_mlakey.mlapub
 const char *szPubkey = "REPLACE WITH PUBLIC KEY FROM SAMPLE";
 
 static int32_t callback_write(const uint8_t* pBuffer, uint32_t length, void *context, uint32_t *pBytesWritten)
@@ -44,7 +44,8 @@ int main()
 
    MLAStatus status;
    MLAWriterConfigHandle hConfig = NULL;
-   status = create_mla_writer_config_with_public_keys_pem(&hConfig, szPubkey);
+   const char *const keys[] = {szPubkey};
+   status = create_mla_writer_config_with_public_keys(&hConfig, keys, 1);
    if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
    {
       fprintf(stderr, " [!] Public key set failed with code %" PRIX64 "\n", (uint64_t)status);
