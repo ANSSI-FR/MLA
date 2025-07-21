@@ -39,7 +39,7 @@ fn app() -> Command {
         )
         .arg(
             Arg::new("public_keys")
-                .help("MLA 2 public key paths (DER or PEM format)")
+                .help("MLA 2 public key paths")
                 .long("pubkey")
                 .short('p')
                 .num_args(1)
@@ -156,8 +156,8 @@ pub(crate) mod tests {
         let temp_public_keys = temp_dir.join(public_keys);
 
         // copy input, private_keys, public_keys to temp_dir
-        fs::copy(format!("../../samples/{input}"), &temp_input).unwrap();
-        fs::copy(format!("../../samples/{private_keys}"), &temp_private_keys).unwrap();
+        fs::copy(format!("test-data/{input}"), &temp_input).unwrap();
+        fs::copy(format!("test-data/{private_keys}"), &temp_private_keys).unwrap();
         fs::copy(format!("../../samples/{public_keys}"), &temp_public_keys).unwrap();
 
         env::set_current_dir(&temp_dir).unwrap();
