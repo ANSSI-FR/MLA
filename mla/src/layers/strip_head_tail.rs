@@ -39,7 +39,8 @@ use super::traits::InnerReaderTrait;
 
 // ---------- Reader ----------
 
-/// Layer offering a view of inner layer but with given number of bytes striped from the begining and end
+/// Layer that provides a view of the inner layer,
+/// with a specified number of bytes stripped from the beginning and end
 pub struct StripHeadTailReader<'a, R: InnerReaderTrait> {
     inner: Box<dyn 'a + LayerReader<'a, R>>,
     head_len: u64,
@@ -176,3 +177,155 @@ impl<'a, R: InnerReaderTrait> Read for StripHeadTailReader<'a, R> {
 // }
 
 // impl<'a, R: Read> LayerFailSafeReader<'a, R> for StripHeadTailFailSafeReader<R> {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::RawLayerReader;
+    use std::io::{Cursor, Read, Seek, SeekFrom};
+
+    #[test]
+    fn test_strip_head_tail_basic() {
+        let data = b"abcdefghij";
+        let inner = Cursor::new(data.to_vec());
+        let raw_layer = RawLayerReader::new(inner);
+        let mut boxed_inner = Box::new(raw_layer);
+
+        boxed_inner.seek(SeekFrom::Start(2)).unwrap();
+        let mut reader = StripHeadTailReader::new(
+            boxed_inner,
+            2,  // head_len
+            3,  // tail_len
+            10, // inner_len_incl_head_tail
+            0,  // current_position_in_this_layer
+        )
+        .unwrap();
+
+        let mut buf = Vec::new();
+        reader.read_to_end(&mut buf).unwrap();
+        assert_eq!(&buf, b"cdefg");
+    }
+
+    #[test]
+    fn test_strip_head_tail_seek() {
+        let data = b"abcdefghij";
+        let inner = Cursor::new(data.to_vec());
+        let raw_layer = RawLayerReader::new(inner);
+        let mut boxed_inner = Box::new(raw_layer);
+        boxed_inner.seek(SeekFrom::Start(4)).unwrap();
+
+        let mut reader = StripHeadTailReader::new(boxed_inner, 2, 3, 10, 2).unwrap();
+
+        // Seek to position 2 in the exposed layer (should be 'e')
+        reader.seek(SeekFrom::Start(2)).unwrap();
+        let mut buf = [0u8; 1];
+        reader.read_exact(&mut buf).unwrap();
+        assert_eq!(buf[0], b'e');
+
+        // Seek to end and try to read (should get 0 bytes)
+        reader.seek(SeekFrom::End(0)).unwrap();
+        let mut buf = [0u8; 1];
+        let n = reader.read(&mut buf).unwrap();
+        assert_eq!(n, 0);
+    }
+
+    #[test]
+    fn test_strip_head_tail_full_strip() {
+        let data = b"abcdefghij";
+        let inner = Cursor::new(data.to_vec());
+        let raw_layer = RawLayerReader::new(inner);
+        let mut boxed_inner = Box::new(raw_layer);
+        boxed_inner.seek(SeekFrom::Start(5)).unwrap();
+
+        // Strip all bytes
+        let result = StripHeadTailReader::new(boxed_inner, 5, 5, 10, 0);
+        assert!(result.is_ok());
+        let mut reader = result.unwrap();
+        let mut buf = Vec::new();
+        reader.read_to_end(&mut buf).unwrap();
+        assert_eq!(buf.len(), 0);
+    }
+
+    #[test]
+    fn test_strip_head_tail_invalid_seek() {
+        let data = b"abcdefghij";
+        let inner = Cursor::new(data.to_vec());
+        let raw_layer = RawLayerReader::new(inner);
+        let mut boxed_inner = Box::new(raw_layer);
+        boxed_inner.seek(SeekFrom::Start(2)).unwrap();
+
+        let mut reader = StripHeadTailReader::new(boxed_inner, 2, 3, 10, 0).unwrap();
+
+        // Try to seek beyond the end of the layer
+        let result = reader.seek(SeekFrom::Start(8));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_strip_head_tail_zero_length_inner() {
+        let data = b"";
+        let inner = Cursor::new(data.to_vec());
+        let raw_layer = RawLayerReader::new(inner);
+        let boxed_inner = Box::new(raw_layer);
+
+        let mut reader = StripHeadTailReader::new(boxed_inner, 0, 0, 0, 0).unwrap();
+
+        let mut buf = Vec::new();
+        reader.read_to_end(&mut buf).unwrap();
+        assert_eq!(buf.len(), 0);
+    }
+
+    #[test]
+    fn test_strip_head_tail_negative_seek() {
+        let data = b"abcdefghij";
+        let inner = Cursor::new(data.to_vec());
+        let raw_layer = RawLayerReader::new(inner);
+        let mut boxed_inner = Box::new(raw_layer);
+        boxed_inner.seek(SeekFrom::Start(5)).unwrap();
+
+        let mut reader = StripHeadTailReader::new(boxed_inner, 2, 3, 10, 3).unwrap();
+
+        // Seek backwards by 2 from current position 3 (should go to position 1)
+        let pos = reader.seek(SeekFrom::Current(-2)).unwrap();
+        assert_eq!(pos, 1);
+        let mut buf = [0u8; 1];
+        reader.read_exact(&mut buf).unwrap();
+        assert_eq!(buf[0], b'd');
+    }
+
+    #[test]
+    fn test_strip_head_tail_excessive_strip() {
+        let data = b"abcdefghij";
+        let inner = Cursor::new(data.to_vec());
+        let raw_layer = RawLayerReader::new(inner);
+        let mut boxed_inner = Box::new(raw_layer);
+        boxed_inner.seek(SeekFrom::Start(6)).unwrap();
+
+        // head + tail > inner_len_incl_head_tail
+        let result = StripHeadTailReader::new(boxed_inner, 6, 5, 10, 0);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_strip_head_tail_partial_reads() {
+        let data = b"abcdefghij";
+        let inner = Cursor::new(data.to_vec());
+        let raw_layer = RawLayerReader::new(inner);
+        let mut boxed_inner = Box::new(raw_layer);
+        boxed_inner.seek(SeekFrom::Start(2)).unwrap();
+
+        let mut reader = StripHeadTailReader::new(boxed_inner, 2, 3, 10, 0).unwrap();
+
+        let mut buf = [0u8; 2];
+        let mut out = Vec::new();
+
+        while let Ok(n) = reader.read(&mut buf) {
+            if n == 0 {
+                break;
+            }
+            out.extend_from_slice(&buf[..n]);
+        }
+
+        assert_eq!(&out, b"cdefg");
+    }
+}

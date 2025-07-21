@@ -63,19 +63,24 @@ mod entryname {
     }
 
     impl EntryName {
-        /// Use with caution, arbitrary bytes are stored as is.
-        /// See `EntryName::from_path`, `EntryName::as_arbitrary_bytes`
-        /// and `EntryName::to_pathbuf`.
+        /// Constructs an `EntryName` from a borrowed byte slice.
         ///
-        /// If you want the entry name be used as a file path you may prefer
-        /// using `EntryName::from_path`.
+        /// Use with caution: arbitrary bytes are stored as-is, without checking for nulls,
+        /// slashes, path traversal (`..`), or encoding. This function is useful when reading
+        /// raw archive entries or crafting low-level names.
         ///
-        /// This function returns an `EntryNameError::InvalidPathComponentContent` when given an empty slice.
+        /// Prefer using [`EntryName::from_path`] if you're working with real filesystem paths.
+        ///
+        /// Returns an `EntryNameError::InvalidPathComponentContent` if the slice is empty,
+        /// or `EntryNameError::EntryNameTooLong` if it exceeds `FILENAME_MAX_SIZE`.
         pub fn from_arbitrary_bytes(bytes: &[u8]) -> Result<Self, EntryNameError> {
             Self::from_arbitrary_bytes_vec(bytes.to_vec())
         }
 
-        /// Owned version of `Self::from_arbitrary_bytes`
+        /// Like [`EntryName::from_arbitrary_bytes`], but takes ownership of the byte vector.
+        ///
+        /// Stores the bytes directly with no validation for slashes, nulls, control characters, or encoding.
+        /// Useful for low-level operations. Returns an error if the input is empty or too long.
         pub fn from_arbitrary_bytes_vec(bytes: Vec<u8>) -> Result<Self, EntryNameError> {
             let u64len =
                 u64::try_from(bytes.len()).map_err(|_| EntryNameError::EntryNameTooLong)?;
@@ -96,20 +101,27 @@ mod entryname {
             self.name.as_slice()
         }
 
-        /// `path` is first normalized by keeping only `Normal`
-        /// `std::path::Component`s and popping an eventual previous
-        /// component when a `..` is encountered.
+        /// Converts a `Path` into an `EntryName`, with normalization and platform-aware encoding.
         ///
-        /// On Windows, `path` is then converted from UTF-16LE to UTF-8 and backslashes are
-        /// converted to slash before being serialized inside archive.
-        /// On UNIX family, `path` is then serialized as is.
-        /// This way, a `Path` P converted with `EntryName::from_path` on an OS and
-        /// converted back with `EntryName::to_pathbuf` on
-        /// another OS have good chance to have the same meaning.
-        /// On Windows, invalid UTF-16 in `path` make this function
-        /// return an `Err(EntryNameError::InvalidPathComponentContent)`.
+        /// The path is first normalized:
+        /// - Only `Component::Normal` parts are kept.
+        /// - Each `..` removes the previous component, if any.
         ///
-        /// This function returns an `EntryNameError::InvalidPathComponentContent` when the resulting `EntryName` would be empty.
+        /// On Windows:
+        /// - The path is converted from UTF-16LE to UTF-8.
+        /// - Backslashes are replaced with slashes (`/`) before serialization.
+        ///
+        /// On Unix:
+        /// - The path is serialized as-is.
+        ///
+        /// This normalization ensures that a path converted with [`EntryName::from_path`] on one OS
+        /// and converted back using [`EntryName::to_pathbuf`] on another OS will likely retain the
+        /// intended structure.
+        ///
+        /// Errors:
+        /// - Returns `EntryNameError::InvalidPathComponentContent` if the resulting path is empty
+        ///   or contains invalid characters (on Windows).
+        /// - Returns `EntryNameError::EntryNameTooLong` if the resulting name exceeds `FILENAME_MAX_SIZE`.
         pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Self, EntryNameError> {
             let components = {
                 let mut stack = Vec::new();
