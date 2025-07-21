@@ -106,18 +106,12 @@ struct ArchiveInfo {
 
 extern "C" {
 
-/// Create a new configuration with the given public key(s) in DER format and
+/// Create a new configuration with the given public key(s) in MLA key format and
 /// return a handle to it
-/// `public_keys_pointers` is an array of pointers to public keys in DER format
-MLAStatus create_mla_writer_config_with_public_keys_der(MLAWriterConfigHandle *handle_out,
-                                                        const uint8_t *const *public_keys_pointers,
-                                                        uintptr_t number_of_public_keys);
-
-/// Create a new configuration with the given public key(s) in PEM format and
-/// return a handle to it
-/// `public_keys` is a C string containing concatenated PEM public keys
-MLAStatus create_mla_writer_config_with_public_keys_pem(MLAWriterConfigHandle *handle_out,
-                                                        const char *public_keys);
+/// `public_keys_pointers` is an array of pointers to public keys
+MLAStatus create_mla_writer_config_with_public_keys(MLAWriterConfigHandle *handle_out,
+                                                    const char *const *public_keys_pointers,
+                                                    uintptr_t number_of_public_keys);
 
 /// Create a new configuration without encryption and return a handle to it
 MLAStatus create_mla_writer_config_without_encryption(MLAWriterConfigHandle *handle_out);
@@ -135,25 +129,19 @@ MLAStatus mla_writer_config_without_compression(MLAWriterConfigHandle *handle_in
 
 MLAStatus create_mla_reader_config_without_encryption(MLAReaderConfigHandle *handle_out);
 
-/// Appends the given private key in DER format to an existing given configuration
-/// (referenced by the handle returned by mla_reader_config_new()).
-MLAStatus create_mla_reader_config_with_private_keys_der(MLAReaderConfigHandle *handle_out,
-                                                         const uint8_t *const *private_keys_pointers,
-                                                         uintptr_t number_of_private_keys);
+/// Create a new configuration with the given private key(s) in MLA key format and
+/// return a handle to it
+/// `private_keys_pointers` is an array of pointers to private keys
+MLAStatus create_mla_reader_config_with_private_keys(MLAReaderConfigHandle *handle_out,
+                                                     const char *const *private_keys_pointers,
+                                                     uintptr_t number_of_private_keys);
 
-/// Appends the given private key in DER format to an existing given configuration
-/// (referenced by the handle returned by mla_reader_config_new()).
-MLAStatus create_mla_reader_config_with_private_keys_der_accept_unencrypted(MLAReaderConfigHandle *handle_out,
-                                                                            const uint8_t *const *private_keys_pointers,
-                                                                            uintptr_t number_of_private_keys);
-
-/// Appends the given private key in PEM format to an existing given configuration
-/// (referenced by the handle returned by mla_reader_config_new()).
-MLAStatus create_mla_reader_config_with_private_key_pem_many(MLAReaderConfigHandle *handle_out,
-                                                             const char *private_key_pem);
-
-MLAStatus create_mla_reader_config_with_private_key_pem_many_accept_unencrypted(MLAReaderConfigHandle *handle_out,
-                                                                                const char *private_key_pem);
+/// Create a new configuration with the given private key(s) in MLA key format and
+/// return a handle to it. Accept opening archives without encryption.
+/// `private_keys_pointers` is an array of pointers to private keys
+MLAStatus create_mla_reader_config_with_private_keys_accept_unencrypted(MLAReaderConfigHandle *handle_out,
+                                                                        const char *const *private_keys_pointers,
+                                                                        uintptr_t number_of_private_keys);
 
 /// Open a new MLA archive using the given configuration, which is consumed and freed
 /// (its handle cannot be reused to create another archive). The archive is streamed

@@ -4,8 +4,9 @@
 #include <string.h>
 #include "mla.h"
 
-// From samples/test_mlakey_many_pub.pem
-const char *szPubkey = "REPLACE WITH MANY PUBLIC KEY FROM SAMPLE";
+// From samples/test_mlakey.mlapub
+const char * const szPubkey = "REPLACE WITH PUBLIC KEY FROM SAMPLE";
+const char * const szPubkey2 = "REPLACE WITH PUBLIC KEY 2 FROM SAMPLE";
 
 static int32_t callback_write(const uint8_t* pBuffer, uint32_t length, void *context, uint32_t *pBytesWritten)
 {
@@ -39,7 +40,8 @@ int main()
    MLAStatus status = 0;
    MLAWriterConfigHandle hConfig = NULL;
 
-   status = create_mla_writer_config_with_public_keys_pem(&hConfig, szPubkey);
+   const char *const keys[] = {szPubkey, szPubkey2};
+   status = create_mla_writer_config_with_public_keys(&hConfig, keys, 2);
    if (status != MLA_STATUS_SUCCESS)
    {
       fprintf(stderr, " [!] Public key set failed with code %" PRIX64 "\n", (uint64_t)status);
