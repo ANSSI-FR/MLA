@@ -1,0 +1,69 @@
+use crate::errors::Error;
+
+const BASE64_CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+pub(crate) fn base64_encode(data: &[u8]) -> Vec<u8> {
+    let mut encoded = Vec::new();
+    let mut i = 0;
+    while i < data.len() {
+        let mut val: u32 = 0;
+        let mut n = 0;
+        while n < 3 && i < data.len() {
+            val = (val << 8) | (data[i] as u32);
+            n += 1;
+            i += 1;
+        }
+        if n == 1 {
+            val <<= 16;
+        } else if n == 2 {
+            val <<= 8;
+        }
+        for j in 0..4 {
+            if j < (n + 1) {
+                let idx = ((val >> ((3 - j) * 6)) & 0x3F) as usize;
+                encoded.push(BASE64_CHARS[idx]);
+            } else {
+                encoded.push(b'=');
+            }
+        }
+    }
+    encoded
+}
+
+pub(crate) fn base64_decode(encoded: &[u8]) -> Result<Vec<u8>, Error> {
+    let encoded = match encoded {
+        [rest @ .., b'=', b'='] | [rest @ .., b'='] => rest,
+        _ => encoded,
+    };
+    let mut decoded = Vec::new();
+    let mut i = 0;
+    while i < encoded.len() {
+        let mut val: u32 = 0;
+        let mut n = 0;
+        while n < 4 && i < encoded.len() {
+            let c = encoded[i];
+            let idx = match c {
+                b'A'..=b'Z' => c - b'A',
+                b'a'..=b'z' => c - b'a' + 26,
+                b'0'..=b'9' => c - b'0' + 52,
+                b'+' => 62,
+                b'/' => 63,
+                _ => return Err(Error::DeserializationError),
+            };
+            val = (val << 6) | (idx as u32);
+            n += 1;
+            i += 1;
+        }
+        if n == 3 {
+            val <<= 6;
+        } else if n == 2 {
+            val <<= 12;
+        }
+        for j in 0..3 {
+            if j < n - 1 {
+                decoded.push(((val >> ((2 - j) * 8)) & 0xFF) as u8);
+            }
+        }
+    }
+    Ok(decoded)
+}
