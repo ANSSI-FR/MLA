@@ -636,7 +636,7 @@ fn test_convert() {
     // Create files
     let testfs = setup();
 
-    // `mlar create -o output.mla -p samples/public_1024.der file1.bin file2.bin file3.bin`
+    // `mlar create -o output.mla -p samples/public_1024.mlapub file1.bin file2.bin file3.bin`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-o")
@@ -660,7 +660,7 @@ fn test_convert() {
     let assert = cmd.assert();
     assert.success().stderr(String::from(&file_list));
 
-    // `mlar convert -i output.mla -k samples/private_1024.der -l encrypt -o convert.mla -p samples/public_2048.der`
+    // `mlar convert -i output.mla -k samples/private_1024.mlapriv -l encrypt -o convert.mla -p samples/public_2048.mlapub`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("convert")
         .arg("-i")
@@ -685,7 +685,7 @@ fn test_convert() {
     let size_convert = metadata(mlar_file_converted.path()).unwrap().len();
     assert!(size_output < size_convert);
 
-    // `mlar to-tar -i convert.mla -k samples/private_2048.der -o output.tar`
+    // `mlar to-tar -i convert.mla -k samples/private_2048.mlapriv -o output.tar`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("to-tar")
         .arg("-i")
