@@ -119,6 +119,8 @@ impl Write for OutputTypes {
 }
 
 /// Return the parsed version of private keys from arguments `private_keys`
+/// Each key is expected to be a file path containing a serialized MLA private key.
+/// Returns an error if any file can't be opened or parsed.
 fn open_private_keys(matches: &ArgMatches) -> Result<Vec<MLAPrivateKey>, Error> {
     let mut private_keys = Vec::new();
     if let Some(private_key_args) = matches.get_many::<PathBuf>("private_keys") {
@@ -133,6 +135,8 @@ fn open_private_keys(matches: &ArgMatches) -> Result<Vec<MLAPrivateKey>, Error> 
 }
 
 /// Return the parsed version of public keys from arguments `public_keys`
+/// Each key is expected to be a file path containing a serialized MLA public key.
+/// Returns an error if any file can't be opened or parsed.
 fn open_public_keys(matches: &ArgMatches) -> Result<Vec<MLAPublicKey>, Error> {
     let mut public_keys = Vec::new();
 
@@ -177,15 +181,17 @@ fn config_from_matches(matches: &ArgMatches) -> Result<ArchiveWriterConfig, Mlar
                 "[WARNING] 'public_keys' was given, but encrypt layer was not asked. Enabling it"
             );
         }
-        let (pub_enc_keys, _pub_sig_keys) = match open_public_keys(matches) {
-            Ok(public_keys) => public_keys
-                .into_iter()
-                .map(MLAPublicKey::get_public_keys)
-                .collect::<(Vec<_>, Vec<_>)>(),
-            Err(error) => {
-                panic!("[ERROR] Unable to open public keys: {error}");
-            }
-        };
+
+        let public_keys = open_public_keys(matches).map_err(|error| {
+            eprintln!("[ERROR] Unable to open public keys: {error}");
+            MlarError::Mla(Error::InvalidKeyFormat)
+        })?;
+
+        let (pub_enc_keys, _pub_sig_keys) = public_keys
+            .into_iter()
+            .map(MLAPublicKey::get_public_keys)
+            .collect::<(Vec<_>, Vec<_>)>();
+
         ArchiveWriterConfig::with_public_keys(&pub_enc_keys)
     } else {
         ArchiveWriterConfig::without_encryption()
@@ -244,24 +250,27 @@ fn writer_from_matches<'a>(
 
 /// Return the ArchiveReaderConfig corresponding to provided arguments and set
 /// Layers::ENCRYPT if a key is provided
-fn readerconfig_from_matches(matches: &ArgMatches) -> ArchiveReaderConfig {
+fn readerconfig_from_matches(matches: &ArgMatches) -> Result<ArchiveReaderConfig, MlarError> {
     if matches.contains_id("private_keys") {
-        let (private_dec_keys, _private_sig_keys) = match open_private_keys(matches) {
-            Ok(private_keys) => private_keys
-                .into_iter()
-                .map(MLAPrivateKey::get_private_keys)
-                .collect::<(Vec<_>, Vec<_>)>(),
-            Err(error) => {
-                panic!("[ERROR] Unable to open private keys: {error}");
-            }
-        };
+        let private_keys = open_private_keys(matches).map_err(|error| {
+            eprintln!("[ERROR] Unable to open private keys: {error}");
+            MlarError::Mla(Error::InvalidKeyFormat)
+        })?;
+
+        let (private_dec_keys, _private_sig_keys) = private_keys
+            .into_iter()
+            .map(MLAPrivateKey::get_private_keys)
+            .collect::<(Vec<_>, Vec<_>)>();
+
         if matches.get_flag("accept_unencrypted") {
-            ArchiveReaderConfig::with_private_keys_accept_unencrypted(&private_dec_keys)
+            Ok(ArchiveReaderConfig::with_private_keys_accept_unencrypted(
+                &private_dec_keys,
+            ))
         } else {
-            ArchiveReaderConfig::with_private_keys(&private_dec_keys)
+            Ok(ArchiveReaderConfig::with_private_keys(&private_dec_keys))
         }
     } else if matches.get_flag("accept_unencrypted") {
-        ArchiveReaderConfig::without_encryption()
+        Ok(ArchiveReaderConfig::without_encryption())
     } else {
         panic!("No private keys given but --accept-unencrypted was not given")
     }
@@ -276,7 +285,7 @@ fn open_mla_file<'a>(matches: &ArgMatches) -> Result<ArchiveReader<'a, File>, Ml
     let file = File::open(path)?;
 
     // Instantiate reader
-    Ok(ArchiveReader::from_config(file, config)?)
+    Ok(ArchiveReader::from_config(file, config?)?)
 }
 
 // Utils: common code to load a mla_file from arguments, fail-safe mode
@@ -291,7 +300,7 @@ fn open_failsafe_mla_file<'a>(
     let file = File::open(path)?;
 
     // Instantiate reader
-    Ok(TruncatedArchiveReader::from_config(file, config)?)
+    Ok(TruncatedArchiveReader::from_config(file, config?)?)
 }
 
 fn add_file_to_tar<R: Read + Seek, W: Write>(
@@ -1324,7 +1333,7 @@ fn app() -> clap::Command {
                 )
                 .arg(
                     Arg::new("output-prefix")
-                        .help("Output prefix for the keys. The private key will be in {output}.mlapriv and the public key will be in {output}.mlapub")
+                        .help("Output prefix for the keys. The private key will be in {output-prefix}.mlapriv and the public key will be in {output-prefix}.mlapub")
                         .num_args(1)
                         .value_parser(value_parser!(PathBuf))
                         .required(true)

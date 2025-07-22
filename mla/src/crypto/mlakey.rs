@@ -160,10 +160,12 @@ impl MLADecryptionPrivateKey {
     }
 
     fn serialize_decryption_private_key<W: Write>(&self, mut dst: W) -> Result<(), Error> {
+        const KEY_OPTS_LEN: usize = 4;
+
         dst.write_all(MLA_PRIV_DEC_KEY_HEADER)?;
         let mut b64data = vec![];
         b64data.extend_from_slice(DEC_METHOD_ID_0_PRIV);
-        b64data.extend_from_slice(&[0u8; 4]); // key opts, empty length for the moment
+        b64data.extend_from_slice(&[0u8; KEY_OPTS_LEN]); // key opts, empty length for the moment
         b64data.extend_from_slice(&self.private_key_ecc.to_bytes());
         b64data.extend_from_slice(&self.private_key_ml.as_bytes());
         let mut encoded = base64_encode(&b64data);
@@ -184,22 +186,35 @@ impl MLASignaturePrivateKey {
     }
 }
 
+impl Drop for MLASignaturePrivateKey {
+    fn drop(&mut self) {
+        // TODO
+    }
+}
+
 #[derive(Clone)]
 pub struct MLAPrivateKey {
+    // zeroized on drop for both ecc and mlkem keys
     decryption_private_key: MLADecryptionPrivateKey,
+    // TODO: zeroize on drop
     signature_private_key: MLASignaturePrivateKey,
     opts: KeyOpts,
 }
 
 impl MLAPrivateKey {
+    /// Deserialize an MLA private key from a source implementing `Read`.
+    ///
     /// If zeroizing key memory matters to you, ensure that the `Read`
-    /// implemenation of your argument does not use temporary buffers
+    /// implementation of your argument does not use temporary buffers
     /// and do not forget to zeroize the eventual backing data after this call.
+    /// 
+    /// The serialization format is described in `doc/src/KEY_FORMAT.md`.
     pub fn deserialize_private_key(src: impl Read) -> Result<Self, Error> {
         let mut content = zeroizeable_read_to_end(src)?;
         let (first_line, _second_line) = split_lines_zeroize(&content)?;
         let decryption_private_key =
             MLADecryptionPrivateKey::deserialize_decryption_private_key(first_line)?;
+        // TODO: deserialize signature private key when implemented
         let signature_private_key = MLASignaturePrivateKey {};
         content.zeroize();
         Ok(Self {
@@ -232,6 +247,9 @@ impl MLAPrivateKey {
         &self.signature_private_key
     }
 
+    /// Serialize the MLA private key into `dst`.
+    ///
+    /// The serialization format is described in `doc/src/KEY_FORMAT.md`.
     pub fn serialize_private_key<W: Write>(&self, mut dst: W) -> Result<(), Error> {
         self.decryption_private_key
             .serialize_decryption_private_key(&mut dst)?;
@@ -285,10 +303,12 @@ impl MLAEncryptionPublicKey {
     }
 
     fn serialize_encryption_public_key<W: Write>(&self, mut dst: W) -> Result<(), Error> {
+        const KEY_OPTS_LEN: usize = 4;
+
         dst.write_all(MLA_PUB_ENC_KEY_HEADER)?;
         let mut b64data = vec![];
         b64data.extend_from_slice(ENC_METHOD_ID_0_PUB);
-        b64data.extend_from_slice(&[0u8; 4]); // key opts, empty length for the moment
+        b64data.extend_from_slice(&[0u8; KEY_OPTS_LEN]); // key opts, empty length for the moment
         b64data.extend_from_slice(&self.public_key_ecc.to_bytes());
         b64data.extend_from_slice(&self.public_key_ml.as_bytes());
         dst.write_all(&base64_encode(&b64data))?;
@@ -373,6 +393,7 @@ pub fn generate_mla_keypair_from_seed(seed: [u8; 32]) -> (MLAPrivateKey, MLAPubl
 
 fn generate_mla_keypair_from_rng(mut csprng: impl CryptoRngCore) -> (MLAPrivateKey, MLAPublicKey) {
     let (decryption_private_key, encryption_public_key) = generate_keypair_from_rng(&mut csprng);
+    // TODO: generate a real signature keypair
     let (signature_private_key, signature_verification_public_key) = (
         MLASignaturePrivateKey {},
         MLASignatureVerificationPublicKey {},
@@ -411,12 +432,14 @@ const DERIVE_PATH_SALT: &[u8; 15] = b"PATH DERIVATION";
 ///
 /// \[1\] <https://eprint.iacr.org/2023/861>
 fn apply_derive(path: &[u8], src: MLADecryptionPrivateKey) -> [u8; 32] {
+    const SEED_LEN: usize = 32;
+
     // Force uniform-randomness on ECC-key, used as the future HKDF "salt" argument
     let (dprf_salt, _hkdf) = Hkdf::<Sha512>::extract(None, src.private_key_ecc.as_bytes());
 
     // `salt` being uniformly random, HKDF can be viewed as a dual-PRF
     let hkdf: Hkdf<Sha512> = Hkdf::new(Some(&dprf_salt), &src.private_key_ml.as_bytes());
-    let mut seed = [0u8; 32];
+    let mut seed = [0u8; SEED_LEN];
     hkdf.expand_multi_info(&[DERIVE_PATH_SALT, path], &mut seed)
         .expect("Unexpected error while derivating along the path");
 
@@ -537,13 +560,15 @@ mod tests {
         use std::collections::HashSet;
         use x25519_dalek::StaticSecret;
 
+        const SEED_LEN: usize = 32;
+
         // Ensure determinism
         let (privkey, _pubkey) = generate_keypair_from_seed([0; 32]);
 
         // Derive along "test"
         let path = b"test";
         let seed = apply_derive(path, privkey);
-        assert_ne!(seed, [0u8; 32]);
+        assert_ne!(seed, [0u8; SEED_LEN]);
 
         // Derive along "test2"
         let (privkey, _pubkey) = generate_keypair_from_seed([0; 32]);
@@ -586,6 +611,7 @@ mod tests {
         .unwrap();
         let privkey = MLAPrivateKey::from_decryption_and_signature_keys(
             decryption_private_key,
+            // TODO: fix MLASignaturePrivateKey after implementing it
             MLASignaturePrivateKey {},
         );
         let mut computed_ser_derived_priv = Vec::new();
@@ -594,5 +620,35 @@ mod tests {
             .unwrap();
 
         assert_eq!(computed_ser_derived_priv.as_slice(), ser_derived_priv);
+    }
+
+    #[test]
+    fn test_deserialization_errors() {
+        use std::io::Cursor;
+
+        // 1. Invalid header string (missing or wrong header)
+        let missing_header = b"WRONG HEADER bWxhLWtlbS1wdWJsaWMtMTIzNDU2\n";
+        let mut cursor = Cursor::new(&missing_header[..]);
+        let result = MLAPrivateKey::deserialize_private_key(&mut cursor);
+        assert!(matches!(result, Err(Error::DeserializationError)));
+
+        // 2. Corrupted base64 (invalid characters)
+        let corrupted_base64 = b"DO NOT SEND THIS TO ANYONE - MLA PRIVATE DECRYPTION KEY !!@@##\n";
+        let mut cursor = Cursor::new(&corrupted_base64[..]);
+        let result = MLAPrivateKey::deserialize_private_key(&mut cursor);
+        assert!(matches!(result, Err(Error::DeserializationError)));
+
+        // 3. Wrong method ID length (simulate bad base64 with short method id bytes)
+        // Here we craft a base64 string too short to contain a valid method ID.
+        let bad_method_id = b"DO NOT SEND THIS TO ANYONE - MLA PRIVATE DECRYPTION KEY QUFB\n";
+        let mut cursor = Cursor::new(&bad_method_id[..]);
+        let result = MLAPrivateKey::deserialize_private_key(&mut cursor);
+        assert!(matches!(result, Err(Error::DeserializationError)));
+
+        // 4. Truncated base64 data
+        let truncated_data = b"DO NOT SEND THIS TO ANYONE - MLA PRIVATE DECRYPTION KEY bWxh\n";
+        let mut cursor = Cursor::new(&truncated_data[..]);
+        let result = MLAPrivateKey::deserialize_private_key(&mut cursor);
+        assert!(matches!(result, Err(Error::DeserializationError)));
     }
 }
