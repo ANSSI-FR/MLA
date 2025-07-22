@@ -160,10 +160,12 @@ impl MLADecryptionPrivateKey {
     }
 
     fn serialize_decryption_private_key<W: Write>(&self, mut dst: W) -> Result<(), Error> {
+        const KEY_OPTS_LEN: usize = 4;
+
         dst.write_all(MLA_PRIV_DEC_KEY_HEADER)?;
         let mut b64data = vec![];
         b64data.extend_from_slice(DEC_METHOD_ID_0_PRIV);
-        b64data.extend_from_slice(&[0u8; 4]); // key opts, empty length for the moment
+        b64data.extend_from_slice(&[0u8; KEY_OPTS_LEN]); // key opts, empty length for the moment
         b64data.extend_from_slice(&self.private_key_ecc.to_bytes());
         b64data.extend_from_slice(&self.private_key_ml.as_bytes());
         let mut encoded = base64_encode(&b64data);
@@ -313,10 +315,12 @@ impl MLAEncryptionPublicKey {
     }
 
     fn serialize_encryption_public_key<W: Write>(&self, mut dst: W) -> Result<(), Error> {
+        const KEY_OPTS_LEN: usize = 4;
+
         dst.write_all(MLA_PUB_ENC_KEY_HEADER)?;
         let mut b64data = vec![];
         b64data.extend_from_slice(ENC_METHOD_ID_0_PUB);
-        b64data.extend_from_slice(&[0u8; 4]); // key opts, empty length for the moment
+        b64data.extend_from_slice(&[0u8; KEY_OPTS_LEN]); // key opts, empty length for the moment
         b64data.extend_from_slice(&self.public_key_ecc.to_bytes());
         b64data.extend_from_slice(&self.public_key_ml.as_bytes());
         dst.write_all(&base64_encode(&b64data))?;
@@ -440,12 +444,14 @@ const DERIVE_PATH_SALT: &[u8; 15] = b"PATH DERIVATION";
 ///
 /// \[1\] <https://eprint.iacr.org/2023/861>
 fn apply_derive(path: &[u8], src: MLADecryptionPrivateKey) -> [u8; 32] {
+    const SEED_LEN: usize = 32;
+
     // Force uniform-randomness on ECC-key, used as the future HKDF "salt" argument
     let (dprf_salt, _hkdf) = Hkdf::<Sha512>::extract(None, src.private_key_ecc.as_bytes());
 
     // `salt` being uniformly random, HKDF can be viewed as a dual-PRF
     let hkdf: Hkdf<Sha512> = Hkdf::new(Some(&dprf_salt), &src.private_key_ml.as_bytes());
-    let mut seed = [0u8; 32];
+    let mut seed = [0u8; SEED_LEN];
     hkdf.expand_multi_info(&[DERIVE_PATH_SALT, path], &mut seed)
         .expect("Unexpected error while derivating along the path");
 
@@ -566,13 +572,15 @@ mod tests {
         use std::collections::HashSet;
         use x25519_dalek::StaticSecret;
 
+        const SEED_LEN: usize = 32;
+
         // Ensure determinism
         let (privkey, _pubkey) = generate_keypair_from_seed([0; 32]);
 
         // Derive along "test"
         let path = b"test";
         let seed = apply_derive(path, privkey);
-        assert_ne!(seed, [0u8; 32]);
+        assert_ne!(seed, [0u8; SEED_LEN]);
 
         // Derive along "test2"
         let (privkey, _pubkey) = generate_keypair_from_seed([0; 32]);
