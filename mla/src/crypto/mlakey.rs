@@ -633,4 +633,34 @@ mod tests {
 
         assert_eq!(computed_ser_derived_priv.as_slice(), ser_derived_priv);
     }
+
+    #[test]
+    fn test_deserialization_errors() {
+        use std::io::Cursor;
+
+        // 1. Invalid header string (missing or wrong header)
+        let missing_header = b"WRONG HEADER bWxhLWtlbS1wdWJsaWMtMTIzNDU2\n";
+        let mut cursor = Cursor::new(&missing_header[..]);
+        let result = MLAPrivateKey::deserialize_private_key(&mut cursor);
+        assert!(matches!(result, Err(Error::DeserializationError)));
+
+        // 2. Corrupted base64 (invalid characters)
+        let corrupted_base64 = b"DO NOT SEND THIS TO ANYONE - MLA PRIVATE DECRYPTION KEY !!@@##\n";
+        let mut cursor = Cursor::new(&corrupted_base64[..]);
+        let result = MLAPrivateKey::deserialize_private_key(&mut cursor);
+        assert!(matches!(result, Err(Error::DeserializationError)));
+
+        // 3. Wrong method ID length (simulate bad base64 with short method id bytes)
+        // Here we craft a base64 string too short to contain a valid method ID.
+        let bad_method_id = b"DO NOT SEND THIS TO ANYONE - MLA PRIVATE DECRYPTION KEY QUFB\n";
+        let mut cursor = Cursor::new(&bad_method_id[..]);
+        let result = MLAPrivateKey::deserialize_private_key(&mut cursor);
+        assert!(matches!(result, Err(Error::DeserializationError)));
+
+        // 4. Truncated base64 data
+        let truncated_data = b"DO NOT SEND THIS TO ANYONE - MLA PRIVATE DECRYPTION KEY bWxh\n";
+        let mut cursor = Cursor::new(&truncated_data[..]);
+        let result = MLAPrivateKey::deserialize_private_key(&mut cursor);
+        assert!(matches!(result, Err(Error::DeserializationError)));
+    }
 }
