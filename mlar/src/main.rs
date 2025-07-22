@@ -182,11 +182,10 @@ fn config_from_matches(matches: &ArgMatches) -> Result<ArchiveWriterConfig, Mlar
             );
         }
 
-        let public_keys = open_public_keys(matches)
-            .map_err(|error| {
-                eprintln!("[ERROR] Unable to open public keys: {}", error);
-                MlarError::Mla(Error::InvalidKeyFormat)
-            })?;
+        let public_keys = open_public_keys(matches).map_err(|error| {
+            eprintln!("[ERROR] Unable to open public keys: {}", error);
+            MlarError::Mla(Error::InvalidKeyFormat)
+        })?;
 
         let (pub_enc_keys, _pub_sig_keys) = public_keys
             .into_iter()
@@ -264,7 +263,9 @@ fn readerconfig_from_matches(matches: &ArgMatches) -> Result<ArchiveReaderConfig
             .collect::<(Vec<_>, Vec<_>)>();
 
         if matches.get_flag("accept_unencrypted") {
-            Ok(ArchiveReaderConfig::with_private_keys_accept_unencrypted(&private_dec_keys))
+            Ok(ArchiveReaderConfig::with_private_keys_accept_unencrypted(
+                &private_dec_keys,
+            ))
         } else {
             Ok(ArchiveReaderConfig::with_private_keys(&private_dec_keys))
         }
