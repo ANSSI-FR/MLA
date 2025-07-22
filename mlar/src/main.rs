@@ -183,7 +183,7 @@ fn config_from_matches(matches: &ArgMatches) -> Result<ArchiveWriterConfig, Mlar
         }
 
         let public_keys = open_public_keys(matches).map_err(|error| {
-            eprintln!("[ERROR] Unable to open public keys: {}", error);
+            eprintln!("[ERROR] Unable to open public keys: {error}");
             MlarError::Mla(Error::InvalidKeyFormat)
         })?;
 
@@ -253,7 +253,7 @@ fn writer_from_matches<'a>(
 fn readerconfig_from_matches(matches: &ArgMatches) -> Result<ArchiveReaderConfig, MlarError> {
     if matches.contains_id("private_keys") {
         let private_keys = open_private_keys(matches).map_err(|error| {
-            eprintln!("[ERROR] Unable to open private keys: {}", error);
+            eprintln!("[ERROR] Unable to open private keys: {error}");
             MlarError::Mla(Error::InvalidKeyFormat)
         })?;
 
