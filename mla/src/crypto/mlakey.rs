@@ -4,7 +4,7 @@ use rand_chacha::ChaCha20Rng;
 use rand_chacha::rand_core::CryptoRngCore;
 use zeroize::Zeroize;
 
-use std::io::{BufRead, BufReader, Cursor, ErrorKind, Read, Write};
+use std::io::{Cursor, ErrorKind, Read, Write};
 
 use curve25519_dalek::montgomery::MontgomeryPoint;
 use ml_kem::EncodedSizeUser;
@@ -22,8 +22,8 @@ use crate::layers::encrypt::get_crypto_rng;
 
 use super::hybrid::generate_keypair_from_rng;
 
-const MLA_PRIV_DEC_KEY_HEADER: &[u8] = b"DO NOT SEND THIS TO ANYONE - MLA PRIVATE DECRYPTION KEY ";
-//const MLA_PRIV_SIG_KEY_HEADER: &[u8] = b"DO NOT SEND THIS TO ANYONE - MLA PRIVATE SIGNATURE KEY ";
+const MLA_PRIV_DEC_KEY_HEADER: &[u8] = b"MLA PRIVATE DECRYPTION KEY ";
+//const MLA_PRIV_SIG_KEY_HEADER: &[u8] = b"MLA PRIVATE SIGNATURE KEY ";
 const DEC_METHOD_ID_0_PRIV: &[u8] = b"mla-kem-private-x25519-mlkem1024";
 //const SIG_METHOD_ID_0_PRIV: &[u8] = b"mla-signature-private-ed25519-mldsa87";
 
@@ -31,6 +31,11 @@ const MLA_PUB_ENC_KEY_HEADER: &[u8] = b"MLA PUBLIC ENCRYPTION KEY ";
 //const MLA_PUB_SIGVERIF_KEY_HEADER: &[u8] = b"MLA PUBLIC SIGNATURE VERIFICATION KEY ";
 const ENC_METHOD_ID_0_PUB: &[u8] = b"mla-kem-public-x25519-mlkem1024";
 //const SIGVERIF_METHOD_ID_0_PUB: &[u8] = b"mla-signature-verification-public-ed25519-mldsa87";
+
+const PRIV_KEY_FILE_HEADER: &[u8] = b"DO NOT SEND THIS TO ANYONE - MLA PRIVATE KEY FILE V1";
+const PRIV_KEY_FILE_FOOTER: &[u8] = b"END OF MLA PRIVATE KEY FILE";
+const PUB_KEY_FILE_HEADER: &[u8] = b"MLA PUBLIC KEY FILE V1";
+const PUB_KEY_FILE_FOOTER: &[u8] = b"END OF MLA PUBLIC KEY FILE";
 
 #[allow(clippy::slow_vector_initialization, clippy::manual_memcpy)]
 fn zeroizeable_read_to_end(mut src: impl Read) -> Result<Vec<u8>, Error> {
@@ -68,35 +73,36 @@ fn zeroizeable_read_to_end(mut src: impl Read) -> Result<Vec<u8>, Error> {
     }
 }
 
+/// No buffering to avoid having to zeroize eventual secret data parsed by this function
 #[allow(clippy::needless_range_loop)]
-fn split_lines_zeroize(content: &[u8]) -> Result<(&[u8], &[u8]), Error> {
-    let mut first_carriage_return_index = 0;
-    for i in 0..content.len() {
-        if content[i] == b'\r' {
-            first_carriage_return_index = i;
-            break;
+fn split_five_lines_without_buffering(content: &[u8]) -> Result<[&[u8]; 5], Error> {
+    fn split_line(content: &[u8]) -> Result<(&[u8], &[u8]), Error> {
+        let mut carriage_return_index = 0;
+        for i in 0..content.len() {
+            if content[i] == b'\r' {
+                carriage_return_index = i;
+                break;
+            }
         }
-    }
-    if first_carriage_return_index == 0 {
-        return Err(Error::DeserializationError);
-    }
-    let (first_line, rest) = content.split_at(first_carriage_return_index);
-    if rest.len() < 2 || rest[0] != b'\r' && rest[1] != b'\n' {
-        return Err(Error::DeserializationError);
-    }
-    let rest = &rest[2..];
-    let mut second_carriage_return_index = 0;
-    for i in second_carriage_return_index..rest.len() {
-        if rest[i] == b'\r' {
-            second_carriage_return_index = i;
-            break;
+        if carriage_return_index == 0 {
+            return Err(Error::DeserializationError);
         }
+        let (line, rest) = content.split_at(carriage_return_index);
+        if rest.len() < 2 || rest[0] != b'\r' && rest[1] != b'\n' {
+            return Err(Error::DeserializationError);
+        }
+        let rest = &rest[2..];
+        Ok((line, rest))
     }
-    if second_carriage_return_index == 0 {
+    let (first_line, rest) = split_line(content)?;
+    let (second_line, rest) = split_line(rest)?;
+    let (third_line, rest) = split_line(rest)?;
+    let (fourth_line, rest) = split_line(rest)?;
+    let (fifth_line, rest) = split_line(rest)?;
+    if !rest.is_empty() {
         return Err(Error::DeserializationError);
     }
-    let (second_line, _) = rest.split_at(second_carriage_return_index);
-    Ok((first_line, second_line))
+    Ok([first_line, second_line, third_line, fourth_line, fifth_line])
 }
 
 #[derive(Clone)]
@@ -174,8 +180,8 @@ impl MLADecryptionPrivateKey {
 pub struct MLASignaturePrivateKey {}
 
 impl MLASignaturePrivateKey {
-    fn serialize_signature_private_key<W: Write>(&self, _dst: W) -> Result<(), Error> {
-        // TODO
+    fn serialize_signature_private_key<W: Write>(&self, mut dst: W) -> Result<(), Error> {
+        dst.write_all(b"TODO\r\n").unwrap();
         Ok(())
     }
 }
@@ -205,9 +211,15 @@ impl MLAPrivateKey {
     /// The serialization format is described in `doc/src/KEY_FORMAT.md`.
     pub fn deserialize_private_key(src: impl Read) -> Result<Self, Error> {
         let mut content = zeroizeable_read_to_end(src)?;
-        let (first_line, _second_line) = split_lines_zeroize(&content)?;
+        let lines = split_five_lines_without_buffering(&content)?;
+        if lines[0] != PRIV_KEY_FILE_HEADER {
+            return Err(Error::DeserializationError);
+        }
+        if lines[4] != PRIV_KEY_FILE_FOOTER {
+            return Err(Error::DeserializationError);
+        }
         let decryption_private_key =
-            MLADecryptionPrivateKey::deserialize_decryption_private_key(first_line)?;
+            MLADecryptionPrivateKey::deserialize_decryption_private_key(lines[1])?;
         // TODO: deserialize signature private key when implemented
         let signature_private_key = MLASignaturePrivateKey {};
         content.zeroize();
@@ -245,24 +257,23 @@ impl MLAPrivateKey {
     ///
     /// The serialization format is described in `doc/src/KEY_FORMAT.md`.
     pub fn serialize_private_key<W: Write>(&self, mut dst: W) -> Result<(), Error> {
+        dst.write_all(PRIV_KEY_FILE_HEADER)?;
+        dst.write_all(b"\r\n")?;
         self.decryption_private_key
             .serialize_decryption_private_key(&mut dst)?;
         self.signature_private_key
             .serialize_signature_private_key(&mut dst)?;
         self.opts.serialize_key_opts(&mut dst)?;
+        dst.write_all(PRIV_KEY_FILE_FOOTER)?;
+        dst.write_all(b"\r\n")?;
         Ok(())
     }
 }
 
 impl MLAEncryptionPublicKey {
-    fn deserialize_encryption_public_key(src: impl Read) -> Result<Self, Error> {
-        let mut line = String::new();
-        BufReader::new(src).read_line(&mut line)?;
+    fn deserialize_encryption_public_key(line: &[u8]) -> Result<Self, Error> {
         let b64data = line
-            .as_bytes()
             .strip_prefix(MLA_PUB_ENC_KEY_HEADER)
-            .ok_or(Error::DeserializationError)?
-            .strip_suffix(b"\r\n")
             .ok_or(Error::DeserializationError)?;
         let data = base64_decode(b64data).map_err(|_| Error::DeserializationError)?;
         let mut cursor = Cursor::new(data);
@@ -315,8 +326,11 @@ impl MLAEncryptionPublicKey {
 pub struct MLASignatureVerificationPublicKey {}
 
 impl MLASignatureVerificationPublicKey {
-    fn serialize_signature_verification_public_key<W: Write>(&self, _dst: W) -> Result<(), Error> {
-        // TODO
+    fn serialize_signature_verification_public_key<W: Write>(
+        &self,
+        mut dst: W,
+    ) -> Result<(), Error> {
+        dst.write_all(b"TODO\r\n").unwrap();
         Ok(())
     }
 }
@@ -329,10 +343,19 @@ pub struct MLAPublicKey {
 }
 
 impl MLAPublicKey {
-    pub fn deserialize_public_key(mut src: impl Read) -> Result<Self, Error> {
+    pub fn deserialize_public_key(src: impl Read) -> Result<Self, Error> {
+        let mut content = zeroizeable_read_to_end(src)?;
+        let lines = split_five_lines_without_buffering(&content)?;
+        if lines[0] != PUB_KEY_FILE_HEADER {
+            return Err(Error::DeserializationError);
+        }
+        if lines[4] != PUB_KEY_FILE_FOOTER {
+            return Err(Error::DeserializationError);
+        }
         let encryption_public_key =
-            MLAEncryptionPublicKey::deserialize_encryption_public_key(&mut src)?;
+            MLAEncryptionPublicKey::deserialize_encryption_public_key(lines[1])?;
         let signature_verification_public_key = MLASignatureVerificationPublicKey {};
+        content.zeroize();
         Ok(Self {
             encryption_public_key,
             signature_verification_public_key,
@@ -367,11 +390,15 @@ impl MLAPublicKey {
     }
 
     pub fn serialize_public_key<W: Write>(&self, mut dst: W) -> Result<(), Error> {
+        dst.write_all(PUB_KEY_FILE_HEADER)?;
+        dst.write_all(b"\r\n")?;
         self.encryption_public_key
             .serialize_encryption_public_key(&mut dst)?;
         self.signature_verification_public_key
             .serialize_signature_verification_public_key(&mut dst)?;
         self.opts.serialize_key_opts(&mut dst)?;
+        dst.write_all(PUB_KEY_FILE_FOOTER)?;
+        dst.write_all(b"\r\n")?;
         Ok(())
     }
 }
@@ -633,20 +660,20 @@ mod tests {
         assert!(matches!(result, Err(Error::DeserializationError)));
 
         // 2. Corrupted base64 (invalid characters)
-        let corrupted_base64 = b"DO NOT SEND THIS TO ANYONE - MLA PRIVATE DECRYPTION KEY !!@@##\n";
+        let corrupted_base64 = b"MLA PRIVATE DECRYPTION KEY !!@@##\n";
         let mut cursor = Cursor::new(&corrupted_base64[..]);
         let result = MLAPrivateKey::deserialize_private_key(&mut cursor);
         assert!(matches!(result, Err(Error::DeserializationError)));
 
         // 3. Wrong method ID length (simulate bad base64 with short method id bytes)
         // Here we craft a base64 string too short to contain a valid method ID.
-        let bad_method_id = b"DO NOT SEND THIS TO ANYONE - MLA PRIVATE DECRYPTION KEY QUFB\n";
+        let bad_method_id = b"MLA PRIVATE DECRYPTION KEY QUFB\n";
         let mut cursor = Cursor::new(&bad_method_id[..]);
         let result = MLAPrivateKey::deserialize_private_key(&mut cursor);
         assert!(matches!(result, Err(Error::DeserializationError)));
 
         // 4. Truncated base64 data
-        let truncated_data = b"DO NOT SEND THIS TO ANYONE - MLA PRIVATE DECRYPTION KEY bWxh\n";
+        let truncated_data = b"MLA PRIVATE DECRYPTION KEY bWxh\n";
         let mut cursor = Cursor::new(&truncated_data[..]);
         let result = MLAPrivateKey::deserialize_private_key(&mut cursor);
         assert!(matches!(result, Err(Error::DeserializationError)));
