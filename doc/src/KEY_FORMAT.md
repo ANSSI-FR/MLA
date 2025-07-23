@@ -16,9 +16,9 @@ A private key file is an ASCII file, which may use `mlapriv` as file extension. 
 * The only valid `EncMethodId` for the moment is the ASCII `mla-kem-private-x25519-mlkem1024`.
 * The only valid `SigMethodId` for the moment is the ASCII `mla-signature-private-ed25519-mldsa87`.
 * `X25519PrivKey` is a X25519 private key as specified in RFC 7748.
-* `MLKEM1024PrivKey` is an ML-KEM-1024 private key as specified in FIPS 203.
+* `MLKEM1024PrivKey` is an ML-KEM-1024 private key seed (d,z) as specified in FIPS 203 algorithm 16. d and z are concatenated in this order.
 * `Ed25519PrivKey` is a Ed25519 private key as specified in RFC 8032.
-* `MLDSA87PrivKey` is an ML-DSA-87 private key as specified in FIPS 204.
+* `MLDSA87PrivKey` is an ML-DSA-87 private key seed xi as specified in FIPS 204 algorithm 6.
 
 For `PrivEncOpts` and `PrivSigOpts`, refer to below generic explanation for `KeyOpts`.
 
