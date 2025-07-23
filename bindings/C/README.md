@@ -1,6 +1,6 @@
 # MLA C/CPP Bindings
 
-This project provides C and CPP bindings for the MLA archive format.
+This project provides C and CPP bindings for the MLA format.
 
 ## How-to
 
@@ -33,7 +33,7 @@ Notes: when linking with `mla.lib`, `ntdll.lib` is also needed.
 
 ## Example
 
-* Creating a new MLA archive (from [this file](tests/linux-gcc-g++/create.c) - Windows example [here](tests/windows-msvc/src/main.c))
+* Creating a new MLA (from [this file](tests/linux-gcc-g++/create.c) - Windows example [here](tests/windows-msvc/src/main.c))
 
 ```C
 // Called to out Archive content to the actual output
@@ -120,3 +120,7 @@ The bindings are [tested](tests). These tests might also provides some example o
 
 They are launched by the CI.
 One can locally launch them using the available `Makefile` and Visual Studio projects.
+
+## Caveat
+
+Current implementation uses `Box<dyn Trait>` Rust's feature to handle MLA reads and writes. Hence, Rust compiler can't know at compile time if underneath types implement a Trait, notably `Send`. Thus, MLA `Send` feature is not available as Rust compiler can't ensure thread safety.
