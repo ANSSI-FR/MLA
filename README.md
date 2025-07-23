@@ -99,7 +99,15 @@ mlar cat -k test_mlakey.priv -i archive_weird.mla --raw-escaped-names c%3a%2f%00
 
 * through Cargo: `cargo install mlar`
 * using the [latest release](https://github.com/ANSSI-FR/MLA/releases) for supported operating systems
+  * The released binaries are built with `opt-level = 3`, enabling great performance
 
+For even higher performance, you can build a native-optimized binary (not portable), for example on a Linux machine:
+
+```bash
+RUSTFLAGS="-Ctarget-cpu=native" cargo build --release --target x86_64-unknown-linux-musl
+```
+
+Note: Native builds are optimized for your machine's CPU and **are not portable**. Use them only when running on the same machine you build on.
 
 API usage
 =
