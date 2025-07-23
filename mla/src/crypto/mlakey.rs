@@ -16,7 +16,7 @@ pub use crate::crypto::hybrid::{MLADecryptionPrivateKey, MLAEncryptionPublicKey}
 pub use crate::crypto::hybrid::{generate_keypair, generate_keypair_from_seed};
 
 use crate::MLADeserialize;
-use crate::crypto::hybrid::{MLKEMDecapsulationKey, MLKEMEncapsulationKey};
+use crate::crypto::hybrid::{MLKEM_DZ_SIZE, MLKEMEncapsulationKey, MLKEMSeed};
 use crate::errors::Error;
 use crate::layers::encrypt::get_crypto_rng;
 
@@ -141,21 +141,15 @@ impl MLADecryptionPrivateKey {
             .map_err(|_| Error::DeserializationError)?;
         let private_key_ecc = StaticSecret::from(serialized_ecc_key);
         serialized_ecc_key.zeroize();
-        let mut serialized_mlkem_key = Vec::new();
+        let mut serialized_mlkem_seed = [0; MLKEM_DZ_SIZE];
         cursor
-            .read_to_end(&mut serialized_mlkem_key)
+            .read_exact(&mut serialized_mlkem_seed)
             .map_err(|_| Error::DeserializationError)?;
-        let private_key_ml = MLKEMDecapsulationKey::from_bytes(
-            serialized_mlkem_key
-                .as_slice()
-                .try_into()
-                .map_err(|_| Error::DeserializationError)?,
-        );
+        let private_key_seed_ml = MLKEMSeed::from_d_z_64(serialized_mlkem_seed);
         cursor.into_inner().zeroize();
-        serialized_mlkem_key.zeroize();
         Ok(Self {
             private_key_ecc,
-            private_key_ml,
+            private_key_seed_ml,
         })
     }
 
@@ -167,7 +161,7 @@ impl MLADecryptionPrivateKey {
         b64data.extend_from_slice(DEC_METHOD_ID_0_PRIV);
         b64data.extend_from_slice(&[0u8; KEY_OPTS_LEN]); // key opts, empty length for the moment
         b64data.extend_from_slice(&self.private_key_ecc.to_bytes());
-        b64data.extend_from_slice(&self.private_key_ml.as_bytes());
+        b64data.extend_from_slice(self.private_key_seed_ml.to_d_z_64().as_ref());
         let mut encoded = base64_encode(&b64data);
         dst.write_all(&encoded)?;
         encoded.zeroize();
@@ -207,7 +201,7 @@ impl MLAPrivateKey {
     /// If zeroizing key memory matters to you, ensure that the `Read`
     /// implementation of your argument does not use temporary buffers
     /// and do not forget to zeroize the eventual backing data after this call.
-    /// 
+    ///
     /// The serialization format is described in `doc/src/KEY_FORMAT.md`.
     pub fn deserialize_private_key(src: impl Read) -> Result<Self, Error> {
         let mut content = zeroizeable_read_to_end(src)?;
@@ -438,7 +432,10 @@ fn apply_derive(path: &[u8], src: MLADecryptionPrivateKey) -> [u8; 32] {
     let (dprf_salt, _hkdf) = Hkdf::<Sha512>::extract(None, src.private_key_ecc.as_bytes());
 
     // `salt` being uniformly random, HKDF can be viewed as a dual-PRF
-    let hkdf: Hkdf<Sha512> = Hkdf::new(Some(&dprf_salt), &src.private_key_ml.as_bytes());
+    let hkdf: Hkdf<Sha512> = Hkdf::new(
+        Some(&dprf_salt),
+        src.private_key_seed_ml.to_d_z_64().as_ref(),
+    );
     let mut seed = [0u8; SEED_LEN];
     hkdf.expand_multi_info(&[DERIVE_PATH_SALT, path], &mut seed)
         .expect("Unexpected error while derivating along the path");
@@ -500,7 +497,11 @@ mod tests {
         );
         let mut rng = rand::rngs::OsRng {};
         let (encap, key) = pub_key.public_key_ml.encapsulate(&mut rng).unwrap();
-        let key_decap = priv_key.private_key_ml.decapsulate(&encap).unwrap();
+        let key_decap = priv_key
+            .private_key_seed_ml
+            .to_privkey()
+            .decapsulate(&encap)
+            .unwrap();
         assert_eq!(key, key_decap);
     }
 
@@ -556,7 +557,6 @@ mod tests {
     #[test]
     /// Naive checks for "apply_derive", to avoid naive erros
     fn check_apply_derive() {
-        use crate::crypto::hybrid::MLKEMDecapsulationKey;
         use std::collections::HashSet;
         use x25519_dalek::StaticSecret;
 
@@ -582,7 +582,7 @@ mod tests {
             for j in 0..1 {
                 priv_keys.push(MLADecryptionPrivateKey {
                     private_key_ecc: StaticSecret::from([i as u8; 32]),
-                    private_key_ml: MLKEMDecapsulationKey::from_bytes(&[j as u8; 3168].into()),
+                    private_key_seed_ml: MLKEMSeed::from_d_z_64([j as u8; 64]),
                 });
             }
         }
