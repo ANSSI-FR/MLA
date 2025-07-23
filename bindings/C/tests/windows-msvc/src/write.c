@@ -36,87 +36,107 @@ static int32_t callback_flush(void* context)
 
 int test_writer()
 {
-    FILE *kf;
+    FILE *kf = NULL;
+    char *szPubkey = NULL;
+    HANDLE hOutFile = INVALID_HANDLE_VALUE;
+    MLAStatus status = MLA_STATUS(MLA_STATUS_SUCCESS);
+    MLAWriterConfigHandle hConfig = NULL;
+    MLAArchiveHandle hArchive = NULL;
+    MLAArchiveFileHandle hFile = NULL;
+    long keySize = 0;
 
-    if (fopen_s(&kf, "../../../../samples/test_mlakey_pub.pem", "r") != 0)
+    if (fopen_s(&kf, "../../../../samples/test_mlakey_pub.pem", "rb") != 0)
     {
         fprintf(stderr, " [!] Could not open public key file\n");
         return errno;
     }
+
     if (fseek(kf, 0, SEEK_END))
     {
-        fprintf(stderr, " [!] Could not open public key file\n");
-        return errno;
+        fprintf(stderr, " [!] Could not seek in public key file\n");
+        status = (MLAStatus)errno;
+        goto cleanup;
     }
 
-    long keySize = ftell(kf);
-    char *szPubkey = (char *)malloc((size_t)keySize);
+    keySize = ftell(kf);
+    if (keySize <= 0)
+    {
+        fprintf(stderr, " [!] Invalid key file size\n");
+        status = (MLAStatus)1;
+        goto cleanup;
+    }
+
+    szPubkey = (char *)malloc((size_t)keySize);
+    if (!szPubkey)
+    {
+        fprintf(stderr, " [!] Memory allocation failed\n");
+        status = (MLAStatus)ENOMEM;
+        goto cleanup;
+    }
+
     rewind(kf);
-    if (keySize != (long)fread(szPubkey, sizeof *szPubkey, keySize, kf))
+    if ((long)fread(szPubkey, 1, keySize, kf) != keySize)
     {
         fprintf(stderr, " [!] Could not read public key file\n");
-        return ferror(kf);
+        status = (MLAStatus)ferror(kf);
+        goto cleanup;
     }
-
-    HANDLE hOutFile = INVALID_HANDLE_VALUE;
 
     hOutFile = CreateFileA("test.mla", GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
     if (hOutFile == INVALID_HANDLE_VALUE)
     {
         fprintf(stderr, " [!] Could not create output file: error %lu\n", GetLastError());
-        return 1;
+        status = (MLAStatus)1;
+        goto cleanup;
     }
 
-    MLAStatus status;
-    MLAWriterConfigHandle hConfig = NULL;
     status = create_mla_writer_config_with_public_keys_pem(&hConfig, szPubkey);
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
     {
         fprintf(stderr, " [!] Public key set failed with code %" PRIX64 "\n", (uint64_t)status);
-        return (int)status;
+        goto cleanup;
     }
 
-    MLAArchiveHandle hArchive = NULL;
     status = mla_archive_new(&hConfig, &callback_write, &callback_flush, (void*)hOutFile, &hArchive);
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
     {
         fprintf(stderr, " [!] Archive creation failed with code %" PRIX64 "\n", (uint64_t)status);
-        return (int)status;
+        goto cleanup;
     }
 
-    MLAArchiveFileHandle hFile = NULL;
     status = mla_archive_start_entry_with_path_as_name(hArchive, "test.txt", &hFile);
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
     {
         fprintf(stderr, " [!] File creation failed with code %" PRIX64 "\n", (uint64_t)status);
-        return 1;
+        goto cleanup;
     }
 
     status = mla_archive_file_append(hArchive, hFile, (const uint8_t*)"Hello, World!\n", (uint32_t)strlen("Hello, World!\n"));
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
     {
         fprintf(stderr, " [!] File write failed with code %" PRIX64 "\n", (uint64_t)status);
-        return 1;
+        goto cleanup;
     }
 
     status = mla_archive_file_close(hArchive, &hFile);
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
     {
         fprintf(stderr, " [!] File close failed with code %" PRIX64 "\n", (uint64_t)status);
-        return 1;
+        goto cleanup;
     }
 
     status = mla_archive_close(&hArchive);
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
     {
         fprintf(stderr, " [!] Archive close failed with code %" PRIX64 "\n", (uint64_t)status);
-        return 1;
+        goto cleanup;
     }
 
-    CloseHandle(hOutFile);
+    printf("SUCCESS\n");
 
-    free(szPubkey);
-    fclose(kf);
-    
-    return 0;
+cleanup:
+    if (szPubkey) free(szPubkey);
+    if (kf) fclose(kf);
+    if (hOutFile != INVALID_HANDLE_VALUE) CloseHandle(hOutFile);
+    return (int)status;
 }
