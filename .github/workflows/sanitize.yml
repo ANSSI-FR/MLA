@@ -36,10 +36,8 @@ jobs:
     # Ensure CHANGELOGs respect the KeepAChangelog format
     strategy:
       matrix:
-        changelog: [curve25519-parser, mla, mlar]
+        changelog: [mla, mlar]
         include:
-          - changelog: curve25519-parser
-            path: curve25519-parser
           - changelog: mla
             path: mla
           - changelog: mlar
