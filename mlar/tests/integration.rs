@@ -53,7 +53,10 @@ fn setup() -> TestFS {
 
     // `file2.bin`: Use full charset for bad compression
     let mut rng: StdRng = SeedableRng::from_seed([0u8; 32]);
-    let data: Vec<u8> = StandardUniform.sample_iter(&mut rng).take(SIZE_FILE2).collect();
+    let data: Vec<u8> = StandardUniform
+        .sample_iter(&mut rng)
+        .take(SIZE_FILE2)
+        .collect();
     tmp_file2.write_binary(data.as_slice()).unwrap();
 
     // `file3.bin`: tiny file
