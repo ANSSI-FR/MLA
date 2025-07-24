@@ -1,6 +1,8 @@
 #include <Windows.h>
 #include <stdio.h>
 #include <inttypes.h>
+#include <errno.h>
+
 #ifdef __cplusplus
 #include "mla.hpp"
 #define MLA_STATUS(x) MLAStatus::x
@@ -37,21 +39,25 @@ static int32_t callback_flush(void* context)
 int test_writer()
 {
     FILE *kf = NULL;
-    char *szPubkey = NULL;
+    char *keyData = NULL;
+    const char *keys[1] = { NULL };
+
     HANDLE hOutFile = INVALID_HANDLE_VALUE;
     MLAStatus status = MLA_STATUS(MLA_STATUS_SUCCESS);
     MLAWriterConfigHandle hConfig = NULL;
     MLAArchiveHandle hArchive = NULL;
     MLAArchiveFileHandle hFile = NULL;
     long keySize = 0;
+    size_t bytesRead = 0;
+    const char *message = NULL;
 
-    if (fopen_s(&kf, "../../../../samples/test_mlakey.mlapub", "rb") != 0)
+    if (fopen_s(&kf, "../../../../samples/test_mlakey.mlapub", "r") != 0)
     {
         fprintf(stderr, " [!] Could not open public key file\n");
         return errno;
     }
 
-    if (fseek(kf, 0, SEEK_END))
+    if (fseek(kf, 0, SEEK_END) != 0)
     {
         fprintf(stderr, " [!] Could not seek in public key file\n");
         status = (MLAStatus)errno;
@@ -66,8 +72,9 @@ int test_writer()
         goto cleanup;
     }
 
-    szPubkey = (char *)malloc((size_t)keySize);
-    if (!szPubkey)
+    // Allocate space +1 for null terminator
+    keyData = (char *)malloc((size_t)keySize + 1);
+    if (!keyData)
     {
         fprintf(stderr, " [!] Memory allocation failed\n");
         status = (MLAStatus)ENOMEM;
@@ -75,12 +82,18 @@ int test_writer()
     }
 
     rewind(kf);
-    if ((long)fread(szPubkey, 1, keySize, kf) != keySize)
+
+    bytesRead = fread(keyData, 1, keySize, kf);
+    if (bytesRead != (size_t)keySize)
     {
         fprintf(stderr, " [!] Could not read public key file\n");
         status = (MLAStatus)ferror(kf);
         goto cleanup;
     }
+
+    keyData[bytesRead] = '\0';  // Null terminate for string safety
+
+    keys[0] = (const char *)keyData;
 
     hOutFile = CreateFileA("test.mla", GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
     if (hOutFile == INVALID_HANDLE_VALUE)
@@ -90,7 +103,7 @@ int test_writer()
         goto cleanup;
     }
 
-    status = create_mla_writer_config_with_public_keys(&hConfig, szPubkey);
+    status = create_mla_writer_config_with_public_keys(&hConfig, keys, 1);
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
     {
         fprintf(stderr, " [!] Public key set failed with code %" PRIX64 "\n", (uint64_t)status);
@@ -111,7 +124,8 @@ int test_writer()
         goto cleanup;
     }
 
-    status = mla_archive_file_append(hArchive, hFile, (const uint8_t*)"Hello, World!\n", (uint32_t)strlen("Hello, World!\n"));
+    message = "Hello, World!\n";
+    status = mla_archive_file_append(hArchive, hFile, (const uint8_t*)message, (uint32_t)strlen(message));
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
     {
         fprintf(stderr, " [!] File write failed with code %" PRIX64 "\n", (uint64_t)status);
@@ -135,7 +149,7 @@ int test_writer()
     printf("SUCCESS\n");
 
 cleanup:
-    if (szPubkey) free(szPubkey);
+    if (keyData) free(keyData);
     if (kf) fclose(kf);
     if (hOutFile != INVALID_HANDLE_VALUE) CloseHandle(hOutFile);
     return (int)status;
