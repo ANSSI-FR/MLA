@@ -1,6 +1,8 @@
 #include <Windows.h>
 #include <stdio.h>
 #include <inttypes.h>
+#include <stdlib.h>
+#include <string.h>
 #ifdef __cplusplus
 #include "mla.hpp"
 #define MLA_STATUS(x) MLAStatus::x
@@ -27,12 +29,11 @@ static int32_t read_cb(uint8_t *buffer, uint32_t buffer_len, void *context, uint
 static int32_t seek_cb(int64_t offset, int32_t whence, void *context, uint64_t *new_pos)
 {
     FILE *f = (FILE *)context;
-    if (!_fseeki64(f, offset, whence))
+    if (!_fseeki64(f, offset, whence) == 0)
     {
         *new_pos = (uint64_t)_ftelli64(f);
         return 0;
     }
-
     return errno;
 }
 
@@ -74,7 +75,10 @@ static int32_t file_cb(void *context, const uint8_t *filename, uintptr_t filenam
 
     FILE *ofile;
     if (fopen_s(&ofile, szOutput, "wb") != 0)
+    {
+        free(szOutput);
         return -2;
+    }
 
     free(szOutput);
 
@@ -90,10 +94,10 @@ int test_reader_info()
     MLAStatus status;
 
     ArchiveInfo archive_info;
-    HANDLE hFile = CreateFile(TEXT("../../../../samples/archive_v2.mla"), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    HANDLE hFile = CreateFile(TEXT("../../../../samples/archive_v2.mla"), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (hFile == INVALID_HANDLE_VALUE)
     {
-        fprintf(stderr, " [!] Cannot open file: %d\n", GetLastError());
+        fprintf(stderr, " [!] Cannot open file: %lu\n", GetLastError());
         return 1;
     }
 
@@ -113,7 +117,7 @@ int test_reader_info()
 
     if (archive_info.is_encryption_enabled != 1)
     {
-        fprintf(stderr, " [!] Encryption should be enabled");
+        fprintf(stderr, " [!] Encryption should be enabled\n");
         CloseHandle(hFile);
         return 2;
     }
@@ -125,24 +129,23 @@ int test_reader_info()
 
 int test_reader_extract()
 {
-    FILE *kf;
+    FILE *kf = NULL;
 
-    if (fopen_s(&kf, "../../../../samples/test_mlakey_archive_v2.mlapriv", "rb") != 0)
+    if (fopen_s(&kf, "../../../../samples/test_mlakey_archive_v2.mlapriv", "r") != 0)
     {
         fprintf(stderr, " [!] Could not open private key file\n");
         return errno;
     }
-    if (fseek(kf, 0, SEEK_END))
+    if (fseek(kf, 0, SEEK_END) != 0)
     {
-        fprintf(stderr, " [!] Could not open private key file\n");
+        fprintf(stderr, " [!] Could not seek private key file\n");
         fclose(kf);
         return errno;
     }
 
-    CreateDirectory(TEXT("extracted"), NULL);
-
     long keySize = ftell(kf);
-    if (keySize <= 0) {
+    if (keySize <= 0)
+    {
         fprintf(stderr, " [!] Invalid key file size\n");
         fclose(kf);
         return 1;
@@ -150,24 +153,30 @@ int test_reader_extract()
 
     rewind(kf);
 
-    uint8_t *keyData = (uint8_t *)malloc((size_t)keySize);
-    if (!keyData) {
+    // Allocate buffer with an extra byte for null terminator
+    char *keyData = (char *)malloc((size_t)keySize + 1);
+    if (!keyData)
+    {
         fprintf(stderr, " [!] Memory allocation failed\n");
         fclose(kf);
         return ENOMEM;
     }
 
-    if (keySize != (long)fread(keyData, sizeof *keyData, keySize, kf))
+    size_t readLen = fread(keyData, 1, keySize, kf);
+    if (readLen != (size_t)keySize)
     {
         fprintf(stderr, " [!] Could not read private key file\n");
         free(keyData);
+        fclose(kf);
         return ferror(kf);
     }
+
+    keyData[keySize] = '\0'; // Null terminate
 
     fclose(kf);
 
     MLAReaderConfigHandle hConfig = NULL;
-    const char *const keys[] = {(const char *const) keyData};
+    const char *const keys[] = {(const char *const)keyData};
     MLAStatus status = create_mla_reader_config_with_private_keys(&hConfig, keys, 1);
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
     {
@@ -176,13 +185,15 @@ int test_reader_extract()
         return (int)status;
     }
 
-    FILE *f;
-    if (fopen_s(&f, "../../../../samples/archive_v2.mla", "rb"))
+    FILE *f = NULL;
+    if (fopen_s(&f, "../../../../samples/archive_v2.mla", "rb") != 0)
     {
-        fprintf(stderr, " [!] Cannot open file: %d\n", errno);
+        fprintf(stderr, " [!] Cannot open archive file: %d\n", errno);
         free(keyData);
         return 1;
     }
+
+    CreateDirectory(TEXT("extracted"), NULL);
 
     status = mla_roarchive_extract(&hConfig, read_cb, seek_cb, file_cb, 0, f);
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
