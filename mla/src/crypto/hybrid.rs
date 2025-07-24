@@ -3,19 +3,20 @@ use std::io::{Read, Write};
 use crate::crypto::aesgcm::{ConstantTimeEq, KEY_SIZE, Key, TAG_LENGTH};
 use crate::crypto::hpke::{DHKEMCiphertext, dhkem_decap, key_schedule_base_hybrid_kem_recipient};
 use crate::errors::{ConfigError, Error};
-use crate::layers::encrypt::get_crypto_rng;
 use crate::{MLADeserialize, MLASerialize};
 use hkdf::Hkdf;
 use kem::{Decapsulate, Encapsulate};
-use ml_kem::{KemCore, MlKem1024};
+use ml_kem::{B32, KemCore, MlKem1024};
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use rand_chacha::rand_core::CryptoRngCore;
 use sha2::Sha512;
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use super::hpke::dhkem_encap_from_rng;
+
+pub(crate) const MLKEM_DZ_SIZE: usize = 64;
 
 /// `info` to bound the HPKE usage to the MLA Recipient derivation
 const HPKE_INFO_RECIPIENT: &[u8] = b"MLA Recipient";
@@ -187,6 +188,78 @@ impl HybridMultiRecipientEncapsulatedKey {
     }
 }
 
+/// Represents a 64-byte seed split into two 32-byte parts (`d` and `z`).
+///
+/// This seed is used internally in the ML-KEM encryption scheme for
+/// deterministic key derivation.
+#[derive(Clone)]
+pub(crate) struct MLKEMSeed {
+    d: B32,
+    z: B32,
+}
+
+impl MLKEMSeed {
+    fn generate_from_csprng(mut csprng: impl CryptoRngCore) -> Self {
+        let mut d_array = [0u8; 32];
+        csprng.fill_bytes(&mut d_array);
+        let mut z_array = [0u8; 32];
+        csprng.fill_bytes(&mut z_array);
+        Self::from_d_z_32(d_array, z_array)
+    }
+
+    fn from_d_z_32(d: [u8; 32], z: [u8; 32]) -> Self {
+        let d = B32::from(d);
+        let z = B32::from(z);
+        Self { d, z }
+    }
+
+    /// Creates an MLKEMSeed from a 64-byte array `[d || z]`.
+    pub(crate) fn from_d_z_64(mut dz: [u8; 64]) -> Self {
+        let d = B32::try_from(&dz[0..32]).unwrap(); // should not fail as length is 64
+        let z = B32::try_from(&dz[32..64]).unwrap(); // should not fail as length is 64
+        dz.zeroize();
+        Self { d, z }
+    }
+
+    pub(crate) fn to_d_z_64(&self) -> Zeroizing<[u8; 64]> {
+        let mut dz64 = [0u8; 64];
+        let dpart = &mut dz64[0..32];
+        dpart.copy_from_slice(self.d.as_slice());
+        let zpart = &mut dz64[32..];
+        zpart.copy_from_slice(self.z.as_slice());
+        Zeroizing::new(dz64)
+    }
+
+    pub(crate) fn to_privkey(&self) -> MLKEMDecapsulationKey {
+        MlKem1024::generate_deterministic(&self.d, &self.z).0
+    }
+
+    pub(crate) fn to_pubkey(&self) -> MLKEMEncapsulationKey {
+        MlKem1024::generate_deterministic(&self.d, &self.z).1
+    }
+}
+
+impl PartialEq for MLKEMSeed {
+    fn eq(&self, other: &Self) -> bool {
+        self.d.ct_eq(&other.d).into() && self.z.ct_eq(&other.z).into()
+    }
+}
+
+impl Zeroize for MLKEMSeed {
+    fn zeroize(&mut self) {
+        self.d.zeroize();
+        self.z.zeroize();
+    }
+}
+
+impl Drop for MLKEMSeed {
+    fn drop(&mut self) {
+        self.zeroize();
+    }
+}
+
+impl ZeroizeOnDrop for MLKEMSeed {}
+
 /// Private key for hybrid cryptography.
 ///
 /// Made of:
@@ -195,19 +268,21 @@ impl HybridMultiRecipientEncapsulatedKey {
 ///
 /// Supports KEM decapsulation
 #[derive(Clone)]
-pub struct HybridPrivateKey {
+pub struct MLADecryptionPrivateKey {
     pub(crate) private_key_ecc: X25519StaticSecret,
-    pub(crate) private_key_ml: MLKEMDecapsulationKey,
+    pub(crate) private_key_seed_ml: MLKEMSeed,
 }
 
-impl Drop for HybridPrivateKey {
+impl Drop for MLADecryptionPrivateKey {
     fn drop(&mut self) {
         self.private_key_ecc.zeroize();
         // ml-kem zeroization is done natively on drop cf. https://github.com/RustCrypto/KEMs/commit/a75d842b697aa54477d017c0c7c5da661e689be3
     }
 }
 
-impl Decapsulate<HybridMultiRecipientEncapsulatedKey, HybridKemSharedSecret> for HybridPrivateKey {
+impl Decapsulate<HybridMultiRecipientEncapsulatedKey, HybridKemSharedSecret>
+    for MLADecryptionPrivateKey
+{
     type Error = ConfigError;
 
     fn decapsulate(
@@ -219,7 +294,8 @@ impl Decapsulate<HybridMultiRecipientEncapsulatedKey, HybridKemSharedSecret> for
             let ss_ecc = dhkem_decap(&recipient.ct_ecc, &self.private_key_ecc)
                 .or(Err(ConfigError::DHKEMComputationError))?;
             let ss_ml = self
-                .private_key_ml
+                .private_key_seed_ml
+                .to_privkey()
                 .decapsulate(&recipient.ct_ml.into())
                 .or(Err(ConfigError::MLKEMComputationError))?;
 
@@ -260,7 +336,7 @@ impl Decapsulate<HybridMultiRecipientEncapsulatedKey, HybridKemSharedSecret> for
 /// - an X25519 key, for ECC (pre-quantum) cryptography
 /// - an ML-KEM 1024 key, for post-quantum cryptography
 #[derive(Clone)]
-pub struct HybridPublicKey {
+pub struct MLAEncryptionPublicKey {
     pub(crate) public_key_ecc: X25519PublicKey,
     pub(crate) public_key_ml: MLKEMEncapsulationKey,
 }
@@ -270,7 +346,7 @@ pub struct HybridPublicKey {
 /// Support KEM encapsulation
 #[derive(Default)]
 pub(crate) struct HybridMultiRecipientsPublicKeys {
-    pub(crate) keys: Vec<HybridPublicKey>,
+    pub(crate) keys: Vec<MLAEncryptionPublicKey>,
 }
 
 impl Encapsulate<HybridMultiRecipientEncapsulatedKey, HybridKemSharedSecret>
@@ -336,33 +412,31 @@ impl Encapsulate<HybridMultiRecipientEncapsulatedKey, HybridKemSharedSecret>
 /// You should probably rather use the `generate_keypair` function.
 ///
 /// Generate an Hybrid key pair using the provided seed
-pub fn generate_keypair_from_seed(seed: [u8; 32]) -> (HybridPrivateKey, HybridPublicKey) {
+pub fn generate_keypair_from_seed(
+    seed: [u8; 32],
+) -> (MLADecryptionPrivateKey, MLAEncryptionPublicKey) {
     let mut csprng = ChaCha20Rng::from_seed(seed);
     generate_keypair_from_rng(&mut csprng)
 }
 
 /// Generate an Hybrid key pair using the provided csprng
-fn generate_keypair_from_rng(
+pub(crate) fn generate_keypair_from_rng(
     mut csprng: impl CryptoRngCore,
-) -> (HybridPrivateKey, HybridPublicKey) {
+) -> (MLADecryptionPrivateKey, MLAEncryptionPublicKey) {
     let private_key_ecc = X25519StaticSecret::random_from_rng(&mut csprng);
     let public_key_ecc = X25519PublicKey::from(&private_key_ecc);
-    let (private_key_ml, public_key_ml) = MlKem1024::generate(&mut csprng);
+    let private_key_seed_ml = MLKEMSeed::generate_from_csprng(&mut csprng);
+    let public_key_ml = private_key_seed_ml.to_pubkey();
     (
-        HybridPrivateKey {
+        MLADecryptionPrivateKey {
             private_key_ecc,
-            private_key_ml,
+            private_key_seed_ml,
         },
-        HybridPublicKey {
+        MLAEncryptionPublicKey {
             public_key_ecc,
             public_key_ml,
         },
     )
-}
-
-/// Generate an Hybrid key pair using a CSPRNG
-pub fn generate_keypair() -> (HybridPrivateKey, HybridPublicKey) {
-    generate_keypair_from_rng(get_crypto_rng())
 }
 
 #[cfg(test)]
@@ -373,6 +447,8 @@ mod tests {
     use rand::SeedableRng;
     use rand_chacha::ChaChaRng;
     use std::collections::HashSet;
+
+    use crate::crypto::mlakey::generate_mla_keypair;
 
     use super::*;
 
@@ -470,14 +546,15 @@ mod tests {
         // Create public and private keys
         let private_key_ecc = X25519StaticSecret::from(csprng.r#gen::<[u8; 32]>());
         let public_key_ecc = X25519PublicKey::from(&private_key_ecc);
-        let (private_key_ml, public_key_ml) = MlKem1024::generate(&mut csprng);
+        let private_key_seed_ml = MLKEMSeed::generate_from_csprng(&mut csprng);
+        let public_key_ml = private_key_seed_ml.to_pubkey();
 
         // Create hybrid public and private keys
-        let hybrid_private_key = HybridPrivateKey {
+        let hybrid_private_key = MLADecryptionPrivateKey {
             private_key_ecc,
-            private_key_ml,
+            private_key_seed_ml,
         };
-        let hybrid_public_key = HybridPublicKey {
+        let hybrid_public_key = MLAEncryptionPublicKey {
             public_key_ecc,
             public_key_ml,
         };
@@ -512,14 +589,15 @@ mod tests {
             // Create public and private keys
             let private_key_ecc = X25519StaticSecret::from(csprng.r#gen::<[u8; 32]>());
             let public_key_ecc = X25519PublicKey::from(&private_key_ecc);
-            let (private_key_ml, public_key_ml) = MlKem1024::generate(&mut csprng);
+            let private_key_seed_ml = MLKEMSeed::generate_from_csprng(&mut csprng);
+            let public_key_ml = private_key_seed_ml.to_pubkey();
 
             // Create hybrid public and private keys
-            let hybrid_private_key = HybridPrivateKey {
+            let hybrid_private_key = MLADecryptionPrivateKey {
                 private_key_ecc,
-                private_key_ml,
+                private_key_seed_ml,
             };
-            let hybrid_public_key = HybridPublicKey {
+            let hybrid_public_key = MLAEncryptionPublicKey {
                 public_key_ecc,
                 public_key_ml,
             };
@@ -552,8 +630,9 @@ mod tests {
         // Create initial materials
         let private_key_ecc = X25519StaticSecret::from(csprng.r#gen::<[u8; 32]>());
         let public_key_ecc = X25519PublicKey::from(&private_key_ecc);
-        let (_private_key_ml, public_key_ml) = MlKem1024::generate(&mut csprng);
-        let hybrid_public_key = HybridPublicKey {
+        let private_key_seed_ml = MLKEMSeed::generate_from_csprng(&mut csprng);
+        let public_key_ml = private_key_seed_ml.to_pubkey();
+        let hybrid_public_key = MLAEncryptionPublicKey {
             public_key_ecc,
             public_key_ml,
         };
@@ -582,16 +661,29 @@ mod tests {
     /// Test the generation of a key pair
     #[test]
     fn test_generate_keypair() {
-        let (private_key, public_key) = generate_keypair();
+        let (private_key, public_key) = generate_mla_keypair();
 
         // Ensure the ECC private key correspond to the ECC public key
-        let public_key_ecc = X25519PublicKey::from(&private_key.private_key_ecc);
-        assert_eq!(public_key_ecc, public_key.public_key_ecc);
+        let public_key_ecc =
+            X25519PublicKey::from(&private_key.get_decryption_private_key().private_key_ecc);
+        assert_eq!(
+            public_key_ecc,
+            public_key.get_encryption_public_key().public_key_ecc
+        );
 
         // Ensure the ML private key correspond to the ML public key
         let mut rng = ChaChaRng::from_entropy();
-        let (encap, key) = public_key.public_key_ml.encapsulate(&mut rng).unwrap();
-        let key_decap = private_key.private_key_ml.decapsulate(&encap).unwrap();
+        let (encap, key) = public_key
+            .get_encryption_public_key()
+            .public_key_ml
+            .encapsulate(&mut rng)
+            .unwrap();
+        let key_decap = private_key
+            .get_decryption_private_key()
+            .private_key_seed_ml
+            .to_privkey()
+            .decapsulate(&encap)
+            .unwrap();
         assert_eq!(key, key_decap);
     }
 
@@ -607,7 +699,10 @@ mod tests {
             private_key.private_key_ecc.to_bytes(),
             private_key2.private_key_ecc.to_bytes()
         );
-        assert_eq!(private_key.private_key_ml, private_key2.private_key_ml);
+        assert_eq!(
+            private_key.private_key_seed_ml.to_d_z_64(),
+            private_key2.private_key_seed_ml.to_d_z_64()
+        );
         assert_eq!(
             public_key.public_key_ecc.as_bytes(),
             public_key2.public_key_ecc.as_bytes()
@@ -622,11 +717,51 @@ mod tests {
             private_key.private_key_ecc.to_bytes(),
             private_key3.private_key_ecc.to_bytes()
         );
-        assert_ne!(private_key.private_key_ml, private_key3.private_key_ml);
+        assert_ne!(
+            private_key.private_key_seed_ml.to_d_z_64(),
+            private_key3.private_key_seed_ml.to_d_z_64()
+        );
         assert_ne!(
             public_key.public_key_ecc.as_bytes(),
             public_key3.public_key_ecc.as_bytes()
         );
         assert_ne!(public_key.public_key_ml, public_key3.public_key_ml);
+    }
+
+    #[test]
+    fn test_seed_to_and_from_dz64() {
+        let original_seed = MLKEMSeed::generate_from_csprng(&mut ChaCha20Rng::from_seed([0u8; 32]));
+        let dz64 = original_seed.to_d_z_64();
+        let recovered = MLKEMSeed::from_d_z_64(*dz64);
+        assert!(original_seed == recovered);
+    }
+
+    #[test]
+    fn test_seed_determinism() {
+        let d = [42u8; 32];
+        let z = [7u8; 32];
+        let seed1 = MLKEMSeed::from_d_z_32(d, z);
+        let seed2 = MLKEMSeed::from_d_z_32(d, z);
+        assert!(seed1 == seed2);
+    }
+
+    #[test]
+    fn test_seed_inequality() {
+        let seed1 = MLKEMSeed::from_d_z_32([1u8; 32], [2u8; 32]);
+        let seed2 = MLKEMSeed::from_d_z_32([3u8; 32], [4u8; 32]);
+        assert!(seed1 != seed2);
+    }
+
+    #[test]
+    fn test_seed_to_keypair_roundtrip() {
+        let seed = MLKEMSeed::generate_from_csprng(&mut ChaCha20Rng::from_seed([0u8; 32]));
+        let privkey = seed.to_privkey();
+        let pubkey = seed.to_pubkey();
+
+        let (expected_privkey, expected_pubkey) =
+            MlKem1024::generate_deterministic(&seed.d, &seed.z);
+
+        assert_eq!(privkey, expected_privkey);
+        assert_eq!(pubkey, expected_pubkey);
     }
 }

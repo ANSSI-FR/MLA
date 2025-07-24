@@ -13,6 +13,9 @@
 #define MLA_STATUS(x) (x)
 #endif
 
+// from samples/test_mlakey.mlariv
+const char * const szPrivkey = "REPLACE WITH PRIVATE KEY FROM SAMPLE";
+
 static int32_t read_cb(uint8_t *buffer, uint32_t buffer_len, void *context, uint32_t *bytes_read)
 {
     FILE *f = (FILE *)context;
@@ -83,53 +86,14 @@ static int32_t file_cb(void *context, const uint8_t *filename, uintptr_t filenam
 
 int main()
 {
-    FILE *kf = fopen("../../../../samples/test_mlakey_archive_v2.der", "r");
-    if (kf == NULL)
-    {
-        fprintf(stderr, " [!] Could not open private key file\n");
-        return errno;
-    }
-    if (fseek(kf, 0, SEEK_END))
-    {
-        fprintf(stderr, " [!] Could not open private key file\n");
-        fclose(kf);
-        return errno;
-    }
-
     mkdir("extracted", S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
 
-    long keySize = ftell(kf);
-    if (keySize <= 0) {
-        fprintf(stderr, " [!] Invalid key file size\n");
-        fclose(kf);
-        return 1;
-    }
-
-    rewind(kf);
-
-    uint8_t *keyData = malloc((size_t)keySize);
-    if (!keyData) {
-        fprintf(stderr, " [!] Memory allocation failed\n");
-        fclose(kf);
-        return ENOMEM;
-    }
-
-    if (keySize != (long)fread(keyData, sizeof *keyData, keySize, kf))
-    {
-        fprintf(stderr, " [!] Could not read private key file\n");
-        free(keyData);
-        return ferror(kf);
-    }
-
-    fclose(kf);
-
     MLAReaderConfigHandle hConfig = NULL;
-    const uint8_t *const keys[] = {(const uint8_t *const) keyData};
-    MLAStatus status = create_mla_reader_config_with_private_keys_der(&hConfig, keys, 1);
+    const char *const keys[] = {(const char *const) szPrivkey};
+    MLAStatus status = create_mla_reader_config_with_private_keys(&hConfig, keys, 1);
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
     {
         fprintf(stderr, " [!] Private key set failed with code %" PRIX64 "\n", (uint64_t)status);
-        free(keyData);
         return (int)status;
     }
 
@@ -137,7 +101,6 @@ int main()
     if (!f)
     {
         fprintf(stderr, " [!] Cannot open file: %d\n", errno);
-        free(keyData);
         return 1;
     }
 
@@ -146,11 +109,9 @@ int main()
     {
         fprintf(stderr, " [!] Archive read failed with code %" PRIX64 "\n", (uint64_t)status);
         fclose(f);
-        free(keyData);
         return (int)status;
     }
 
-    free(keyData);
     fclose(f);
 
     printf("SUCCESS\n");

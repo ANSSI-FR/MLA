@@ -33,23 +33,24 @@
 //!
 //! * Create an archive, with compression and encryption:
 //! ```rust
-//! use mla::crypto::mlakey::parse_mlakey_pubkey_pem;
+//! use mla::crypto::mlakey::MLAPublicKey;
 //! use mla::config::ArchiveWriterConfig;
 //! use mla::ArchiveWriter;
 //! use mla::entry::EntryName;
 //!
-//! const PUB_KEY: &[u8] = include_bytes!("../../samples/test_mlakey_pub.pem");
+//! const PUB_KEY: &[u8] = include_bytes!("../../samples/test_mlakey.mlapub");
 //!
 //! fn main() {
 //!     // Load the needed public key
-//!     let public_key = parse_mlakey_pubkey_pem(PUB_KEY).unwrap();
+//!     let pub_key = MLAPublicKey::deserialize_public_key(PUB_KEY).unwrap();
+//!     // In production, you may want to zeroize the real `PUB_KEY` or
+//!     // associated temporary values of its `Read` implementation here.
 //!
 //!     // Create an MLA Archive - Output only needs the Write trait.
 //!     // Here, a Vec is used but it would tipically be a `File` or a network socket.
 //!     let mut buf = Vec::new();
-//!     // Default is Compression + Encryption, to avoid mistakes
-//!     let config = ArchiveWriterConfig::with_public_keys(&[public_key]);
 //!     // The use of multiple public keys is supported
+//!     let config = ArchiveWriterConfig::with_public_keys(&[pub_key.get_encryption_public_key().clone()]);
 //!     // Create the Writer
 //!     let mut mla = ArchiveWriter::from_config(&mut buf, config).unwrap();
 //!
@@ -63,22 +64,20 @@
 //! ```
 //! * Add entries part per part, in a "concurrent" fashion:
 //! ```rust
-//! use mla::crypto::mlakey::parse_mlakey_pubkey_pem;
+//! use mla::crypto::mlakey::MLAPublicKey;
 //! use mla::config::ArchiveWriterConfig;
 //! use mla::ArchiveWriter;
 //! use mla::entry::EntryName;
 //!
-//! const PUB_KEY: &[u8] = include_bytes!("../../samples/test_mlakey_pub.pem");
+//! const PUB_KEY: &[u8] = include_bytes!("../../samples/test_mlakey.mlapub");
 //!
 //! fn main() {
 //!     // Load the needed public key
-//!     let public_key = parse_mlakey_pubkey_pem(PUB_KEY).unwrap();
+//!     let pub_key = MLAPublicKey::deserialize_public_key(PUB_KEY).unwrap();
 //!
 //!     // Create an MLA Archive - Output only needs the Write trait
 //!     let mut buf = Vec::new();
-//!
-//!     // Default is Compression + Encryption, to avoid mistakes
-//!     let config = ArchiveWriterConfig::with_public_keys(&[public_key]);
+//!     let config = ArchiveWriterConfig::with_public_keys(&[pub_key.get_encryption_public_key().clone()]);
 //!
 //!     // Create the Writer
 //!     let mut mla = ArchiveWriter::from_config(&mut buf, config).unwrap();
@@ -117,21 +116,21 @@
 //! ```
 //! * Read entries from an archive
 //! ```rust
-//! use mla::crypto::mlakey::parse_mlakey_privkey_der;
+//! use mla::crypto::mlakey::MLAPrivateKey;
 //! use mla::config::ArchiveReaderConfig;
 //! use mla::ArchiveReader;
 //! use std::io;
 //! use mla::entry::EntryName;
 //!
-//! const PRIV_KEY: &[u8] = include_bytes!("../../samples/test_mlakey_archive_v2.der");
+//! const PRIV_KEY: &[u8] = include_bytes!("../../samples/test_mlakey_archive_v2.mlapriv");
 //! const DATA: &[u8] = include_bytes!("../../samples/archive_v2.mla");
 //!
 //! fn main() {
 //!     // Get the private key
-//!     let private_key = parse_mlakey_privkey_der(PRIV_KEY).unwrap();
+//!     let priv_key = MLAPrivateKey::deserialize_private_key(PRIV_KEY).unwrap();
 //!
 //!     // Specify the key for the Reader
-//!     let config = ArchiveReaderConfig::with_private_keys(&[private_key]);
+//!     let config = ArchiveReaderConfig::with_private_keys(&[priv_key.get_decryption_private_key().clone()]);
 //!
 //!     // Read from buf, which needs Read + Seek
 //!     let buf = io::Cursor::new(DATA);
@@ -165,7 +164,7 @@ use std::io;
 use std::io::{Read, Seek, SeekFrom, Write};
 #[macro_use]
 extern crate bitflags;
-use crypto::hybrid::HybridPublicKey;
+use crypto::hybrid::MLAEncryptionPublicKey;
 use layers::compress::COMPRESSION_LAYER_MAGIC;
 use layers::encrypt::ENCRYPTION_LAYER_MAGIC;
 use layers::strip_head_tail::StripHeadTailReader;
@@ -176,6 +175,8 @@ use entry::{
     ArchiveEntry, ArchiveEntryDataReader, ArchiveEntryId, EntryName, deserialize_entry_name,
     serialize_entry_name,
 };
+
+mod base64;
 
 /// As the name spoils it, an MLA is made of several, independent, layers. The following section introduces the design ideas behind MLA. Please refer to [FORMAT.md](FORMAT.md) for a more formal description.
 ///
@@ -672,7 +673,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
     }
 
     /// Create an `ArchiveWriter` with a default config (encryption and compression with default level).
-    pub fn new(dest: W, public_keys: &[HybridPublicKey]) -> Result<Self, Error> {
+    pub fn new(dest: W, public_keys: &[MLAEncryptionPublicKey]) -> Result<Self, Error> {
         let config = ArchiveWriterConfig::with_public_keys(public_keys);
         Self::from_config(dest, config)
     }
@@ -1528,8 +1529,10 @@ pub mod info;
 
 #[cfg(test)]
 pub(crate) mod tests {
+    use crate::crypto::mlakey::{MLAPrivateKey, MLAPublicKey};
+
     use super::*;
-    use crypto::hybrid::{HybridPrivateKey, generate_keypair_from_seed};
+    use crypto::hybrid::{MLADecryptionPrivateKey, generate_keypair_from_seed};
     // use curve25519_parser::{parse_openssl_25519_privkey, parse_openssl_25519_pubkey};
     use rand::distributions::{Distribution, Standard};
     use rand::{RngCore, SeedableRng};
@@ -1594,8 +1597,7 @@ pub(crate) mod tests {
         let file = Vec::new();
         // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
         let (private_key, public_key) = generate_keypair_from_seed([0; 32]);
-        let mut mla = ArchiveWriter::new(file, std::slice::from_ref(&public_key))
-            .expect("Writer init failed");
+        let mut mla = ArchiveWriter::new(file, &[public_key]).expect("Writer init failed");
 
         let fake_file = vec![1, 2, 3, 4];
         mla.add_entry(
@@ -1646,8 +1648,8 @@ pub(crate) mod tests {
         interleaved: bool,
     ) -> (
         Vec<u8>,
-        HybridPrivateKey,
-        HybridPublicKey,
+        MLADecryptionPrivateKey,
+        MLAEncryptionPublicKey,
         Vec<(EntryName, Vec<u8>)>,
     ) {
         let (written_archive, privkey, pubkey, files_content, _, _) =
@@ -1662,8 +1664,8 @@ pub(crate) mod tests {
         interleaved: bool,
     ) -> (
         Vec<u8>,
-        HybridPrivateKey,
-        HybridPublicKey,
+        MLADecryptionPrivateKey,
+        MLAEncryptionPublicKey,
         Vec<(EntryName, Vec<u8>)>,
         HashMap<EntryName, ArchiveEntryId>,
         HashMap<ArchiveEntryId, EntryInfo>,
@@ -1797,7 +1799,7 @@ pub(crate) mod tests {
         let config_encrypt =
             ArchiveWriterConfig::with_public_keys(&[public_key.clone()]).without_compression();
         let config_compress = ArchiveWriterConfig::without_encryption();
-        let config_both = ArchiveWriterConfig::with_public_keys(&[public_key.clone()]);
+        let config_both = ArchiveWriterConfig::with_public_keys(&[public_key]);
 
         for (config, encryption) in [
             (config_nolayer, false),
@@ -2194,8 +2196,11 @@ pub(crate) mod tests {
         let file = Vec::new();
 
         // Use committed keys
-        let pem_pub: &'static [u8] = include_bytes!("../../samples/test_mlakey_archive_v2_pub.pem");
-        let pub_key = crypto::mlakey::parse_mlakey_pubkey_pem(pem_pub).unwrap();
+        let pub_bytes: &'static [u8] =
+            include_bytes!("../../samples/test_mlakey_archive_v2.mlapub");
+        let (pub_key, _) = MLAPublicKey::deserialize_public_key(pub_bytes)
+            .unwrap()
+            .get_public_keys();
 
         let mut config = ArchiveWriterConfig::with_public_keys(&[pub_key]);
         if let Some(cfg) = config.encryption_config.as_mut() {
@@ -2287,34 +2292,30 @@ pub(crate) mod tests {
         assert_eq!(
             Sha256::digest(&raw_mla).as_slice(),
             [
-                249, 25, 27, 204, 78, 17, 100, 189, 202, 248, 50, 116, 61, 231, 59, 145, 62, 104,
-                191, 191, 237, 103, 0, 119, 39, 253, 168, 37, 204, 177, 89, 166
+                135, 37, 191, 95, 254, 253, 174, 43, 73, 49, 2, 139, 223, 84, 135, 247, 113, 204,
+                198, 65, 64, 154, 102, 215, 58, 191, 141, 0, 143, 149, 125, 6
             ]
         )
     }
 
     #[test]
     fn check_archive_format_v2_content() {
-        let der_priv: &'static [u8] = include_bytes!("../../samples/test_mlakey_archive_v2.der");
+        let privbytes: &'static [u8] =
+            include_bytes!("../../samples/test_mlakey_archive_v2.mlapriv");
 
         let mla_data: &'static [u8] = include_bytes!("../../samples/archive_v2.mla");
         let files = make_format_regression_files();
 
         // Build Reader
         let buf = Cursor::new(mla_data);
-        let config =
-            ArchiveReaderConfig::with_private_keys(&[crypto::mlakey::parse_mlakey_privkey_der(
-                der_priv,
-            )
-            .unwrap()]);
+        let (privkey, _) = MLAPrivateKey::deserialize_private_key(privbytes)
+            .unwrap()
+            .get_private_keys();
+        let config = ArchiveReaderConfig::with_private_keys(&[privkey.clone()]);
         let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
 
         // Build FailSafeReader
-        let config =
-            ArchiveReaderConfig::with_private_keys(&[crypto::mlakey::parse_mlakey_privkey_der(
-                der_priv,
-            )
-            .unwrap()]);
+        let config = ArchiveReaderConfig::with_private_keys(&[privkey]);
         let mut mla_fsread = TruncatedArchiveReader::from_config(mla_data, config).unwrap();
 
         // Repair the archive (without any damage, but trigger the corresponding code)
@@ -2354,8 +2355,10 @@ pub(crate) mod tests {
     #[test]
     fn not_path_entry_name() {
         let mut file: Vec<u8> = Vec::new();
-        let pem_pub: &'static [u8] = include_bytes!("../../samples/test_mlakey_pub.pem");
-        let pub_key = crypto::mlakey::parse_mlakey_pubkey_pem(pem_pub).unwrap();
+        let pub_bytes: &'static [u8] = include_bytes!("../../samples/test_mlakey.mlapub");
+        let (pub_key, _) = MLAPublicKey::deserialize_public_key(pub_bytes)
+            .unwrap()
+            .get_public_keys();
 
         let mut config = ArchiveWriterConfig::with_public_keys(&[pub_key]).without_compression();
         if let Some(cfg) = config.encryption_config.as_mut() {
@@ -2380,8 +2383,8 @@ pub(crate) mod tests {
         assert_eq!(
             Sha256::digest(&file).as_slice(),
             [
-                52, 219, 175, 82, 41, 98, 122, 173, 85, 164, 89, 183, 67, 234, 87, 12, 78, 9, 45,
-                247, 74, 237, 34, 45, 17, 218, 232, 209, 234, 17, 150, 165
+                64, 230, 212, 71, 12, 147, 9, 23, 189, 120, 216, 227, 181, 97, 82, 205, 196, 80,
+                115, 176, 115, 179, 26, 237, 164, 128, 222, 205, 26, 231, 202, 101
             ]
         )
     }

@@ -5,14 +5,10 @@ use std::{
     path::PathBuf,
     sync::Mutex,
 };
-use mla::crypto::mlakey::{
-    parse_mlakey_privkey_der, parse_mlakey_privkey_pem, parse_mlakey_pubkey_der,
-    parse_mlakey_pubkey_pem,
-};
 use mla::{
     ArchiveReader, ArchiveWriter,
     config::{ArchiveReaderConfig, ArchiveWriterConfig},
-    crypto::mlakey::{HybridPrivateKey, HybridPublicKey},
+    crypto::mlakey::{MLAPrivateKey, MLAPublicKey},
 };
 use mla::entry::EntryName as RustEntryName;
 use pyo3::{
@@ -305,20 +301,10 @@ impl FileMetadata {
 
 /// Represents multiple MLA Public Keys
 ///
-/// Instanciate with path (as string) or data (as bytes)
-/// PEM and DER format are supported
-///
-/// Example:
-/// ```python
-/// pkeys = PublicKeys("/path/to/key.pem", b"""
-/// -----BEGIN PUBLIC KEY-----
-/// ...
-/// -----END PUBLIC KEY-----
-/// """)
-/// ```
+/// Instanciate string or bytes containing a public key in MLA key format
 #[derive(Clone)]
 struct PublicKeysInner {
-    keys: Vec<HybridPublicKey>,
+    keys: Vec<MLAPublicKey>,
 }
 
 #[pyclass]
@@ -339,30 +325,27 @@ impl Clone for PublicKeys {
 impl PublicKeys {
     #[new]
     #[pyo3(signature = (*args))]
-    /// Main constructor: PEM-based
-    fn from_pem(args: &Bound<PyTuple>) -> Result<Self, WrappedError> {
+    fn new(args: &Bound<PyTuple>) -> Result<Self, WrappedError> {
         let mut keys = Vec::new();
 
         for element in args {
-            // PEM public key submitted as a string
-            // "-----PUBLIC KEY[...]"
             if let Ok(data) = element.downcast::<PyString>() {
                 // Convert PyString to &str
                 let string = data.to_str()?;
                 // Convert &str to &[u8]
                 let bytes = string.as_bytes();
                 keys.push(
-                    parse_mlakey_pubkey_pem(bytes)
+                    MLAPublicKey::deserialize_public_key(bytes)
                         .map_err(|_| mla::errors::Error::InvalidKeyFormat)?,
                 );
             } else if let Ok(data) = element.downcast::<PyBytes>() {
                 keys.push(
-                    parse_mlakey_pubkey_pem(&data[..])
+                    MLAPublicKey::deserialize_public_key(&data[..])
                         .map_err(|_| mla::errors::Error::InvalidKeyFormat)?,
                 );
             } else {
                 return Err(PyTypeError::new_err(
-                    "Expect a PEM public key as a string or as bytes",
+                    "Expect an MLA public key as a string or as bytes",
                 )
                 .into());
             }
@@ -372,37 +355,15 @@ impl PublicKeys {
         })
     }
 
-    /// Alternative constructor: DER-based
-    #[classmethod]
-    #[pyo3(signature = (*args))]
-    fn from_der(_cls: &Bound<PyType>, args: &Bound<PyTuple>) -> Result<Self, WrappedError> {
-        let mut keys = Vec::new();
-
-        for element in args {
-            // DER public key is encoded, hence PyString is not supported below
-            if let Ok(data) = element.downcast::<PyBytes>() {
-                keys.push(
-                    parse_mlakey_pubkey_der(&data[..])
-                        .map_err(|_| mla::errors::Error::InvalidKeyFormat)?,
-                );
-            } else {
-                return Err(PyTypeError::new_err("Expect a DER public key as bytes").into());
-            }
-        }
-        Ok(Self {
-            inner: Mutex::new(PublicKeysInner { keys }),
-        })
-    }
-
-    /// DER representation of keys
+    /// String serializations of keys in MLA key format
     #[getter]
-    fn keys(&self) -> Vec<Vec<u8>> {
+    fn keys(&self) -> Result<Vec<String>, WrappedError> {
         self.inner
             .lock()
             .expect("Mutex poisoned")
             .keys
             .iter()
-            .map(|pubkey| pubkey.to_der().to_vec())
+            .map(|pubkey| {let mut v = Vec::new(); pubkey.serialize_public_key(&mut v)?; Ok(String::from_utf8(v).unwrap())})
             .collect()
     }
 }
@@ -411,20 +372,10 @@ impl PublicKeys {
 
 /// Represents multiple MLA Private Keys
 ///
-/// Instanciate with path (as string) or data (as bytes)
-/// PEM and DER format are supported
-///
-/// Example:
-/// ```python
-/// pkeys = PrivateKeys("/path/to/key.pem", b"""
-/// -----BEGIN PRIVATE KEY-----
-/// ...
-/// -----END PRIVATE KEY-----
-/// """)
-/// ```
+/// Instanciate string or bytes containing a private key in MLA key format
 #[derive(Clone)]
 struct PrivateKeysInner {
-    keys: Vec<HybridPrivateKey>,
+    keys: Vec<MLAPrivateKey>,
 }
 
 #[pyclass]
@@ -445,30 +396,27 @@ impl Clone for PrivateKeys {
 impl PrivateKeys {
     #[new]
     #[pyo3(signature = (*args))]
-    /// Main constructor: PEM-based
-    fn from_pem(args: &Bound<PyTuple>) -> Result<Self, WrappedError> {
-        let mut keys: Vec<HybridPrivateKey> = Vec::new();
+    fn new(args: &Bound<PyTuple>) -> Result<Self, WrappedError> {
+        let mut keys = Vec::new();
 
         for element in args {
-            // PEM private key submitted as a string
-            // "-----PRIVATE KEY[...]"
             if let Ok(data) = element.downcast::<PyString>() {
                 // Convert PyString to &str
                 let string = data.to_str()?;
                 // Convert &str to &[u8]
                 let bytes = string.as_bytes();
                 keys.push(
-                    parse_mlakey_privkey_pem(bytes)
+                    MLAPrivateKey::deserialize_private_key(bytes)
                         .map_err(|_| mla::errors::Error::InvalidKeyFormat)?,
                 );
             } else if let Ok(data) = element.downcast::<PyBytes>() {
                 keys.push(
-                    parse_mlakey_privkey_pem(&data[..])
+                    MLAPrivateKey::deserialize_private_key(&data[..])
                         .map_err(|_| mla::errors::Error::InvalidKeyFormat)?,
                 );
             } else {
                 return Err(PyTypeError::new_err(
-                    "Expect a PEM private key as a string or as bytes",
+                    "Expect an MLA formatted private key as a string or as bytes",
                 )
                 .into());
             }
@@ -478,38 +426,16 @@ impl PrivateKeys {
         })
     }
 
-    /// Alternative constructor: DER-based
-    #[classmethod]
-    #[pyo3(signature = (*args))]
-    fn from_der(_cls: &Bound<PyType>, args: &Bound<PyTuple>) -> Result<Self, WrappedError> {
-        let mut keys: Vec<HybridPrivateKey> = Vec::new();
 
-        for element in args {
-            // DER private key is encoded, hence PyString is not supported below
-            if let Ok(data) = element.downcast::<PyBytes>() {
-                keys.push(
-                    parse_mlakey_privkey_der(&data[..])
-                        .map_err(|_| mla::errors::Error::InvalidKeyFormat)?,
-                );
-            } else {
-                return Err(PyTypeError::new_err("Expect a DER private key as bytes").into());
-            }
-        }
-        Ok(Self {
-            inner: Mutex::new(PrivateKeysInner { keys }),
-        })
-    }
-
-    /// DER representation of keys
-    /// :warning: This keys must be kept secrets!
+    /// String serializations of keys in MLA key format
     #[getter]
-    fn keys(&self) -> Vec<Vec<u8>> {
+    fn keys(&self) -> Result<Vec<String>, WrappedError> {
         self.inner
             .lock()
             .expect("Mutex poisoned")
             .keys
             .iter()
-            .map(|privkey| privkey.to_der().to_vec())
+            .map(|privkey| {let mut v = Vec::new(); privkey.serialize_private_key(&mut v)?; Ok(String::from_utf8(v).unwrap())})
             .collect()
     }
 }
@@ -585,7 +511,10 @@ impl WriterConfig {
     fn to_archive_writer_config(&self) -> Result<ArchiveWriterConfig, WrappedError> {
         let inner = self.inner.lock().expect("Mutex poisoned");
         let config = match inner.public_keys.as_ref() {
-            Some(public_keys) => ArchiveWriterConfig::with_public_keys(&public_keys.inner.lock().expect("Mutex poisoned").keys),
+            Some(public_keys) => {
+                let encryption_keys = public_keys.inner.lock().expect("Mutex poisoned").keys.iter().map(|k| k.get_encryption_public_key().clone()).collect::<Vec<_>>();
+                ArchiveWriterConfig::with_public_keys(&encryption_keys)
+            }
             None => ArchiveWriterConfig::without_encryption(),
         };
         let config = match inner.compression_level.as_ref() {
@@ -643,11 +572,11 @@ impl ReaderConfig {
     fn to_archive_reader_config(&self) -> ArchiveReaderConfig {
         let inner = self.inner.lock().expect("Mutex poisoned");
         if let Some(ref private_keys) = inner.private_keys {
-            let private_keys = &private_keys.inner.lock().expect("Mutex poisoned").keys;
+            let private_keys = private_keys.inner.lock().expect("Mutex poisoned").keys.iter().map(|k| k.get_decryption_private_key().clone()).collect::<Vec<_>>();
             if inner.accept_unencrypted {
-                ArchiveReaderConfig::with_private_keys_accept_unencrypted(private_keys)
+                ArchiveReaderConfig::with_private_keys_accept_unencrypted(&private_keys)
             } else {
-                ArchiveReaderConfig::with_private_keys(private_keys)
+                ArchiveReaderConfig::with_private_keys(&private_keys)
             }
         } else if inner.accept_unencrypted {
             ArchiveReaderConfig::without_encryption()

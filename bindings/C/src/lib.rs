@@ -1,15 +1,9 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 use mla::config::ArchiveReaderConfig;
 use mla::config::ArchiveWriterConfig;
-use mla::crypto::mlakey::HybridPrivateKey;
-use mla::crypto::mlakey::HybridPublicKey;
-use mla::crypto::mlakey::MLAKeyParserError;
-use mla::crypto::mlakey::MLAKEY_PRIVKEY_DER_SIZE;
-use mla::crypto::mlakey::MLAKEY_PUBKEY_DER_SIZE;
-use mla::crypto::mlakey::{
-    parse_mlakey_privkey_der, parse_mlakey_privkeys_pem_many, parse_mlakey_pubkey_der,
-    parse_mlakey_pubkeys_pem_many,
-};
+use mla::crypto::mlakey::MLADecryptionPrivateKey;
+use mla::crypto::mlakey::MLAPrivateKey;
+use mla::crypto::mlakey::MLAPublicKey;
 use mla::entry::ArchiveEntryId;
 use mla::entry::EntryName;
 use mla::errors::ConfigError;
@@ -20,6 +14,7 @@ use mla::ArchiveWriter;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::ffi::{c_void, CStr};
+use std::io::Cursor;
 use std::io::{Read, Seek, Write};
 use std::mem::MaybeUninit;
 use std::os::raw::c_char;
@@ -263,13 +258,13 @@ impl Write for CallbackOutput {
 
 // The actual C API exposed to external callers
 
-/// Create a new configuration with the given public key(s) in DER format and
+/// Create a new configuration with the given public key(s) in MLA key format and
 /// return a handle to it
-/// `public_keys_pointers` is an array of pointers to public keys in DER format
+/// `public_keys_pointers` is an array of pointers to public keys
 #[no_mangle]
-pub extern "C" fn create_mla_writer_config_with_public_keys_der(
+pub extern "C" fn create_mla_writer_config_with_public_keys(
     handle_out: *mut MLAWriterConfigHandle,
-    public_keys_pointers: *const *const u8,
+    public_keys_pointers: *const *const c_char,
     number_of_public_keys: usize,
 ) -> MLAStatus {
     if handle_out.is_null() || public_keys_pointers.is_null() || number_of_public_keys == 0 {
@@ -279,55 +274,31 @@ pub extern "C" fn create_mla_writer_config_with_public_keys_der(
     let public_keys_pointers =
         unsafe { std::slice::from_raw_parts(public_keys_pointers, number_of_public_keys) };
 
-    for pointer in public_keys_pointers {
-        if pointer.is_null() {
-            return MLAStatus::BadAPIArgument;
-        }
-    }
-
     let public_keys = public_keys_pointers
         .iter()
         .map(|pointer| {
-            let public_key_data =
-                unsafe { std::slice::from_raw_parts(*pointer, MLAKEY_PUBKEY_DER_SIZE) };
-            parse_mlakey_pubkey_der(public_key_data)
+            if pointer.is_null() {
+                Err(MLAStatus::BadAPIArgument)
+            } else {
+                let key_bytes = unsafe { CStr::from_ptr(*pointer) }.to_bytes();
+                let mut cursor = Cursor::new(key_bytes);
+                MLAPublicKey::deserialize_public_key(&mut cursor)
+                    .map_err(|_| MLAStatus::MlaKeyParserError)
+            }
         })
-        .collect::<Result<Vec<HybridPublicKey>, MLAKeyParserError>>();
+        .collect::<Result<Vec<_>, MLAStatus>>();
+
     let public_keys = match public_keys {
         Ok(public_keys) => public_keys,
-        Err(_) => return MLAStatus::MlaKeyParserError,
+        Err(e) => return e,
     };
 
-    let config = ArchiveWriterConfig::with_public_keys(&public_keys);
+    let (public_encryption_keys, _public_signature_keys) = public_keys
+        .into_iter()
+        .map(|k| k.get_public_keys())
+        .collect::<(Vec<_>, Vec<_>)>();
 
-    let ptr = Box::into_raw(Box::new(config));
-    unsafe {
-        *handle_out = ptr as MLAWriterConfigHandle;
-    }
-    MLAStatus::Success
-}
-
-/// Create a new configuration with the given public key(s) in PEM format and
-/// return a handle to it
-/// `public_keys` is a C string containing concatenated PEM public keys
-#[no_mangle]
-pub extern "C" fn create_mla_writer_config_with_public_keys_pem(
-    handle_out: *mut MLAWriterConfigHandle,
-    public_keys: *const c_char,
-) -> MLAStatus {
-    if handle_out.is_null() || public_keys.is_null() {
-        return MLAStatus::BadAPIArgument;
-    }
-
-    // Create a slice from the NULL-terminated string
-    let public_keys = unsafe { CStr::from_ptr(public_keys) }.to_bytes();
-    // Parse as MLA public key(s)
-    let public_keys = match parse_mlakey_pubkeys_pem_many(public_keys) {
-        Ok(public_keys) => public_keys,
-        Err(_) => return MLAStatus::MlaKeyParserError,
-    };
-
-    let config = ArchiveWriterConfig::with_public_keys(&public_keys);
+    let config = ArchiveWriterConfig::with_public_keys(&public_encryption_keys);
 
     let ptr = Box::into_raw(Box::new(config));
     unsafe {
@@ -421,15 +392,16 @@ pub extern "C" fn create_mla_reader_config_without_encryption(
     MLAStatus::Success
 }
 
-/// Appends the given private key in DER format to an existing given configuration
-/// (referenced by the handle returned by mla_reader_config_new()).
+/// Create a new configuration with the given private key(s) in MLA key format and
+/// return a handle to it
+/// `private_keys_pointers` is an array of pointers to private keys
 #[no_mangle]
-pub extern "C" fn create_mla_reader_config_with_private_keys_der(
+pub extern "C" fn create_mla_reader_config_with_private_keys(
     handle_out: *mut MLAReaderConfigHandle,
-    private_keys_pointers: *const *const u8,
+    private_keys_pointers: *const *const c_char,
     number_of_private_keys: usize,
 ) -> MLAStatus {
-    create_mla_reader_config_with_private_keys_der_generic(
+    create_mla_reader_config_with_private_keys_generic(
         handle_out,
         private_keys_pointers,
         number_of_private_keys,
@@ -437,15 +409,16 @@ pub extern "C" fn create_mla_reader_config_with_private_keys_der(
     )
 }
 
-/// Appends the given private key in DER format to an existing given configuration
-/// (referenced by the handle returned by mla_reader_config_new()).
+/// Create a new configuration with the given private key(s) in MLA key format and
+/// return a handle to it. Accept opening archives without encryption.
+/// `private_keys_pointers` is an array of pointers to private keys
 #[no_mangle]
-pub extern "C" fn create_mla_reader_config_with_private_keys_der_accept_unencrypted(
+pub extern "C" fn create_mla_reader_config_with_private_keys_accept_unencrypted(
     handle_out: *mut MLAReaderConfigHandle,
-    private_keys_pointers: *const *const u8,
+    private_keys_pointers: *const *const c_char,
     number_of_private_keys: usize,
 ) -> MLAStatus {
-    create_mla_reader_config_with_private_keys_der_generic(
+    create_mla_reader_config_with_private_keys_generic(
         handle_out,
         private_keys_pointers,
         number_of_private_keys,
@@ -453,14 +426,14 @@ pub extern "C" fn create_mla_reader_config_with_private_keys_der_accept_unencryp
     )
 }
 
-fn create_mla_reader_config_with_private_keys_der_generic<F>(
+fn create_mla_reader_config_with_private_keys_generic<F>(
     handle_out: *mut MLAReaderConfigHandle,
-    private_keys_pointers: *const *const u8,
+    private_keys_pointers: *const *const c_char,
     number_of_private_keys: usize,
     f: F,
 ) -> MLAStatus
 where
-    F: FnOnce(&[HybridPrivateKey]) -> ArchiveReaderConfig,
+    F: FnOnce(&[MLADecryptionPrivateKey]) -> ArchiveReaderConfig,
 {
     if handle_out.is_null() || private_keys_pointers.is_null() || number_of_private_keys == 0 {
         return MLAStatus::BadAPIArgument;
@@ -469,81 +442,31 @@ where
     let private_keys_pointers =
         unsafe { std::slice::from_raw_parts(private_keys_pointers, number_of_private_keys) };
 
-    for pointer in private_keys_pointers {
-        if pointer.is_null() {
-            return MLAStatus::BadAPIArgument;
-        }
-    }
-
     let private_keys = private_keys_pointers
         .iter()
         .map(|pointer| {
-            let private_key_data =
-                unsafe { std::slice::from_raw_parts(*pointer, MLAKEY_PRIVKEY_DER_SIZE) };
-            parse_mlakey_privkey_der(private_key_data)
+            if pointer.is_null() {
+                Err(MLAStatus::BadAPIArgument)
+            } else {
+                let key_bytes = unsafe { CStr::from_ptr(*pointer) }.to_bytes();
+                let mut cursor = Cursor::new(key_bytes);
+                MLAPrivateKey::deserialize_private_key(&mut cursor)
+                    .map_err(|_| MLAStatus::MlaKeyParserError)
+            }
         })
-        .collect::<Result<Vec<HybridPrivateKey>, MLAKeyParserError>>();
+        .collect::<Result<Vec<_>, MLAStatus>>();
+
     let private_keys = match private_keys {
         Ok(private_keys) => private_keys,
-        Err(_) => return MLAStatus::MlaKeyParserError,
+        Err(e) => return e,
     };
 
-    let config = f(&private_keys);
+    let (private_encryption_keys, _private_signature_verification_keys) = private_keys
+        .into_iter()
+        .map(|k| k.get_private_keys())
+        .collect::<(Vec<_>, Vec<_>)>();
 
-    let ptr = Box::into_raw(Box::new(config));
-    unsafe {
-        *handle_out = ptr as MLAReaderConfigHandle;
-    }
-    MLAStatus::Success
-}
-
-/// Appends the given private key in PEM format to an existing given configuration
-/// (referenced by the handle returned by mla_reader_config_new()).
-#[no_mangle]
-pub extern "C" fn create_mla_reader_config_with_private_key_pem_many(
-    handle_out: *mut MLAReaderConfigHandle,
-    private_key_pem: *const c_char,
-) -> MLAStatus {
-    create_mla_reader_config_with_private_key_pem_many_generic(
-        handle_out,
-        private_key_pem,
-        ArchiveReaderConfig::with_private_keys,
-    )
-}
-
-#[no_mangle]
-pub extern "C" fn create_mla_reader_config_with_private_key_pem_many_accept_unencrypted(
-    handle_out: *mut MLAReaderConfigHandle,
-    private_key_pem: *const c_char,
-) -> MLAStatus {
-    create_mla_reader_config_with_private_key_pem_many_generic(
-        handle_out,
-        private_key_pem,
-        ArchiveReaderConfig::with_private_keys_accept_unencrypted,
-    )
-}
-
-fn create_mla_reader_config_with_private_key_pem_many_generic<F>(
-    handle_out: *mut MLAReaderConfigHandle,
-    private_keys_pem: *const c_char,
-    f: F,
-) -> MLAStatus
-where
-    F: FnOnce(&[HybridPrivateKey]) -> ArchiveReaderConfig,
-{
-    if handle_out.is_null() || private_keys_pem.is_null() {
-        return MLAStatus::BadAPIArgument;
-    }
-
-    // PEM is a null-terminated string
-    let private_keys = unsafe { CStr::from_ptr(private_keys_pem) }.to_bytes();
-
-    let private_keys = match parse_mlakey_privkeys_pem_many(private_keys) {
-        Ok(private_keys) => private_keys,
-        Err(_) => return MLAStatus::MlaKeyParserError,
-    };
-
-    let config = f(&private_keys);
+    let config = f(&private_encryption_keys);
 
     let ptr = Box::into_raw(Box::new(config));
     unsafe {
