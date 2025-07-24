@@ -12,8 +12,8 @@ use sha2::Sha512;
 use x25519_dalek::{PublicKey, StaticSecret};
 
 use crate::base64::{base64_decode, base64_encode};
+use crate::crypto::hybrid::generate_keypair_from_seed;
 pub use crate::crypto::hybrid::{MLADecryptionPrivateKey, MLAEncryptionPublicKey};
-pub use crate::crypto::hybrid::{generate_keypair, generate_keypair_from_seed};
 
 use crate::MLADeserialize;
 use crate::crypto::hybrid::{MLKEM_DZ_SIZE, MLKEMEncapsulationKey, MLKEMSeed};
@@ -742,5 +742,4 @@ mod tests {
         let result = MLAPrivateKey::deserialize_private_key(&mut cursor);
         assert!(matches!(result, Err(Error::DeserializationError)));
     }
-
 }

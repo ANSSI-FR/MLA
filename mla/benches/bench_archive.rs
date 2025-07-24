@@ -5,7 +5,7 @@ use criterion::Throughput;
 
 use mla::TruncatedArchiveReader;
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
-use mla::crypto::mlakey::{MLAEncryptionPublicKey, generate_keypair_from_seed};
+use mla::crypto::mlakey::{MLAEncryptionPublicKey, generate_mla_keypair_from_seed};
 use mla::entry::EntryName;
 use mla::helpers::linear_extract;
 use mla::{ArchiveReader, ArchiveWriter};
@@ -36,11 +36,11 @@ fn build_archive(
 ) -> (Vec<u8>, ArchiveReaderConfig) {
     // Setup
     let mut rng = ChaChaRng::seed_from_u64(0);
-    let (private_key, public_key) = generate_keypair_from_seed([0; 32]);
+    let (private_key, public_key) = generate_mla_keypair_from_seed([0; 32]);
     let file = Vec::new();
     // Create the initial archive with `iters` files of `size` bytes
     let config = if encryption {
-        ArchiveWriterConfig::with_public_keys(&[public_key])
+        ArchiveWriterConfig::with_public_keys(&[public_key.get_encryption_public_key().clone()])
     } else {
         ArchiveWriterConfig::without_encryption()
     };
@@ -65,7 +65,8 @@ fn build_archive(
     let dest = mla.finalize().unwrap();
 
     // Instantiate the reader
-    let config = ArchiveReaderConfig::with_private_keys(&[private_key]);
+    let config =
+        ArchiveReaderConfig::with_private_keys(&[private_key.get_decryption_private_key().clone()]);
     (dest, config)
 }
 
@@ -109,7 +110,7 @@ pub fn writer_multiple_layers_multiple_block_size(c: &mut Criterion) {
     // Setup
     // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
     let mut rng = ChaChaRng::seed_from_u64(0);
-    let (_private_key, public_key) = generate_keypair_from_seed([0; 32]);
+    let (_private_key, public_key) = generate_mla_keypair_from_seed([0; 32]);
 
     let mut group = c.benchmark_group("writer_multiple_layers_multiple_block_size");
     group.measurement_time(Duration::from_secs(10));
@@ -125,7 +126,10 @@ pub fn writer_multiple_layers_multiple_block_size(c: &mut Criterion) {
 
             let mut mla = ArchiveWriter::from_config(
                 file,
-                layers_to_config(&(*compression, *encryption), &public_key),
+                layers_to_config(
+                    &(*compression, *encryption),
+                    public_key.get_encryption_public_key(),
+                ),
             )
             .expect("Writer init failed");
 
