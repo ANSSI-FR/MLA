@@ -38,7 +38,7 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/formatv2'  # Ensure only this branch triggers deploy
+    if: github.ref == 'refs/heads/main'  # Ensure only this branch triggers deploy
     environment:
       name: github-pages # GitHub automatically uses this environment for Pages
       url: ${{ steps.deployment.outputs.page_url }}
