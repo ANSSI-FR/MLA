@@ -416,18 +416,25 @@ impl<W: InnerWriterTrait> Write for InternalEncryptionLayerWriter<'_, W> {
             self.inner.write_all(&tag)?;
         }
 
-        // StreamingCipher is working in place, so we use a temporary buffer
-        let size = std::cmp::min(
-            std::cmp::min(CIPHER_BUF_SIZE, buf.len() as u64),
-            CHUNK_SIZE - self.current_chunk_offset,
-        );
-        let mut buf_tmp = Vec::with_capacity(size as usize);
+        // Compute safe size as usize (bounded by platform)
+        let available = CHUNK_SIZE - self.current_chunk_offset;
+        let safe_len = std::cmp::min(CIPHER_BUF_SIZE, buf.len() as u64);
+        let size_u64 = std::cmp::min(safe_len, available);
+
+        // Try converting to usize safely
+        let size = usize::try_from(size_u64).map_err(|_| {
+            io::Error::other( "Size exceeds platform usize limit")
+        })?;
+
+        // StreamingCipher encrypts in-place, modifying the buffer directly,
+        // so we must copy input bytes into a mutable temporary buffer before encrypting and writing.
+        let mut buf_tmp = Vec::with_capacity(size);
         let buf_src = BufReader::new(buf);
-        io::copy(&mut buf_src.take(size), &mut buf_tmp)?;
+        io::copy(&mut buf_src.take(size_u64), &mut buf_tmp)?;
         self.cipher.encrypt(&mut buf_tmp);
         self.inner.write_all(&buf_tmp)?;
-        self.current_chunk_offset += size;
-        Ok(size as usize)
+        self.current_chunk_offset += size_u64;
+        Ok(size)
     }
 
     fn flush(&mut self) -> io::Result<()> {
