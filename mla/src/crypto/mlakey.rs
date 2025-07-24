@@ -403,10 +403,16 @@ impl MLAPublicKey {
     }
 }
 
+/// Generate an MLA key pair using the current Operating System CSPRNG
 pub fn generate_mla_keypair() -> (MLAPrivateKey, MLAPublicKey) {
     generate_mla_keypair_from_rng(get_crypto_rng())
 }
 
+/// WARNING: the seed is as secret as the private key.
+/// If provided, it should be a cryptographically secure random.
+/// You should probably rather use the `generate_keypair` function.
+///
+/// Generate an MLA key pair using the provided seed
 pub fn generate_mla_keypair_from_seed(seed: [u8; 32]) -> (MLAPrivateKey, MLAPublicKey) {
     let csprng = ChaCha20Rng::from_seed(seed);
     generate_mla_keypair_from_rng(csprng)
