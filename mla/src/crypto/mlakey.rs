@@ -678,4 +678,69 @@ mod tests {
         let result = MLAPrivateKey::deserialize_private_key(&mut cursor);
         assert!(matches!(result, Err(Error::DeserializationError)));
     }
+
+    #[test]
+    fn test_deserialize_private_key_wrong_line_count_too_few() {
+        let input = b"MLA PRIVATE KEY FILE V1\r\n\
+                    MLA PRIVATE DECRYPTION KEY bWxhYmFzZTY0Cg==\r\n\
+                    TODO\r\n\
+                    END OF MLA PRIVATE KEY FILE\r\n"; // only 4 lines instead of 5
+
+        let mut cursor = Cursor::new(&input[..]);
+        let result = MLAPrivateKey::deserialize_private_key(&mut cursor);
+        assert!(matches!(result, Err(Error::DeserializationError)));
+    }
+
+    #[test]
+    fn test_deserialize_private_key_wrong_line_count_too_many() {
+        let input = b"MLA PRIVATE KEY FILE V1\r\n\
+                    MLA PRIVATE DECRYPTION KEY bWxhYmFzZTY0Cg==\r\n\
+                    TODO\r\n\
+                    opts_line\r\n\
+                    END OF MLA PRIVATE KEY FILE\r\n\
+                    EXTRA LINE\r\n";
+
+        let mut cursor = Cursor::new(&input[..]);
+        let result = MLAPrivateKey::deserialize_private_key(&mut cursor);
+        assert!(matches!(result, Err(Error::DeserializationError)));
+    }
+
+    #[test]
+    fn test_deserialize_private_key_missing_crlf() {
+        let input = b"MLA PRIVATE KEY FILE V1\n\
+                    MLA PRIVATE DECRYPTION KEY bWxhYmFzZTY0Cg==\n\
+                    TODO\n\
+                    opts_line\n\
+                    END OF MLA PRIVATE KEY FILE\n"; // only LF, no CR
+
+        let mut cursor = Cursor::new(&input[..]);
+        let result = MLAPrivateKey::deserialize_private_key(&mut cursor);
+        assert!(matches!(result, Err(Error::DeserializationError)));
+    }
+
+    #[test]
+    fn test_deserialize_private_key_header_footer_case_sensitive() {
+        // Header slightly different case
+        let input = b"mla private key file v1\r\n\
+                    MLA PRIVATE DECRYPTION KEY bWxhYmFzZTY0Cg==\r\n\
+                    TODO\r\n\
+                    opts_line\r\n\
+                    END OF MLA PRIVATE KEY FILE\r\n";
+
+        let mut cursor = Cursor::new(&input[..]);
+        let result = MLAPrivateKey::deserialize_private_key(&mut cursor);
+        assert!(matches!(result, Err(Error::DeserializationError)));
+
+        // Footer slightly different case
+        let input = b"MLA PRIVATE KEY FILE V1\r\n\
+                    MLA PRIVATE DECRYPTION KEY bWxhYmFzZTY0Cg==\r\n\
+                    TODO\r\n\
+                    opts_line\r\n\
+                    end of mla private key file\r\n";
+
+        let mut cursor = Cursor::new(&input[..]);
+        let result = MLAPrivateKey::deserialize_private_key(&mut cursor);
+        assert!(matches!(result, Err(Error::DeserializationError)));
+    }
+
 }
