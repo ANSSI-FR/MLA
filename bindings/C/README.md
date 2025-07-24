@@ -112,7 +112,7 @@ For now, only the writer API is available.
 
 * If one wants an archive without encryption, they must explicitly ask for it (ie. default is encrypted)
 * Statuses and handles are separated, to avoid confusion and the use of a variable for two distinct purposes. As a result, each API always returns a `MLAStatus`, and could take or give handles through arguments
-* Output writing is delegated to the library user, through callbacks. That way, she can manage how and when flushing and  actual writes are made (buffering, writing to an external HTTP server, ...)
+* Output writing is delegated to the library user, through callbacks. That way, she can manage how and when flushing and  actual writes are made (buffering, writing to an external HTTP server...)
 
 ## Tests
 
@@ -123,4 +123,4 @@ One can locally launch them using the available `Makefile` and Visual Studio pro
 
 ## Caveat
 
-Current implementation uses `Box<dyn Trait>` Rust's feature to handle MLA reads and writes. Hence, Rust compiler can't know at compile time if underneath types implement a Trait, notably `Send`. Thus, MLA `Send` feature is not available as Rust compiler can't ensure thread safety.
+MLA bindings for C currently does not support the `Send` feature, so its handles and objects are not safe to use across multiple threads. Thread safety cannot be guaranteed at this time.
