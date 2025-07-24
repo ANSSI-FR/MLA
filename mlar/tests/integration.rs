@@ -53,7 +53,10 @@ fn setup() -> TestFS {
 
     // `file2.bin`: Use full charset for bad compression
     let mut rng: StdRng = SeedableRng::from_seed([0u8; 32]);
-    let data: Vec<u8> = StandardUniform.sample_iter(&mut rng).take(SIZE_FILE2).collect();
+    let data: Vec<u8> = StandardUniform
+        .sample_iter(&mut rng)
+        .take(SIZE_FILE2)
+        .collect();
     tmp_file2.write_binary(data.as_slice()).unwrap();
 
     // `file3.bin`: tiny file
@@ -175,8 +178,8 @@ fn test_help() {
 #[test]
 fn test_create_from_dir() {
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
-    let public_key = Path::new("../samples/test_mlakey_pub.pem");
-    let private_key = Path::new("../samples/test_mlakey.pem");
+    let public_key = Path::new("../samples/test_mlakey.mlapub");
+    let private_key = Path::new("../samples/test_mlakey.mlapriv");
 
     // Temporary directory to test recursive file addition
     let tmp_dir = TempDir::new().unwrap();
@@ -188,7 +191,7 @@ fn test_create_from_dir() {
     std::fs::create_dir(subdir_path).unwrap();
     std::fs::write(subfile2_path, "Test2").unwrap();
 
-    // `mlar create -o output.mla -p samples/test_mlakey_pub.pem <tmp_dir>`
+    // `mlar create -o output.mla -p samples/test_mlakey.mlapub <tmp_dir>`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-o")
@@ -207,7 +210,7 @@ fn test_create_from_dir() {
     let assert = cmd.assert();
     assert.success().stderr(file_list.join("\n") + "\n");
 
-    // `mlar list -i output.mla -k samples/test_mlakey.pem`
+    // `mlar list -i output.mla -k samples/test_mlakey.mlapriv`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
         .arg("-i")
@@ -224,13 +227,13 @@ fn test_create_from_dir() {
 #[test]
 fn test_create_filelist_stdin() {
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
-    let public_key = Path::new("../samples/test_mlakey_pub.pem");
-    let private_key = Path::new("../samples/test_mlakey.pem");
+    let public_key = Path::new("../samples/test_mlakey.mlapub");
+    let private_key = Path::new("../samples/test_mlakey.mlapriv");
 
     // Create files
     let testfs = setup();
 
-    // `mlar create -o output.mla -p samples/test_mlakey_pub.pem -`
+    // `mlar create -o output.mla -p samples/test_mlakey.mlapub -`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-o")
@@ -260,7 +263,7 @@ fn test_create_filelist_stdin() {
     let assert = cmd.assert();
     assert.success().stderr(String::from(&file_list));
 
-    // `mlar list -i output.mla -k samples/test_mlakey.pem`
+    // `mlar list -i output.mla -k samples/test_mlakey.mlapriv`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
         .arg("-i")
@@ -277,13 +280,13 @@ fn test_create_filelist_stdin() {
 fn test_create_list_tar() {
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
     let tar_file = NamedTempFile::new("output.tar").unwrap();
-    let public_key = Path::new("../samples/test_mlakey_pub.pem");
-    let private_key = Path::new("../samples/test_mlakey.pem");
+    let public_key = Path::new("../samples/test_mlakey.mlapub");
+    let private_key = Path::new("../samples/test_mlakey.mlapriv");
 
     // Create files
     let testfs = setup();
 
-    // `mlar create -o output.mla -p samples/test_mlakey_pub.pem file1.bin file2.bin file3.bin`
+    // `mlar create -o output.mla -p samples/test_mlakey.mlapub file1.bin file2.bin file3.bin`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-o")
@@ -307,7 +310,7 @@ fn test_create_list_tar() {
     let assert = cmd.assert();
     assert.success().stderr(String::from(&file_list));
 
-    // `mlar list -i output.mla -k samples/test_mlakey.pem`
+    // `mlar list -i output.mla -k samples/test_mlakey.mlapriv`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
         .arg("-i")
@@ -319,7 +322,7 @@ fn test_create_list_tar() {
     let assert = cmd.assert();
     assert.success().stdout(file_list);
 
-    // `mlar to-tar -i output.mla -k samples/test_mlakey.pem -o output.tar`
+    // `mlar to-tar -i output.mla -k samples/test_mlakey.mlapriv -o output.tar`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("to-tar")
         .arg("-i")
@@ -342,13 +345,13 @@ fn test_truncated_repair_list_tar() {
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
     let mlar_repaired_file = NamedTempFile::new("repaired.mla").unwrap();
     let tar_file = NamedTempFile::new("output.tar").unwrap();
-    let public_key = Path::new("../samples/test_mlakey_pub.pem");
-    let private_key = Path::new("../samples/test_mlakey.pem");
+    let public_key = Path::new("../samples/test_mlakey.mlapub");
+    let private_key = Path::new("../samples/test_mlakey.mlapriv");
 
     // Create files
     let testfs = setup();
 
-    // `mlar create -o output.mla -p samples/test_mlakey_pub.pem file1.bin file2.bin file3.bin`
+    // `mlar create -o output.mla -p samples/test_mlakey.mlapub file1.bin file2.bin file3.bin`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-o")
@@ -391,7 +394,7 @@ fn test_truncated_repair_list_tar() {
         .write_all(&data[..data.len() * 6 / 7])
         .unwrap();
 
-    // `mlar repair -i output.mla -k samples/test_mlakey.pem -p samples/test_mlakey_pub.pem -o repaired.mla`
+    // `mlar repair -i output.mla -k samples/test_mlakey.mlapriv -p samples/test_mlakey.mlapub -o repaired.mla`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("repair")
         .arg("-i")
@@ -407,7 +410,7 @@ fn test_truncated_repair_list_tar() {
     let assert = cmd.assert();
     assert.success();
 
-    // `mlar list -i repaired.mla -k samples/test_mlakey.pem`
+    // `mlar list -i repaired.mla -k samples/test_mlakey.mlapriv`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
         .arg("-i")
@@ -421,7 +424,7 @@ fn test_truncated_repair_list_tar() {
     // 6 / 7 (last file being really small)
     assert.success().stdout(file_list_no_last);
 
-    // `mlar to-tar -i output.mla -k samples/test_mlakey.pem -o output.tar`
+    // `mlar to-tar -i output.mla -k samples/test_mlakey.mlapriv -o output.tar`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("to-tar")
         .arg("-i")
@@ -478,18 +481,18 @@ fn test_multiple_keys() {
     // Key parsing is common for each subcommands, so test only one: `list`
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
     let public_keys = [
-        Path::new("../samples/test_mlakey_pub.pem"),
-        Path::new("../samples/test_mlakey_3_pub.pem"),
+        Path::new("../samples/test_mlakey.mlapub"),
+        Path::new("../samples/test_mlakey_3.mlapub"),
     ];
     let private_keys = [
-        Path::new("../samples/test_mlakey.pem"),
-        Path::new("../samples/test_mlakey_2.pem"),
+        Path::new("../samples/test_mlakey.mlapriv"),
+        Path::new("../samples/test_mlakey_2.mlapriv"),
     ];
 
     // Create files
     let testfs = setup();
 
-    // `mlar create -o output.mla -p samples/test_mlakey_pub.pem -p samples/test_mlakey_3_pub.pem file1.bin file2.bin file3.bin`
+    // `mlar create -o output.mla -p samples/test_mlakey_pub.mlapriv -p samples/test_mlakey_3.mlapub file1.bin file2.bin file3.bin`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-o")
@@ -520,7 +523,7 @@ fn test_multiple_keys() {
     // - we can read with only the second correct private key
     // - we cannot read with only a bad private key
 
-    // `mlar list -i output.mla -k samples/test_mlakey.pem -k samples/test_mlakey_2.pem`
+    // `mlar list -i output.mla -k samples/test_mlakey.mlapriv -k samples/test_mlakey_2.mlapriv`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
         .arg("-i")
@@ -534,19 +537,19 @@ fn test_multiple_keys() {
     let assert = cmd.assert();
     assert.success().stdout(String::from(&file_list));
 
-    // `mlar list -i output.mla -k samples/test_mlakey_3.pem`
+    // `mlar list -i output.mla -k samples/test_mlakey_3.mlapriv`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
         .arg("-i")
         .arg(mlar_file.path())
         .arg("-k")
-        .arg(Path::new("../samples/test_mlakey_3.pem"));
+        .arg(Path::new("../samples/test_mlakey_3.mlapriv"));
 
     println!("{cmd:?}");
     let assert = cmd.assert();
     assert.success().stdout(String::from(&file_list));
 
-    // `mlar list -i output.mla -k samples/test_mlakey_2.pem`
+    // `mlar list -i output.mla -k samples/test_mlakey_2.mlapriv`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
         .arg("-i")
@@ -628,15 +631,15 @@ fn test_convert() {
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
     let mlar_file_converted = NamedTempFile::new("convert.mla").unwrap();
     let tar_file = NamedTempFile::new("output.tar").unwrap();
-    let public_key1 = Path::new("../samples/test_mlakey_pub.pem");
-    let private_key1 = Path::new("../samples/test_mlakey.pem");
-    let public_key2 = Path::new("../samples/test_mlakey_2_pub.pem");
-    let private_key2 = Path::new("../samples/test_mlakey_2.pem");
+    let public_key1 = Path::new("../samples/test_mlakey.mlapub");
+    let private_key1 = Path::new("../samples/test_mlakey.mlapriv");
+    let public_key2 = Path::new("../samples/test_mlakey_2.mlapub");
+    let private_key2 = Path::new("../samples/test_mlakey_2.mlapriv");
 
     // Create files
     let testfs = setup();
 
-    // `mlar create -o output.mla -p samples/public_1024.der file1.bin file2.bin file3.bin`
+    // `mlar create -o output.mla -p samples/public_1024.mlapub file1.bin file2.bin file3.bin`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-o")
@@ -660,7 +663,7 @@ fn test_convert() {
     let assert = cmd.assert();
     assert.success().stderr(String::from(&file_list));
 
-    // `mlar convert -i output.mla -k samples/private_1024.der -l encrypt -o convert.mla -p samples/public_2048.der`
+    // `mlar convert -i output.mla -k samples/private_1024.mlapriv -l encrypt -o convert.mla -p samples/public_2048.mlapub`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("convert")
         .arg("-i")
@@ -685,7 +688,7 @@ fn test_convert() {
     let size_convert = metadata(mlar_file_converted.path()).unwrap().len();
     assert!(size_output < size_convert);
 
-    // `mlar to-tar -i convert.mla -k samples/private_2048.der -o output.tar`
+    // `mlar to-tar -i convert.mla -k samples/private_2048.mlapriv -o output.tar`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("to-tar")
         .arg("-i")
@@ -708,13 +711,13 @@ fn test_stdio() {
     // Create an archive on stdout, and check it
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
     let tar_file = NamedTempFile::new("output.tar").unwrap();
-    let public_key = Path::new("../samples/test_mlakey_pub.pem");
-    let private_key = Path::new("../samples/test_mlakey.pem");
+    let public_key = Path::new("../samples/test_mlakey.mlapub");
+    let private_key = Path::new("../samples/test_mlakey.mlapriv");
 
     // Create files
     let testfs = setup();
 
-    // `mlar create -o - -p samples/test_mlakey_pub.pem file1.bin file2.bin file3.bin`
+    // `mlar create -o - -p samples/test_mlakey.mlapub file1.bin file2.bin file3.bin`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-o")
@@ -743,7 +746,7 @@ fn test_stdio() {
         .unwrap()
         .write_all(&archive_data)
         .unwrap();
-    // `mlar to-tar -i output.mla -k samples/test_mlakey.pem -o output.tar`
+    // `mlar to-tar -i output.mla -k samples/test_mlakey.mlapriv -o output.tar`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("to-tar")
         .arg("-i")
@@ -766,8 +769,8 @@ fn test_multi_fileorders() {
     // Create several archive with all possible file order. Result should be the same
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
     let tar_file = NamedTempFile::new("output.tar").unwrap();
-    let public_key = Path::new("../samples/test_mlakey_pub.pem");
-    let private_key = Path::new("../samples/test_mlakey.pem");
+    let public_key = Path::new("../samples/test_mlakey.mlapub");
+    let private_key = Path::new("../samples/test_mlakey.mlapriv");
 
     // Create files
     let testfs = setup();
@@ -786,7 +789,7 @@ fn test_multi_fileorders() {
             continue;
         }
 
-        // `mlar create -o output.mla -p samples/test_mlakey_pub.pem file1.bin file2.bin file3.bin`
+        // `mlar create -o output.mla -p samples/test_mlakey.mlapub file1.bin file2.bin file3.bin`
         let mut cmd = Command::cargo_bin(UTIL).unwrap();
         cmd.arg("create")
             .arg("-o")
@@ -806,7 +809,7 @@ fn test_multi_fileorders() {
         let assert = cmd.assert();
         assert.success().stderr(String::from(&file_list));
 
-        // `mlar to-tar -i convert.mla -k samples/test_mlakey.pem -o output.tar`
+        // `mlar to-tar -i convert.mla -k samples/test_mlakey.mlapriv -o output.tar`
         let mut cmd = Command::cargo_bin(UTIL).unwrap();
         cmd.arg("to-tar")
             .arg("-i")
@@ -1062,19 +1065,21 @@ fn test_keygen() {
     // Gen a keypair, create and list an archive using them
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
     let output_dir = TempDir::new().unwrap();
-    let base_name = output_dir.path().join("key");
+    let base_path = output_dir.path().join("key");
+    let priv_path = base_path.with_extension("mlapriv");
+    let pub_path = base_path.with_extension("mlapub");
     let testfs = setup();
 
     // `mlar keygen tempdir/key`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
-    cmd.arg("keygen").arg(&base_name);
+    cmd.arg("keygen").arg(&base_path);
     cmd.assert().success();
 
     // `mlar create -p tempdir/key.pub -o output.mla file1 file2 file3`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-p")
-        .arg(base_name.with_extension("pub"))
+        .arg(&pub_path)
         .arg("-o")
         .arg(mlar_file.path());
 
@@ -1098,7 +1103,7 @@ fn test_keygen() {
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
         .arg("-k")
-        .arg(base_name)
+        .arg(&priv_path)
         .arg("-i")
         .arg(mlar_file.path());
 
@@ -1108,28 +1113,29 @@ fn test_keygen() {
 }
 
 const PRIVATE_KEY_TESTSEED_SHA256: [u8; 32] = [
-    158, 50, 216, 157, 41, 62, 242, 214, 132, 119, 240, 48, 68, 96, 179, 166, 182, 147, 96, 161,
-    231, 199, 6, 25, 37, 147, 182, 13, 16, 125, 11, 77,
+    239, 245, 13, 179, 44, 156, 74, 71, 231, 123, 190, 119, 211, 255, 188, 22, 116, 117, 16, 196,
+    126, 189, 175, 242, 235, 125, 36, 175, 144, 175, 33, 36,
 ];
 
 const PRIVATE_KEY_TESTSEED2_SHA256: [u8; 32] = [
-    186, 74, 147, 165, 173, 98, 138, 74, 77, 9, 149, 36, 41, 252, 120, 19, 138, 255, 57, 31, 231,
-    10, 0, 42, 207, 208, 248, 209, 18, 8, 3, 209,
+    85, 144, 39, 211, 71, 114, 123, 218, 196, 108, 205, 109, 69, 92, 55, 111, 239, 235, 125, 8,
+    191, 128, 8, 241, 117, 191, 133, 117, 192, 139, 24, 223,
 ];
 
 #[test]
 fn test_keygen_seed() {
     // Gen deterministic keypairs
     let output_dir = TempDir::new().unwrap();
-    let base_name = output_dir.path().join("key");
+    let base_path = output_dir.path().join("key");
+    let priv_path = base_path.with_extension("mlapriv");
 
     // `mlar keygen tempdir/key -s TESTSEED`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
-    cmd.arg("keygen").arg(&base_name).arg("-s").arg("TESTSEED");
+    cmd.arg("keygen").arg(&base_path).arg("-s").arg("TESTSEED");
     cmd.assert().success();
 
     let mut pkey_testseed = vec![];
-    File::open(&base_name)
+    File::open(&priv_path)
         .unwrap()
         .read_to_end(&mut pkey_testseed)
         .unwrap();
@@ -1139,11 +1145,11 @@ fn test_keygen_seed() {
 
     // `mlar keygen tempdir/key -s TESTSEED2`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
-    cmd.arg("keygen").arg(&base_name).arg("-s").arg("TESTSEED2");
+    cmd.arg("keygen").arg(&base_path).arg("-s").arg("TESTSEED2");
     cmd.assert().success();
 
     let mut pkey_testseed2 = vec![];
-    File::open(&base_name)
+    File::open(&priv_path)
         .unwrap()
         .read_to_end(&mut pkey_testseed2)
         .unwrap();
@@ -1164,10 +1170,14 @@ fn test_keyderive() {
     └──["Child 2"]── key_child2
      */
     let output_dir = TempDir::new().unwrap();
-    let key_parent = output_dir.path().join("key_parent");
-    let key_child1 = output_dir.path().join("key_child1");
-    let key_child2 = output_dir.path().join("key_child2");
-    let key_child1_child1 = output_dir.path().join("key_child1_child1");
+    let key_parent_pfx = output_dir.path().join("key_parent");
+    let key_parent_priv = key_parent_pfx.with_extension("mlapriv");
+    let key_child1_pfx = output_dir.path().join("key_child1");
+    let key_child1_priv = key_child1_pfx.with_extension("mlapriv");
+    let key_child2_pfx = output_dir.path().join("key_child2");
+    let key_child2_priv = key_child2_pfx.with_extension("mlapriv");
+    let key_child1_child1_pfx = output_dir.path().join("key_child1_child1");
+    let key_child1_child1_priv = key_child1_child1_pfx.with_extension("mlapriv");
 
     //---------------- SETUP: Create and fill `keys` --------------
     struct Keys {
@@ -1185,43 +1195,43 @@ fn test_keyderive() {
 
     // `mlar keygen tempdir/key_parent`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
-    cmd.arg("keygen").arg(&key_parent);
+    cmd.arg("keygen").arg(&key_parent_pfx);
     cmd.assert().success();
 
-    keys.parent = fs::read(&key_parent).unwrap();
+    keys.parent = fs::read(&key_parent_priv).unwrap();
 
     // `mlar keyderive tempdir/key_parent tempdir/key_child1 --path "Child 1"`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("keyderive")
-        .arg(&key_parent)
-        .arg(&key_child1)
+        .arg(&key_parent_priv)
+        .arg(&key_child1_pfx)
         .arg("-p")
         .arg("Child 1");
     cmd.assert().success();
 
-    keys.child1 = fs::read(&key_child1).unwrap();
+    keys.child1 = fs::read(&key_child1_priv).unwrap();
 
     // `mlar keyderive tempdir/key_parent tempdir/key_child2 --path "Child 2"`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("keyderive")
-        .arg(&key_parent)
-        .arg(&key_child2)
+        .arg(&key_parent_priv)
+        .arg(&key_child2_pfx)
         .arg("-p")
         .arg("Child 2");
     cmd.assert().success();
 
-    keys.child2 = fs::read(&key_child2).unwrap();
+    keys.child2 = fs::read(&key_child2_priv).unwrap();
 
     // `mlar keyderive tempdir/key_child1 tempdir/key_child1_child1 --path "Child 1"`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("keyderive")
-        .arg(&key_child1)
-        .arg(&key_child1_child1)
+        .arg(&key_child1_priv)
+        .arg(&key_child1_child1_pfx)
         .arg("-p")
         .arg("Child 1");
     cmd.assert().success();
 
-    keys.child1child1 = fs::read(&key_child1_child1).unwrap();
+    keys.child1child1 = fs::read(&key_child1_child1_priv).unwrap();
 
     //---------------- END OF SETUP -----------------
 
@@ -1234,40 +1244,42 @@ fn test_keyderive() {
 
     // Ensure path is deterministic
 
-    let key_tmp = output_dir.path().join("key_tmp");
+    let key_tmp_pfx = output_dir.path().join("key_tmp");
+    let key_tmp_priv = key_tmp_pfx.with_extension("mlapriv");
     // `mlar keyderive tempdir/key_parent tempdir/key_tmp --path "Child 2"`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("keyderive")
-        .arg(&key_parent)
-        .arg(&key_tmp)
+        .arg(&key_parent_priv)
+        .arg(&key_tmp_pfx)
         .arg("-p")
         .arg("Child 2");
     cmd.assert().success();
 
-    assert_eq!(keys.child2, fs::read(&key_tmp).unwrap());
+    assert_eq!(keys.child2, fs::read(&key_tmp_priv).unwrap());
 
     // Ensure path is transitive
 
-    let key_tmp2 = output_dir.path().join("key_tmp2");
+    let key_tmp2_pfx = output_dir.path().join("key_tmp2");
+    let key_tmp2_priv = key_tmp2_pfx.with_extension("mlapriv");
     // `mlar keyderive tempdir/key_parent tempdir/key_tmp2 --path "Child 1" --path "Child 1"`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("keyderive")
-        .arg(&key_parent)
-        .arg(&key_tmp2)
+        .arg(&key_parent_priv)
+        .arg(&key_tmp2_pfx)
         .arg("-p")
         .arg("Child 1")
         .arg("-p")
         .arg("Child 1");
     cmd.assert().success();
 
-    assert_eq!(keys.child1child1, fs::read(&key_tmp2).unwrap());
+    assert_eq!(keys.child1child1, fs::read(&key_tmp2_priv).unwrap());
 }
 
 #[test]
 fn test_verbose_info() {
-    let public_key = Path::new("../samples/test_mlakey_pub.pem");
-    let private_key = Path::new("../samples/test_mlakey.pem");
-    let public_key_2 = Path::new("../samples/test_mlakey_2_pub.pem");
+    let public_key = Path::new("../samples/test_mlakey.mlapub");
+    let private_key = Path::new("../samples/test_mlakey.mlapriv");
+    let public_key_2 = Path::new("../samples/test_mlakey_2.mlapub");
 
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
     let testfs = setup();
@@ -1330,7 +1342,7 @@ Encryption: true
 fn test_no_open_on_encrypt() {
     // Create an unencrypted archive
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
-    let private_key = Path::new("../samples/test_mlakey.pem");
+    let private_key = Path::new("../samples/test_mlakey.mlapriv");
 
     // Create files
     let testfs = setup();
@@ -1362,7 +1374,7 @@ fn test_no_open_on_encrypt() {
     // Ensure:
     // - mlar refuse to open the MLA file if a private key is provided
 
-    // `mlar list -i output.mla -k samples/test_mlakey.pem`
+    // `mlar list -i output.mla -k samples/test_mlakey.mlapriv`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
         .arg("-i")

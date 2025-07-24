@@ -244,27 +244,18 @@ def test_public_keys():
 
     # This is a private key, not a public one
     with pytest.raises(mla.InvalidKeyFormat):
-        mla.PublicKeys(os.path.join(SAMPLE_PATH, "test_mlakey.pem"))
+        mla.PublicKeys(os.path.join(SAMPLE_PATH, "test_mlakey.mlapriv"))
 
-    # Open a PEM key, through data
-    pkeys_pem = mla.PublicKeys(
-        open(os.path.join(SAMPLE_PATH, "test_mlakey_pub.pem"), "rb").read()
-    )
-    assert len(pkeys_pem.keys) == 1
-
-    # Open a DER key, through data
-    pkeys_der = mla.PublicKeys.from_der(
-        open(os.path.join(SAMPLE_PATH, "test_mlakey_pub.der"), "rb").read()
-    )
-    assert len(pkeys_pem.keys) == 1
-
-    # Keys must be the same
-    assert pkeys_pem.keys == pkeys_der.keys
-
-    # Open several PEM keys, using data
+    # Parse a key
     pkeys = mla.PublicKeys(
-        open(os.path.join(SAMPLE_PATH, "test_mlakey_pub.pem"), "rb").read(),
-        open(os.path.join(SAMPLE_PATH, "test_mlakey_2_pub.pem"), "rb").read(),
+        open(os.path.join(SAMPLE_PATH, "test_mlakey.mlapub"), "rb").read()
+    )
+    assert len(pkeys.keys) == 1
+
+    # Open several keys
+    pkeys = mla.PublicKeys(
+        open(os.path.join(SAMPLE_PATH, "test_mlakey.mlapub"), "rb").read(),
+        open(os.path.join(SAMPLE_PATH, "test_mlakey_2.mlapub"), "rb").read(),
     )
     assert len(pkeys.keys) == 2
 
@@ -277,37 +268,20 @@ def test_private_keys():
 
     # This is a public key, not a private one
     with pytest.raises(mla.InvalidKeyFormat):
-        mla.PrivateKeys(os.path.join(SAMPLE_PATH, "test_mlakey_pub.pem"))
+        mla.PrivateKeys(os.path.join(SAMPLE_PATH, "test_mlakey.mlapub"))
 
-    # Open a PEM key, through data
-    pkeys_pem = mla.PrivateKeys(
-        open(os.path.join(SAMPLE_PATH, "test_mlakey.pem"), "rb").read()
-    )
-    assert len(pkeys_pem.keys) == 1
-
-    # Open a DER key, through data
-    pkeys_der = mla.PrivateKeys.from_der(
-        open(os.path.join(SAMPLE_PATH, "test_mlakey.der"), "rb").read()
-    )
-    assert len(pkeys_pem.keys) == 1
-
-    # Keys must be the same
-    assert pkeys_pem.keys == pkeys_der.keys
-
-    # Open several PEM keys, using data
+    # Parse a key
     pkeys = mla.PrivateKeys(
-        open(os.path.join(SAMPLE_PATH, "test_mlakey.pem"), "rb").read(),
-        open(os.path.join(SAMPLE_PATH, "test_mlakey_2.pem"), "rb").read(),
+        open(os.path.join(SAMPLE_PATH, "test_mlakey.mlapriv"), "rb").read()
+    )
+    assert len(pkeys.keys) == 1
+
+    # Open several keys
+    pkeys = mla.PrivateKeys(
+        open(os.path.join(SAMPLE_PATH, "test_mlakey.mlapriv"), "rb").read(),
+        open(os.path.join(SAMPLE_PATH, "test_mlakey_2.mlapriv"), "rb").read(),
     )
     assert len(pkeys.keys) == 2
-
-    # Open several DER keys, using data
-    pkeys = mla.PrivateKeys.from_der(
-        open(os.path.join(SAMPLE_PATH, "test_mlakey.der"), "rb").read(),
-        open(os.path.join(SAMPLE_PATH, "test_mlakey_2.der"), "rb").read(),
-    )
-    assert len(pkeys.keys) == 2
-
 
 def test_writer_config_public_keys():
     "Test public keys API in WriterConfig creation"
@@ -319,15 +293,15 @@ def test_writer_config_public_keys():
     # Test shortcut on object build
     config = mla.WriterConfig(
         mla.PublicKeys(
-            open(os.path.join(SAMPLE_PATH, "test_mlakey_pub.pem"), "rb").read()
+            open(os.path.join(SAMPLE_PATH, "test_mlakey.mlapub"), "rb").read()
         )
     )
 
     # Chaining
     out = mla.WriterConfig(
         mla.PublicKeys(
-            open(os.path.join(SAMPLE_PATH, "test_mlakey_pub.pem"), "rb").read(),
-            open(os.path.join(SAMPLE_PATH, "test_mlakey_2_pub.pem"), "rb").read(),
+            open(os.path.join(SAMPLE_PATH, "test_mlakey.mlapub"), "rb").read(),
+            open(os.path.join(SAMPLE_PATH, "test_mlakey_2.mlapub"), "rb").read(),
         )
     )
 
@@ -346,10 +320,10 @@ def test_mlafile_bad_config():
 def test_reader_config_api():
     "Test the ReaderConfig API"
     # Add a remove private keys
-    config = mla.ReaderConfig(mla.PrivateKeys(open(os.path.join(SAMPLE_PATH, "test_mlakey.pem"), "rb").read()))
+    config = mla.ReaderConfig(mla.PrivateKeys(open(os.path.join(SAMPLE_PATH, "test_mlakey.mlapriv"), "rb").read()))
     config = mla.ReaderConfig(
         private_keys=mla.PrivateKeys(
-            open(os.path.join(SAMPLE_PATH, "test_mlakey.pem"), "rb").read()
+            open(os.path.join(SAMPLE_PATH, "test_mlakey.mlapriv"), "rb").read()
         )
     )
 
@@ -362,7 +336,7 @@ def test_write_then_read_encrypted():
         "w",
         config=mla.WriterConfig(
             mla.PublicKeys(
-                open(os.path.join(SAMPLE_PATH, "test_mlakey_pub.pem"), "rb").read()
+                open(os.path.join(SAMPLE_PATH, "test_mlakey.mlapub"), "rb").read()
             )
         ),
     ) as archive:
@@ -375,7 +349,7 @@ def test_write_then_read_encrypted():
         "r", 
         config=mla.ReaderConfig(
             private_keys=mla.PrivateKeys(
-                open(os.path.join(SAMPLE_PATH, "test_mlakey.pem"), "rb").read()
+                open(os.path.join(SAMPLE_PATH, "test_mlakey.mlapriv"), "rb").read()
             )
         ),
     ) as archive:
@@ -393,7 +367,7 @@ def test_read_encrypted_archive_bad_key():
         "w",
         config=mla.WriterConfig(
             mla.PublicKeys(
-                open(os.path.join(SAMPLE_PATH, "test_mlakey_pub.pem"), "rb").read()
+                open(os.path.join(SAMPLE_PATH, "test_mlakey.mlapub"), "rb").read()
             ),            
         ),
     ) as archive:
@@ -411,8 +385,8 @@ def test_read_encrypted_archive_bad_key():
             path,
             "r", 
             config=mla.ReaderConfig(
-                private_keys=mla.PrivateKeys.from_der(
-                    open(os.path.join(SAMPLE_PATH, "test_mlakey_2.der"), "rb").read()
+                private_keys=mla.PrivateKeys(
+                    open(os.path.join(SAMPLE_PATH, "test_mlakey_2.mlapriv"), "rb").read()
                 )
             ),
         ) as archive:
