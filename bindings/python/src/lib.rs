@@ -221,8 +221,7 @@ impl From<WrappedError> for PyErr {
                     current_state,
                     expected_state,
                 } => PyErr::new::<WrongArchiveWriterState, _>(format!(
-                    "The writer state is not in the expected state for the current operation. Current state: {:?}, expected state: {:?}",
-                    current_state, expected_state
+                    "The writer state is not in the expected state for the current operation. Current state: {current_state:?}, expected state: {expected_state:?}"
                 )),
                 mla::errors::Error::WrongReaderState(msg) => PyErr::new::<WrongReaderState, _>(msg),
                 mla::errors::Error::WrongWriterState(msg) => PyErr::new::<WrongWriterState, _>(msg),
@@ -246,7 +245,7 @@ impl From<WrappedError> for PyErr {
                     "End of stream reached, no more data should be expected",
                 ),
                 mla::errors::Error::ConfigError(err) => {
-                    PyErr::new::<ConfigError, _>(format!("{:}", err))
+                    PyErr::new::<ConfigError, _>(format!("{err:}"))
                 }
                 mla::errors::Error::DuplicateFilename => {
                     PyErr::new::<DuplicateFilename, _>("Filename already used")
@@ -856,8 +855,7 @@ impl MLAFile {
                 })
             }
             _ => Err(mla::errors::Error::BadAPIArgument(format!(
-                "Unknown mode {}, use 'r' or 'w'",
-                mode
+                "Unknown mode {mode}, use 'r' or 'w'"
             ))
             .into()),
         }
@@ -897,6 +895,7 @@ impl MLAFile {
         include_hash: bool,
     ) -> Result<HashMap<EntryName, FileMetadata>, WrappedError> {
         self.with_reader(|inner| {
+            #[allow(clippy::mutable_key_type)]
             let mut output = HashMap::new();
             let iter: Vec<RustEntryName> = inner.list_entries()?.cloned().collect();
             for fname in iter {
