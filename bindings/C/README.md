@@ -1,6 +1,6 @@
 # MLA C/CPP Bindings
 
-This project provides C and CPP bindings for the MLA archive format.
+This project provides C and CPP bindings for the MLA format.
 
 ## How-to
 
@@ -33,7 +33,7 @@ Notes: when linking with `mla.lib`, `ntdll.lib` is also needed.
 
 ## Example
 
-* Creating a new MLA archive (from [this file](tests/linux-gcc-g++/create.c) - Windows example [here](tests/windows-msvc/src/main.c))
+* Creating a new MLA (from [this file](tests/linux-gcc-g++/create.c) - Windows example [here](tests/windows-msvc/src/main.c))
 
 ```C
 // Called to out Archive content to the actual output
@@ -112,7 +112,7 @@ For now, only the writer API is available.
 
 * If one wants an archive without encryption, they must explicitly ask for it (ie. default is encrypted)
 * Statuses and handles are separated, to avoid confusion and the use of a variable for two distinct purposes. As a result, each API always returns a `MLAStatus`, and could take or give handles through arguments
-* Output writing is delegated to the library user, through callbacks. That way, she can manage how and when flushing and  actual writes are made (buffering, writing to an external HTTP server, ...)
+* Output writing is delegated to the library user, through callbacks. That way, she can manage how and when flushing and  actual writes are made (buffering, writing to an external HTTP server...)
 
 ## Tests
 
@@ -120,3 +120,7 @@ The bindings are [tested](tests). These tests might also provides some example o
 
 They are launched by the CI.
 One can locally launch them using the available `Makefile` and Visual Studio projects.
+
+## Caveat
+
+MLA bindings for C currently does not support the `Send` feature, so its handles and objects are not safe to use across multiple threads. Thread safety cannot be guaranteed at this time.
