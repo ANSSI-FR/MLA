@@ -189,6 +189,10 @@ impl HybridMultiRecipientEncapsulatedKey {
     }
 }
 
+/// Represents a 64-byte seed split into two 32-byte parts (`d` and `z`).
+///
+/// This seed is used internally in the ML-KEM encryption scheme for
+/// deterministic key derivation.
 #[derive(Clone)]
 pub(crate) struct MLKEMSeed {
     d: B32,
@@ -210,6 +214,7 @@ impl MLKEMSeed {
         Self { d, z }
     }
 
+    /// Creates an MLKEMSeed from a 64-byte array `[d || z]`.
     pub(crate) fn from_d_z_64(mut dz: [u8; 64]) -> Self {
         let d = B32::try_from(&dz[0..32]).unwrap(); // should not fail as length is 64
         let z = B32::try_from(&dz[32..64]).unwrap(); // should not fail as length is 64
@@ -716,5 +721,41 @@ mod tests {
             public_key3.public_key_ecc.as_bytes()
         );
         assert_ne!(public_key.public_key_ml, public_key3.public_key_ml);
+    }
+
+    #[test]
+    fn test_seed_to_and_from_dz64() {
+        let original_seed = MLKEMSeed::generate_from_csprng(&mut rand::thread_rng());
+        let dz64 = original_seed.to_d_z_64();
+        let recovered = MLKEMSeed::from_d_z_64(*dz64);
+        assert!(original_seed == recovered);
+    }
+
+    #[test]
+    fn test_seed_determinism() {
+        let d = [42u8; 32];
+        let z = [7u8; 32];
+        let seed1 = MLKEMSeed::from_d_z_32(d, z);
+        let seed2 = MLKEMSeed::from_d_z_32(d, z);
+        assert!(seed1 == seed2);
+    }
+
+    #[test]
+    fn test_seed_inequality() {
+        let seed1 = MLKEMSeed::from_d_z_32([1u8; 32], [2u8; 32]);
+        let seed2 = MLKEMSeed::from_d_z_32([3u8; 32], [4u8; 32]);
+        assert!(seed1 != seed2);
+    }
+
+    #[test]
+    fn test_seed_to_keypair_roundtrip() {
+        let seed = MLKEMSeed::generate_from_csprng(&mut rand::thread_rng());
+        let privkey = seed.to_privkey();
+        let pubkey = seed.to_pubkey();
+
+        let (expected_privkey, expected_pubkey) = MlKem1024::generate_deterministic(&seed.d, &seed.z);
+
+        assert_eq!(privkey, expected_privkey);
+        assert_eq!(pubkey, expected_pubkey);
     }
 }
