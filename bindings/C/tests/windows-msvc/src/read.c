@@ -150,7 +150,7 @@ int test_reader_extract()
 
     rewind(kf);
 
-    uint8_t *keyData = malloc((size_t)keySize);
+    uint8_t *keyData = (uint8_t *)malloc((size_t)keySize);
     if (!keyData) {
         fprintf(stderr, " [!] Memory allocation failed\n");
         fclose(kf);
