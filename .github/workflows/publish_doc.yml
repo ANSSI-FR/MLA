@@ -5,7 +5,7 @@ permissions: {}
 on:
   push:
     branches:
-      - formatv2
+      - main
 
 jobs:
   build:
