@@ -3,7 +3,6 @@ use std::io::{Read, Write};
 use crate::crypto::aesgcm::{ConstantTimeEq, KEY_SIZE, Key, TAG_LENGTH};
 use crate::crypto::hpke::{DHKEMCiphertext, dhkem_decap, key_schedule_base_hybrid_kem_recipient};
 use crate::errors::{ConfigError, Error};
-use crate::layers::encrypt::get_crypto_rng;
 use crate::{MLADeserialize, MLASerialize};
 use hkdf::Hkdf;
 use kem::{Decapsulate, Encapsulate};
@@ -440,11 +439,6 @@ pub(crate) fn generate_keypair_from_rng(
     )
 }
 
-/// Generate an Hybrid key pair using a CSPRNG
-pub fn generate_keypair() -> (MLADecryptionPrivateKey, MLAEncryptionPublicKey) {
-    generate_keypair_from_rng(get_crypto_rng())
-}
-
 #[cfg(test)]
 mod tests {
     use std::io::Read;
@@ -453,6 +447,8 @@ mod tests {
     use rand::SeedableRng;
     use rand_chacha::ChaChaRng;
     use std::collections::HashSet;
+
+    use crate::crypto::mlakey::generate_mla_keypair;
 
     use super::*;
 
@@ -665,16 +661,25 @@ mod tests {
     /// Test the generation of a key pair
     #[test]
     fn test_generate_keypair() {
-        let (private_key, public_key) = generate_keypair();
+        let (private_key, public_key) = generate_mla_keypair();
 
         // Ensure the ECC private key correspond to the ECC public key
-        let public_key_ecc = X25519PublicKey::from(&private_key.private_key_ecc);
-        assert_eq!(public_key_ecc, public_key.public_key_ecc);
+        let public_key_ecc =
+            X25519PublicKey::from(&private_key.get_decryption_private_key().private_key_ecc);
+        assert_eq!(
+            public_key_ecc,
+            public_key.get_encryption_public_key().public_key_ecc
+        );
 
         // Ensure the ML private key correspond to the ML public key
         let mut rng = ChaChaRng::from_entropy();
-        let (encap, key) = public_key.public_key_ml.encapsulate(&mut rng).unwrap();
+        let (encap, key) = public_key
+            .get_encryption_public_key()
+            .public_key_ml
+            .encapsulate(&mut rng)
+            .unwrap();
         let key_decap = private_key
+            .get_decryption_private_key()
             .private_key_seed_ml
             .to_privkey()
             .decapsulate(&encap)
@@ -753,7 +758,8 @@ mod tests {
         let privkey = seed.to_privkey();
         let pubkey = seed.to_pubkey();
 
-        let (expected_privkey, expected_pubkey) = MlKem1024::generate_deterministic(&seed.d, &seed.z);
+        let (expected_privkey, expected_pubkey) =
+            MlKem1024::generate_deterministic(&seed.d, &seed.z);
 
         assert_eq!(privkey, expected_privkey);
         assert_eq!(pubkey, expected_pubkey);
