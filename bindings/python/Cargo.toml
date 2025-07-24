@@ -19,6 +19,6 @@ name = "pymla"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = "0.24"
+pyo3 = "0.25"
 mla = { version = "2", features = ["send"], path = "../../mla"}
 ml-kem = "0.3.0-pre"
