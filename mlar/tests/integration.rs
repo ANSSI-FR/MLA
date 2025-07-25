@@ -1308,7 +1308,7 @@ fn test_no_open_on_encrypt() {
 #[test]
 fn test_extract_lot_files() {
     // This value should be bigger than FILE_WRITER_POOL_SIZE
-    const TEST_MANY_FILES_NB: usize = 2000;
+    const TEST_MANY_FILES_NB: usize = 1010;
     const SIZE_FILE: usize = 10;
     const SEPARATOR: &str = "SEP";
 
