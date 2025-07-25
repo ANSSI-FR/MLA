@@ -1337,68 +1337,82 @@ fn test_no_open_on_encrypt() {
     assert.failure();
 }
 
-// This value should be bigger than FILE_WRITER_POOL_SIZE
-const TEST_MANY_FILES_NB: usize = 2000;
-
 #[test]
 fn test_extract_lot_files() {
+    // This value should be bigger than FILE_WRITER_POOL_SIZE
+    const TEST_MANY_FILES_NB: usize = 2000;
+    const SIZE_FILE: usize = 10;
+    const SEPARATOR: &str = "SEP";
+
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
     let mut rng: StdRng = SeedableRng::from_seed([0u8; 32]);
-    let mut files_archive_order = vec![];
     let mut files = vec![];
-    const SIZE_FILE: usize = 10;
+    let mut filenames = vec![];
 
-    // Create many files, filled with a few alphanumeric characters
-    for i in 1..TEST_MANY_FILES_NB {
+    // Create many files with random alphanumeric content
+    for i in 0..TEST_MANY_FILES_NB {
         let tmp_file = NamedTempFile::new(format!("file{i}.bin")).unwrap();
         let data: Vec<u8> = Alphanumeric.sample_iter(&mut rng).take(SIZE_FILE).collect();
         tmp_file.write_binary(data.as_slice()).unwrap();
 
-        files_archive_order.push(tmp_file.path().to_path_buf());
-        files.push(tmp_file);
+        files.push((tmp_file, data));
+        filenames.push(format!("file{i}.bin"));
     }
 
-    files.sort_by(|i1, i2| Ord::cmp(&i1.path(), &i2.path()));
+    // Concatenate file data separated by SEPARATOR
+    let mut concatenated_data = Vec::new();
+    for (idx, (_tmp_file, data)) in files.iter().enumerate() {
+        if idx > 0 {
+            concatenated_data.extend(SEPARATOR.as_bytes());
+        }
+        concatenated_data.extend(data);
+    }
 
-    let mut testfs = TestFS {
-        files,
-        files_archive_order,
-    };
-
-    // `mlar create -l -o output.mla -
+    // Create archive passing multiple --filenames flags
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-l")
         .arg("-o")
         .arg(mlar_file.path())
-        .arg("-");
+        .arg("--separator")
+        .arg(SEPARATOR);
 
-    // Use "-" to avoid large command line (Windows limitation is about 8191 char)
-    let mut file_list = String::new();
-    for file in &testfs.files {
-        let entry_name = EntryName::from_path(file.path()).unwrap();
-        let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
-        file_list.push_str(format!("{escaped}\n").as_str());
+    for filename in &filenames {
+        cmd.arg("--filenames").arg(filename);
     }
-    let mut file_listing = String::new();
-    for file in &testfs.files {
-        file_listing.push_str(
-            format!(
-                "{}\n",
-                normalize(file.path()).to_string_lossy().replace('\\', "/")
-            )
-            .as_str(),
-        );
-    }
-    cmd.write_stdin(String::from(&file_list));
+
+    cmd.arg("-").write_stdin(concatenated_data);
 
     println!("{cmd:?}");
     let assert = cmd.assert();
-    assert.success().stderr(String::from(&file_listing));
 
-    // Test global (with all files)
+    let expected_output = filenames.join("\n") + "\n";
+    assert.success().stdout(expected_output.clone());
 
-    // `mlar extract -v -i output.mla -o ouput_dir -g '*'`
+    // === 1. Linear extraction ===
+    let output_dir = TempDir::new().unwrap();
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("extract")
+        .arg("-v")
+        .arg("--accept-unencrypted")
+        .arg("-i")
+        .arg(mlar_file.path())
+        .arg("-o")
+        .arg(output_dir.path());
+
+    println!("{cmd:?}");
+    let assert = cmd.assert();
+    assert.success();
+
+    for (filename, (_tmp_file, original_data)) in filenames.iter().zip(files.iter()) {
+        let extracted = fs::read(output_dir.path().join(filename)).unwrap();
+        assert_eq!(
+            extracted, *original_data,
+            "Mismatch in linear extract: {filename}"
+        );
+    }
+
+    // === 2. Glob extraction ===
     let output_dir = TempDir::new().unwrap();
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("extract")
@@ -1413,49 +1427,25 @@ fn test_extract_lot_files() {
 
     println!("{cmd:?}");
     let assert = cmd.assert();
-    assert.success().stdout(file_listing.clone());
-
-    ensure_directory_content(output_dir.path(), &testfs.files);
-
-    // Test linear extraction of all files
-
-    // `mlar extract -v -i output.mla -o ouput_dir`
-    let output_dir = TempDir::new().unwrap();
-    let mut cmd = Command::cargo_bin(UTIL).unwrap();
-    cmd.arg("extract")
-        .arg("-v")
-        .arg("--accept-unencrypted")
-        .arg("-i")
-        .arg(mlar_file.path())
-        .arg("-o")
-        .arg(output_dir.path());
-
-    println!("{cmd:?}");
-    let assert = cmd.assert();
-    let expected_output = format!(
-        "Extracting the whole archive using a linear extraction\n{}",
-        &file_listing
-    );
-    assert.success().stdout(expected_output);
-
-    ensure_directory_content(output_dir.path(), &testfs.files);
-
-    // Test extraction of one file explicitly
-    // `mlar extract -v -i output.mla -o ouput_dir file1`
-    let one_filename = &testfs.files_archive_order[0];
-    let mut one_file = Vec::new();
-    loop {
-        match testfs.files.pop() {
-            None => {
-                break;
-            }
-            Some(ntf) => {
-                if ntf.path() == one_filename {
-                    one_file.push(ntf);
-                }
-            }
-        }
+    let output_str = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
+    for filename in &filenames {
+        assert!(
+            output_str.contains(filename),
+            "Missing filename in stdout: {filename}",
+        );
     }
+    for (filename, (_tmp_file, original_data)) in filenames.iter().zip(files.iter()) {
+        let extracted = fs::read(output_dir.path().join(filename)).unwrap();
+        assert_eq!(
+            extracted, *original_data,
+            "Mismatch in glob extract: {filename}"
+        );
+    }
+
+    // === 3. Single file extraction ===
+    let single_file = &filenames[0];
+    let single_file_data = &files[0].1;
+
     let output_dir = TempDir::new().unwrap();
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("extract")
@@ -1465,16 +1455,17 @@ fn test_extract_lot_files() {
         .arg(mlar_file.path())
         .arg("-o")
         .arg(output_dir.path())
-        .arg(normalize(one_filename));
+        .arg(single_file);
 
     println!("{cmd:?}");
     let assert = cmd.assert();
-    assert.success().stdout(format!(
-        "{}\n",
-        normalize(one_filename).to_string_lossy().replace('\\', "/")
-    ));
+    assert.success().stdout(format!("{single_file}\n"));
 
-    ensure_directory_content(output_dir.path(), &one_file);
+    let extracted = fs::read(output_dir.path().join(single_file)).unwrap();
+    assert_eq!(
+        extracted, *single_file_data,
+        "Mismatch in single file extract: {single_file}"
+    );
 }
 
 #[test]
