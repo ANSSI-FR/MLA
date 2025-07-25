@@ -1,5 +1,6 @@
 use assert_cmd::Command;
 use assert_fs::fixture::{FileWriteBin, NamedTempFile, TempDir};
+use mla::entry::EntryName;
 use permutate::Permutator;
 use rand::SeedableRng;
 use rand::distr::{Alphanumeric, Distribution, StandardUniform};
@@ -153,12 +154,9 @@ fn file_list_append_from_dir(dir: &Path, file_list: &mut Vec<String>) {
         if new_path.is_dir() {
             file_list_append_from_dir(&new_path, file_list);
         } else {
-            file_list.push(
-                normalize(&new_path)
-                    .to_string_lossy()
-                    .replace('\\', "/")
-                    .to_string(),
-            );
+            let entry_name = EntryName::from_path(new_path).unwrap();
+            let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
+            file_list.push(escaped.to_string());
         }
     }
 }
@@ -250,13 +248,9 @@ fn test_create_filelist_stdin() {
     }
     let mut file_list = String::new();
     for file in &testfs.files {
-        file_list.push_str(
-            format!(
-                "{}\n",
-                normalize(file.path()).to_string_lossy().replace('\\', "/")
-            )
-            .as_str(),
-        );
+        let entry_name = EntryName::from_path(file.path()).unwrap();
+        let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
+        file_list.push_str(format!("{escaped}\n").as_str());
     }
     cmd.write_stdin(String::from(&file_list_stdin));
     println!("{file_list:?}");
@@ -297,13 +291,9 @@ fn test_create_list_tar() {
     let mut file_list = String::new();
     for file in &testfs.files {
         cmd.arg(file.path());
-        file_list.push_str(
-            format!(
-                "{}\n",
-                normalize(file.path()).to_string_lossy().replace('\\', "/")
-            )
-            .as_str(),
-        );
+        let entry_name = EntryName::from_path(file.path()).unwrap();
+        let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
+        file_list.push_str(format!("{escaped}\n").as_str());
     }
 
     println!("{cmd:?}");
@@ -374,9 +364,9 @@ fn test_truncated_repair_list_tar() {
     }
     for path in &testfs.files_archive_order {
         cmd.arg(path);
-        file_list.push_str(
-            format!("{}\n", normalize(path).to_string_lossy().replace('\\', "/")).as_str(),
-        );
+        let entry_name = EntryName::from_path(path).unwrap();
+        let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
+        file_list.push_str(format!("{escaped}\n").as_str());
     }
 
     println!("{cmd:?}");
@@ -505,13 +495,9 @@ fn test_multiple_keys() {
     let mut file_list = String::new();
     for file in &testfs.files {
         cmd.arg(file.path());
-        file_list.push_str(
-            format!(
-                "{}\n",
-                normalize(file.path()).to_string_lossy().replace('\\', "/")
-            )
-            .as_str(),
-        );
+        let entry_name = EntryName::from_path(file.path()).unwrap();
+        let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
+        file_list.push_str(format!("{escaped}\n").as_str());
     }
 
     println!("{cmd:?}");
@@ -586,13 +572,9 @@ fn test_multiple_compression_level() {
         let mut file_list = String::new();
         for file in &testfs.files {
             cmd.arg(file.path());
-            file_list.push_str(
-                format!(
-                    "{}\n",
-                    normalize(file.path()).to_string_lossy().replace('\\', "/")
-                )
-                .as_str(),
-            );
+            let entry_name = EntryName::from_path(file.path()).unwrap();
+            let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
+            file_list.push_str(format!("{escaped}\n").as_str());
         }
 
         println!("{cmd:?}");
@@ -650,13 +632,9 @@ fn test_convert() {
     let mut file_list = String::new();
     for file in &testfs.files {
         cmd.arg(file.path());
-        file_list.push_str(
-            format!(
-                "{}\n",
-                normalize(file.path()).to_string_lossy().replace('\\', "/")
-            )
-            .as_str(),
-        );
+        let entry_name = EntryName::from_path(file.path()).unwrap();
+        let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
+        file_list.push_str(format!("{escaped}\n").as_str());
     }
 
     println!("{cmd:?}");
@@ -728,13 +706,9 @@ fn test_stdio() {
     let mut file_list = String::new();
     for file in &testfs.files {
         cmd.arg(file.path());
-        file_list.push_str(
-            format!(
-                "{}\n",
-                normalize(file.path()).to_string_lossy().replace('\\', "/")
-            )
-            .as_str(),
-        );
+        let entry_name = EntryName::from_path(file.path()).unwrap();
+        let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
+        file_list.push_str(format!("{escaped}\n").as_str());
     }
 
     println!("{cmd:?}");
@@ -800,9 +774,9 @@ fn test_multi_fileorders() {
         let mut file_list = String::new();
         for file in list {
             cmd.arg(file);
-            file_list.push_str(
-                format!("{}\n", normalize(file).to_string_lossy().replace('\\', "/")).as_str(),
-            );
+            let entry_name = EntryName::from_path(file).unwrap();
+            let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
+            file_list.push_str(format!("{escaped}\n").as_str());
         }
 
         println!("{cmd:?}");
@@ -840,13 +814,9 @@ fn test_verbose_listing() {
     let mut file_list = String::new();
     for file in &testfs.files {
         cmd.arg(file.path());
-        file_list.push_str(
-            format!(
-                "{}\n",
-                normalize(file.path()).to_string_lossy().replace('\\', "/")
-            )
-            .as_str(),
-        );
+        let entry_name = EntryName::from_path(file.path()).unwrap();
+        let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
+        file_list.push_str(format!("{escaped}\n").as_str());
     }
 
     println!("{cmd:?}");
@@ -901,13 +871,9 @@ fn test_extract() {
     let mut file_list = String::new();
     for file in &testfs.files {
         cmd.arg(file.path());
-        file_list.push_str(
-            format!(
-                "{}\n",
-                normalize(file.path()).to_string_lossy().replace('\\', "/")
-            )
-            .as_str(),
-        );
+        let entry_name = EntryName::from_path(file.path()).unwrap();
+        let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
+        file_list.push_str(format!("{escaped}\n").as_str());
     }
 
     println!("{cmd:?}");
@@ -1028,13 +994,9 @@ fn test_cat() {
     let mut file_list = String::new();
     for file in &testfs.files {
         cmd.arg(file.path());
-        file_list.push_str(
-            format!(
-                "{}\n",
-                normalize(file.path()).to_string_lossy().replace('\\', "/")
-            )
-            .as_str(),
-        );
+        let entry_name = EntryName::from_path(file.path()).unwrap();
+        let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
+        file_list.push_str(format!("{escaped}\n").as_str());
     }
 
     println!("{cmd:?}");
@@ -1086,13 +1048,9 @@ fn test_keygen() {
     let mut file_list = String::new();
     for file in &testfs.files {
         cmd.arg(file.path());
-        file_list.push_str(
-            format!(
-                "{}\n",
-                normalize(file.path()).to_string_lossy().replace('\\', "/")
-            )
-            .as_str(),
-        );
+        let entry_name = EntryName::from_path(file.path()).unwrap();
+        let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
+        file_list.push_str(format!("{escaped}\n").as_str());
     }
 
     println!("{cmd:?}");
@@ -1295,13 +1253,9 @@ fn test_verbose_info() {
     let mut file_list = String::new();
     for file in &testfs.files {
         cmd.arg(file.path());
-        file_list.push_str(
-            format!(
-                "{}\n",
-                normalize(file.path()).to_string_lossy().replace('\\', "/")
-            )
-            .as_str(),
-        );
+        let entry_name = EntryName::from_path(file.path()).unwrap();
+        let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
+        file_list.push_str(format!("{escaped}\n").as_str());
     }
 
     println!("{cmd:?}");
@@ -1358,13 +1312,9 @@ fn test_no_open_on_encrypt() {
     let mut file_list = String::new();
     for file in &testfs.files {
         cmd.arg(file.path());
-        file_list.push_str(
-            format!(
-                "{}\n",
-                normalize(file.path()).to_string_lossy().replace('\\', "/")
-            )
-            .as_str(),
-        );
+        let entry_name = EntryName::from_path(file.path()).unwrap();
+        let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
+        file_list.push_str(format!("{escaped}\n").as_str());
     }
 
     println!("{cmd:?}");
@@ -1426,7 +1376,9 @@ fn test_extract_lot_files() {
     // Use "-" to avoid large command line (Windows limitation is about 8191 char)
     let mut file_list = String::new();
     for file in &testfs.files {
-        file_list.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
+        let entry_name = EntryName::from_path(file.path()).unwrap();
+        let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
+        file_list.push_str(format!("{escaped}\n").as_str());
     }
     let mut file_listing = String::new();
     for file in &testfs.files {
