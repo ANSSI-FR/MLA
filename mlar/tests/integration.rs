@@ -317,13 +317,9 @@ fn test_truncated_repair_list_tar() {
     let mut file_list_no_last = String::new(); // Sorted by name
     for file in &testfs.files {
         if file.path() != testfs.files_archive_order.last().unwrap() {
-            file_list_no_last.push_str(
-                format!(
-                    "{}\n",
-                    normalize(file.path()).to_string_lossy().replace('\\', "/")
-                )
-                .as_str(),
-            );
+            let entry_name = EntryName::from_path(file.path()).unwrap();
+            let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
+            file_list_no_last.push_str(format!("{escaped}\n").as_str());
         }
     }
     for path in &testfs.files_archive_order {
