@@ -46,6 +46,8 @@ enum class MLAStatus : uint64_t {
   MLA_STATUS_INVALID_LAST_TAG = 102400,
   MLA_STATUS_ENCRYPTION_ASKED_BUT_NOT_MARKED_PRESENT = 1572864,
   MLA_STATUS_WRONG_END_MAGIC = 1638400,
+  MLA_STATUS_NO_VALID_SIGNATURE_FOUND = 2097152,
+  MLA_STATUS_SIGNATURE_VERIFICATION_ASKED_BUT_NO_SIGNATURE_LAYER_FOUND = 2162688,
   MLA_STATUS_MLA_KEY_PARSER_ERROR = 15859712,
 };
 
@@ -106,15 +108,51 @@ struct ArchiveInfo {
 
 extern "C" {
 
-/// Create a new configuration with the given public key(s) in MLA key format and
-/// return a handle to it
-/// `public_keys_pointers` is an array of pointers to public keys
-MLAStatus create_mla_writer_config_with_public_keys(MLAWriterConfigHandle *handle_out,
-                                                    const char *const *public_keys_pointers,
-                                                    uintptr_t number_of_public_keys);
+/// Create a new configuration with encryption and signature and
+/// return a handle to it.
+///
+/// See rust doc for `ArchiveWriterConfig::with_encryption_with_signature` for more info.
+///
+/// `private_keys_pointers` is an array of pointers to private keys null terminated strings in MLA key format.
+///
+/// `public_keys_pointers` is an array of pointers to public keys null terminated strings in MLA key format.
+MLAStatus create_mla_writer_config_with_encryption_with_signature(MLAWriterConfigHandle *handle_out,
+                                                                  const char *const *private_keys_pointers,
+                                                                  uintptr_t number_of_private_keys,
+                                                                  const char *const *public_keys_pointers,
+                                                                  uintptr_t number_of_public_keys);
 
-/// Create a new configuration without encryption and return a handle to it
-MLAStatus create_mla_writer_config_without_encryption(MLAWriterConfigHandle *handle_out);
+/// WARNING: Will NOT sign content !
+///
+/// Create a new configuration with encryption AND WITHOUT SIGNATURE and
+/// return a handle to it.
+///
+/// See rust doc for `ArchiveWriterConfig::with_encryption_without_signature` for more info.
+///
+/// `public_keys_pointers` is an array of pointers to public keys null terminated strings in MLA key format.
+MLAStatus create_mla_writer_config_with_encryption_without_signature(MLAWriterConfigHandle *handle_out,
+                                                                     const char *const *public_keys_pointers,
+                                                                     uintptr_t number_of_public_keys);
+
+/// WARNING: Will NOT encrypt content !
+///
+/// Create a new configuration with signature AND WITHOUT ENCRYPTION and
+/// return a handle to it.
+///
+/// See rust doc for `ArchiveWriterConfig::without_encryption_with_signature` for more info.
+///
+/// `private_keys_pointers` is an array of pointers to private keys null terminated strings in MLA key format.
+MLAStatus create_mla_writer_config_without_encryption_with_signature(MLAWriterConfigHandle *handle_out,
+                                                                     const char *const *private_keys_pointers,
+                                                                     uintptr_t number_of_private_keys);
+
+/// WARNING: Will NOT encrypt content and will NOT sign content !
+///
+/// Create a new configuration WITHOUT ENCRYPTION and WITHOUT SIGNATURE and
+/// return a handle to it.
+///
+/// See rust doc for `ArchiveWriterConfig::without_encryption_without_signature_verification` for more info.
+MLAStatus create_mla_writer_config_without_encryption_without_signature(MLAWriterConfigHandle *handle_out);
 
 /// Change handle to same config with given compression level
 /// Currently this level can only be an integer N with 0 <= N <= 11,
@@ -127,21 +165,57 @@ MLAStatus mla_writer_config_with_compression_level(MLAWriterConfigHandle *handle
 /// Previous handle value becomes invalid after this call.
 MLAStatus mla_writer_config_without_compression(MLAWriterConfigHandle *handle_inout);
 
-MLAStatus create_mla_reader_config_without_encryption(MLAReaderConfigHandle *handle_out);
+/// Create a new configuration with encryption and signature and
+/// return a handle to it.
+///
+/// See rust doc for `ArchiveReaderConfig::with_signature` and `IncompleteArchiveReaderConfig::with_encryption` for more info.
+///
+/// `private_keys_pointers` is an array of pointers to private keys null terminated strings in MLA key format.
+///
+/// `public_keys_pointers` is an array of pointers to public keys null terminated strings in MLA key format.
+MLAStatus create_mla_reader_config_with_encryption_with_signature_verification(MLAReaderConfigHandle *handle_out,
+                                                                               const char *const *private_keys_pointers,
+                                                                               uintptr_t number_of_private_keys,
+                                                                               const char *const *public_keys_pointers,
+                                                                               uintptr_t number_of_public_keys);
 
-/// Create a new configuration with the given private key(s) in MLA key format and
-/// return a handle to it
-/// `private_keys_pointers` is an array of pointers to private keys
-MLAStatus create_mla_reader_config_with_private_keys(MLAReaderConfigHandle *handle_out,
-                                                     const char *const *private_keys_pointers,
-                                                     uintptr_t number_of_private_keys);
+/// WARNING: This will accept reading unencrypted archives !
+///
+/// Create a new configuration with signature and EVENTUALLY encryption and
+/// return a handle to it.
+///
+/// See rust doc for `ArchiveReaderConfig::with_signature` and `IncompleteArchiveReaderConfig::with_encryption_accept_unencrypted` for more info.
+///
+/// `private_keys_pointers` is an array of pointers to private keys null terminated strings in MLA key format.
+///
+/// `public_keys_pointers` is an array of pointers to public keys null terminated strings in MLA key format.
+MLAStatus create_mla_reader_config_with_encryption_accept_unencrypted_with_signature_verification(MLAReaderConfigHandle *handle_out,
+                                                                                                  const char *const *private_keys_pointers,
+                                                                                                  uintptr_t number_of_private_keys,
+                                                                                                  const char *const *public_keys_pointers,
+                                                                                                  uintptr_t number_of_public_keys);
 
-/// Create a new configuration with the given private key(s) in MLA key format and
-/// return a handle to it. Accept opening archives without encryption.
-/// `private_keys_pointers` is an array of pointers to private keys
-MLAStatus create_mla_reader_config_with_private_keys_accept_unencrypted(MLAReaderConfigHandle *handle_out,
-                                                                        const char *const *private_keys_pointers,
-                                                                        uintptr_t number_of_private_keys);
+/// Create a new configuration with encryption but SKIPPING signature checking and
+/// return a handle to it.
+///
+/// See rust doc for `ArchiveReaderConfig::without_signature_verification` and `IncompleteArchiveReaderConfig::with_encryption` for more info.
+///
+/// `private_keys_pointers` is an array of pointers to private keys null terminated strings in MLA key format.
+MLAStatus create_mla_reader_config_with_encryption_without_signature_verification(MLAReaderConfigHandle *handle_out,
+                                                                                  const char *const *private_keys_pointers,
+                                                                                  uintptr_t number_of_private_keys);
+
+/// WARNING: This will accept reading unencrypted and unsigned archives !
+///
+/// Create a new configuration EVENTUALLY with encryption but SKIPPING signature checking and
+/// return a handle to it.
+///
+/// See rust doc for `ArchiveReaderConfig::without_signature_verification` and `IncompleteArchiveReaderConfig::with_encryption_accept_unencrypted` for more info.
+///
+/// `private_keys_pointers` is an array of pointers to private keys null terminated strings in MLA key format.
+MLAStatus create_mla_reader_config_with_encryption_accept_unencrypted_without_signature_verification(MLAReaderConfigHandle *handle_out,
+                                                                                                     const char *const *private_keys_pointers,
+                                                                                                     uintptr_t number_of_private_keys);
 
 /// Open a new MLA archive using the given configuration, which is consumed and freed
 /// (its handle cannot be reused to create another archive). The archive is streamed
