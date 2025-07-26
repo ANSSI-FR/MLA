@@ -134,7 +134,7 @@
 //!
 //!     // Read from buf, which needs Read + Seek
 //!     let buf = io::Cursor::new(DATA);
-//!     let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
+//!     let mut mla_read = ArchiveReader::from_config(buf, config).unwrap().0;
 //!
 //!     // Get a file
 //!     let mut entry = mla_read
@@ -1695,7 +1695,7 @@ pub(crate) mod tests {
         let buf = Cursor::new(dest.as_slice());
         let config =
             ArchiveReaderConfig::without_signature_verification().with_encryption(&[private_key]);
-        let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
+        let mut mla_read = ArchiveReader::from_config(buf, config).unwrap().0;
 
         let mut file = mla_read
             .get_entry(EntryName::from_path("my_file").unwrap())
@@ -1751,7 +1751,7 @@ pub(crate) mod tests {
             .get_signature_verification_public_key()
             .clone()])
         .without_encryption();
-        let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
+        let mut mla_read = ArchiveReader::from_config(buf, config).unwrap().0;
 
         let mut file = mla_read
             .get_entry(EntryName::from_path("my_file").unwrap())
@@ -1927,7 +1927,7 @@ pub(crate) mod tests {
         let buf = Cursor::new(mla.as_slice());
         let config = ArchiveReaderConfig::without_signature_verification()
             .with_encryption(&[receiver_key.0.get_decryption_private_key().clone()]);
-        let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
+        let mut mla_read = ArchiveReader::from_config(buf, config).unwrap().0;
 
         for (fname, content) in files {
             let mut file = mla_read.get_entry(fname).unwrap().unwrap();
@@ -1994,7 +1994,7 @@ pub(crate) mod tests {
             } else {
                 ArchiveReaderConfig::without_signature_verification().without_encryption()
             };
-            let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
+            let mut mla_read = ArchiveReader::from_config(buf, config).unwrap().0;
 
             let mut file = mla_read
                 .get_entry(EntryName::from_path("my_file").unwrap())
@@ -2032,7 +2032,7 @@ pub(crate) mod tests {
         let buf = Cursor::new(mla.as_slice());
         let config = ArchiveReaderConfig::without_signature_verification()
             .with_encryption(&[receiver_key.0.get_decryption_private_key().clone()]);
-        let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
+        let mut mla_read = ArchiveReader::from_config(buf, config).unwrap().0;
 
         // Check the list of files is correct
         let mut sorted_list: Vec<EntryName> = mla_read.list_entries().unwrap().cloned().collect();
@@ -2086,7 +2086,7 @@ pub(crate) mod tests {
         let buf2 = Cursor::new(dest_w.as_slice());
         let config = ArchiveReaderConfig::without_signature_verification()
             .with_encryption(&[receiver_key.0.get_decryption_private_key().clone()]);
-        let mut mla_read = ArchiveReader::from_config(buf2, config).unwrap();
+        let mut mla_read = ArchiveReader::from_config(buf2, config).unwrap().0;
 
         // Check the list of files is correct
         let mut sorted_list: Vec<EntryName> = mla_read.list_entries().unwrap().cloned().collect();
@@ -2145,7 +2145,7 @@ pub(crate) mod tests {
                 let buf2 = Cursor::new(dest_w.as_slice());
                 let config = ArchiveReaderConfig::without_signature_verification()
                     .with_encryption(&[receiver_key.0.get_decryption_private_key().clone()]);
-                let mut mla_read = ArchiveReader::from_config(buf2, config).unwrap();
+                let mut mla_read = ArchiveReader::from_config(buf2, config).unwrap().0;
 
                 // Check *the start of* the files list is correct
                 let expected = files.iter().map(|(x, _y)| x.clone()).collect::<Vec<_>>();
@@ -2234,7 +2234,7 @@ pub(crate) mod tests {
             let buf = Cursor::new(dest.as_slice());
             let config = ArchiveReaderConfig::without_signature_verification()
                 .with_encryption(&[receiver_key.0.get_decryption_private_key().clone()]);
-            let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
+            let mut mla_read = ArchiveReader::from_config(buf, config).unwrap().0;
 
             for (fname, data) in &files {
                 let mla_file = mla_read.get_entry(fname.clone()).unwrap().unwrap();
@@ -2308,7 +2308,7 @@ pub(crate) mod tests {
         let buf = Cursor::new(dest.as_slice());
         let config = ArchiveReaderConfig::without_signature_verification()
             .with_encryption(&[receiver_key.0.get_decryption_private_key().clone()]);
-        let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
+        let mut mla_read = ArchiveReader::from_config(buf, config).unwrap().0;
 
         // Get hashes and compare
         for (filename, content) in files {
@@ -2490,7 +2490,7 @@ pub(crate) mod tests {
             .get_private_keys();
         let config = ArchiveReaderConfig::without_signature_verification()
             .with_encryption(&[privkey.clone()]);
-        let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
+        let mut mla_read = ArchiveReader::from_config(buf, config).unwrap().0;
 
         // Build FailSafeReader
         let config =
@@ -2514,7 +2514,7 @@ pub(crate) mod tests {
         let buf2 = Cursor::new(dest_w);
         let repread_config =
             ArchiveReaderConfig::without_signature_verification().without_encryption();
-        let mut mla_repread = ArchiveReader::from_config(buf2, repread_config).unwrap();
+        let mut mla_repread = ArchiveReader::from_config(buf2, repread_config).unwrap().0;
 
         assert_eq!(files.len(), mla_read.list_entries().unwrap().count());
         assert_eq!(files.len(), mla_repread.list_entries().unwrap().count());
@@ -2601,7 +2601,8 @@ pub(crate) mod tests {
             buf,
             ArchiveReaderConfig::without_signature_verification().without_encryption(),
         )
-        .expect("archive reader");
+        .expect("archive reader")
+        .0;
         let mut out = Vec::new();
         mla_read
             .get_entry(fname)
@@ -2670,7 +2671,9 @@ pub(crate) mod tests {
         let buf = Cursor::new(mla_data);
         let config =
             ArchiveReaderConfig::without_signature_verification().with_encryption(&[private_key]);
-        let mut mla_read = ArchiveReader::from_config(buf, config).expect("archive reader");
+        let mut mla_read = ArchiveReader::from_config(buf, config)
+            .expect("archive reader")
+            .0;
 
         let file_names: Vec<EntryName> = (0..nb_file)
             .map(|nb| EntryName::from_path(format!("file_{nb:}")).unwrap())
