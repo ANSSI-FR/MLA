@@ -1,22 +1,39 @@
 use crate::crypto::hybrid::{MLADecryptionPrivateKey, MLAEncryptionPublicKey};
+use crate::crypto::mlakey::MLASignaturePrivateKey;
 use crate::errors::ConfigError;
 use crate::layers::compress::CompressionConfig;
 use crate::layers::encrypt::{EncryptionConfig, EncryptionReaderConfig};
+use crate::layers::signature::SignatureConfig;
 
 /// Configuration to write an archive.
 pub struct ArchiveWriterConfig {
     pub(crate) compression_config: Option<CompressionConfig>,
     pub(crate) encryption_config: Option<EncryptionConfig>,
+    pub(crate) signature_config: Option<SignatureConfig>,
 }
 
 impl ArchiveWriterConfig {
+    /// Will sign content with given signature private keys.
+    ///
+    /// Returns `ConfigError::PrivateKeyNotSet` if `signature_private_keys` is empty.
+    pub fn without_encryption_with_signature(
+        signature_private_keys: &[MLASignaturePrivateKey],
+    ) -> Result<Self, ConfigError> {
+        Ok(ArchiveWriterConfig {
+            compression_config: Some(CompressionConfig::default()),
+            encryption_config: None,
+            signature_config: Some(SignatureConfig::new(signature_private_keys)?),
+        })
+    }
+
     /// Will encrypt content with given public keys.
-    pub fn with_public_keys(keys: &[MLAEncryptionPublicKey]) -> Self {
-        let mut encryption_config = EncryptionConfig::default();
-        encryption_config.add_public_keys(keys);
+    ///
+    /// Returns `ConfigError::EncryptionKeyIsMissing` if `encryption_public_keys` is empty.
+    pub fn with_public_keys(encryption_public_keys: &[MLAEncryptionPublicKey]) -> Self {
         ArchiveWriterConfig {
             compression_config: Some(CompressionConfig::default()),
-            encryption_config: Some(encryption_config),
+            encryption_config: Some(EncryptionConfig::new(encryption_public_keys).unwrap()),
+            signature_config: None,
         }
     }
 
@@ -25,6 +42,7 @@ impl ArchiveWriterConfig {
         ArchiveWriterConfig {
             compression_config: Some(CompressionConfig::default()),
             encryption_config: None,
+            signature_config: None,
         }
     }
 
@@ -34,12 +52,14 @@ impl ArchiveWriterConfig {
         let ArchiveWriterConfig {
             compression_config,
             encryption_config,
+            signature_config,
         } = self;
         let mut compression_config = compression_config.unwrap_or_default();
         compression_config.set_compression_level(compression_level)?;
         Ok(ArchiveWriterConfig {
             compression_config: Some(compression_config),
             encryption_config,
+            signature_config,
         })
     }
 
