@@ -1060,8 +1060,9 @@ pub extern "C" fn mla_roarchive_extract(
     read_callback: MlaReadCallback,
     seek_callback: MlaSeekCallback,
     file_callback: MLAFileCallBack,
-    give_raw_name_as_arbitrary_bytes_to_file_callback: bool,
     context: *mut c_void,
+    give_raw_name_as_arbitrary_bytes_to_file_callback: bool,
+    number_of_keys_with_valid_signature: *mut u32,
 ) -> MLAStatus {
     if config.is_null() {
         return MLAStatus::BadAPIArgument;
@@ -1091,6 +1092,7 @@ pub extern "C" fn mla_roarchive_extract(
         file_callback,
         give_raw_name_as_arbitrary_bytes_to_file_callback,
         context,
+        number_of_keys_with_valid_signature,
     )
 }
 
@@ -1101,6 +1103,7 @@ fn _mla_roarchive_extract<'a, R: Read + Seek + 'a>(
     file_callback: MLAFileCallBackRaw,
     give_raw_name_as_arbitrary_bytes_to_file_callback: bool,
     context: *mut c_void,
+    number_of_keys_with_valid_signature: *mut u32,
 ) -> MLAStatus {
     let config_ptr = unsafe { *(config as *mut *mut ArchiveReaderConfig) };
     // Avoid any use-after-free of this handle by the caller
@@ -1110,7 +1113,13 @@ fn _mla_roarchive_extract<'a, R: Read + Seek + 'a>(
     let config = unsafe { Box::from_raw(config_ptr) };
 
     let mut mla: ArchiveReader<'a, R> = match ArchiveReader::from_config(src, *config) {
-        Ok(mla) => mla,
+        Ok((mla, keys_with_valid_signature)) => {
+            let count = keys_with_valid_signature.len() as u32;
+            unsafe {
+                *number_of_keys_with_valid_signature = count;
+            }
+            mla
+        }
         Err(e) => {
             return MLAStatus::from(e);
         }
