@@ -425,7 +425,7 @@ impl<W: InnerWriterTrait> Write for InternalEncryptionLayerWriter<'_, W> {
 
 // ---------- Reader ----------
 
-fn read_encryption_header_after_magic<R: Read>(
+pub(crate) fn read_encryption_header_after_magic<R: Read>(
     src: &mut R,
 ) -> Result<(EncryptionPersistentConfig, u64), Error> {
     let mut src = PositionLayerReader::new(src);

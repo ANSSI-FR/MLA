@@ -149,6 +149,8 @@ create_exception!(mla, InvalidLastTag, MLAError, "Wrong last block tag");
 create_exception!(mla, EncryptionAskedButNotMarkedPresent, MLAError, "User asked for encryption but archive was not marked as encrypted");
 create_exception!(mla, EntryNameError, MLAError, "An MLA entry name is invalid for the given operation");
 create_exception!(mla, WrongEndMagic, MLAError, "Wrong end magic, must be \"EMLAAAAA\"");
+create_exception!(mla, NoValidSignatureFound, MLAError, "Cannot validate any signature");
+create_exception!(mla, SignatureVerificationAskedButNoSignatureLayerFound, MLAError, "Signature verification was asked but no signature layer was found");
 
 // Convert potentials errors to the wrapped type
 
@@ -265,6 +267,12 @@ impl From<WrappedError> for PyErr {
                 }
                 mla::errors::Error::WrongEndMagic => {
                     PyErr::new::<WrongEndMagic, _>("Wrong magic, must be \"EMLAAAAA\"")
+                }
+                mla::errors::Error::NoValidSignatureFound => {
+                    PyErr::new::<NoValidSignatureFound, _>("Cannot validate any signature")
+                }
+                mla::errors::Error::SignatureVerificationAskedButNoSignatureLayerFound => {
+                    PyErr::new::<SignatureVerificationAskedButNoSignatureLayerFound, _>("Signature verification was asked but no signature layer was found")
                 }
             },
             WrappedError::WrappedPy(inner_err) => inner_err,
@@ -1197,6 +1205,8 @@ fn pymla(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("HPKEError", py.get_type::<HPKEError>())?;
     m.add("InvalidLastTag", py.get_type::<InvalidLastTag>())?;
     m.add("WrongEndMagic", py.get_type::<WrongEndMagic>())?;
+    m.add("NoValidSignatureFound", py.get_type::<NoValidSignatureFound>())?;
+    m.add("SignatureVerificationAskedButNoSignatureLayerFound", py.get_type::<SignatureVerificationAskedButNoSignatureLayerFound>())?;
 
     // Add constants
     m.add("DEFAULT_COMPRESSION_LEVEL", DEFAULT_COMPRESSION_LEVEL)?;
