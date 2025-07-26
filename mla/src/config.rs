@@ -120,7 +120,8 @@ impl ArchiveWriterConfig {
 
 /// Configuration used to read an archive.
 ///
-/// Use
+/// Use this to build an `IncompleteArchiveReaderConfig` which you will be able
+/// to use to build an `ArchiveReaderConfig`.
 pub struct ArchiveReaderConfig {
     pub(crate) accept_unencrypted: bool,
     // Layers specifics
