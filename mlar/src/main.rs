@@ -4,8 +4,9 @@ use humansize::{DECIMAL, FormatSize};
 use lru::LruCache;
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
 use mla::crypto::mlakey::{
-    MLAPrivateKey, MLAPublicKey, derive_keypair_from_path, generate_mla_keypair,
-    generate_mla_keypair_from_seed,
+    MLADecryptionPrivateKey, MLAEncryptionPublicKey, MLAPrivateKey, MLAPublicKey,
+    MLASignaturePrivateKey, MLASignatureVerificationPublicKey, derive_keypair_from_path,
+    generate_mla_keypair, generate_mla_keypair_from_seed,
 };
 use mla::entry::{ENTRY_NAME_RAW_CONTENT_ALLOWED_BYTES, EntryName, EntryNameError};
 use mla::errors::{Error, TruncatedReadError};
@@ -121,40 +122,62 @@ impl Write for OutputTypes {
 /// Return the parsed version of private keys from arguments `private_keys`
 /// Each key is expected to be a file path containing a serialized MLA private key.
 /// Returns an error if any file can't be opened or parsed.
-fn open_private_keys(matches: &ArgMatches) -> Result<Vec<MLAPrivateKey>, Error> {
-    let mut private_keys = Vec::new();
-    if let Some(private_key_args) = matches.get_many::<PathBuf>("private_keys") {
+fn open_private_keys(
+    matches: &ArgMatches,
+    private_keys_arg_name: &str,
+) -> Result<(Vec<MLADecryptionPrivateKey>, Vec<MLASignaturePrivateKey>), Error> {
+    let mut private_decryption_keys = Vec::new();
+    let mut private_signature_keys = Vec::new();
+    if let Some(private_key_args) = matches.get_many::<PathBuf>(private_keys_arg_name) {
         for private_key_arg in private_key_args {
             let mut file = File::open(private_key_arg)?;
-            let private_key = MLAPrivateKey::deserialize_private_key(&mut file)
-                .map_err(|_| Error::InvalidKeyFormat)?;
-            private_keys.push(private_key);
+            let (private_decryption_key, private_siging_key) =
+                MLAPrivateKey::deserialize_private_key(&mut file)
+                    .map_err(|_| Error::InvalidKeyFormat)?
+                    .get_private_keys();
+            private_decryption_keys.push(private_decryption_key);
+            private_signature_keys.push(private_siging_key);
         }
     };
-    Ok(private_keys)
+
+    Ok((private_decryption_keys, private_signature_keys))
 }
 
 /// Return the parsed version of public keys from arguments `public_keys`
 /// Each key is expected to be a file path containing a serialized MLA public key.
 /// Returns an error if any file can't be opened or parsed.
-fn open_public_keys(matches: &ArgMatches) -> Result<Vec<MLAPublicKey>, Error> {
-    let mut public_keys = Vec::new();
-
-    if let Some(public_key_args) = matches.get_many::<PathBuf>("public_keys") {
+fn open_public_keys(
+    matches: &ArgMatches,
+    pubkey_arg_name: &str,
+) -> Result<
+    (
+        Vec<MLAEncryptionPublicKey>,
+        Vec<MLASignatureVerificationPublicKey>,
+    ),
+    Error,
+> {
+    let mut public_encryption_keys = Vec::new();
+    let mut public_signature_verification_keys = Vec::new();
+    if let Some(public_key_args) = matches.get_many::<PathBuf>(pubkey_arg_name) {
         for public_key_arg in public_key_args {
             let mut file = File::open(public_key_arg)?;
-
-            let public_key = MLAPublicKey::deserialize_public_key(&mut file)
-                .map_err(|_| Error::InvalidKeyFormat)?;
-
-            public_keys.push(public_key);
+            let (public_encryption_key, public_signature_verification_key) =
+                MLAPublicKey::deserialize_public_key(&mut file)
+                    .map_err(|_| Error::InvalidKeyFormat)?
+                    .get_public_keys();
+            public_encryption_keys.push(public_encryption_key);
+            public_signature_verification_keys.push(public_signature_verification_key);
         }
-    }
-    Ok(public_keys)
+    };
+
+    Ok((public_encryption_keys, public_signature_verification_keys))
 }
 
 /// Return the ArchiveWriterConfig corresponding to provided arguments
-fn config_from_matches(matches: &ArgMatches) -> Result<ArchiveWriterConfig, MlarError> {
+fn config_from_matches(
+    matches: &ArgMatches,
+    create_command: bool,
+) -> Result<ArchiveWriterConfig, MlarError> {
     // Get layers
     let mut layers = Vec::new();
     if matches.contains_id("layers") {
@@ -166,36 +189,82 @@ fn config_from_matches(matches: &ArgMatches) -> Result<ArchiveWriterConfig, Mlar
         // Default
         layers.push("compress");
         layers.push("encrypt");
+        layers.push("sign");
     };
 
-    if layers.contains(&"encrypt") && !matches.contains_id("public_keys") {
-        eprintln!("Encryption was asked, but no public key was given");
+    let output_public_keys_arg_name = if create_command {
+        "public_keys"
+    } else {
+        "out_pub"
+    };
+
+    let output_private_keys_arg_name = if create_command {
+        "private_keys"
+    } else {
+        "out_priv"
+    };
+
+    if layers.contains(&"encrypt") && !matches.contains_id(output_public_keys_arg_name) {
+        eprintln!("Encryption was asked, but there is no {output_public_keys_arg_name} given");
         return Err(MlarError::Config(
             mla::errors::ConfigError::EncryptionKeyIsMissing,
         ));
     }
 
-    let config = if matches.contains_id("public_keys") {
+    if layers.contains(&"sign") && !matches.contains_id(output_private_keys_arg_name) {
+        eprintln!("Signature was asked, but there is no {output_private_keys_arg_name} given");
+        return Err(MlarError::Config(
+            mla::errors::ConfigError::PrivateKeyNotSet,
+        ));
+    }
+
+    let config = if matches.contains_id(output_public_keys_arg_name) {
         if !layers.contains(&"encrypt") {
             eprintln!(
-                "[WARNING] 'public_keys' was given, but encrypt layer was not asked. Enabling it"
+                "[WARNING] '{output_public_keys_arg_name}' was given, but encrypt layer was not asked. Enabling it"
             );
         }
 
-        let public_keys = open_public_keys(matches).map_err(|error| {
-            eprintln!("[ERROR] Unable to open public keys: {error}");
-            MlarError::Mla(Error::InvalidKeyFormat)
-        })?;
+        let (pub_enc_keys, _pub_sig_keys) = open_public_keys(matches, output_public_keys_arg_name)
+            .map_err(|error| {
+                eprintln!("[ERROR] Unable to open {output_public_keys_arg_name}: {error}");
+                MlarError::Mla(Error::InvalidKeyFormat)
+            })?;
 
-        let (pub_enc_keys, _pub_sig_keys) = public_keys
-            .into_iter()
-            .map(MLAPublicKey::get_public_keys)
-            .collect::<(Vec<_>, Vec<_>)>();
+        if matches.contains_id(output_private_keys_arg_name) {
+            if !layers.contains(&"sign") {
+                eprintln!(
+                    "[WARNING] '{output_private_keys_arg_name}' was given, but sign layer was not asked. Enabling it"
+                );
+            }
 
-        ArchiveWriterConfig::with_public_keys(&pub_enc_keys)
+            let (_private_decryption_keys, private_sig_keys) =
+                open_private_keys(matches, output_private_keys_arg_name).map_err(|error| {
+                    eprintln!("[ERROR] Unable to open private keys: {error}");
+                    MlarError::Mla(Error::InvalidKeyFormat)
+                })?;
+
+            ArchiveWriterConfig::with_encryption_with_signature(&pub_enc_keys, &private_sig_keys)
+        } else {
+            ArchiveWriterConfig::with_encryption_without_signature(&pub_enc_keys)
+        }
+    } else if matches.contains_id("private_keys") {
+        if !layers.contains(&"sign") {
+            eprintln!(
+                "[WARNING] 'private_keys' was given, but sign layer was not asked. Enabling it"
+            );
+        }
+
+        let (_private_decryption_keys, private_sig_keys) =
+            open_private_keys(matches, output_private_keys_arg_name).map_err(|error| {
+                eprintln!("[ERROR] Unable to open private keys: {error}");
+                MlarError::Mla(Error::InvalidKeyFormat)
+            })?;
+
+        ArchiveWriterConfig::without_encryption_with_signature(&private_sig_keys)
     } else {
-        ArchiveWriterConfig::without_encryption()
-    };
+        ArchiveWriterConfig::without_encryption_without_signature()
+    }?;
 
     let config = if layers.contains(&"compress") || matches.contains_id("compression_level") {
         if !layers.contains(&"compress") && matches.contains_id("compression_level") {
@@ -236,8 +305,9 @@ fn destination_from_output_argument(output_argument: &PathBuf) -> Result<OutputT
 /// Return an ArchiveWriter corresponding to provided arguments
 fn writer_from_matches<'a>(
     matches: &ArgMatches,
+    create_command: bool,
 ) -> Result<ArchiveWriter<'a, OutputTypes>, MlarError> {
-    let config = config_from_matches(matches)?;
+    let config = config_from_matches(matches, create_command)?;
 
     // Safe to use unwrap() because the option is required()
     let output = matches.get_one::<PathBuf>("output").unwrap();
@@ -251,26 +321,29 @@ fn writer_from_matches<'a>(
 /// Return the ArchiveReaderConfig corresponding to provided arguments and set
 /// Layers::ENCRYPT if a key is provided
 fn readerconfig_from_matches(matches: &ArgMatches) -> Result<ArchiveReaderConfig, MlarError> {
+    let incomplete_config = if matches.get_flag("skip_signature_verification") {
+        ArchiveReaderConfig::without_signature_verification()
+    } else if matches.contains_id("public_keys") {
+        let (_public_encryption_keys, public_signature_verification_keys) =
+            open_public_keys(matches, "public_keys").map_err(|error| {
+                eprintln!("[ERROR] Unable to open public keys: {error}");
+                MlarError::Mla(Error::InvalidKeyFormat)
+            })?;
+        ArchiveReaderConfig::with_signature_verification(&public_signature_verification_keys)
+    } else {
+        panic!("No public keys given but --skip-signature-verification was not given")
+    };
+
     if matches.contains_id("private_keys") {
-        let private_keys = open_private_keys(matches).map_err(|error| {
-            eprintln!("[ERROR] Unable to open private keys: {error}");
-            MlarError::Mla(Error::InvalidKeyFormat)
-        })?;
+        let (private_dec_keys, _private_sig_keys) = open_private_keys(matches, "private_keys")
+            .map_err(|error| {
+                eprintln!("[ERROR] Unable to open private keys: {error}");
+                MlarError::Mla(Error::InvalidKeyFormat)
+            })?;
 
-        let (private_dec_keys, _private_sig_keys) = private_keys
-            .into_iter()
-            .map(MLAPrivateKey::get_private_keys)
-            .collect::<(Vec<_>, Vec<_>)>();
-
-        if matches.get_flag("accept_unencrypted") {
-            Ok(ArchiveReaderConfig::with_private_keys_accept_unencrypted(
-                &private_dec_keys,
-            ))
-        } else {
-            Ok(ArchiveReaderConfig::with_private_keys(&private_dec_keys))
-        }
+        Ok(incomplete_config.with_encryption(&private_dec_keys))
     } else if matches.get_flag("accept_unencrypted") {
-        Ok(ArchiveReaderConfig::without_encryption())
+        Ok(incomplete_config.without_encryption())
     } else {
         panic!("No private keys given but --accept-unencrypted was not given")
     }
@@ -665,7 +738,7 @@ fn add_from_stdin(
 // ----- Commands ------
 
 fn create(matches: &ArgMatches) -> Result<(), MlarError> {
-    let mut mla = writer_from_matches(matches)?;
+    let mut mla = writer_from_matches(matches, true)?;
 
     if let Some(files) = matches.get_many::<PathBuf>("files") {
         for filename in files {
@@ -990,7 +1063,7 @@ fn to_tar(matches: &ArgMatches) -> Result<(), MlarError> {
 
 fn repair(matches: &ArgMatches) -> Result<(), MlarError> {
     let mut mla = open_failsafe_mla_file(matches)?;
-    let mla_out = writer_from_matches(matches)?;
+    let mla_out = writer_from_matches(matches, false)?;
 
     // Convert
     let status = mla.convert_to_archive(mla_out)?;
@@ -1016,7 +1089,7 @@ fn convert(matches: &ArgMatches) -> Result<(), MlarError> {
     };
     fnames.sort();
 
-    let mut mla_out = writer_from_matches(matches)?;
+    let mut mla_out = writer_from_matches(matches, false)?;
 
     // Convert
     for fname in fnames {
@@ -1139,16 +1212,13 @@ fn app() -> clap::Command {
             .num_args(1)
             .value_parser(value_parser!(PathBuf))
             .required(true),
-        Arg::new("private_keys")
-            .long("private-key")
-            .short('k')
-            .help("MLA private key file to try, can be specified multiple times")
-            .num_args(1)
-            .action(ArgAction::Append)
-            .value_parser(value_parser!(PathBuf)),
         Arg::new("accept_unencrypted")
             .long("accept-unencrypted")
             .help("Accept to operate on unencrypted archives")
+            .action(ArgAction::SetTrue),
+        Arg::new("skip_signature_verification")
+            .long("skip-signature-verification")
+            .help("Skip signature verification wether the archive is signed or not. This enables reading unsigned archives and reading signed archives without the cost of verification.")
             .action(ArgAction::SetTrue),
     ];
     let output_args = vec![
@@ -1158,18 +1228,11 @@ fn app() -> clap::Command {
             .short('o')
             .value_parser(value_parser!(PathBuf))
             .required(true),
-        Arg::new("public_keys")
-            .help("MLA public key file, can be specified multiple times")
-            .long("public-key")
-            .short('p')
-            .num_args(1)
-            .action(ArgAction::Append)
-            .value_parser(value_parser!(PathBuf)),
         Arg::new("layers")
             .long("layers")
             .short('l')
-            .help("Layers to use. Default is '-l compress -l encrypt'")
-            .value_parser(["compress", "encrypt"])
+            .help("Layers to use. Default is '-l compress -l encrypt -l sign'")
+            .value_parser(["compress", "encrypt", "sign"])
             .num_args(0..=1)
             .action(ArgAction::Append),
         Arg::new("compression_level")
@@ -1178,6 +1241,22 @@ fn app() -> clap::Command {
             .long("compression_level")
             .value_parser(value_parser!(u32).range(0..=11))
             .help("Compression level (0-11); ; bigger values cause denser, but slower compression"),
+    ];
+    let both_args = vec![
+        Arg::new("private_keys")
+            .long("private-key")
+            .short('k')
+            .help("MLA private key file. If A creates an archive for B, A uses A's private key for signing. For reading, B uses B's private key to decrypt. This parameter can be specified multiple times, for example to try many keys for decryption or to sign with multiple keys.")
+            .num_args(1)
+            .action(ArgAction::Append)
+            .value_parser(value_parser!(PathBuf)),
+        Arg::new("public_keys")
+            .help("MLA public key file. If A creates an archive for B, A uses B's public key for encryption. For reading, B uses A's public key to verifying the signature. This parameter can be specified multiple times, for example to try many keys for decryption or to sign with multiple keys.")
+            .long("public-key")
+            .short('p')
+            .num_args(1)
+            .action(ArgAction::Append)
+            .value_parser(value_parser!(PathBuf)),
     ];
 
     // Main parsing
@@ -1188,6 +1267,7 @@ fn app() -> clap::Command {
             Command::new("create")
                 .about("Create a new MLA Archive")
                 .args(&output_args)
+                .args(&both_args)
                 .arg(
                     Arg::new("files")
                     .help("Files to add")
@@ -1213,6 +1293,7 @@ fn app() -> clap::Command {
                 .about("List entries inside a MLA Archive")
                 .before_help("Outputs a list of MLA entries. By default, names are interpreted as paths and escaped like described in `doc/ENTRY_NAME.md`")
                 .args(&input_args)
+                .args(&both_args)
                 .arg(
                     Arg::new("raw-escaped-names")
                         .long("raw-escaped-names")
@@ -1230,6 +1311,7 @@ fn app() -> clap::Command {
             Command::new("extract")
                 .about("Extract entries from a MLA Archive to files")
                 .args(&input_args)
+                .args(&both_args)
                 .arg(
                     Arg::new("outputdir")
                         .help("Output directory where files are extracted")
@@ -1259,6 +1341,7 @@ fn app() -> clap::Command {
             Command::new("cat")
                 .about("Display entries from a MLA Archive, like 'cat'")
                 .args(&input_args)
+                .args(&both_args)
                 .arg(
                     Arg::new("output")
                         .help("Output file")
@@ -1292,6 +1375,7 @@ fn app() -> clap::Command {
             Command::new("to-tar")
                 .about("Convert a MLA Archive to a TAR Archive")
                 .args(&input_args)
+                .args(&both_args)
                 .arg(
                     Arg::new("output")
                         .help("Tar Archive path")
@@ -1304,9 +1388,26 @@ fn app() -> clap::Command {
         )
         .subcommand(
             Command::new("repair")
-                .about("Create a fresh MLA from what can be read from a truncated one")
+                .about("Create a fresh MLA from what can be read from a truncated one but loosing some security (e.g. no signature verification)")
                 .args(&input_args)
-                .args(&output_args),
+                .args(&output_args)
+                .args(&both_args)
+                .arg(
+                    Arg::new("out_pub")
+                        .help("MLA public key file for output archive encryption")
+                        .long("out-pub")
+                        .num_args(1)
+                        .action(ArgAction::Append)
+                        .value_parser(value_parser!(PathBuf)),
+                )
+                .arg(
+                    Arg::new("out_priv")
+                        .help("MLA private key file for output archive signature")
+                        .long("out-priv")
+                        .num_args(1)
+                        .action(ArgAction::Append)
+                        .value_parser(value_parser!(PathBuf)),
+                )
         )
         .subcommand(
             Command::new("convert")
@@ -1314,7 +1415,24 @@ fn app() -> clap::Command {
                     "Convert a MLA Archive to a fresh new one, with potentially different options",
                 )
                 .args(&input_args)
-                .args(&output_args),
+                .args(&output_args)
+                .args(&both_args)
+                .arg(
+                    Arg::new("out_pub")
+                        .help("MLA public key file for output archive encryption")
+                        .long("out-pub")
+                        .num_args(1)
+                        .action(ArgAction::Append)
+                        .value_parser(value_parser!(PathBuf)),
+                )
+                .arg(
+                    Arg::new("out_priv")
+                        .help("MLA private key file for output archive signature")
+                        .long("out-priv")
+                        .num_args(1)
+                        .action(ArgAction::Append)
+                        .value_parser(value_parser!(PathBuf)),
+                )
         )
         .subcommand(
             Command::new("keygen")
