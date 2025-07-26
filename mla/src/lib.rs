@@ -336,7 +336,7 @@ mod base64;
 /// If this footer is unavailable, the archive is read from the beginning to recover
 /// file information.
 pub(crate) mod layers;
-use crate::crypto::mlakey::MLASignaturePrivateKey;
+use crate::crypto::mlakey::{MLASignaturePrivateKey, MLASignatureVerificationPublicKey};
 use crate::layers::compress::{
     CompressionLayerFailSafeReader, CompressionLayerReader, CompressionLayerWriter,
 };
@@ -1088,7 +1088,10 @@ fn read_mla_entries_header_skip_magic(mut src: impl Read) -> Result<(), Error> {
 
 impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
     /// Create an `ArchiveReader`.
-    pub fn from_config(mut src: R, config: ArchiveReaderConfig) -> Result<Self, Error> {
+    pub fn from_config(
+        mut src: R,
+        config: ArchiveReaderConfig,
+    ) -> Result<(Self, Vec<MLASignatureVerificationPublicKey>), Error> {
         // Make sure we read the archive header from the start
         src.rewind()?;
 
@@ -1135,15 +1138,17 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
         // This is cool because it contains the key commitment.
         // Thus the authentication of the AEAD can protect us if the source we read from is manipulated after signature verification.
         let mut signed_persistent_encryption_config = None;
+        let mut keys_with_valid_signatures = Vec::new();
 
         if magic == SIGNATURE_LAYER_MAGIC {
-            let (sig_layer, _keys_with_valid_signatures, read_persistent_encryption_config) =
+            let (sig_layer, new_keys_with_valid_signatures, read_persistent_encryption_config) =
                 SignatureLayerReader::new_skip_magic(
                     src,
                     config.signature_reader_config,
                     archive_header_hash,
                 )?;
             signed_persistent_encryption_config = read_persistent_encryption_config;
+            keys_with_valid_signatures = new_keys_with_valid_signatures;
             src = Box::new(sig_layer);
             src.initialize()?;
             magic = read_layer_magic(&mut src)?;
@@ -1193,7 +1198,7 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
 
         read_mla_entries_header(&mut src)?;
 
-        Ok(ArchiveReader { src, metadata })
+        Ok((ArchiveReader { src, metadata }, keys_with_valid_signatures))
     }
 
     /// Return an iterator on the name of each entry in the archive.
