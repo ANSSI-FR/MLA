@@ -358,7 +358,18 @@ fn open_mla_file<'a>(matches: &ArgMatches) -> Result<ArchiveReader<'a, File>, Ml
     let file = File::open(path)?;
 
     // Instantiate reader
-    Ok(ArchiveReader::from_config(file, config?)?)
+    let (reader, keys_with_valid_signatures) = ArchiveReader::from_config(file, config?)?;
+    if matches.get_flag("all_keys_must_have_valid_signature") {
+        match matches.get_many::<PathBuf>("public_keys") {
+            Some(public_keys) => {
+                if public_keys.count() != keys_with_valid_signatures.len() {
+                    return Err(MlarError::Mla(Error::NoValidSignatureFound));
+                }
+            }
+            None => return Err(MlarError::Mla(Error::NoValidSignatureFound)),
+        }
+    }
+    Ok(reader)
 }
 
 // Utils: common code to load a mla_file from arguments, fail-safe mode
@@ -1215,6 +1226,10 @@ fn app() -> clap::Command {
         Arg::new("accept_unencrypted")
             .long("accept-unencrypted")
             .help("Accept to operate on unencrypted archives")
+            .action(ArgAction::SetTrue),
+        Arg::new("all_keys_must_have_valid_signature")
+            .long("all-keys-must-have-valid-signature")
+            .help("If multiple public signing verification keys are given, the archive must be correctly signed with all of them")
             .action(ArgAction::SetTrue),
         Arg::new("skip_signature_verification")
             .long("skip-signature-verification")
