@@ -1,9 +1,13 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 use mla::config::ArchiveReaderConfig;
 use mla::config::ArchiveWriterConfig;
+use mla::config::IncompleteArchiveReaderConfig;
 use mla::crypto::mlakey::MLADecryptionPrivateKey;
+use mla::crypto::mlakey::MLAEncryptionPublicKey;
 use mla::crypto::mlakey::MLAPrivateKey;
 use mla::crypto::mlakey::MLAPublicKey;
+use mla::crypto::mlakey::MLASignaturePrivateKey;
+use mla::crypto::mlakey::MLASignatureVerificationPublicKey;
 use mla::entry::ArchiveEntryId;
 use mla::entry::EntryName;
 use mla::errors::ConfigError;
@@ -14,7 +18,6 @@ use mla::ArchiveWriter;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::ffi::{c_void, CStr};
-use std::io::Cursor;
 use std::io::{Read, Seek, Write};
 use std::mem::MaybeUninit;
 use std::os::raw::c_char;
@@ -262,49 +265,108 @@ impl Write for CallbackOutput {
     }
 }
 
-// The actual C API exposed to external callers
+trait Key {
+    type TYPE1;
+    type TYPE2;
+    fn deserialize_key(src: impl Read) -> Result<Self, MLAError>
+    where
+        Self: std::marker::Sized;
+    fn get_keys(self) -> (Self::TYPE1, Self::TYPE2);
+}
 
-/// Create a new configuration with the given public key(s) in MLA key format and
-/// return a handle to it
-/// `public_keys_pointers` is an array of pointers to public keys
-#[no_mangle]
-pub extern "C" fn create_mla_writer_config_with_public_keys(
-    handle_out: *mut MLAWriterConfigHandle,
-    public_keys_pointers: *const *const c_char,
-    number_of_public_keys: usize,
-) -> MLAStatus {
-    if handle_out.is_null() || public_keys_pointers.is_null() || number_of_public_keys == 0 {
-        return MLAStatus::BadAPIArgument;
+impl Key for MLAPrivateKey {
+    type TYPE1 = MLADecryptionPrivateKey;
+    type TYPE2 = MLASignaturePrivateKey;
+
+    fn deserialize_key(src: impl Read) -> Result<Self, MLAError> {
+        Self::deserialize_private_key(src)
     }
 
-    let public_keys_pointers =
-        unsafe { std::slice::from_raw_parts(public_keys_pointers, number_of_public_keys) };
+    fn get_keys(self) -> (Self::TYPE1, Self::TYPE2) {
+        self.get_private_keys()
+    }
+}
 
-    let public_keys = public_keys_pointers
+impl Key for MLAPublicKey {
+    type TYPE1 = MLAEncryptionPublicKey;
+    type TYPE2 = MLASignatureVerificationPublicKey;
+    fn deserialize_key(src: impl Read) -> Result<Self, MLAError> {
+        Self::deserialize_public_key(src)
+    }
+
+    fn get_keys(self) -> (Self::TYPE1, Self::TYPE2) {
+        self.get_public_keys()
+    }
+}
+
+#[allow(clippy::type_complexity)]
+unsafe fn keys_from_pointers<K>(
+    keys_pointers: *const *const c_char,
+    number_of_keys: usize,
+) -> Result<(Vec<K::TYPE1>, Vec<K::TYPE2>), MLAStatus>
+where
+    K: Key,
+{
+    if keys_pointers.is_null() || number_of_keys == 0 {
+        return Err(MLAStatus::BadAPIArgument);
+    }
+
+    let keys_pointers = unsafe { std::slice::from_raw_parts(keys_pointers, number_of_keys) };
+
+    let keys = keys_pointers
         .iter()
         .map(|pointer| {
             if pointer.is_null() {
                 Err(MLAStatus::BadAPIArgument)
             } else {
                 let key_bytes = unsafe { CStr::from_ptr(*pointer) }.to_bytes();
-                let mut cursor = Cursor::new(key_bytes);
-                MLAPublicKey::deserialize_public_key(&mut cursor)
-                    .map_err(|_| MLAStatus::MlaKeyParserError)
+                K::deserialize_key(key_bytes).map_err(|_| MLAStatus::MlaKeyParserError)
             }
         })
-        .collect::<Result<Vec<_>, MLAStatus>>();
+        .collect::<Result<Vec<_>, MLAStatus>>()?;
+    Ok(keys.into_iter().map(|k| k.get_keys()).unzip())
+}
 
-    let public_keys = match public_keys {
-        Ok(public_keys) => public_keys,
+// The actual C API exposed to external callers
+
+/// Create a new configuration with encryption and signature and
+/// return a handle to it.
+///
+/// See rust doc for `ArchiveWriterConfig::with_encryption_with_signature` for more info.
+///
+/// `private_keys_pointers` is an array of pointers to private keys null terminated strings in MLA key format.
+///
+/// `public_keys_pointers` is an array of pointers to public keys null terminated strings in MLA key format.
+#[no_mangle]
+pub extern "C" fn create_mla_writer_config_with_encryption_with_signature(
+    handle_out: *mut MLAWriterConfigHandle,
+    private_keys_pointers: *const *const c_char,
+    number_of_private_keys: usize,
+    public_keys_pointers: *const *const c_char,
+    number_of_public_keys: usize,
+) -> MLAStatus {
+    if handle_out.is_null() {
+        return MLAStatus::BadAPIArgument;
+    }
+
+    let (_private_decryption_keys, private_signature_keys) = match unsafe {
+        keys_from_pointers::<MLAPrivateKey>(private_keys_pointers, number_of_private_keys)
+    } {
+        Ok(private_key_pair) => private_key_pair,
         Err(e) => return e,
     };
 
-    let (public_encryption_keys, _public_signature_keys) = public_keys
-        .into_iter()
-        .map(|k| k.get_public_keys())
-        .collect::<(Vec<_>, Vec<_>)>();
+    let (public_encryption_keys, _public_signature_verification_keys) = match unsafe {
+        keys_from_pointers::<MLAPublicKey>(public_keys_pointers, number_of_public_keys)
+    } {
+        Ok(public_key_pair) => public_key_pair,
+        Err(e) => return e,
+    };
 
-    let config = ArchiveWriterConfig::with_public_keys(&public_encryption_keys);
+    let config = ArchiveWriterConfig::with_encryption_with_signature(
+        &public_encryption_keys,
+        &private_signature_keys,
+    );
 
     let ptr = Box::into_raw(Box::new(config));
     unsafe {
@@ -313,16 +375,89 @@ pub extern "C" fn create_mla_writer_config_with_public_keys(
     MLAStatus::Success
 }
 
-/// Create a new configuration without encryption and return a handle to it
+/// WARNING: Will NOT sign content !
+///
+/// Create a new configuration with encryption AND WITHOUT SIGNATURE and
+/// return a handle to it.
+///
+/// See rust doc for `ArchiveWriterConfig::with_encryption_without_signature` for more info.
+///
+/// `public_keys_pointers` is an array of pointers to public keys null terminated strings in MLA key format.
 #[no_mangle]
-pub extern "C" fn create_mla_writer_config_without_encryption(
+pub extern "C" fn create_mla_writer_config_with_encryption_without_signature(
+    handle_out: *mut MLAWriterConfigHandle,
+    public_keys_pointers: *const *const c_char,
+    number_of_public_keys: usize,
+) -> MLAStatus {
+    if handle_out.is_null() {
+        return MLAStatus::BadAPIArgument;
+    }
+
+    let (public_encryption_keys, _public_signature_verification_keys) = match unsafe {
+        keys_from_pointers::<MLAPublicKey>(public_keys_pointers, number_of_public_keys)
+    } {
+        Ok(public_key_pair) => public_key_pair,
+        Err(e) => return e,
+    };
+
+    let config = ArchiveWriterConfig::with_encryption_without_signature(&public_encryption_keys);
+
+    let ptr = Box::into_raw(Box::new(config));
+    unsafe {
+        *handle_out = ptr as MLAWriterConfigHandle;
+    }
+    MLAStatus::Success
+}
+
+/// WARNING: Will NOT encrypt content !
+///
+/// Create a new configuration with signature AND WITHOUT ENCRYPTION and
+/// return a handle to it.
+///
+/// See rust doc for `ArchiveWriterConfig::without_encryption_with_signature` for more info.
+///
+/// `private_keys_pointers` is an array of pointers to private keys null terminated strings in MLA key format.
+#[no_mangle]
+pub extern "C" fn create_mla_writer_config_without_encryption_with_signature(
+    handle_out: *mut MLAWriterConfigHandle,
+    private_keys_pointers: *const *const c_char,
+    number_of_private_keys: usize,
+) -> MLAStatus {
+    if handle_out.is_null() {
+        return MLAStatus::BadAPIArgument;
+    }
+
+    let (_private_decryption_keys, private_signature_keys) = match unsafe {
+        keys_from_pointers::<MLAPrivateKey>(private_keys_pointers, number_of_private_keys)
+    } {
+        Ok(private_key_pair) => private_key_pair,
+        Err(e) => return e,
+    };
+
+    let config = ArchiveWriterConfig::without_encryption_with_signature(&private_signature_keys);
+
+    let ptr = Box::into_raw(Box::new(config));
+    unsafe {
+        *handle_out = ptr as MLAWriterConfigHandle;
+    }
+    MLAStatus::Success
+}
+
+/// WARNING: Will NOT encrypt content and will NOT sign content !
+///
+/// Create a new configuration WITHOUT ENCRYPTION and WITHOUT SIGNATURE and
+/// return a handle to it.
+///
+/// See rust doc for `ArchiveWriterConfig::without_encryption_without_signature_verification` for more info.
+#[no_mangle]
+pub extern "C" fn create_mla_writer_config_without_encryption_without_signature(
     handle_out: *mut MLAWriterConfigHandle,
 ) -> MLAStatus {
     if handle_out.is_null() {
         return MLAStatus::BadAPIArgument;
     }
 
-    let config = ArchiveWriterConfig::without_encryption();
+    let config = ArchiveWriterConfig::without_encryption_without_signature();
 
     let ptr = Box::into_raw(Box::new(config));
     unsafe {
@@ -381,98 +516,224 @@ pub extern "C" fn mla_writer_config_without_compression(
     MLAStatus::Success
 }
 
+/// Create a new configuration with encryption and signature and
+/// return a handle to it.
+///
+/// See rust doc for `ArchiveReaderConfig::with_signature` and `IncompleteArchiveReaderConfig::with_encryption` for more info.
+///
+/// `private_keys_pointers` is an array of pointers to private keys null terminated strings in MLA key format.
+///
+/// `public_keys_pointers` is an array of pointers to public keys null terminated strings in MLA key format.
 #[no_mangle]
-pub extern "C" fn create_mla_reader_config_without_encryption(
+pub extern "C" fn create_mla_reader_config_with_encryption_with_signature_verification(
     handle_out: *mut MLAReaderConfigHandle,
+    private_keys_pointers: *const *const c_char,
+    number_of_private_keys: usize,
+    public_keys_pointers: *const *const c_char,
+    number_of_public_keys: usize,
 ) -> MLAStatus {
+    create_mla_reader_config_with_encryption_generic_with_signature_verification(
+        handle_out,
+        private_keys_pointers,
+        number_of_private_keys,
+        public_keys_pointers,
+        number_of_public_keys,
+        IncompleteArchiveReaderConfig::with_encryption,
+    )
+}
+
+/// WARNING: This will accept reading unencrypted archives !
+///
+/// Create a new configuration with signature and EVENTUALLY encryption and
+/// return a handle to it.
+///
+/// See rust doc for `ArchiveReaderConfig::with_signature` and `IncompleteArchiveReaderConfig::with_encryption_accept_unencrypted` for more info.
+///
+/// `private_keys_pointers` is an array of pointers to private keys null terminated strings in MLA key format.
+///
+/// `public_keys_pointers` is an array of pointers to public keys null terminated strings in MLA key format.
+#[no_mangle]
+pub extern "C" fn create_mla_reader_config_with_encryption_accept_unencrypted_with_signature_verification(
+    handle_out: *mut MLAReaderConfigHandle,
+    private_keys_pointers: *const *const c_char,
+    number_of_private_keys: usize,
+    public_keys_pointers: *const *const c_char,
+    number_of_public_keys: usize,
+) -> MLAStatus {
+    create_mla_reader_config_with_encryption_generic_with_signature_verification(
+        handle_out,
+        private_keys_pointers,
+        number_of_private_keys,
+        public_keys_pointers,
+        number_of_public_keys,
+        IncompleteArchiveReaderConfig::with_encryption_accept_unencrypted,
+    )
+}
+
+fn create_mla_reader_config_with_encryption_generic_with_signature_verification<F>(
+    handle_out: *mut MLAReaderConfigHandle,
+    private_keys_pointers: *const *const c_char,
+    number_of_private_keys: usize,
+    public_keys_pointers: *const *const c_char,
+    number_of_public_keys: usize,
+    f: F,
+) -> MLAStatus
+where
+    F: FnOnce(IncompleteArchiveReaderConfig, &[MLADecryptionPrivateKey]) -> ArchiveReaderConfig,
+{
     if handle_out.is_null() {
         return MLAStatus::BadAPIArgument;
     }
 
-    let config = ArchiveReaderConfig::without_encryption();
+    let (_public_encryption_keys, public_signature_verification_keys) = match unsafe {
+        keys_from_pointers::<MLAPublicKey>(public_keys_pointers, number_of_public_keys)
+    } {
+        Ok(public_key_pair) => public_key_pair,
+        Err(e) => return e,
+    };
+
+    let incomplete_config =
+        ArchiveReaderConfig::with_signature_verification(&public_signature_verification_keys);
+
+    let (private_decryption_keys, _private_signature_keys) = match unsafe {
+        keys_from_pointers::<MLAPrivateKey>(private_keys_pointers, number_of_private_keys)
+    } {
+        Ok(private_key_pair) => private_key_pair,
+        Err(e) => return e,
+    };
+
+    let config = f(incomplete_config, &private_decryption_keys);
 
     let ptr = Box::into_raw(Box::new(config));
     unsafe {
-        *handle_out = ptr as MLAWriterConfigHandle;
+        *handle_out = ptr as MLAReaderConfigHandle;
     }
     MLAStatus::Success
 }
 
-/// Create a new configuration with the given private key(s) in MLA key format and
-/// return a handle to it
-/// `private_keys_pointers` is an array of pointers to private keys
+/// Create a new configuration with encryption but SKIPPING signature checking and
+/// return a handle to it.
+///
+/// See rust doc for `ArchiveReaderConfig::without_signature_verification` and `IncompleteArchiveReaderConfig::with_encryption` for more info.
+///
+/// `private_keys_pointers` is an array of pointers to private keys null terminated strings in MLA key format.
 #[no_mangle]
-pub extern "C" fn create_mla_reader_config_with_private_keys(
+pub extern "C" fn create_mla_reader_config_with_encryption_without_signature_verification(
     handle_out: *mut MLAReaderConfigHandle,
     private_keys_pointers: *const *const c_char,
     number_of_private_keys: usize,
 ) -> MLAStatus {
-    create_mla_reader_config_with_private_keys_generic(
+    create_mla_reader_config_with_encryption_generic_without_signature_verification(
         handle_out,
         private_keys_pointers,
         number_of_private_keys,
-        ArchiveReaderConfig::with_private_keys,
+        IncompleteArchiveReaderConfig::with_encryption,
     )
 }
 
-/// Create a new configuration with the given private key(s) in MLA key format and
-/// return a handle to it. Accept opening archives without encryption.
-/// `private_keys_pointers` is an array of pointers to private keys
+/// WARNING: This will accept reading unencrypted and unsigned archives !
+///
+/// Create a new configuration EVENTUALLY with encryption but SKIPPING signature checking and
+/// return a handle to it.
+///
+/// See rust doc for `ArchiveReaderConfig::without_signature_verification` and `IncompleteArchiveReaderConfig::with_encryption_accept_unencrypted` for more info.
+///
+/// `private_keys_pointers` is an array of pointers to private keys null terminated strings in MLA key format.
 #[no_mangle]
-pub extern "C" fn create_mla_reader_config_with_private_keys_accept_unencrypted(
+pub extern "C" fn create_mla_reader_config_with_encryption_accept_unencrypted_without_signature_verification(
     handle_out: *mut MLAReaderConfigHandle,
     private_keys_pointers: *const *const c_char,
     number_of_private_keys: usize,
 ) -> MLAStatus {
-    create_mla_reader_config_with_private_keys_generic(
+    create_mla_reader_config_with_encryption_generic_without_signature_verification(
         handle_out,
         private_keys_pointers,
         number_of_private_keys,
-        ArchiveReaderConfig::with_private_keys_accept_unencrypted,
+        IncompleteArchiveReaderConfig::with_encryption_accept_unencrypted,
     )
 }
 
-fn create_mla_reader_config_with_private_keys_generic<F>(
+fn create_mla_reader_config_with_encryption_generic_without_signature_verification<F>(
     handle_out: *mut MLAReaderConfigHandle,
     private_keys_pointers: *const *const c_char,
     number_of_private_keys: usize,
     f: F,
 ) -> MLAStatus
 where
-    F: FnOnce(&[MLADecryptionPrivateKey]) -> ArchiveReaderConfig,
+    F: FnOnce(IncompleteArchiveReaderConfig, &[MLADecryptionPrivateKey]) -> ArchiveReaderConfig,
 {
-    if handle_out.is_null() || private_keys_pointers.is_null() || number_of_private_keys == 0 {
+    if handle_out.is_null() {
         return MLAStatus::BadAPIArgument;
     }
 
-    let private_keys_pointers =
-        unsafe { std::slice::from_raw_parts(private_keys_pointers, number_of_private_keys) };
+    let incomplete_config = ArchiveReaderConfig::without_signature_verification();
 
-    let private_keys = private_keys_pointers
-        .iter()
-        .map(|pointer| {
-            if pointer.is_null() {
-                Err(MLAStatus::BadAPIArgument)
-            } else {
-                let key_bytes = unsafe { CStr::from_ptr(*pointer) }.to_bytes();
-                let mut cursor = Cursor::new(key_bytes);
-                MLAPrivateKey::deserialize_private_key(&mut cursor)
-                    .map_err(|_| MLAStatus::MlaKeyParserError)
-            }
-        })
-        .collect::<Result<Vec<_>, MLAStatus>>();
-
-    let private_keys = match private_keys {
-        Ok(private_keys) => private_keys,
+    let (private_decryption_keys, _private_signature_keys) = match unsafe {
+        keys_from_pointers::<MLAPrivateKey>(private_keys_pointers, number_of_private_keys)
+    } {
+        Ok(private_key_pair) => private_key_pair,
         Err(e) => return e,
     };
 
-    let (private_encryption_keys, _private_signature_verification_keys) = private_keys
-        .into_iter()
-        .map(|k| k.get_private_keys())
-        .collect::<(Vec<_>, Vec<_>)>();
+    let config = f(incomplete_config, &private_decryption_keys);
 
-    let config = f(&private_encryption_keys);
+    let ptr = Box::into_raw(Box::new(config));
+    unsafe {
+        *handle_out = ptr as MLAReaderConfigHandle;
+    }
+    MLAStatus::Success
+}
+
+/// Will NOT accept encrypted archives.
+///
+/// Create a new configuration WITHOUT encryption and with signature and
+/// return a handle to it.
+///
+/// See rust doc for `ArchiveReaderConfig::with_signature_verification` and `IncompleteArchiveReaderConfig::without_encryption` for more info.
+///
+/// `pubc_keys_pointers` is an array of pointers to public keys null terminated strings in MLA key format.
+pub fn create_mla_reader_config_without_encryption_with_signature_verification(
+    handle_out: *mut MLAReaderConfigHandle,
+    public_keys_pointers: *const *const c_char,
+    number_of_public_keys: usize,
+) -> MLAStatus {
+    if handle_out.is_null() {
+        return MLAStatus::BadAPIArgument;
+    }
+
+    let (_public_encryption_keys, public_signature_verification_keys) = match unsafe {
+        keys_from_pointers::<MLAPublicKey>(public_keys_pointers, number_of_public_keys)
+    } {
+        Ok(public_key_pair) => public_key_pair,
+        Err(e) => return e,
+    };
+
+    let incomplete_config =
+        ArchiveReaderConfig::with_signature_verification(&public_signature_verification_keys);
+
+    let config = incomplete_config.without_encryption();
+
+    let ptr = Box::into_raw(Box::new(config));
+    unsafe {
+        *handle_out = ptr as MLAReaderConfigHandle;
+    }
+    MLAStatus::Success
+}
+
+/// Will NOT accept encrypted archives and will SKIP verification.
+///
+/// Create a new configuration WITHOUT encryption and SKIP signature checking and
+/// return a handle to it.
+///
+/// See rust doc for `ArchiveReaderConfig::without_signature_verification` and `IncompleteArchiveReaderConfig::without_encryption` for more info.
+pub fn create_mla_reader_config_without_encryption_without_signature_verification(
+    handle_out: *mut MLAReaderConfigHandle,
+) -> MLAStatus {
+    if handle_out.is_null() {
+        return MLAStatus::BadAPIArgument;
+    }
+
+    let config = ArchiveReaderConfig::without_signature_verification().without_encryption();
 
     let ptr = Box::into_raw(Box::new(config));
     unsafe {
