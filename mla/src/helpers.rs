@@ -199,11 +199,12 @@ mod tests {
     #[test]
     fn full_linear_extract() {
         // Build an archive with 3 files
-        let (mla, key, _pubkey, files) = build_archive(true, true, false);
+        let (mla, _sender_key, receiver_key, files) = build_archive(true, true, false, false);
 
         // Prepare the reader
         let dest = Cursor::new(mla);
-        let config = ArchiveReaderConfig::with_private_keys(&[key]);
+        let config = ArchiveReaderConfig::without_signature_verification()
+            .with_encryption(&[receiver_key.0.get_decryption_private_key().clone()]);
         let mut mla_read = ArchiveReader::from_config(dest, config).unwrap();
 
         // Prepare writers
@@ -225,11 +226,12 @@ mod tests {
     #[test]
     fn one_linear_extract() {
         // Build an archive with 3 files
-        let (mla, key, _pubkey, files) = build_archive(true, true, false);
+        let (mla, _sender_key, receiver_key, files) = build_archive(true, true, false, false);
 
         // Prepare the reader
         let dest = Cursor::new(mla);
-        let config = ArchiveReaderConfig::with_private_keys(&[key]);
+        let config = ArchiveReaderConfig::without_signature_verification()
+            .with_encryption(&[receiver_key.0.get_decryption_private_key().clone()]);
         let mut mla_read = ArchiveReader::from_config(dest, config).unwrap();
 
         // Prepare writers
@@ -257,7 +259,7 @@ mod tests {
         // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
         let mut rng = ChaChaRng::seed_from_u64(0);
         let (private_key, public_key) = generate_keypair_from_seed([0; 32]);
-        let config = ArchiveWriterConfig::with_public_keys(&[public_key]);
+        let config = ArchiveWriterConfig::with_encryption_without_signature(&[public_key]).unwrap();
         let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
 
         let fname = EntryName::from_arbitrary_bytes(b"my_file").unwrap();
@@ -272,7 +274,8 @@ mod tests {
 
         // Prepare the reader
         let dest = Cursor::new(dest);
-        let config = ArchiveReaderConfig::with_private_keys(&[private_key]);
+        let config =
+            ArchiveReaderConfig::without_signature_verification().with_encryption(&[private_key]);
         let mut mla_read = ArchiveReader::from_config(dest, config).unwrap();
 
         // Prepare writers
@@ -287,8 +290,9 @@ mod tests {
     #[test]
     fn stream_writer() {
         let file = Vec::new();
-        let config =
-            ArchiveWriterConfig::without_encryption_without_signature().without_compression();
+        let config = ArchiveWriterConfig::without_encryption_without_signature()
+            .unwrap()
+            .without_compression();
         let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
 
         let fake_file = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
@@ -317,8 +321,11 @@ mod tests {
 
         // Read the obtained stream
         let buf = Cursor::new(dest.as_slice());
-        let mut mla_read =
-            ArchiveReader::from_config(buf, ArchiveReaderConfig::without_encryption()).unwrap();
+        let mut mla_read = ArchiveReader::from_config(
+            buf,
+            ArchiveReaderConfig::without_signature_verification().without_encryption(),
+        )
+        .unwrap();
         let mut content1 = Vec::new();
         mla_read
             .get_entry(EntryName::from_arbitrary_bytes(b"my_file").unwrap())
