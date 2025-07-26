@@ -40,14 +40,16 @@ fn build_archive(
     let file = Vec::new();
     // Create the initial archive with `iters` files of `size` bytes
     let config = if encryption {
-        ArchiveWriterConfig::with_public_keys(&[public_key.get_encryption_public_key().clone()])
+        ArchiveWriterConfig::with_encryption_without_signature(&[public_key
+            .get_encryption_public_key()
+            .clone()])
     } else {
-        ArchiveWriterConfig::without_encryption()
+        ArchiveWriterConfig::without_encryption_without_signature()
     };
     let config = if compression {
-        config
+        config.unwrap()
     } else {
-        config.without_compression()
+        config.unwrap().without_compression()
     };
     let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
     for i in 0..iters {
@@ -65,8 +67,8 @@ fn build_archive(
     let dest = mla.finalize().unwrap();
 
     // Instantiate the reader
-    let config =
-        ArchiveReaderConfig::with_private_keys(&[private_key.get_decryption_private_key().clone()]);
+    let config = ArchiveReaderConfig::without_signature_verification()
+        .with_encryption(&[private_key.get_decryption_private_key().clone()]);
     (dest, config)
 }
 
@@ -87,14 +89,14 @@ fn layers_to_config(
     public_key: &MLAEncryptionPublicKey,
 ) -> ArchiveWriterConfig {
     let config = if *encryption {
-        ArchiveWriterConfig::with_public_keys(&[public_key.clone()])
+        ArchiveWriterConfig::with_encryption_without_signature(&[public_key.clone()])
     } else {
-        ArchiveWriterConfig::without_encryption()
+        ArchiveWriterConfig::without_encryption_without_signature()
     };
     if *compression {
-        config
+        config.unwrap()
     } else {
-        config.without_compression()
+        config.unwrap().without_compression()
     }
 }
 
@@ -173,7 +175,8 @@ pub fn multiple_compression_quality(c: &mut Criterion) {
 
         // Create an archive
         let file = Vec::new();
-        let config = ArchiveWriterConfig::without_encryption()
+        let config = ArchiveWriterConfig::without_encryption_without_signature()
+            .unwrap()
             .with_compression_level(quality)
             .unwrap();
         let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
@@ -365,7 +368,9 @@ fn repair_archive(iters: u64, size: u64, compression: bool, encryption: bool) ->
     // No need to truncate the data, repair the whole file
     let mut mla_repair = TruncatedArchiveReader::from_config(buf, config).unwrap();
     // Avoid any layers to speed up writing, as this is not the measurement target
-    let writer_config = ArchiveWriterConfig::without_encryption().without_compression();
+    let writer_config = ArchiveWriterConfig::without_encryption_without_signature()
+        .unwrap()
+        .without_compression();
     let mla_output = ArchiveWriter::from_config(dest, writer_config).unwrap();
 
     let start = Instant::now();
