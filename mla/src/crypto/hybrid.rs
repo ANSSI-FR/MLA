@@ -730,7 +730,7 @@ mod tests {
 
     #[test]
     fn test_seed_to_and_from_dz64() {
-        let original_seed = MLKEMSeed::generate_from_csprng(&mut ChaCha20Rng::from_seed([0u8; 32]));
+        let original_seed = MLKEMSeed::generate_from_csprng(&mut rand::rngs::OsRng);
         let dz64 = original_seed.to_d_z_64();
         let recovered = MLKEMSeed::from_d_z_64(*dz64);
         assert!(original_seed == recovered);
@@ -754,7 +754,7 @@ mod tests {
 
     #[test]
     fn test_seed_to_keypair_roundtrip() {
-        let seed = MLKEMSeed::generate_from_csprng(&mut ChaCha20Rng::from_seed([0u8; 32]));
+        let seed = MLKEMSeed::generate_from_csprng(&mut rand::rngs::OsRng);
         let privkey = seed.to_privkey();
         let pubkey = seed.to_pubkey();
 
