@@ -841,7 +841,7 @@ impl MLAFile {
                                 .extract::<PyRef<ReaderConfig>>()?
                                 .to_archive_reader_config();
                 let input_file = std::fs::File::open(path)?;
-                let arch_reader = ArchiveReader::from_config(input_file, rconfig)?;
+                let arch_reader = ArchiveReader::from_config(input_file, rconfig)?.0;
                 Ok(MLAFile {
                     inner: Mutex::new(MLAFileInner {
                         inner: OpeningModeInner::Read(ExplicitReader::FileReader(arch_reader)),
