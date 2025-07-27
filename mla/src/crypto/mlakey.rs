@@ -209,7 +209,7 @@ impl MLDSASeed {
         Self { xi }
     }
 
-    pub(crate) fn _to_signing_key(&self) -> SigningKey<MlDsa87> {
+    pub(crate) fn to_signing_key(&self) -> SigningKey<MlDsa87> {
         MlDsa87::key_gen_internal(&self.xi).signing_key().clone()
     }
 
@@ -240,8 +240,8 @@ impl ZeroizeOnDrop for MLDSASeed {}
 
 #[derive(Clone)]
 pub struct MLASignaturePrivateKey {
-    private_key_ed25519: Ed25519SigningKey,
-    private_key_seed_mldsa: MLDSASeed,
+    pub(crate) private_key_ed25519: Ed25519SigningKey,
+    pub(crate) private_key_seed_mldsa: MLDSASeed,
     #[allow(dead_code)]
     opts: KeyOpts,
 }
