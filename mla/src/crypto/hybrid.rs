@@ -650,7 +650,7 @@ mod tests {
     /// Test the generation of a key pair
     #[test]
     fn test_generate_keypair() {
-        let (private_key, public_key) = generate_mla_keypair();
+        let (private_key, public_key) = generate_mla_keypair().unwrap();
 
         // Ensure the ECC private key correspond to the ECC public key
         let public_key_ecc =

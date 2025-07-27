@@ -1149,7 +1149,7 @@ fn keygen(matches: &ArgMatches) -> Result<(), MlarError> {
             hseed.copy_from_slice(&Sha512::digest(seed.as_bytes())[0..32]);
             generate_mla_keypair_from_seed(hseed)
         }
-        None => generate_mla_keypair(),
+        None => generate_mla_keypair()?,
     };
 
     pubkey

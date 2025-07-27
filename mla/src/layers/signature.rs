@@ -81,7 +81,7 @@ impl<'a, W: 'a + InnerWriterTrait> LayerWriter<'a, W> for SignatureLayerWriter<'
         signature_data_content_size.serialize(&mut out)?;
 
         // prepare rng for mldsa
-        let mut rng = self.signature_config.rng.get_rng();
+        let mut rng = self.signature_config.rng.get_rng()?;
 
         for key in self.signature_config.signature_keys.keys {
             let ed25519ph_signature = key.sign_ed25519ph(self.hash.clone())?;

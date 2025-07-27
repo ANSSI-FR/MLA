@@ -112,7 +112,7 @@ impl<R: Read> MLADeserialize<R> for KeyCommitmentAndTag {
 }
 
 /// Return a Cryptographic random number generator
-pub(crate) fn get_crypto_rng() -> ChaCha20Rng {
+pub(crate) fn get_crypto_rng() -> Result<ChaCha20Rng, Error> {
     // Use OsRng from crate rand, that uses getrandom() from crate getrandom.
     // getrandom provides implementations for many systems, listed on
     // https://docs.rs/getrandom/0.1.14/getrandom/
@@ -130,7 +130,7 @@ pub(crate) fn get_crypto_rng() -> ChaCha20Rng {
     // https://docs.rs/rand/0.7.3/rand/trait.SeedableRng.html#method.from_entropy
     //
     // For the same reasons, force at compile time that the Rng implements CryptoRngCore
-    ChaCha20Rng::from_entropy()
+    Ok(ChaCha20Rng::from_entropy())
 }
 
 #[derive(Zeroize, ZeroizeOnDrop)]
@@ -194,19 +194,22 @@ impl EncryptionConfig {
     /// will results in several materials
     pub(crate) fn to_persistent(
         &self,
-    ) -> Result<(EncryptionPersistentConfig, InternalEncryptionConfig), ConfigError> {
+    ) -> Result<(EncryptionPersistentConfig, InternalEncryptionConfig), Error> {
         // Generate then encapsulate the main key for each recipients
         let (hybrid_multi_recipient_encapsulate_key, ss_hybrid) =
-            self.public_keys.encapsulate(&mut self.rng.get_rng())?;
+            self.public_keys.encapsulate(&mut self.rng.get_rng()?)?;
 
         // Generate the main encrypt layer nonce and keep the main key for internal use
-        let cryptographic_material = InternalEncryptionConfig::from(ss_hybrid)
-            .or(Err(ConfigError::KeyWrappingComputationError))?;
+        let cryptographic_material = InternalEncryptionConfig::from(ss_hybrid).or(Err(
+            Error::ConfigError(ConfigError::KeyWrappingComputationError),
+        ))?;
 
         // Add a key commitment
         let key_commitment =
             build_key_commitment_chain(&cryptographic_material.key, &cryptographic_material.nonce)
-                .or(Err(ConfigError::KeyCommitmentComputationError))?;
+                .or(Err(Error::ConfigError(
+                    ConfigError::KeyCommitmentComputationError,
+                )))?;
 
         // Create the persistent version, to be exported
         Ok((
