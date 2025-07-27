@@ -7,7 +7,7 @@ use std::{
 };
 use mla::{
     ArchiveReader, ArchiveWriter,
-    config::{ArchiveReaderConfig, ArchiveWriterConfig},
+    config::{ArchiveReaderConfig, ArchiveWriterConfig, DEFAULT_COMPRESSION_LEVEL},
     crypto::mlakey::{MLAPrivateKey, MLAPublicKey},
 };
 use mla::entry::EntryName as RustEntryName;
@@ -450,14 +450,12 @@ impl PrivateKeys {
 
 // -------- mla.ConfigWriter --------
 
-// from mla::layers::DEFAULT_COMPRESSION_LEVEL
-const DEFAULT_COMPRESSION_LEVEL: u32 = 5;
-
 // This class keep the values of configured object, and can be used to produce an actual
 // `ArchiveWriterConfig`. That way, it can be used to produced many of them, as they are
 // consumed during the `ArchiveWriter` init (to avoid reusing cryptographic materials)
 struct WriterConfigInner {
     compression_level: Option<u32>,
+    signature_config: Option<PrivateKeys>,
     public_keys: Option<PublicKeys>,
 }
 
@@ -469,25 +467,52 @@ struct WriterConfig {
 #[pymethods]
 impl WriterConfig {
     #[new]
-    #[pyo3(signature = (public_keys))]
+    #[pyo3(signature = (private_keys, public_keys))]
     fn new(
+        private_keys: PrivateKeys,
         public_keys: PublicKeys,
     ) -> Result<Self, WrappedError> {
 
         Ok(WriterConfig {
             inner: Mutex::new(WriterConfigInner {
                 compression_level: Some(DEFAULT_COMPRESSION_LEVEL),
+                signature_config: Some(private_keys),
                 public_keys: Some(public_keys),
             }),
         })
     }
 
     #[classmethod]
-    #[pyo3(signature = ())]
-    fn without_encryption(_cls: &Bound<PyType>) -> Result<Self, WrappedError> {
+    #[pyo3(signature = (public_keys))]
+    fn with_encryption_without_signature(_cls: &Bound<PyType>, public_keys: PublicKeys) -> Result<Self, WrappedError> {
         Ok(WriterConfig {
             inner: Mutex::new(WriterConfigInner {
                 compression_level: Some(DEFAULT_COMPRESSION_LEVEL),
+                signature_config: None,
+                public_keys: Some(public_keys),
+            }),
+        })
+    }
+
+    #[classmethod]
+    #[pyo3(signature = (private_keys))]
+    fn without_encryption_with_signature(_cls: &Bound<PyType>, private_keys: PrivateKeys) -> Result<Self, WrappedError> {
+        Ok(WriterConfig {
+            inner: Mutex::new(WriterConfigInner {
+                compression_level: Some(DEFAULT_COMPRESSION_LEVEL),
+                signature_config: Some(private_keys),
+                public_keys: None,
+            }),
+        })
+    }
+
+    #[classmethod]
+    #[pyo3(signature = ())]
+    fn without_encryption_without_signature(_cls: &Bound<PyType>) -> Result<Self, WrappedError> {
+        Ok(WriterConfig {
+            inner: Mutex::new(WriterConfigInner {
+                compression_level: Some(DEFAULT_COMPRESSION_LEVEL),
+                signature_config: None,
                 public_keys: None,
             }),
         })
@@ -500,7 +525,7 @@ impl WriterConfig {
         compression_level: u32,
     ) -> Result<PyRefMut<Self>, WrappedError> {
         // Check compression level is correct using a fake object
-        ArchiveWriterConfig::without_encryption().with_compression_level(compression_level)?;
+        ArchiveWriterConfig::without_encryption_without_signature()?.with_compression_level(compression_level)?;
 
         slf.inner.lock().expect("Mutex poisoned").compression_level = Some(compression_level);
         Ok(slf)
@@ -521,15 +546,51 @@ impl WriterConfig {
         let config = match inner.public_keys.as_ref() {
             Some(public_keys) => {
                 let encryption_keys = public_keys.inner.lock().expect("Mutex poisoned").keys.iter().map(|k| k.get_encryption_public_key().clone()).collect::<Vec<_>>();
-                ArchiveWriterConfig::with_public_keys(&encryption_keys)
+                match inner.signature_config.as_ref() {
+                    Some(private_keys) => {
+                        let signature_keys = private_keys.inner.lock().expect("Mutex poisoned").keys.iter().map(|k| k.get_signature_private_key().clone()).collect::<Vec<_>>();
+                        ArchiveWriterConfig::with_encryption_with_signature(&encryption_keys, &signature_keys)
+                    }
+                    None => ArchiveWriterConfig::with_encryption_without_signature(&encryption_keys),
+                }
             }
-            None => ArchiveWriterConfig::without_encryption(),
-        };
+            None => match inner.signature_config.as_ref() {
+                Some(private_keys) => {
+                    let signature_keys = private_keys.inner.lock().expect("Mutex poisoned").keys.iter().map(|k| k.get_signature_private_key().clone()).collect::<Vec<_>>();
+                    ArchiveWriterConfig::without_encryption_with_signature(&signature_keys)
+                }
+                None => ArchiveWriterConfig::without_encryption_without_signature(),
+            }
+        }?;
         let config = match inner.compression_level.as_ref() {
             Some(compression_level) => config.with_compression_level(*compression_level)?,
             None => config.without_compression(),
         };
         Ok(config)
+    }
+}
+
+#[pyclass]
+struct SignatureConfig {
+    inner: Mutex<Option<PublicKeys>>,
+}
+
+#[pymethods]
+impl SignatureConfig {
+    #[new]
+    #[pyo3(signature = (public_keys))]
+    fn new(public_keys: PublicKeys) -> Self {
+        SignatureConfig {
+            inner: Mutex::new(Some(public_keys)),
+        }
+    }
+
+    #[classmethod]
+    #[pyo3(signature = ())]
+    fn without_signature_verification(_cls: &Bound<PyType>) -> Self {
+        SignatureConfig {
+            inner: Mutex::new(None),
+        }
     }
 }
 
@@ -541,6 +602,7 @@ impl WriterConfig {
 struct ReaderConfigInner {
     accept_unencrypted: bool,
     private_keys: Option<PrivateKeys>,
+    signature_config: Option<PublicKeys>,
 }
 
 #[pyclass]
@@ -551,26 +613,29 @@ struct ReaderConfig {
 #[pymethods]
 impl ReaderConfig {
     #[new]
-    #[pyo3(signature = (private_keys))]
-    fn new(private_keys: PrivateKeys) -> Self {
+    #[pyo3(signature = (private_keys, signature_config))]
+    fn new(private_keys: PrivateKeys, signature_config: &SignatureConfig) -> Self {
+        let signature_config = signature_config.inner.lock().expect("Mutex poisoned").clone();
         ReaderConfig {
-            inner: Mutex::new(ReaderConfigInner { accept_unencrypted: false, private_keys: Some(private_keys) }),
+            inner: Mutex::new(ReaderConfigInner { accept_unencrypted: false, private_keys: Some(private_keys), signature_config }),
         }
     }
 
     #[classmethod]
-    #[pyo3(signature = (private_keys))]
-    fn with_private_keys_accept_unencrypted(_cls: &Bound<PyType>, private_keys: PrivateKeys) -> Self {
+    #[pyo3(signature = (private_keys, signature_config))]
+    fn with_private_keys_accept_unencrypted(_cls: &Bound<PyType>, private_keys: PrivateKeys, signature_config: &SignatureConfig) -> Self {
+        let signature_config = signature_config.inner.lock().expect("Mutex poisoned").clone();
         ReaderConfig {
-            inner: Mutex::new(ReaderConfigInner { accept_unencrypted: true, private_keys: Some(private_keys) }),
+            inner: Mutex::new(ReaderConfigInner { accept_unencrypted: true, private_keys: Some(private_keys), signature_config }),
         }
     }
 
     #[classmethod]
-    #[pyo3(signature = ())]
-    fn without_encryption(_cls: &Bound<PyType>) -> Self {
+    #[pyo3(signature = (signature_config))]
+    fn without_encryption(_cls: &Bound<PyType>, signature_config: &SignatureConfig) -> Self {
+        let signature_config = signature_config.inner.lock().expect("Mutex poisoned").clone();
         ReaderConfig {
-            inner: Mutex::new(ReaderConfigInner { accept_unencrypted: true, private_keys: None }),
+            inner: Mutex::new(ReaderConfigInner { accept_unencrypted: true, private_keys: None, signature_config }),
         }
     }
 }
@@ -579,15 +644,23 @@ impl ReaderConfig {
     /// Create an `ArchiveReaderConfig` out of the python object
     fn to_archive_reader_config(&self) -> ArchiveReaderConfig {
         let inner = self.inner.lock().expect("Mutex poisoned");
+
+        let incomplete_config = if let Some(ref public_keys) = inner.signature_config {
+            let public_keys = public_keys.inner.lock().expect("Mutex poisoned").keys.iter().map(|k| k.get_signature_verification_public_key().clone()).collect::<Vec<_>>();
+            ArchiveReaderConfig::with_signature_verification(&public_keys)
+        } else {
+            ArchiveReaderConfig::without_signature_verification()
+        };
+
         if let Some(ref private_keys) = inner.private_keys {
             let private_keys = private_keys.inner.lock().expect("Mutex poisoned").keys.iter().map(|k| k.get_decryption_private_key().clone()).collect::<Vec<_>>();
             if inner.accept_unencrypted {
-                ArchiveReaderConfig::with_private_keys_accept_unencrypted(&private_keys)
+                incomplete_config.with_encryption_accept_unencrypted(&private_keys)
             } else {
-                ArchiveReaderConfig::with_private_keys(&private_keys)
+                incomplete_config.with_encryption(&private_keys)
             }
         } else if inner.accept_unencrypted {
-            ArchiveReaderConfig::without_encryption()
+            incomplete_config.without_encryption()
         } else {
             panic!("Given ReaderConfig API this should not happen. Please report bug")
         }
@@ -1163,6 +1236,7 @@ fn pymla(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<WriterConfig>()?;
     m.add_class::<PublicKeys>()?;
     m.add_class::<PrivateKeys>()?;
+    m.add_class::<SignatureConfig>()?;
     m.add_class::<ReaderConfig>()?;
 
     // Exceptions
