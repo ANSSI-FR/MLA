@@ -205,7 +205,7 @@ mod tests {
         let dest = Cursor::new(mla);
         let config = ArchiveReaderConfig::without_signature_verification()
             .with_encryption(&[receiver_key.0.get_decryption_private_key().clone()]);
-        let mut mla_read = ArchiveReader::from_config(dest, config).unwrap();
+        let mut mla_read = ArchiveReader::from_config(dest, config).unwrap().0;
 
         // Prepare writers
         let file_list: Vec<EntryName> = mla_read
@@ -232,7 +232,7 @@ mod tests {
         let dest = Cursor::new(mla);
         let config = ArchiveReaderConfig::without_signature_verification()
             .with_encryption(&[receiver_key.0.get_decryption_private_key().clone()]);
-        let mut mla_read = ArchiveReader::from_config(dest, config).unwrap();
+        let mut mla_read = ArchiveReader::from_config(dest, config).unwrap().0;
 
         // Prepare writers
         let mut export: HashMap<&EntryName, Vec<u8>> = HashMap::new();
@@ -276,7 +276,7 @@ mod tests {
         let dest = Cursor::new(dest);
         let config =
             ArchiveReaderConfig::without_signature_verification().with_encryption(&[private_key]);
-        let mut mla_read = ArchiveReader::from_config(dest, config).unwrap();
+        let mut mla_read = ArchiveReader::from_config(dest, config).unwrap().0;
 
         // Prepare writers
         let mut export: HashMap<&EntryName, Vec<u8>> = HashMap::new();
@@ -325,7 +325,8 @@ mod tests {
             buf,
             ArchiveReaderConfig::without_signature_verification().without_encryption(),
         )
-        .unwrap();
+        .unwrap()
+        .0;
         let mut content1 = Vec::new();
         mla_read
             .get_entry(EntryName::from_arbitrary_bytes(b"my_file").unwrap())
