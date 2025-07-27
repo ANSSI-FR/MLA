@@ -592,8 +592,8 @@ fn generate_signature_keypair_from_rng(
 }
 
 /// Generate an MLA key pair using the current Operating System CSPRNG
-pub fn generate_mla_keypair() -> (MLAPrivateKey, MLAPublicKey) {
-    generate_mla_keypair_from_rng(get_crypto_rng())
+pub fn generate_mla_keypair() -> Result<(MLAPrivateKey, MLAPublicKey), Error> {
+    Ok(generate_mla_keypair_from_rng(get_crypto_rng()?))
 }
 
 /// WARNING: the seed is as secret as the private key.
@@ -729,7 +729,7 @@ mod tests {
     /// Ensure the generated keypair is coherent and re-readable
     #[test]
     fn keypair_serialize_deserialize_and_check() {
-        let (priv_key, pub_key) = generate_mla_keypair();
+        let (priv_key, pub_key) = generate_mla_keypair().unwrap();
 
         let mut cursor = Cursor::new(Vec::new());
         priv_key.serialize_private_key(&mut cursor).unwrap();

@@ -2,7 +2,7 @@
 use rand::SeedableRng as _;
 use rand_chacha::ChaCha20Rng;
 
-use crate::layers::encrypt::get_crypto_rng;
+use crate::{errors::Error, layers::encrypt::get_crypto_rng};
 
 pub(crate) mod aesgcm;
 pub(crate) mod hash;
@@ -18,10 +18,10 @@ pub(crate) enum MaybeSeededRNG {
 }
 
 impl MaybeSeededRNG {
-    pub(crate) fn get_rng(&self) -> ChaCha20Rng {
+    pub(crate) fn get_rng(&self) -> Result<ChaCha20Rng, Error> {
         match self {
             MaybeSeededRNG::System => get_crypto_rng(),
-            MaybeSeededRNG::Seed(s) => ChaCha20Rng::from_seed(*s),
+            MaybeSeededRNG::Seed(s) => Ok(ChaCha20Rng::from_seed(*s)),
         }
     }
 }
