@@ -1,6 +1,6 @@
 //! `ArchiveReader` and `ArchiveWriter` configuration
 use crate::crypto::hybrid::{MLADecryptionPrivateKey, MLAEncryptionPublicKey};
-use crate::crypto::mlakey::{MLASignaturePrivateKey, MLASignatureVerificationPublicKey};
+use crate::crypto::mlakey::{MLASignatureVerificationPublicKey, MLASigningPrivateKey};
 use crate::errors::ConfigError;
 use crate::layers::compress::CompressionConfig;
 use crate::layers::encrypt::{EncryptionConfig, EncryptionReaderConfig};
@@ -22,21 +22,21 @@ impl ArchiveWriterConfig {
     /// Do not mix up keys. If `A` sends an archive to `B`,
     /// `encryption_public_keys` must contain
     /// `B`'s encryption public key and
-    /// `signature_private_keys` must contain `A`'s signature private key.
+    /// `signing_private_keys` must contain `A`'s signature private key.
     ///
     /// Will compress by default with `DEFAULT_COMPRESSION_LEVEL`. Can be
     /// configured with `with_compression_level` and `without_compression`.
     ///
     /// Returns `ConfigError::EncryptionKeyIsMissing` if `encryption_public_keys` is empty.
-    /// Returns `ConfigError::PrivateKeyNotSet` if `signature_private_keys` is empty.
+    /// Returns `ConfigError::PrivateKeyNotSet` if `signing_private_keys` is empty.
     pub fn with_encryption_with_signature(
         encryption_public_keys: &[MLAEncryptionPublicKey],
-        signature_private_keys: &[MLASignaturePrivateKey],
+        signing_private_keys: &[MLASigningPrivateKey],
     ) -> Result<Self, ConfigError> {
         Ok(ArchiveWriterConfig {
             compression_config: Some(CompressionConfig::default()),
             encryption_config: Some(EncryptionConfig::new(encryption_public_keys)?),
-            signature_config: Some(SignatureConfig::new(signature_private_keys)?),
+            signature_config: Some(SignatureConfig::new(signing_private_keys)?),
         })
     }
 
@@ -67,19 +67,19 @@ impl ArchiveWriterConfig {
     /// Will sign content with given signature private keys AND WONT ENCRYPT content.
     ///
     /// Do not mix up keys. If `A` sends an archive to `B`,
-    /// `signature_private_keys` must contain `A`'s signature private key.
+    /// `signing_private_keys` must contain `A`'s signature private key.
     ///
     /// Will compress by default with `DEFAULT_COMPRESSION_LEVEL`. Can be
     /// configured with `with_compression_level` and `without_compression`.
     ///
-    /// Returns `ConfigError::PrivateKeyNotSet` if `signature_private_keys` is empty.
+    /// Returns `ConfigError::PrivateKeyNotSet` if `signing_private_keys` is empty.
     pub fn without_encryption_with_signature(
-        signature_private_keys: &[MLASignaturePrivateKey],
+        signing_private_keys: &[MLASigningPrivateKey],
     ) -> Result<Self, ConfigError> {
         Ok(ArchiveWriterConfig {
             compression_config: Some(CompressionConfig::default()),
             encryption_config: None,
-            signature_config: Some(SignatureConfig::new(signature_private_keys)?),
+            signature_config: Some(SignatureConfig::new(signing_private_keys)?),
         })
     }
 

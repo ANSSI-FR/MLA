@@ -548,7 +548,7 @@ impl WriterConfig {
                 let encryption_keys = public_keys.inner.lock().expect("Mutex poisoned").keys.iter().map(|k| k.get_encryption_public_key().clone()).collect::<Vec<_>>();
                 match inner.signature_config.as_ref() {
                     Some(private_keys) => {
-                        let signature_keys = private_keys.inner.lock().expect("Mutex poisoned").keys.iter().map(|k| k.get_signature_private_key().clone()).collect::<Vec<_>>();
+                        let signature_keys = private_keys.inner.lock().expect("Mutex poisoned").keys.iter().map(|k| k.get_signing_private_key().clone()).collect::<Vec<_>>();
                         ArchiveWriterConfig::with_encryption_with_signature(&encryption_keys, &signature_keys)
                     }
                     None => ArchiveWriterConfig::with_encryption_without_signature(&encryption_keys),
@@ -556,7 +556,7 @@ impl WriterConfig {
             }
             None => match inner.signature_config.as_ref() {
                 Some(private_keys) => {
-                    let signature_keys = private_keys.inner.lock().expect("Mutex poisoned").keys.iter().map(|k| k.get_signature_private_key().clone()).collect::<Vec<_>>();
+                    let signature_keys = private_keys.inner.lock().expect("Mutex poisoned").keys.iter().map(|k| k.get_signing_private_key().clone()).collect::<Vec<_>>();
                     ArchiveWriterConfig::without_encryption_with_signature(&signature_keys)
                 }
                 None => ArchiveWriterConfig::without_encryption_without_signature(),

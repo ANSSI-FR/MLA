@@ -12,7 +12,7 @@ use crate::{
             HybridMultiRecipientSigningKeys, ML_DSA87_SIGNATURE_SIZE, MLASignature,
             deserialize_signatures,
         },
-        mlakey::{MLASignaturePrivateKey, MLASignatureVerificationPublicKey},
+        mlakey::{MLASignatureVerificationPublicKey, MLASigningPrivateKey},
     },
     errors::{ConfigError, Error},
     helpers::{InnerReaderTrait, InnerWriterTrait},
@@ -101,14 +101,12 @@ pub(crate) struct SignatureConfig {
 }
 
 impl SignatureConfig {
-    pub(crate) fn new(
-        signature_private_keys: &[MLASignaturePrivateKey],
-    ) -> Result<Self, ConfigError> {
-        if signature_private_keys.is_empty() {
+    pub(crate) fn new(signing_private_keys: &[MLASigningPrivateKey]) -> Result<Self, ConfigError> {
+        if signing_private_keys.is_empty() {
             return Err(ConfigError::PrivateKeyNotSet);
         }
         let signature_keys = HybridMultiRecipientSigningKeys {
-            keys: signature_private_keys.to_vec(),
+            keys: signing_private_keys.to_vec(),
         };
         Ok(Self {
             signature_keys,

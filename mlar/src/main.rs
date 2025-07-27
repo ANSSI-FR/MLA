@@ -5,7 +5,7 @@ use lru::LruCache;
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
 use mla::crypto::mlakey::{
     MLADecryptionPrivateKey, MLAEncryptionPublicKey, MLAPrivateKey, MLAPublicKey,
-    MLASignaturePrivateKey, MLASignatureVerificationPublicKey, derive_keypair_from_path,
+    MLASignatureVerificationPublicKey, MLASigningPrivateKey, derive_keypair_from_path,
     generate_mla_keypair, generate_mla_keypair_from_seed,
 };
 use mla::entry::{ENTRY_NAME_RAW_CONTENT_ALLOWED_BYTES, EntryName, EntryNameError};
@@ -125,9 +125,9 @@ impl Write for OutputTypes {
 fn open_private_keys(
     matches: &ArgMatches,
     private_keys_arg_name: &str,
-) -> Result<(Vec<MLADecryptionPrivateKey>, Vec<MLASignaturePrivateKey>), Error> {
+) -> Result<(Vec<MLADecryptionPrivateKey>, Vec<MLASigningPrivateKey>), Error> {
     let mut private_decryption_keys = Vec::new();
-    let mut private_signature_keys = Vec::new();
+    let mut private_signing_keys = Vec::new();
     if let Some(private_key_args) = matches.get_many::<PathBuf>(private_keys_arg_name) {
         for private_key_arg in private_key_args {
             let mut file = File::open(private_key_arg)?;
@@ -136,11 +136,11 @@ fn open_private_keys(
                     .map_err(|_| Error::InvalidKeyFormat)?
                     .get_private_keys();
             private_decryption_keys.push(private_decryption_key);
-            private_signature_keys.push(private_siging_key);
+            private_signing_keys.push(private_siging_key);
         }
     };
 
-    Ok((private_decryption_keys, private_signature_keys))
+    Ok((private_decryption_keys, private_signing_keys))
 }
 
 /// Return the parsed version of public keys from arguments `public_keys`
@@ -1417,7 +1417,7 @@ fn app() -> clap::Command {
                 )
                 .arg(
                     Arg::new("out_priv")
-                        .help("MLA private key file for output archive signature")
+                        .help("MLA private key file for output archive signing")
                         .long("out-priv")
                         .num_args(1)
                         .action(ArgAction::Append)
@@ -1442,7 +1442,7 @@ fn app() -> clap::Command {
                 )
                 .arg(
                     Arg::new("out_priv")
-                        .help("MLA private key file for output archive signature")
+                        .help("MLA private key file for output archive signing")
                         .long("out-priv")
                         .num_args(1)
                         .action(ArgAction::Append)

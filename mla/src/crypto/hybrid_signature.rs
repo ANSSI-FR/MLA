@@ -7,7 +7,7 @@ use sha2::{Digest, Sha512};
 
 use crate::{
     MLADeserialize, MLASerialize,
-    crypto::mlakey::{MLASignaturePrivateKey, MLASignatureVerificationPublicKey},
+    crypto::mlakey::{MLASignatureVerificationPublicKey, MLASigningPrivateKey},
     errors::Error,
 };
 
@@ -15,10 +15,10 @@ const ED25519PH_CONTEXT: &[u8] = b"MLAEd25519SigMethod";
 const MLDSA87_CONTEXT: &[u8] = b"MLAMLDSA87SigMethod";
 
 pub(crate) struct HybridMultiRecipientSigningKeys {
-    pub(crate) keys: Vec<MLASignaturePrivateKey>,
+    pub(crate) keys: Vec<MLASigningPrivateKey>,
 }
 
-impl MLASignaturePrivateKey {
+impl MLASigningPrivateKey {
     pub(crate) fn sign_ed25519ph(
         &self,
         hash_to_sign: Sha512,

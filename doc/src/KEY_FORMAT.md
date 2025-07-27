@@ -10,7 +10,7 @@ A private key file is an ASCII file, which may use `mlapriv` as file extension. 
 
 * `PrivFormatHeader` is the ASCII string `DO NOT SEND THIS TO ANYONE - MLA PRIVATE KEY FILE V1`.
 * `PrivEncHdr` is the ASCII string `MLA PRIVATE DECRYPTION KEY ` (note the trailing space).
-* `PrivSigHdr` is the ASCII string `MLA PRIVATE SIGNATURE KEY ` (note the trailing space).
+* `PrivSigHdr` is the ASCII string `MLA PRIVATE SIGNING KEY ` (note the trailing space).
 * `B64Priv4Enc` is the base64 encoding (RFC 4648) of `EncMethodId||PrivEncOpts||X25519PrivKey||MLKEM1024PrivKey` where `EncMethodId`, `PrivEncOpts`, `X25519PrivKey` and` MLKEM1024PrivKey` are described below.
 * `B64Priv4Sig` is the base64 encoding of `SigMethodId||PrivSigOpts||Ed25519PrivKey||MLDSA87PrivKey` where `MethodId`, `PrivEncOpts`, `Ed25519PrivKey` and` MLDSA87PrivKey` are described below.
 * `PrivFormatFooter` is the ASCII string `END OF MLA PRIVATE KEY FILE`

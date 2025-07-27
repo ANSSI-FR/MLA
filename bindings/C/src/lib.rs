@@ -6,8 +6,8 @@ use mla::crypto::mlakey::MLADecryptionPrivateKey;
 use mla::crypto::mlakey::MLAEncryptionPublicKey;
 use mla::crypto::mlakey::MLAPrivateKey;
 use mla::crypto::mlakey::MLAPublicKey;
-use mla::crypto::mlakey::MLASignaturePrivateKey;
 use mla::crypto::mlakey::MLASignatureVerificationPublicKey;
+use mla::crypto::mlakey::MLASigningPrivateKey;
 use mla::entry::ArchiveEntryId;
 use mla::entry::EntryName;
 use mla::errors::ConfigError;
@@ -276,7 +276,7 @@ trait Key {
 
 impl Key for MLAPrivateKey {
     type TYPE1 = MLADecryptionPrivateKey;
-    type TYPE2 = MLASignaturePrivateKey;
+    type TYPE2 = MLASigningPrivateKey;
 
     fn deserialize_key(src: impl Read) -> Result<Self, MLAError> {
         Self::deserialize_private_key(src)
@@ -349,7 +349,7 @@ pub extern "C" fn create_mla_writer_config_with_encryption_with_signature(
         return MLAStatus::BadAPIArgument;
     }
 
-    let (_private_decryption_keys, private_signature_keys) = match unsafe {
+    let (_private_decryption_keys, private_signing_keys) = match unsafe {
         keys_from_pointers::<MLAPrivateKey>(private_keys_pointers, number_of_private_keys)
     } {
         Ok(private_key_pair) => private_key_pair,
@@ -365,7 +365,7 @@ pub extern "C" fn create_mla_writer_config_with_encryption_with_signature(
 
     let config = ArchiveWriterConfig::with_encryption_with_signature(
         &public_encryption_keys,
-        &private_signature_keys,
+        &private_signing_keys,
     );
 
     let ptr = Box::into_raw(Box::new(config));
@@ -427,14 +427,14 @@ pub extern "C" fn create_mla_writer_config_without_encryption_with_signature(
         return MLAStatus::BadAPIArgument;
     }
 
-    let (_private_decryption_keys, private_signature_keys) = match unsafe {
+    let (_private_decryption_keys, private_signing_keys) = match unsafe {
         keys_from_pointers::<MLAPrivateKey>(private_keys_pointers, number_of_private_keys)
     } {
         Ok(private_key_pair) => private_key_pair,
         Err(e) => return e,
     };
 
-    let config = ArchiveWriterConfig::without_encryption_with_signature(&private_signature_keys);
+    let config = ArchiveWriterConfig::without_encryption_with_signature(&private_signing_keys);
 
     let ptr = Box::into_raw(Box::new(config));
     unsafe {
@@ -595,7 +595,7 @@ where
     let incomplete_config =
         ArchiveReaderConfig::with_signature_verification(&public_signature_verification_keys);
 
-    let (private_decryption_keys, _private_signature_keys) = match unsafe {
+    let (private_decryption_keys, _private_signing_keys) = match unsafe {
         keys_from_pointers::<MLAPrivateKey>(private_keys_pointers, number_of_private_keys)
     } {
         Ok(private_key_pair) => private_key_pair,
@@ -668,7 +668,7 @@ where
 
     let incomplete_config = ArchiveReaderConfig::without_signature_verification();
 
-    let (private_decryption_keys, _private_signature_keys) = match unsafe {
+    let (private_decryption_keys, _private_signing_keys) = match unsafe {
         keys_from_pointers::<MLAPrivateKey>(private_keys_pointers, number_of_private_keys)
     } {
         Ok(private_key_pair) => private_key_pair,
