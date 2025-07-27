@@ -188,8 +188,6 @@ jobs:
       - uses: actions-rs/toolchain@b2417cde72dcf67f306c0ae8e0828a81bf0b189f # v1.0.6
         with:
           toolchain: stable
-      - name: Dry-run publish curve25519-parser
-        run: cd curve25519-parser && cargo publish --dry-run
       - name: Dry-run publish mla
         run: cd mla && cargo publish --dry-run
       - name: Dry-run publish mlar
