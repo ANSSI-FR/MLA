@@ -149,7 +149,7 @@ pub(crate) mod tests {
         let input = "archive_v1.mla";
         let output = temp_dir.join("archive_v2.mla");
         let private_keys = "test_x25519_archive_v1.pem";
-        let public_keys = "test_mlakey_archive_v2.mlapub";
+        let public_keys = "test_mlakey_archive_v2_receiver.mlapub";
 
         // temporary locations
         let temp_input = temp_dir.join(input);
