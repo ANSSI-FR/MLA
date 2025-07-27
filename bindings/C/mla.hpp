@@ -104,6 +104,7 @@ using MLAFileCallBack = int32_t(*)(void *context,
 struct ArchiveInfo {
   uint32_t version;
   uint8_t is_encryption_enabled;
+  uint8_t is_signature_enabled;
 };
 
 extern "C" {
