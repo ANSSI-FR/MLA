@@ -34,63 +34,79 @@
 //!
 //! * Create an archive, with compression and encryption:
 //! ```rust
-//! use mla::crypto::mlakey::{MLAPrivateKey, MLAPublicKey};
-//! use mla::config::ArchiveWriterConfig;
 //! use mla::ArchiveWriter;
+//! use mla::config::ArchiveWriterConfig;
+//! use mla::crypto::mlakey::{MLAPrivateKey, MLAPublicKey};
 //! use mla::entry::EntryName;
-//!
 //! // for encryption
-//! const RECEIVER_PUB_KEY: &[u8] = include_bytes!("../../samples/test_mlakey_archive_v2_receiver.mlapub");
+//! const RECEIVER_PUB_KEY: &[u8] =
+//!     include_bytes!("../../samples/test_mlakey_archive_v2_receiver.mlapub");
 //! // for signing
-//! const SENDER_PRIV_KEY: &[u8] = include_bytes!("../../samples/test_mlakey_archive_v2_sender.mlapriv");
-//!
+//! const SENDER_PRIV_KEY: &[u8] =
+//!     include_bytes!("../../samples/test_mlakey_archive_v2_sender.mlapriv");
 //! fn main() {
 //!     // For encryption, load the needed receiver public key
-//!     let (pub_enc_key, _pub_sig_verif_key) = MLAPublicKey::deserialize_public_key(RECEIVER_PUB_KEY).unwrap().get_public_keys();
+//!     let (pub_enc_key, _pub_sig_verif_key) = MLAPublicKey::deserialize_public_key(RECEIVER_PUB_KEY)
+//!         .unwrap()
+//!         .get_public_keys();
 //!     // For signing, load the needed sender private key
-//!     let (_priv_dec_key, priv_sig_key) = MLAPrivateKey::deserialize_private_key(SENDER_PRIV_KEY).unwrap().get_private_keys();
+//!     let (_priv_dec_key, priv_sig_key) = MLAPrivateKey::deserialize_private_key(SENDER_PRIV_KEY)
+//!         .unwrap()
+//!         .get_private_keys();
 //!     // In production, you may want to zeroize the real `SENDER_PRIV_KEY` or
 //!     // associated temporary values of its `Read` implementation here.
-//!
 //!     // Create an MLA Archive - Output only needs the Write trait.
 //!     // Here, a Vec is used but it would tipically be a `File` or a network socket.
 //!     let mut buf = Vec::new();
 //!     // The use of multiple keys is supported
-//!     let config = ArchiveWriterConfig::with_encryption_with_signature(&[pub_enc_key], &[priv_sig_key]).unwrap();
+//!     let config =
+//!         ArchiveWriterConfig::with_encryption_with_signature(&[pub_enc_key], &[priv_sig_key])
+//!             .unwrap();
 //!     // Create the Writer
 //!     let mut mla = ArchiveWriter::from_config(&mut buf, config).unwrap();
-//!
 //!     // Add a file
 //!     // This creates an entry named "a/filename" (without first "/"), See `EntryName::from_path`
-//!     mla.add_entry(EntryName::from_path("/a/filename").unwrap(), 4, &[0, 1, 2, 3][..]).unwrap();
-//!
+//!     mla.add_entry(
+//!         EntryName::from_path("/a/filename").unwrap(),
+//!         4,
+//!         &[0, 1, 2, 3][..],
+//!     )
+//!     .unwrap();
 //!     // Complete the archive
 //!     mla.finalize().unwrap();
 //! }
 //! ```
 //! * Add entries part per part, in a "concurrent" fashion:
 //! ```rust
-//! use mla::crypto::mlakey::{MLAPrivateKey, MLAPublicKey};
-//! use mla::config::ArchiveWriterConfig;
 //! use mla::ArchiveWriter;
+//! use mla::config::ArchiveWriterConfig;
+//! use mla::crypto::mlakey::{MLAPrivateKey, MLAPublicKey};
 //! use mla::entry::EntryName;
 //!
 //! // for encryption
-//! const RECEIVER_PUB_KEY: &[u8] = include_bytes!("../../samples/test_mlakey_archive_v2_receiver.mlapub");
+//! const RECEIVER_PUB_KEY: &[u8] =
+//!     include_bytes!("../../samples/test_mlakey_archive_v2_receiver.mlapub");
 //! // for signing
-//! const SENDER_PRIV_KEY: &[u8] = include_bytes!("../../samples/test_mlakey_archive_v2_sender.mlapriv");
+//! const SENDER_PRIV_KEY: &[u8] =
+//!     include_bytes!("../../samples/test_mlakey_archive_v2_sender.mlapriv");
 //!
 //! fn main() {
 //!     // For encryption, load the needed receiver public key
-//!     let (pub_enc_key, _pub_sig_verif_key) = MLAPublicKey::deserialize_public_key(RECEIVER_PUB_KEY).unwrap().get_public_keys();
+//!     let (pub_enc_key, _pub_sig_verif_key) = MLAPublicKey::deserialize_public_key(RECEIVER_PUB_KEY)
+//!         .unwrap()
+//!         .get_public_keys();
 //!     // For signing, load the needed sender private key
-//!     let (_priv_dec_key, priv_sig_key) = MLAPrivateKey::deserialize_private_key(SENDER_PRIV_KEY).unwrap().get_private_keys();
+//!     let (_priv_dec_key, priv_sig_key) = MLAPrivateKey::deserialize_private_key(SENDER_PRIV_KEY)
+//!         .unwrap()
+//!         .get_private_keys();
 //!     // In production, you may want to zeroize the real `SENDER_PRIV_KEY` or
 //!     // associated temporary values of its `Read` implementation here.
 //!
 //!     // Create an MLA Archive - Output only needs the Write trait
 //!     let mut buf = Vec::new();
-//!     let config = ArchiveWriterConfig::with_encryption_with_signature(&[pub_enc_key], &[priv_sig_key]).unwrap();
+//!     let config =
+//!         ArchiveWriterConfig::with_encryption_with_signature(&[pub_enc_key], &[priv_sig_key])
+//!             .unwrap();
 //!
 //!     // Create the Writer
 //!     let mut mla = ArchiveWriter::from_config(&mut buf, config).unwrap();
@@ -102,22 +118,46 @@
 //!     // 3. end_entry(id)
 //!
 //!     // Start an entry and add content
-//!     let id_entry1 = mla.start_entry(EntryName::from_path("name1").unwrap()).unwrap();
+//!     let id_entry1 = mla
+//!         .start_entry(EntryName::from_path("name1").unwrap())
+//!         .unwrap();
 //!     let entry1_part1 = vec![11, 12, 13, 14];
-//!     mla.append_entry_content(id_entry1, entry1_part1.len() as u64, entry1_part1.as_slice()).unwrap();
+//!     mla.append_entry_content(
+//!         id_entry1,
+//!         entry1_part1.len() as u64,
+//!         entry1_part1.as_slice(),
+//!     )
+//!     .unwrap();
 //!
 //!     // Start a second entry and add content
-//!     let id_entry2 = mla.start_entry(EntryName::from_path("name2").unwrap()).unwrap();
+//!     let id_entry2 = mla
+//!         .start_entry(EntryName::from_path("name2").unwrap())
+//!         .unwrap();
 //!     let entry2_part1 = vec![21, 22, 23, 24];
-//!     mla.append_entry_content(id_entry2, entry2_part1.len() as u64, entry2_part1.as_slice()).unwrap();
+//!     mla.append_entry_content(
+//!         id_entry2,
+//!         entry2_part1.len() as u64,
+//!         entry2_part1.as_slice(),
+//!     )
+//!     .unwrap();
 //!
 //!     // Add an entry as a whole
 //!     let entry3 = vec![31, 32, 33, 34];
-//!     mla.add_entry(EntryName::from_path("name3").unwrap(), entry3.len() as u64, entry3.as_slice()).unwrap();
+//!     mla.add_entry(
+//!         EntryName::from_path("name3").unwrap(),
+//!         entry3.len() as u64,
+//!         entry3.as_slice(),
+//!     )
+//!     .unwrap();
 //!
 //!     // Add new content to the first entry
 //!     let entry1_part2 = vec![15, 16, 17, 18];
-//!     mla.append_entry_content(id_entry1, entry1_part2.len() as u64, entry1_part2.as_slice()).unwrap();
+//!     mla.append_entry_content(
+//!         id_entry1,
+//!         entry1_part2.len() as u64,
+//!         entry1_part2.as_slice(),
+//!     )
+//!     .unwrap();
 //!
 //!     // Mark still opened entries as finished
 //!     mla.end_entry(id_entry1).unwrap();
@@ -129,26 +169,32 @@
 //! ```
 //! * Read entries from an archive
 //! ```rust
-//! use mla::crypto::mlakey::{MLAPrivateKey, MLAPublicKey};
-//! use mla::config::ArchiveReaderConfig;
 //! use mla::ArchiveReader;
-//! use std::io;
+//! use mla::config::ArchiveReaderConfig;
+//! use mla::crypto::mlakey::{MLAPrivateKey, MLAPublicKey};
 //! use mla::entry::EntryName;
+//! use std::io;
 //!
 //! const DATA: &[u8] = include_bytes!("../../samples/archive_v2.mla");
 //! // for decryption
-//! const RECEIVER_PRIV_KEY: &[u8] = include_bytes!("../../samples/test_mlakey_archive_v2_receiver.mlapriv");
+//! const RECEIVER_PRIV_KEY: &[u8] =
+//!     include_bytes!("../../samples/test_mlakey_archive_v2_receiver.mlapriv");
 //! // for signature verification
 //! const SENDER_PUB_KEY: &[u8] = include_bytes!("../../samples/test_mlakey_archive_v2_sender.mlapub");
 //!
 //! fn main() {
 //!     // For decryption, load the needed receiver private key
-//!     let (priv_dec_key, _priv_sig_key) = MLAPrivateKey::deserialize_private_key(RECEIVER_PRIV_KEY).unwrap().get_private_keys();
+//!     let (priv_dec_key, _priv_sig_key) = MLAPrivateKey::deserialize_private_key(RECEIVER_PRIV_KEY)
+//!         .unwrap()
+//!         .get_private_keys();
 //!     // For signature verification, load the needed sender public key
-//!     let (_pub_enc_key, pub_sig_verif_key) = MLAPublicKey::deserialize_public_key(SENDER_PUB_KEY).unwrap().get_public_keys();
+//!     let (_pub_enc_key, pub_sig_verif_key) = MLAPublicKey::deserialize_public_key(SENDER_PUB_KEY)
+//!         .unwrap()
+//!         .get_public_keys();
 //!
 //!     // Specify the key for the Reader
-//!     let config = ArchiveReaderConfig::with_signature_verification(&[pub_sig_verif_key]).with_encryption(&[priv_dec_key]);
+//!     let config = ArchiveReaderConfig::with_signature_verification(&[pub_sig_verif_key])
+//!         .with_encryption(&[priv_dec_key]);
 //!
 //!     // Read from buf, which needs Read + Seek
 //!     let buf = io::Cursor::new(DATA);
@@ -163,7 +209,11 @@
 //!     // Get back its name, size, and data
 //!     // display name interpreted as file path and escape to avoid
 //!     // issues with terminal escape sequences for example
-//!     println!("{} ({} bytes)", entry.name.to_pathbuf_escaped_string().unwrap(), entry.size);
+//!     println!(
+//!         "{} ({} bytes)",
+//!         entry.name.to_pathbuf_escaped_string().unwrap(),
+//!         entry.size
+//!     );
 //!     let mut output = Vec::new();
 //!     std::io::copy(&mut entry.data, &mut output).unwrap();
 //!
@@ -354,7 +404,7 @@ mod base64;
 /// If this footer is unavailable, the archive is read from the beginning to recover
 /// file information.
 pub(crate) mod layers;
-use crate::crypto::mlakey::{MLASignaturePrivateKey, MLASignatureVerificationPublicKey};
+use crate::crypto::mlakey::{MLASignatureVerificationPublicKey, MLASigningPrivateKey};
 use crate::layers::compress::{
     CompressionLayerFailSafeReader, CompressionLayerReader, CompressionLayerWriter,
 };
@@ -710,18 +760,18 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
     /// Do not mix up keys. If `A` sends an archive to `B`,
     /// `encryption_public_keys` must contain
     /// `B`'s encryption public key and
-    /// `signature_private_keys` must contain `A`'s signature private key.
+    /// `signing_private_keys` must contain `A`'s signature private key.
     ///
     /// Returns `ConfigError::EncryptionKeyIsMissing` if `encryption_public_keys` is empty.
-    /// Returns `ConfigError::PrivateKeyNotSet` if `signature_private_keys` is empty.
+    /// Returns `ConfigError::PrivateKeyNotSet` if `signing_private_keys` is empty.
     pub fn new(
         dest: W,
         encryption_public_keys: &[MLAEncryptionPublicKey],
-        signature_private_keys: &[MLASignaturePrivateKey],
+        signing_private_keys: &[MLASigningPrivateKey],
     ) -> Result<Self, Error> {
         let config = ArchiveWriterConfig::with_encryption_with_signature(
             encryption_public_keys,
-            signature_private_keys,
+            signing_private_keys,
         )?;
         Self::from_config(dest, config)
     }
@@ -1740,7 +1790,7 @@ pub(crate) mod tests {
         // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
         let (private_key, public_key) = generate_mla_keypair_from_seed([0; 32]);
         let config = ArchiveWriterConfig::without_encryption_with_signature(&[private_key
-            .get_signature_private_key()
+            .get_signing_private_key()
             .clone()])
         .unwrap();
         let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
@@ -1830,7 +1880,7 @@ pub(crate) mod tests {
             if signature {
                 ArchiveWriterConfig::with_encryption_with_signature(
                     &[receiver_public_key.get_encryption_public_key().clone()],
-                    &[sender_private_key.get_signature_private_key().clone()],
+                    &[sender_private_key.get_signing_private_key().clone()],
                 )
             } else {
                 ArchiveWriterConfig::with_encryption_without_signature(&[receiver_public_key
@@ -1839,7 +1889,7 @@ pub(crate) mod tests {
             }
         } else if signature {
             ArchiveWriterConfig::without_encryption_with_signature(&[sender_private_key
-                .get_signature_private_key()
+                .get_signing_private_key()
                 .clone()])
         } else {
             ArchiveWriterConfig::without_encryption_without_signature()
