@@ -291,8 +291,9 @@ MLAStatus mla_roarchive_extract(MLAReaderConfigHandle *config,
                                 MlaReadCallback read_callback,
                                 MlaSeekCallback seek_callback,
                                 MLAFileCallBack file_callback,
+                                void *context,
                                 bool give_raw_name_as_arbitrary_bytes_to_file_callback,
-                                void *context);
+                                uint32_t *number_of_keys_with_valid_signature);
 
 /// Get info on an existing MLA archive
 MLAStatus mla_roarchive_info(MlaReadCallback read_callback, void *context, ArchiveInfo *info_out);
