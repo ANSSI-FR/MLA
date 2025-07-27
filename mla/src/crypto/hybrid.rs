@@ -259,13 +259,6 @@ impl Drop for MLKEMSeed {
 
 impl ZeroizeOnDrop for MLKEMSeed {}
 
-/// Private key for hybrid cryptography.
-///
-/// Made of:
-/// - an X25519 key, for ECC (pre-quantum) cryptography
-/// - an ML-KEM 1024 key, for post-quantum cryptography
-///
-/// Supports KEM decapsulation
 #[derive(Clone)]
 pub struct MLADecryptionPrivateKey {
     pub(crate) private_key_ecc: X25519StaticSecret,
@@ -329,11 +322,6 @@ impl Decapsulate<HybridMultiRecipientEncapsulatedKey, HybridKemSharedSecret>
     }
 }
 
-/// Public key for hybrid cryptography
-///
-/// Made of:
-/// - an X25519 key, for ECC (pre-quantum) cryptography
-/// - an ML-KEM 1024 key, for post-quantum cryptography
 #[derive(Clone)]
 pub struct MLAEncryptionPublicKey {
     pub(crate) public_key_ecc: X25519PublicKey,
