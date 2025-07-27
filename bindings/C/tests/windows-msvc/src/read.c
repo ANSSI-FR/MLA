@@ -195,7 +195,8 @@ int test_reader_extract()
 
     CreateDirectory(TEXT("extracted"), NULL);
 
-    status = mla_roarchive_extract(&hConfig, read_cb, seek_cb, file_cb, 0, f);
+    uint32_t number_of_keys_with_valid_signature = 0;
+    status = mla_roarchive_extract(&hConfig, read_cb, seek_cb, file_cb, f, 0, &number_of_keys_with_valid_signature);
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
     {
         fprintf(stderr, " [!] Archive read failed with code %" PRIX64 "\n", (uint64_t)status);
