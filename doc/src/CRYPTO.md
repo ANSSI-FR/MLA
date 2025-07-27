@@ -8,11 +8,17 @@ Keys used for encryption and signature are generated and used separately.
 
 ### Signature
 
-As described in `FORMAT.md` an archive can be signed. Implementation must ensure users explicitely choose if signature is made and verified. Two methods are available and must be used together. Method input is called `m`. The SHA-512 hash `h` of `m` may be computed in a first step.
+As described in `FORMAT.md` an archive can be signed. Implementation must ensure users explicitely choose if signature is made and verified.
+
+A PQ/T key consists of a pair of a post-quantum key and a traditional key. An archive is considered correctly signed for a PQ/T key if and only if it is correctly signed for its post-quantum part AND its traditional part.
+
+Two signature methods are available and must be used together. Signature method input is called `m`. The SHA-512 hash `h` of `m` may be computed in a first step.
 
 For method `MLAEd25519SigMethod`, `signature_data` is the Ed25519ph (as described in RFC 8032 [^rfc8032]) signature of `m` (not `h` even though it can be used for computing the result). The context given as parameter to Ed25519ph is the ASCII `MLAEd25519SigMethod`. Signature verification and key generation are done as described in RFC 8032. Key storage is described in `KEY_FORMAT.md`.
 
 For method `MLAMLDSA87SigMethod`, `signature_data` is the ML-DSA-87 signature (as described in FIPS 204 [^fips204], not HashML-DSA) of `h` (not `m` this time) with the ASCII `MLAMLDSA87SigMethod` as context. Signature verification and key generation are done as described in FIPS 204. Key storage is described in `KEY_FORMAT.md`.
+
+An archive can be signed with multiple signing keys. If a user provides a set of PQ/T keys for signature verification, implementations should give a way for the user to know if archive is correctly signed for at least one key. Implementations may give a way for users to know if archive is correctly signed for all keys. Users must explicitely know if they are validating against at least one or all keys. Implementations may also give a way for users to know which PQ/T keys correspond to valid signatures or their number.
 
 ### Encryption high-level overview
 
