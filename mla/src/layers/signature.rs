@@ -21,7 +21,7 @@ use crate::{
             ENCRYPTION_LAYER_MAGIC, EncryptionPersistentConfig, read_encryption_header_after_magic,
         },
         strip_head_tail::StripHeadTailReader,
-        traits::{InnerWriterType, LayerReader, LayerWriter},
+        traits::{InnerWriterType, LayerFailSafeReader, LayerReader, LayerWriter},
     },
     read_layer_magic,
 };
@@ -259,5 +259,26 @@ impl<'a, R: 'a + InnerReaderTrait> LayerReader<'a, R> for SignatureLayerReader<'
     fn initialize(&mut self) -> Result<(), Error> {
         // nothing, inner layer was already initialized during new
         Ok(())
+    }
+}
+
+pub(crate) struct SignatureLayerFailSafeReader<'a, R: Read> {
+    inner: Box<dyn 'a + LayerFailSafeReader<'a, R>>,
+}
+
+impl<'a, R: 'a + Read> SignatureLayerFailSafeReader<'a, R> {
+    pub(crate) fn new_skip_magic(
+        mut inner: Box<dyn 'a + LayerFailSafeReader<'a, R>>,
+    ) -> Result<Self, Error> {
+        let _ = Opts::from_reader(&mut inner)?; // No option handled at the moment
+        Ok(Self { inner })
+    }
+}
+
+impl<'a, R: 'a + Read> LayerFailSafeReader<'a, R> for SignatureLayerFailSafeReader<'a, R> {}
+
+impl<R: Read> Read for SignatureLayerFailSafeReader<'_, R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.inner.read(buf)
     }
 }
