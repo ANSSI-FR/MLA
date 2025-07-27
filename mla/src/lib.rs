@@ -344,6 +344,7 @@ use crate::layers::encrypt::{
 };
 use crate::layers::position::PositionLayerWriter;
 use crate::layers::raw::{RawLayerFailSafeReader, RawLayerReader, RawLayerWriter};
+use crate::layers::signature::SignatureLayerWriter;
 use crate::layers::traits::{
     InnerWriterTrait, InnerWriterType, LayerFailSafeReader, LayerReader, LayerWriter,
 };
@@ -355,7 +356,7 @@ use crate::config::{ArchiveReaderConfig, ArchiveWriterConfig};
 
 pub mod crypto;
 use crate::crypto::hash::{HashWrapperReader, Sha256Hash};
-use sha2::{Digest, Sha256};
+use sha2::{Digest, Sha256, Sha512};
 
 mod format;
 pub mod helpers;
@@ -633,12 +634,26 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
     pub fn from_config(dest: W, config: ArchiveWriterConfig) -> Result<Self, Error> {
         let mut dest: InnerWriterType<W> = Box::new(RawLayerWriter::new(dest));
 
+        let mut serialized_archive_header = Vec::new();
         let archive_header = ArchiveHeader {
             format_version_number: MLA_FORMAT_VERSION,
         };
-        archive_header.serialize(&mut dest)?;
+        archive_header.serialize(&mut serialized_archive_header)?;
+        dest.write_all(&serialized_archive_header)?;
 
         // Enable layers depending on user option
+        dest = match config.signature_config {
+            Some(signature_config) => {
+                let mut archive_header_hash = Sha512::new();
+                archive_header_hash.update(serialized_archive_header);
+                Box::new(SignatureLayerWriter::new(
+                    dest,
+                    signature_config,
+                    archive_header_hash,
+                )?)
+            }
+            None => dest,
+        };
         dest = match config.encryption_config {
             Some(encryption_config) => {
                 Box::new(EncryptionLayerWriter::new(dest, &encryption_config)?)
@@ -2204,7 +2219,7 @@ pub(crate) mod tests {
 
         let mut config = ArchiveWriterConfig::with_public_keys(&[pub_key]);
         if let Some(cfg) = config.encryption_config.as_mut() {
-            cfg.rng = crate::layers::encrypt::EncapsulationRNG::Seed([0; 32]);
+            cfg.rng = crate::crypto::MaybeSeededRNG::Seed([0; 32]);
         }
         let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
 
@@ -2362,7 +2377,7 @@ pub(crate) mod tests {
 
         let mut config = ArchiveWriterConfig::with_public_keys(&[pub_key]).without_compression();
         if let Some(cfg) = config.encryption_config.as_mut() {
-            cfg.rng = crate::layers::encrypt::EncapsulationRNG::Seed([0; 32]);
+            cfg.rng = crate::crypto::MaybeSeededRNG::Seed([0; 32]);
         }
         let mut mla = ArchiveWriter::from_config(&mut file, config).expect("Writer init failed");
 

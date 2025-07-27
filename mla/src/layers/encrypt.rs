@@ -2,6 +2,7 @@ use crate::crypto::aesgcm::{
     AesGcm256, ConstantTimeEq, KEY_COMMITMENT_SIZE, Key, Nonce, TAG_LENGTH, Tag,
 };
 
+use crate::crypto::MaybeSeededRNG;
 use crate::crypto::hpke::{compute_nonce, key_schedule_base_hybrid_kem};
 use crate::crypto::hybrid::{
     HybridKemSharedSecret, HybridMultiRecipientEncapsulatedKey, HybridMultiRecipientsPublicKeys,
@@ -178,34 +179,11 @@ impl<R: Read> MLADeserialize<R> for EncryptionPersistentConfig {
     }
 }
 
-#[derive(Default)]
 /// ArchiveWriterConfig specific configuration for the Encryption, to let API users specify encryption options
 pub(crate) struct EncryptionConfig {
     /// Public keys of recipients
     public_keys: HybridMultiRecipientsPublicKeys,
-    pub(crate) rng: EncapsulationRNG,
-}
-
-pub(crate) enum EncapsulationRNG {
-    System,
-    #[allow(dead_code)]
-    Seed([u8; 32]),
-}
-
-impl EncapsulationRNG {
-    fn get_rng(&self) -> ChaCha20Rng {
-        match self {
-            EncapsulationRNG::System => get_crypto_rng(),
-            EncapsulationRNG::Seed(s) => ChaCha20Rng::from_seed(*s),
-        }
-    }
-}
-
-#[allow(clippy::derivable_impls)]
-impl Default for EncapsulationRNG {
-    fn default() -> Self {
-        EncapsulationRNG::System
-    }
+    pub(crate) rng: MaybeSeededRNG,
 }
 
 impl EncryptionConfig {
@@ -240,12 +218,19 @@ impl EncryptionConfig {
         ))
     }
 
-    pub(crate) fn add_public_keys(
-        &mut self,
-        keys: &[MLAEncryptionPublicKey],
-    ) -> &mut EncryptionConfig {
-        self.public_keys.keys.extend_from_slice(keys);
-        self
+    pub(crate) fn new(
+        encryption_public_keys: &[MLAEncryptionPublicKey],
+    ) -> Result<Self, ConfigError> {
+        if encryption_public_keys.is_empty() {
+            return Err(ConfigError::EncryptionKeyIsMissing);
+        }
+        let public_keys = HybridMultiRecipientsPublicKeys {
+            keys: encryption_public_keys.to_vec(),
+        };
+        Ok(Self {
+            public_keys,
+            rng: MaybeSeededRNG::default(),
+        })
     }
 }
 
