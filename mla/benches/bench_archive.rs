@@ -81,7 +81,7 @@ fn build_archive_reader<'a>(
 ) -> ArchiveReader<'a, io::Cursor<Vec<u8>>> {
     let (dest, config) = build_archive(iters, size, compression, encryption);
     let buf = Cursor::new(dest);
-    ArchiveReader::from_config(buf, config).unwrap()
+    ArchiveReader::from_config(buf, config).unwrap().0
 }
 
 fn layers_to_config(
