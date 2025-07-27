@@ -177,7 +177,7 @@ int test_reader_extract()
 
     MLAReaderConfigHandle hConfig = NULL;
     const char *const keys[] = {(const char *const)keyData};
-    MLAStatus status = create_mla_reader_config_with_private_keys(&hConfig, keys, 1);
+    MLAStatus status = create_mla_reader_config_with_encryption_without_signature_verification(&hConfig, keys, 1);
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
     {
         fprintf(stderr, " [!] Private key set failed with code %" PRIX64 "\n", (uint64_t)status);
