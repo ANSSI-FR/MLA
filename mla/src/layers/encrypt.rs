@@ -327,9 +327,7 @@ impl<'a, W: 'a + InnerWriterTrait> Write for EncryptionLayerWriter<'a, W> {
 
 impl<'a, W: 'a + InnerWriterTrait> LayerWriter<'a, W> for EncryptionLayerWriter<'a, W> {
     fn finalize(self: Box<Self>) -> Result<W, Error> {
-        let mut out = Box::new(self.0).finalize()?;
-        out.write_all(EMPTY_TAIL_OPTS_SERIALIZATION)?;
-        Ok(out)
+        Box::new(self.0).finalize()
     }
 }
 
@@ -398,6 +396,8 @@ impl<'a, W: 'a + InnerWriterTrait> LayerWriter<'a, W> for InternalEncryptionLaye
         // Only previous chunk tag is used there, further context is not
         let final_tag = self.renew_cipher()?;
         self.inner.write_all(&final_tag)?;
+
+        self.inner.write_all(EMPTY_TAIL_OPTS_SERIALIZATION)?;
 
         // Recursive call
         self.inner.finalize()
@@ -878,7 +878,8 @@ mod tests {
         encrypt_w.write_all(&FAKE_FILE[..21]).unwrap();
         encrypt_w.write_all(&FAKE_FILE[21..]).unwrap();
 
-        let out = encrypt_w.finalize().unwrap();
+        let mut out = encrypt_w.finalize().unwrap();
+        out.resize(out.len() - EMPTY_TAIL_OPTS_SERIALIZATION.len(), 0);
         assert_eq!(out.len(), FAKE_FILE.len() + TAG_LENGTH + FINAL_BLOCK_SIZE);
         assert_ne!(out[..FAKE_FILE.len()], FAKE_FILE);
         out
@@ -1002,7 +1003,8 @@ mod tests {
         let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(0);
         let data: Vec<u8> = Alphanumeric.sample_iter(&mut rng).take(length).collect();
         encrypt_w.write_all(&data).unwrap();
-        let out = encrypt_w.finalize().unwrap();
+        let mut out = encrypt_w.finalize().unwrap();
+        out.resize(out.len() - EMPTY_TAIL_OPTS_SERIALIZATION.len(), 0);
 
         assert_eq!(out.len(), length + 2 * TAG_LENGTH + FINAL_BLOCK_SIZE);
         assert_ne!(&out[..length], data.as_slice());
