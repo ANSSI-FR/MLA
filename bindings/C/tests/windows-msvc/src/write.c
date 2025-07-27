@@ -103,7 +103,7 @@ int test_writer()
         goto cleanup;
     }
 
-    status = create_mla_writer_config_with_public_keys(&hConfig, keys, 1);
+    status = create_mla_writer_config_with_encryption_without_signature(&hConfig, keys, 1);
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
     {
         fprintf(stderr, " [!] Public key set failed with code %" PRIX64 "\n", (uint64_t)status);
