@@ -3,16 +3,17 @@
 //! MLA is an archive file format with the following features:
 //!
 //! * Support for traditional and post-quantum encryption hybridation with asymmetric keys (HPKE with AES256-GCM and a KEM based on an hybridation of X25519 and post-quantum ML-KEM 1024)
+//! * Support for traditional and post-quantum signature hybridation
 //! * Support for compression (based on [`rust-brotli`](https://github.com/dropbox/rust-brotli/))
-//! * Architecture agnostic and portable to some extent (written entirely in Rust)
 //! * Streamable archive creation:
 //!   * An archive can be built even over a data-diode
 //!   * An entry can be added through chunks of data, without initially knowing the final size
 //!   * Entry chunks can be interleaved (one can add the beginning of an entry, start a second one, and then continue adding the first entry's parts)
-//! * Archive files are seekable, even if compressed or encrypted. An entry can be accessed in the middle of the archive without reading from the beginning
+//! * Architecture agnostic and portable to some extent (written entirely in Rust)
+//! * Archive reading is seekable, even if compressed or encrypted. An entry can be accessed in the middle of the archive without reading from the beginning
 //! * If truncated, archives can be repaired to some extent. Two modes are available:
-//!   * Authenticated repair (default): only authenticated encrypted chunks of data are retrieved
-//!   * Unauthenticated repair: authenticated and unauthenticated encrypted chunks of data are retrieved. Use at your own risk
+//!   * Authenticated repair (default): only authenticated (as in AEAD, there is no signature verification) encrypted chunks of data are retrieved
+//!   * Unauthenticated repair: authenticated and unauthenticated encrypted chunks of data are retrieved. Use at your own risk.
 //! * Arguably less prone to bugs, especially while parsing an untrusted archive (Rust safety)
 //!
 //! Repository
