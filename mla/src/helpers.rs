@@ -1,3 +1,4 @@
+//! Some things you may find useful
 use crate::entry::EntryName;
 use crate::read_mla_entries_header;
 

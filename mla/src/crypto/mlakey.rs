@@ -303,6 +303,7 @@ impl Drop for MLASigningPrivateKey {
     }
 }
 
+/// Contains an `MLADecryptionPrivateKey` and an `MLASigningPrivateKey`. Usually loaded from an MLA key file.
 #[derive(Clone)]
 pub struct MLAPrivateKey {
     // zeroized on drop for both ecc and mlkem keys
@@ -498,6 +499,7 @@ impl MLASignatureVerificationPublicKey {
     }
 }
 
+/// Contains an `MLAEncryptionPublicKey` and an `MLASignatureVerificationPublicKey`. Usually loaded from an MLA key file.
 #[derive(Clone)]
 pub struct MLAPublicKey {
     encryption_public_key: MLAEncryptionPublicKey,
@@ -667,10 +669,11 @@ fn derive_one_path_component(
     generate_mla_keypair_from_seed(seed)
 }
 
-/// Return a KeyPair based on a succession of path components and an hybrid private key.
-/// Return None if `path_components` is empty.
+/// This is for advanced use cases: see KEY_DERIVATION.md.
 ///
-/// See `doc/KEY_DERIVATION.md`.
+/// Return a key pair based on a succession of derivation path components and
+/// a private key.
+/// Return None if `path_components` is empty.
 pub fn derive_keypair_from_path<'a>(
     path_components: impl Iterator<Item = &'a [u8]>,
     src: MLAPrivateKey,

@@ -1,3 +1,4 @@
+//! Error structs
 use crate::ArchiveEntryId;
 use crate::entry::EntryName;
 use std::error;

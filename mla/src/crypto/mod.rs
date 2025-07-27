@@ -1,3 +1,4 @@
+//! Crypto related things like key generation/serialization/deserialization
 use rand::SeedableRng as _;
 use rand_chacha::ChaCha20Rng;
 
