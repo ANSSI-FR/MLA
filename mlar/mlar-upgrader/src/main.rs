@@ -58,10 +58,11 @@ fn writer_from_matches(matches: &ArgMatches) -> mla::ArchiveWriter<'static, File
                     .get_public_keys()
             })
             .collect::<(Vec<_>, Vec<_>)>();
-        ArchiveWriterConfig::with_public_keys(&pub_encryption_keys)
+        ArchiveWriterConfig::with_encryption_without_signature(&pub_encryption_keys)
     } else {
-        ArchiveWriterConfig::without_encryption()
-    };
+        ArchiveWriterConfig::without_encryption_without_signature()
+    }
+    .unwrap();
     let out_file_path = matches.get_one::<PathBuf>("output").unwrap();
     let out_file = File::create(out_file_path).unwrap();
     mla::ArchiveWriter::from_config(out_file, config).unwrap()
