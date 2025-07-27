@@ -1570,7 +1570,7 @@ pub mod info;
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use crate::crypto::mlakey::{MLAPrivateKey, MLAPublicKey};
+    use crate::crypto::mlakey::{MLAPrivateKey, MLAPublicKey, generate_mla_keypair_from_seed};
 
     use super::*;
     use crypto::hybrid::{MLADecryptionPrivateKey, generate_keypair_from_seed};
@@ -1661,6 +1661,61 @@ pub(crate) mod tests {
         let dest = mla.finalize().unwrap();
         let buf = Cursor::new(dest.as_slice());
         let config = ArchiveReaderConfig::with_private_keys(&[private_key]);
+        let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
+
+        let mut file = mla_read
+            .get_entry(EntryName::from_path("my_file").unwrap())
+            .unwrap()
+            .unwrap();
+        let mut rez = Vec::new();
+        file.data.read_to_end(&mut rez).unwrap();
+        assert_eq!(rez, vec![1, 2, 3, 4]);
+        // Explicit drop here, because otherwise mla_read.get_entry() cannot be
+        // recall. It is not detected by the NLL analysis
+        drop(file);
+        let mut file2 = mla_read
+            .get_entry(EntryName::from_path("my_file2").unwrap())
+            .unwrap()
+            .unwrap();
+        let mut rez2 = Vec::new();
+        file2.data.read_to_end(&mut rez2).unwrap();
+        assert_eq!(rez2, vec![5, 6, 7, 8, 9, 10, 11, 12]);
+    }
+
+    #[test]
+    fn new_sig_mla() {
+        let file = Vec::new();
+        // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
+        let (private_key, public_key) = generate_mla_keypair_from_seed([0; 32]);
+        let config = ArchiveWriterConfig::without_encryption_with_signature(&[private_key
+            .get_signature_private_key()
+            .clone()])
+        .unwrap();
+        let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
+
+        let fake_file = vec![1, 2, 3, 4];
+        mla.add_entry(
+            EntryName::from_path("my_file").unwrap(),
+            fake_file.len() as u64,
+            fake_file.as_slice(),
+        )
+        .unwrap();
+        let fake_file = vec![5, 6, 7, 8];
+        let fake_file2 = vec![9, 10, 11, 12];
+        let id = mla
+            .start_entry(EntryName::from_path("my_file2").unwrap())
+            .unwrap();
+        mla.append_entry_content(id, fake_file.len() as u64, fake_file.as_slice())
+            .unwrap();
+        mla.append_entry_content(id, fake_file2.len() as u64, fake_file2.as_slice())
+            .unwrap();
+        mla.end_entry(id).unwrap();
+
+        let dest = mla.finalize().unwrap();
+        let buf = Cursor::new(dest.as_slice());
+        let config = ArchiveReaderConfig::without_encryption_with_signature(&[public_key
+            .get_signature_verification_public_key()
+            .clone()]);
         let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
 
         let mut file = mla_read
