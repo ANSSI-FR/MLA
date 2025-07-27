@@ -86,12 +86,12 @@ mlar create -l encrypt -p archive.mlapub -p client1.mlapub -o my_archive.mla ...
 # NUL, RTLO, newline, terminal escape sequence, carriage return,
 # HTML, surrogate code unit, U+0085 weird newline, fake unicode slash.
 # Please note that some of these characters may appear in valid a path.
-mlar list -k test_mlakey.mlapriv -p test_mlakey_2.mlapub -i archive_weird.mla --raw-escaped-names
+mlar list -k test_mlakey_archive_v2_receiver.mlapriv -p test_mlakey_archive_v2_sender.mlapub -i archive_weird.mla --raw-escaped-names
 
 # Get its content.
 # This displays:
 # `' OR 1=1`
-mlar cat -k test_mlakey.mlapriv -p test_mlakey_2.mlapub -i archive_weird.mla --raw-escaped-names c%3a%2f%00%3b%e2%80%ae%0ac%0dd%1b%5b1%3b31ma%3cscript%3eevil%5c..%2f%d8%01%c2%85%e2%88%95
+mlar cat -k test_mlakey_archive_v2_receiver.mlapriv -p test_mlakey_archive_v2_sender.mlapub -i archive_weird.mla --raw-escaped-names c%3a%2f%00%3b%e2%80%ae%0ac%0dd%1b%5b1%3b31ma%3cscript%3eevil%5c..%2f%d8%01%c2%85%e2%88%95
 
 # Create an archive of a web file and utf-8 string, without encryption and without signature
 (curl https://raw.githubusercontent.com/ANSSI-FR/MLA/refs/heads/master/README.md; echo "SEP"; echo "All Hail MLA!") | mlar create -l -o my_archive.mla --separator "SEP" --filenames great_readme.md -

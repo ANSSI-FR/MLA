@@ -52,9 +52,8 @@ test_info: $(MLAR) info.elf
 %.expanded.c: %.c
 	sh -c 'k=`tr -d "\r" <../../../../samples/test_mlakey.mlapub|tr "\n" "!"|sed "s#!#\\\\\\\\\\\\\\\\r\\\\\\\\\\\\\\\\n#g"`; sed -e "s#REPLACE WITH PUBLIC KEY FROM SAMPLE#$$k#"' < $< > /tmp/a
 	sh -c 'k=`tr -d "\r" <../../../../samples/test_mlakey_2.mlapub|tr "\n" "!"|sed "s#!#\\\\\\\\\\\\\\\\r\\\\\\\\\\\\\\\\n#g"`; sed -e "s#REPLACE WITH PUBLIC KEY 2 FROM SAMPLE#$$k#"' < /tmp/a > /tmp/b
-	sh -c 'k=`tr -d "\r" <../../../../samples/test_mlakey_archive_v2.mlapriv|tr "\n" "!"|sed "s#!#\\\\\\\\\\\\\\\\r\\\\\\\\\\\\\\\\n#g"`; sed -e "s#REPLACE WITH PRIVATE KEY FROM SAMPLE#$$k#"' < /tmp/b > $@
-#	sh -c 'k=`tr -d "\r" <../../../../samples/test_mlakey_2.mlapub|tr "\n" "!"`; sed -e "s#REPLACE WITH PUBLIC KEY 2 FROM SAMPLE#$$k#" -e "s#!#\\\\r\\\\n#g"' < /tmp/a > /tmp/b
-#	sh -c 'k=`tr -d "\r" <../../../../samples/test_mlakey.mlapub|tr "\n" "!"`; sed -e "s#REPLACE WITH PRIVATE KEY FROM SAMPLE#$$k#" -e "s#!#\\\\r\\\\n#g"' < /tmp/b > $@
+	sh -c 'k=`tr -d "\r" <../../../../samples/test_mlakey_archive_v2_receiver.mlapriv|tr "\n" "!"|sed "s#!#\\\\\\\\\\\\\\\\r\\\\\\\\\\\\\\\\n#g"`; sed -e "s#REPLACE WITH PRIVATE ARCHIVE V2 RECEIVER PRIVATE KEY FROM SAMPLE#$$k#"' < /tmp/b > /tmp/c
+	sh -c 'k=`tr -d "\r" <../../../../samples/test_mlakey_archive_v2_sender.mlapub|tr "\n" "!"|sed "s#!#\\\\\\\\\\\\\\\\r\\\\\\\\\\\\\\\\n#g"`; sed -e "s#REPLACE WITH PRIVATE ARCHIVE V2 SENDER PUBLIC KEY FROM SAMPLE#$$k#"' < /tmp/c > $@
 
 %.elf: %.expanded.c $(BUILDDIR)/$(TARGET)/debug/libmla.a
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
