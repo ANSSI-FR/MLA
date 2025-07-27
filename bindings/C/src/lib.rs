@@ -1183,6 +1183,7 @@ fn _mla_roarchive_extract<'a, R: Read + Seek + 'a>(
 pub struct ArchiveInfo {
     version: u32,
     is_encryption_enabled: u8,
+    is_signature_enabled: u8,
 }
 
 /// Get info on an existing MLA archive
@@ -1215,10 +1216,12 @@ fn _mla_roarchive_info<R: Read>(src: &mut R, info_out: *mut ArchiveInfo) -> MLAS
     };
     let version = info.get_format_version();
     let is_encryption_enabled = info.is_encryption_enabled();
+    let is_signature_enabled = info.is_signature_enabled();
 
     unsafe {
         (*info_out).version = version;
         (*info_out).is_encryption_enabled = if is_encryption_enabled { 1 } else { 0 };
+        (*info_out).is_signature_enabled = if is_signature_enabled { 1 } else { 0 };
     }
     MLAStatus::Success
 }

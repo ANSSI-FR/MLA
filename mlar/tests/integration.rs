@@ -1378,6 +1378,7 @@ fn test_verbose_info() {
     assert.success().stdout(
         "Format version: 2
 Encryption: true
+Signature: false
 ",
     );
 

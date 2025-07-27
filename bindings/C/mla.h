@@ -116,6 +116,7 @@ typedef int32_t (*MLAFileCallBack)(void *context,
 typedef struct ArchiveInfo {
   uint32_t version;
   uint8_t is_encryption_enabled;
+  uint8_t is_signature_enabled;
 } ArchiveInfo;
 
 /**

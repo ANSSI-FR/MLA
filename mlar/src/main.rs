@@ -1203,12 +1203,12 @@ fn info(matches: &ArgMatches) -> Result<(), MlarError> {
     let info = mla::info::read_info(&mut src)?;
 
     let encryption = info.is_encryption_enabled();
+    let signature = info.is_signature_enabled();
 
     // Format Version
     println!("Format version: {}", info.get_format_version());
-
-    // Encryption config
     println!("Encryption: {encryption}");
+    println!("Signature: {signature}");
 
     Ok(())
 }
