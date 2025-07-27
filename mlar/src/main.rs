@@ -4,8 +4,8 @@ use humansize::{DECIMAL, FormatSize};
 use lru::LruCache;
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
 use mla::crypto::mlakey::{
-    MLAPrivateKey, MLAPublicKey, MLASignaturePrivateKey, MLASignatureVerificationPublicKey,
-    derive_keypair_from_path, generate_mla_keypair, generate_mla_keypair_from_seed,
+    MLAPrivateKey, MLAPublicKey, derive_keypair_from_path, generate_mla_keypair,
+    generate_mla_keypair_from_seed,
 };
 use mla::entry::{ENTRY_NAME_RAW_CONTENT_ALLOWED_BYTES, EntryName, EntryNameError};
 use mla::errors::{Error, TruncatedReadError};
@@ -1098,18 +1098,8 @@ fn keyderive(matches: &ArgMatches) -> Result<(), MlarError> {
     let paths = matches
         .get_many::<String>("path-component")
         .expect("[ERROR] At least one path must be provided");
-    let (priv_enc, pub_enc) = derive_keypair_from_path(
-        paths.map(String::as_bytes),
-        secret.get_decryption_private_key().clone(),
-    )
-    .unwrap();
-    let (priv_key, pub_key) = (
-        MLAPrivateKey::from_decryption_and_signature_keys(priv_enc, MLASignaturePrivateKey {}),
-        MLAPublicKey::from_encryption_and_signature_verification_keys(
-            pub_enc,
-            MLASignatureVerificationPublicKey {},
-        ),
-    );
+    let (priv_key, pub_key) =
+        derive_keypair_from_path(paths.map(String::as_bytes), secret).unwrap();
 
     pub_key
         .serialize_public_key(&mut output_pub)

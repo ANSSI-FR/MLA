@@ -7,8 +7,7 @@ use crate::{MLADeserialize, MLASerialize};
 use hkdf::Hkdf;
 use kem::{Decapsulate, Encapsulate};
 use ml_kem::{B32, KemCore, MlKem1024};
-use rand::{Rng, SeedableRng};
-use rand_chacha::ChaCha20Rng;
+use rand::Rng;
 use rand_chacha::rand_core::CryptoRngCore;
 use sha2::Sha512;
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
@@ -412,10 +411,12 @@ impl Encapsulate<HybridMultiRecipientEncapsulatedKey, HybridKemSharedSecret>
 /// You should probably rather use the `generate_keypair` function.
 ///
 /// Generate an Hybrid key pair using the provided seed
+#[cfg(test)]
 pub fn generate_keypair_from_seed(
     seed: [u8; 32],
 ) -> (MLADecryptionPrivateKey, MLAEncryptionPublicKey) {
-    let mut csprng = ChaCha20Rng::from_seed(seed);
+    use rand::SeedableRng;
+    let mut csprng = rand_chacha::ChaCha20Rng::from_seed(seed);
     generate_keypair_from_rng(&mut csprng)
 }
 
