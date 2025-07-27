@@ -287,7 +287,8 @@ mod tests {
     #[test]
     fn stream_writer() {
         let file = Vec::new();
-        let config = ArchiveWriterConfig::without_encryption().without_compression();
+        let config =
+            ArchiveWriterConfig::without_encryption_without_signature().without_compression();
         let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
 
         let fake_file = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
