@@ -1,18 +1,29 @@
-use std::io::{self, Write};
+use std::io::{self, Read, Seek, SeekFrom, Write, sink};
 
 use ed25519_dalek::SIGNATURE_LENGTH as ED25519_SIGNATURE_LENGTH;
 use sha2::{Digest, Sha512};
 
 use crate::{
-    EMPTY_TAIL_OPTS_SERIALIZATION, MLASerialize as _, Opts,
+    EMPTY_TAIL_OPTS_SERIALIZATION, MLADeserialize as _, MLASerialize as _, Opts,
     crypto::{
         MaybeSeededRNG,
-        hybrid_signature::{HybridMultiRecipientSigningKeys, ML_DSA87_SIGNATURE_SIZE},
-        mlakey::MLASignaturePrivateKey,
+        hash::{HashWrapperReader, HashWrapperWriter},
+        hybrid_signature::{
+            HybridMultiRecipientSigningKeys, ML_DSA87_SIGNATURE_SIZE, MLASignature,
+            deserialize_signatures,
+        },
+        mlakey::{MLASignaturePrivateKey, MLASignatureVerificationPublicKey},
     },
     errors::{ConfigError, Error},
-    helpers::InnerWriterTrait,
-    layers::traits::{InnerWriterType, LayerWriter},
+    helpers::{InnerReaderTrait, InnerWriterTrait},
+    layers::{
+        encrypt::{
+            ENCRYPTION_LAYER_MAGIC, EncryptionPersistentConfig, read_encryption_header_after_magic,
+        },
+        strip_head_tail::StripHeadTailReader,
+        traits::{InnerWriterType, LayerReader, LayerWriter},
+    },
+    read_layer_magic,
 };
 
 pub const SIGNATURE_LAYER_MAGIC: &[u8] = b"SIGMLAAA";
@@ -24,12 +35,15 @@ pub(crate) struct SignatureLayerWriter<'a, W: 'a + InnerWriterTrait> {
 
 impl<'a, W: 'a + InnerWriterTrait> SignatureLayerWriter<'a, W> {
     pub fn new(
-        mut inner: InnerWriterType<'a, W>,
+        inner: InnerWriterType<'a, W>,
         signature_config: SignatureConfig,
-        hash: Sha512,
+        mut hash: Sha512,
     ) -> Result<Self, Error> {
+        let mut inner = HashWrapperWriter::new(inner, &mut hash);
         inner.write_all(SIGNATURE_LAYER_MAGIC)?;
         let _ = Opts.dump(&mut inner)?;
+        let inner = inner.into_inner();
+
         Ok(Self {
             inner,
             signature_config,
@@ -100,5 +114,150 @@ impl SignatureConfig {
             signature_keys,
             rng: MaybeSeededRNG::default(),
         })
+    }
+}
+
+pub(crate) struct SignatureReaderConfig {
+    signature_verification_keys: Vec<MLASignatureVerificationPublicKey>,
+    pub(crate) signature_check: bool,
+}
+
+impl SignatureReaderConfig {
+    pub(crate) fn set_public_keys(&mut self, keys: &[MLASignatureVerificationPublicKey]) {
+        self.signature_verification_keys = keys.to_vec();
+    }
+}
+
+impl Default for SignatureReaderConfig {
+    fn default() -> Self {
+        Self {
+            signature_verification_keys: Default::default(),
+            signature_check: true,
+        }
+    }
+}
+
+pub(crate) struct SignatureLayerReader<'a, R: 'a + InnerReaderTrait>(StripHeadTailReader<'a, R>);
+
+impl<'a, R: 'a + InnerReaderTrait> SignatureLayerReader<'a, R> {
+    pub(crate) fn new_skip_magic(
+        mut inner: Box<dyn 'a + LayerReader<'a, R>>,
+        signature_reader_config: SignatureReaderConfig,
+        archive_header_hash: Sha512,
+    ) -> Result<
+        (
+            Self,
+            Vec<MLASignatureVerificationPublicKey>,
+            Option<EncryptionPersistentConfig>,
+        ),
+        Error,
+    > {
+        let mut signed_hash = archive_header_hash;
+        inner.initialize()?;
+        let mut src = HashWrapperReader::<_, Sha512>::new(inner, &mut signed_hash);
+        let _ = Opts::from_reader(&mut src)?; // No option handled at the moment
+        let mut src = src.into_inner();
+
+        let sig_inner_layer_position = src.stream_position()?;
+        // Shallow parse signature and footer options now to know up to where to hash
+        src.seek(SeekFrom::End(-8))?;
+        let signature_data_serialized_vec_length = u64::deserialize(&mut src)?;
+        let signature_data_offset_from_end = 8u64 // rewind over signature_data_serialized_vec_length
+            .checked_add(signature_data_serialized_vec_length) // rewind over signature_data's Vec
+            .ok_or(Error::DeserializationError)?;
+        let i64_signature_data_offset_from_end = 0i64
+            .checked_sub_unsigned(signature_data_offset_from_end)
+            .ok_or(Error::DeserializationError)?;
+        src.seek(SeekFrom::End(i64_signature_data_offset_from_end))?;
+        let signature_data = Vec::<u8>::deserialize(&mut src)?;
+        let signature_options_length_offset_from_end = signature_data_offset_from_end
+            .checked_add(8) // rewind over the signature_options_length we want to read
+            .ok_or(Error::DeserializationError)?;
+        let i64_signature_options_length_offset_from_end = 0i64
+            .checked_sub_unsigned(signature_options_length_offset_from_end)
+            .ok_or(Error::DeserializationError)?;
+        src.seek(SeekFrom::End(i64_signature_options_length_offset_from_end))?;
+        let signature_options_length = u64::deserialize(&mut src)?;
+        let sig_layer_tail_len = signature_options_length_offset_from_end
+            .checked_add(signature_options_length)
+            .ok_or(Error::DeserializationError)?;
+
+        let inner_len = src.seek(SeekFrom::End(0))?;
+        src.seek(SeekFrom::Start(sig_inner_layer_position))?;
+        let mut src = StripHeadTailReader::new(
+            src,
+            sig_inner_layer_position,
+            sig_layer_tail_len,
+            inner_len,
+            0,
+        )?;
+
+        let mut keys_with_valid_signatures = Vec::new();
+        let mut read_persistent_encryption_config = None;
+        if signature_reader_config.signature_check {
+            let mut hashing_src = HashWrapperReader::new(src, &mut signed_hash);
+            let next_layer_magic = read_layer_magic(&mut hashing_src)?;
+            if &next_layer_magic == ENCRYPTION_LAYER_MAGIC {
+                read_persistent_encryption_config =
+                    Some(read_encryption_header_after_magic(&mut hashing_src)?.0)
+            }
+            // hash the rest of sig_inner_layer
+            io::copy(&mut hashing_src, &mut sink())?;
+            src = hashing_src.into_inner();
+            src.rewind()?;
+
+            // check signatures
+            let mut keys_ref_with_valid_signatures = Vec::new();
+            let signatures = deserialize_signatures(&signature_data)?;
+            for key in signature_reader_config.signature_verification_keys.iter() {
+                let verified_signatures = signatures
+                    .iter()
+                    .filter(|sig| key.verify(signed_hash.clone(), sig))
+                    .collect::<Vec<_>>();
+                let traditional_signature_verified = verified_signatures
+                    .iter()
+                    .any(|sig| matches!(sig, MLASignature::MLAEd25519Ph(_)));
+                let post_quantum_signature_verified = verified_signatures
+                    .iter()
+                    .any(|sig| matches!(sig, MLASignature::MLAMlDsa87(_)));
+                if traditional_signature_verified && post_quantum_signature_verified {
+                    keys_ref_with_valid_signatures.push(key);
+                }
+            }
+
+            if keys_ref_with_valid_signatures.is_empty() {
+                return Err(Error::NoValidSignatureFound);
+            }
+            keys_with_valid_signatures.extend(keys_ref_with_valid_signatures.into_iter().cloned());
+        }
+
+        Ok((
+            Self(src),
+            keys_with_valid_signatures,
+            read_persistent_encryption_config,
+        ))
+    }
+}
+
+impl<'a, R: 'a + InnerReaderTrait> Read for SignatureLayerReader<'a, R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.0.read(buf)
+    }
+}
+
+impl<'a, R: 'a + InnerReaderTrait> Seek for SignatureLayerReader<'a, R> {
+    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+        self.0.seek(pos)
+    }
+}
+
+impl<'a, R: 'a + InnerReaderTrait> LayerReader<'a, R> for SignatureLayerReader<'a, R> {
+    fn into_raw(self: Box<Self>) -> R {
+        Box::new(self.0).into_raw()
+    }
+
+    fn initialize(&mut self) -> Result<(), Error> {
+        // nothing, inner layer was already initialized during new
+        Ok(())
     }
 }

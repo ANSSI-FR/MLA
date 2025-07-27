@@ -344,7 +344,7 @@ use crate::layers::encrypt::{
 };
 use crate::layers::position::PositionLayerWriter;
 use crate::layers::raw::{RawLayerFailSafeReader, RawLayerReader, RawLayerWriter};
-use crate::layers::signature::SignatureLayerWriter;
+use crate::layers::signature::{SIGNATURE_LAYER_MAGIC, SignatureLayerReader, SignatureLayerWriter};
 use crate::layers::traits::{
     InnerWriterTrait, InnerWriterType, LayerFailSafeReader, LayerReader, LayerWriter,
 };
@@ -355,7 +355,7 @@ pub mod config;
 use crate::config::{ArchiveReaderConfig, ArchiveWriterConfig};
 
 pub mod crypto;
-use crate::crypto::hash::{HashWrapperReader, Sha256Hash};
+use crate::crypto::hash::{HashWrapperReader, HashWrapperWriter, Sha256Hash};
 use sha2::{Digest, Sha256, Sha512};
 
 mod format;
@@ -632,26 +632,23 @@ fn vec_remove_item<T: std::cmp::PartialEq>(vec: &mut Vec<T>, item: &T) -> Option
 impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
     /// Create an `ArchiveWriter` from config.
     pub fn from_config(dest: W, config: ArchiveWriterConfig) -> Result<Self, Error> {
-        let mut dest: InnerWriterType<W> = Box::new(RawLayerWriter::new(dest));
+        let dest: InnerWriterType<W> = Box::new(RawLayerWriter::new(dest));
 
-        let mut serialized_archive_header = Vec::new();
         let archive_header = ArchiveHeader {
             format_version_number: MLA_FORMAT_VERSION,
         };
-        archive_header.serialize(&mut serialized_archive_header)?;
-        dest.write_all(&serialized_archive_header)?;
+        let mut archive_header_hash = Sha512::new();
+        let mut dest = HashWrapperWriter::new(dest, &mut archive_header_hash);
+        archive_header.serialize(&mut dest)?;
+        let mut dest = dest.into_inner();
 
         // Enable layers depending on user option
         dest = match config.signature_config {
-            Some(signature_config) => {
-                let mut archive_header_hash = Sha512::new();
-                archive_header_hash.update(serialized_archive_header);
-                Box::new(SignatureLayerWriter::new(
-                    dest,
-                    signature_config,
-                    archive_header_hash,
-                )?)
-            }
+            Some(signature_config) => Box::new(SignatureLayerWriter::new(
+                dest,
+                signature_config,
+                archive_header_hash,
+            )?),
             None => dest,
         };
         dest = match config.encryption_config {
@@ -1077,10 +1074,13 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
         // Make sure we read the archive header from the start
         src.rewind()?;
 
+        // Read Archive Header while hashing it
+        let mut archive_header_hash = Sha512::new();
+        let mut src = HashWrapperReader::new(src, &mut archive_header_hash);
         ArchiveHeader::deserialize(&mut src)?;
 
         // Pin the current position (after header) as the new 0
-        let mut raw_src = Box::new(RawLayerReader::new(src));
+        let mut raw_src = Box::new(RawLayerReader::new(src.into_inner()));
         raw_src.reset_position()?;
         let mut src: Box<dyn 'b + LayerReader<'b, R>> = raw_src;
 
@@ -1105,13 +1105,39 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
 
         // Enable layers depending on user option. Order is relevant
 
-        let accept_unencrypted = config.accept_unencrypted;
+        // Read first layer magic while updating hash
+        let mut src = HashWrapperReader::new(src, &mut archive_header_hash);
         let mut magic = read_layer_magic(&mut src)?;
+        let mut src = src.into_inner();
+        let accept_unencrypted = config.accept_unencrypted;
+
+        // check signature first if any
+
+        // The following var lets us ensure the encryption persistent config we use is the one read during signature verification
+        // This is cool because it contains the key commitment.
+        // Thus the authentication of the AEAD can protect us if the source we read from is manipulated after signature verification.
+        let mut signed_persistent_encryption_config = None;
+
+        if magic == SIGNATURE_LAYER_MAGIC {
+            let (sig_layer, _keys_with_valid_signatures, read_persistent_encryption_config) =
+                SignatureLayerReader::new_skip_magic(
+                    src,
+                    config.signature_reader_config,
+                    archive_header_hash,
+                )?;
+            signed_persistent_encryption_config = read_persistent_encryption_config;
+            src = Box::new(sig_layer);
+            src.initialize()?;
+            magic = read_layer_magic(&mut src)?;
+        } else if config.signature_reader_config.signature_check {
+            return Err(Error::SignatureVerificationAskedButNoSignatureLayerFound);
+        }
+
         if &magic == ENCRYPTION_LAYER_MAGIC {
             src = Box::new(EncryptionLayerReader::new_skip_magic(
                 src,
                 config.encrypt,
-                None,
+                signed_persistent_encryption_config,
             )?);
             src.initialize()?;
             magic = read_layer_magic(&mut src)?;

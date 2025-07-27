@@ -436,8 +436,8 @@ impl MLAEncryptionPublicKey {
 
 #[derive(Clone)]
 pub struct MLASignatureVerificationPublicKey {
-    public_key_ed25519: Ed25519VerifyingKey,
-    public_key_mldsa87: VerifyingKey<MlDsa87>,
+    pub(crate) public_key_ed25519: Ed25519VerifyingKey,
+    pub(crate) public_key_mldsa87: VerifyingKey<MlDsa87>,
     #[allow(dead_code)]
     opts: KeyOpts,
 }

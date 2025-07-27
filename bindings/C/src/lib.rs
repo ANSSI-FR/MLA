@@ -65,6 +65,8 @@ pub enum MLAStatus {
     InvalidLastTag = 0x19000,
     EncryptionAskedButNotMarkedPresent = 0x180000,
     WrongEndMagic = 0x190000,
+    NoValidSignatureFound = 0x200000,
+    SignatureVerificationAskedButNoSignatureLayerFound = 0x210000,
     // Keep 0xF10000 slot for backward compatibility
     // Curve25519ParserError = 0xF10000,
     MlaKeyParserError = 0xF20000,
@@ -210,6 +212,10 @@ impl From<MLAError> for MLAStatus {
                 MLAStatus::EncryptionAskedButNotMarkedPresent
             }
             MLAError::WrongEndMagic => MLAStatus::WrongEndMagic,
+            MLAError::NoValidSignatureFound => MLAStatus::NoValidSignatureFound,
+            MLAError::SignatureVerificationAskedButNoSignatureLayerFound => {
+                MLAStatus::SignatureVerificationAskedButNoSignatureLayerFound
+            }
         }
     }
 }

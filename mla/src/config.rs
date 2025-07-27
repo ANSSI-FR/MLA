@@ -1,9 +1,9 @@
 use crate::crypto::hybrid::{MLADecryptionPrivateKey, MLAEncryptionPublicKey};
-use crate::crypto::mlakey::MLASignaturePrivateKey;
+use crate::crypto::mlakey::{MLASignaturePrivateKey, MLASignatureVerificationPublicKey};
 use crate::errors::ConfigError;
 use crate::layers::compress::CompressionConfig;
 use crate::layers::encrypt::{EncryptionConfig, EncryptionReaderConfig};
-use crate::layers::signature::SignatureConfig;
+use crate::layers::signature::{SignatureConfig, SignatureReaderConfig};
 
 /// Configuration to write an archive.
 pub struct ArchiveWriterConfig {
@@ -75,35 +75,59 @@ pub struct ArchiveReaderConfig {
     pub(crate) accept_unencrypted: bool,
     // Layers specifics
     pub(crate) encrypt: EncryptionReaderConfig,
+    pub(crate) signature_reader_config: SignatureReaderConfig,
 }
 
 impl ArchiveReaderConfig {
     /// Will refuse to open an archive without encryption.
     pub fn with_private_keys(keys: &[MLADecryptionPrivateKey]) -> Self {
         let mut encrypt = EncryptionReaderConfig::default();
+        let mut signature_reader_config = SignatureReaderConfig::default();
+        signature_reader_config.signature_check = false;
         encrypt.set_private_keys(keys);
         Self {
             accept_unencrypted: false,
             encrypt,
+            signature_reader_config,
         }
     }
 
     /// Will accept to open encrypted and unencrypted archives.
     pub fn with_private_keys_accept_unencrypted(keys: &[MLADecryptionPrivateKey]) -> Self {
         let mut encrypt = EncryptionReaderConfig::default();
+        let mut signature_reader_config = SignatureReaderConfig::default();
+        signature_reader_config.signature_check = false;
         encrypt.set_private_keys(keys);
         Self {
             accept_unencrypted: true,
             encrypt,
+            signature_reader_config,
         }
     }
 
     /// Won't accept encrypted archives.
     pub fn without_encryption() -> Self {
         let encrypt = EncryptionReaderConfig::default();
+        let mut signature_reader_config = SignatureReaderConfig::default();
+        signature_reader_config.signature_check = false;
         Self {
             accept_unencrypted: true,
             encrypt,
+            signature_reader_config,
+        }
+    }
+
+    /// Won't accept encrypted archives.
+    pub fn without_encryption_with_signature(
+        signature_verification_public_keys: &[MLASignatureVerificationPublicKey],
+    ) -> Self {
+        let encrypt = EncryptionReaderConfig::default();
+        let mut signature_reader_config = SignatureReaderConfig::default();
+        signature_reader_config.set_public_keys(signature_verification_public_keys);
+        Self {
+            accept_unencrypted: true,
+            encrypt,
+            signature_reader_config,
         }
     }
 }

@@ -65,6 +65,10 @@ pub enum Error {
     EncryptionAskedButNotMarkedPresent,
     /// MLA archive must be terminated by EMLAAAAA
     WrongEndMagic,
+    // Cannot validate any signature
+    NoValidSignatureFound,
+    // Signature verification was asked but no signature layer was found
+    SignatureVerificationAskedButNoSignatureLayerFound,
 }
 
 impl fmt::Display for Error {
