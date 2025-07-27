@@ -2797,6 +2797,91 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn signature_verification_fails_with_wrong_public_key() {
+        let file = Vec::new();
+
+        // Correct keypair for signing
+        let (privkey_correct, _pubkey_correct) = generate_mla_keypair_from_seed([1u8; 32]);
+        // Wrong public key for verification
+        let (_privkey_wrong, pubkey_wrong) = generate_mla_keypair_from_seed([2u8; 32]);
+
+        let config = ArchiveWriterConfig::without_encryption_with_signature(&[privkey_correct
+            .get_signing_private_key()
+            .clone()])
+        .unwrap();
+
+        let mut writer = ArchiveWriter::from_config(file, config).expect("Writer init failed");
+
+        let data = vec![10, 20, 30, 40];
+        writer
+            .add_entry(
+                EntryName::from_path("file1").unwrap(),
+                data.len() as u64,
+                data.as_slice(),
+            )
+            .unwrap();
+
+        let archive = writer.finalize().unwrap();
+        let buf = Cursor::new(archive.as_slice());
+
+        let config = ArchiveReaderConfig::with_signature_verification(&[pubkey_wrong
+            .get_signature_verification_public_key()
+            .clone()])
+        .without_encryption();
+
+        // Reading with wrong public key should fail on signature verification
+        let reader_result = ArchiveReader::from_config(buf, config);
+
+        assert!(
+            reader_result.is_err(),
+            "Verification should fail with wrong public key"
+        );
+    }
+
+    #[test]
+    fn signature_verification_fails_on_tampered_archive() {
+        let file = Vec::new();
+
+        let (privkey, pubkey) = generate_mla_keypair_from_seed([5u8; 32]);
+
+        let config = ArchiveWriterConfig::without_encryption_with_signature(&[privkey
+            .get_signing_private_key()
+            .clone()])
+        .unwrap();
+
+        let mut writer = ArchiveWriter::from_config(file, config).expect("Writer init failed");
+
+        let data = vec![50, 60, 70, 80];
+        writer
+            .add_entry(
+                EntryName::from_path("my_file").unwrap(),
+                data.len() as u64,
+                data.as_slice(),
+            )
+            .unwrap();
+
+        let mut archive = writer.finalize().unwrap();
+
+        // Tamper with archive bytes (flip one byte)
+        archive[10] ^= 0xFF;
+
+        let buf = Cursor::new(archive.as_slice());
+
+        let config = ArchiveReaderConfig::with_signature_verification(&[pubkey
+            .get_signature_verification_public_key()
+            .clone()])
+        .without_encryption();
+
+        // Signature verification should fail on tampered archive
+        let result = ArchiveReader::from_config(buf, config);
+
+        assert!(
+            result.is_err(),
+            "Signature verification should fail on tampered archive"
+        );
+    }
+
+    #[test]
     #[cfg(feature = "send")]
     fn test_send() {
         static_assertions::assert_cfg!(feature = "send");
