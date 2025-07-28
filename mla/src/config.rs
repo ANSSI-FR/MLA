@@ -130,7 +130,7 @@ pub struct ArchiveReaderConfig {
 }
 
 impl ArchiveReaderConfig {
-    /// Will refuse to open an archive without signature verified by at least
+    /// Will refuse to open an archive without signature verified by AT LEAST
     /// one of the given `signature_verification_public_keys`.
     ///
     /// Caller will be able to tell how many and against which keys signatures
