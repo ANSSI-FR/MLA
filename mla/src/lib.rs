@@ -1674,7 +1674,6 @@ pub(crate) mod tests {
 
     use super::*;
     use crypto::hybrid::generate_keypair_from_seed;
-    // use curve25519_parser::{parse_openssl_25519_privkey, parse_openssl_25519_pubkey};
     use rand::distributions::{Distribution, Standard};
     use rand::{RngCore, SeedableRng};
     use rand_chacha::ChaChaRng;
@@ -2794,6 +2793,179 @@ pub(crate) mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn signature_verification_fails_with_wrong_public_key() {
+        let file = Vec::new();
+
+        // Correct keypair for signing
+        let (privkey_correct, _pubkey_correct) = generate_mla_keypair_from_seed([1u8; 32]);
+        // Wrong public key for verification
+        let (_privkey_wrong, pubkey_wrong) = generate_mla_keypair_from_seed([2u8; 32]);
+
+        let config = ArchiveWriterConfig::without_encryption_with_signature(&[privkey_correct
+            .get_signing_private_key()
+            .clone()])
+        .unwrap();
+
+        let mut writer = ArchiveWriter::from_config(file, config).expect("Writer init failed");
+
+        let data = vec![10, 20, 30, 40];
+        writer
+            .add_entry(
+                EntryName::from_path("file1").unwrap(),
+                data.len() as u64,
+                data.as_slice(),
+            )
+            .unwrap();
+
+        let archive = writer.finalize().unwrap();
+        let buf = Cursor::new(archive.as_slice());
+
+        let config = ArchiveReaderConfig::with_signature_verification(&[pubkey_wrong
+            .get_signature_verification_public_key()
+            .clone()])
+        .without_encryption();
+
+        // Reading with wrong public key should fail on signature verification
+        let reader_result = ArchiveReader::from_config(buf, config);
+
+        assert!(
+            reader_result.is_err(),
+            "Verification should fail with wrong public key"
+        );
+    }
+
+    #[test]
+    fn signature_verification_fails_on_tampered_archive() {
+        let file = Vec::new();
+
+        let (privkey, pubkey) = generate_mla_keypair_from_seed([5u8; 32]);
+
+        let config = ArchiveWriterConfig::without_encryption_with_signature(&[privkey
+            .get_signing_private_key()
+            .clone()])
+        .unwrap();
+
+        let mut writer = ArchiveWriter::from_config(file, config).expect("Writer init failed");
+
+        let data = vec![50, 60, 70, 80];
+        writer
+            .add_entry(
+                EntryName::from_path("my_file").unwrap(),
+                data.len() as u64,
+                data.as_slice(),
+            )
+            .unwrap();
+
+        let mut archive = writer.finalize().unwrap();
+
+        // Tamper with archive bytes (flip one byte)
+        archive[10] ^= 0xFF;
+
+        let buf = Cursor::new(archive.as_slice());
+
+        let config = ArchiveReaderConfig::with_signature_verification(&[pubkey
+            .get_signature_verification_public_key()
+            .clone()])
+        .without_encryption();
+
+        // Signature verification should fail on tampered archive
+        let result = ArchiveReader::from_config(buf, config);
+
+        assert!(
+            result.is_err(),
+            "Signature verification should fail on tampered archive"
+        );
+    }
+
+    #[test]
+    fn signature_verification_fails_if_ed25519_signature_corrupted() {
+        let file = Vec::new();
+
+        let (privkey, pubkey) = generate_mla_keypair_from_seed([7u8; 32]);
+
+        let config = ArchiveWriterConfig::without_encryption_with_signature(&[privkey
+            .get_signing_private_key()
+            .clone()])
+        .unwrap();
+
+        let mut writer = ArchiveWriter::from_config(file, config).expect("Writer init failed");
+
+        let data = vec![10, 20, 30, 40];
+        writer
+            .add_entry(
+                EntryName::from_path("file1").unwrap(),
+                data.len() as u64,
+                data.as_slice(),
+            )
+            .unwrap();
+
+        let mut archive = writer.finalize().unwrap();
+
+        // Flip a byte inside Ed25519 signature payload,
+        // should land in the middle of the Ed25519 signature
+        let flip_pos = 50;
+        archive[flip_pos] ^= 0xFF;
+
+        let buf = std::io::Cursor::new(archive);
+
+        let config = ArchiveReaderConfig::with_signature_verification(&[pubkey
+            .get_signature_verification_public_key()
+            .clone()])
+        .without_encryption();
+
+        let reader_result = ArchiveReader::from_config(buf, config);
+
+        assert!(
+            matches!(reader_result, Err(Error::NoValidSignatureFound)),
+            "Verification should fail if Ed25519 signature is corrupted"
+        );
+    }
+
+    #[test]
+    fn signature_verification_fails_if_mldsa87_signature_corrupted() {
+        let file = Vec::new();
+
+        let (privkey, pubkey) = generate_mla_keypair_from_seed([8u8; 32]);
+
+        let config = ArchiveWriterConfig::without_encryption_with_signature(&[privkey
+            .get_signing_private_key()
+            .clone()])
+        .unwrap();
+
+        let mut writer = ArchiveWriter::from_config(file, config).expect("Writer init failed");
+
+        let data = vec![50, 60, 70, 80];
+        writer
+            .add_entry(
+                EntryName::from_path("my_file").unwrap(),
+                data.len() as u64,
+                data.as_slice(),
+            )
+            .unwrap();
+
+        let mut archive = writer.finalize().unwrap();
+
+        // Flip a byte inside MlDsa87 signature payload,
+        // should land in the middle of the MlDsa87 signature
+        let flip_pos = 4000;
+        archive[flip_pos] ^= 0xFF;
+
+        let buf = std::io::Cursor::new(archive);
+
+        let config = ArchiveReaderConfig::with_signature_verification(&[pubkey
+            .get_signature_verification_public_key()
+            .clone()])
+        .without_encryption();
+
+        let reader_result = ArchiveReader::from_config(buf, config);
+
+        assert!(
+            matches!(reader_result, Err(Error::NoValidSignatureFound)),
+            "Verification should fail if MlDsa87 signature is corrupted"
+        );
     }
 
     #[test]
