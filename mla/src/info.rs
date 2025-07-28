@@ -37,8 +37,7 @@ pub fn read_info<R: Read>(src: &mut R) -> Result<ArchiveInfo, Error> {
     let header = ArchiveHeader::deserialize(src)?;
     let layer_magic = read_layer_magic(src)?;
     let (encryption_enabled, signature_enabled) = if layer_magic == SIGNATURE_LAYER_MAGIC {
-        let src = //: Box<dyn 'b + LayerFailSafeReader<'b, R>> =
-            Box::new(RawLayerFailSafeReader::new(src));
+        let src = Box::new(RawLayerFailSafeReader::new(src));
         let mut src = Box::new(SignatureLayerFailSafeReader::new_skip_magic(src)?);
         let next_layer_magic = read_layer_magic(&mut src)?;
         (&next_layer_magic == ENCRYPTION_LAYER_MAGIC, true)
