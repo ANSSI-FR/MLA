@@ -359,14 +359,11 @@ fn open_mla_file<'a>(matches: &ArgMatches) -> Result<ArchiveReader<'a, File>, Ml
 
     // Instantiate reader
     let (reader, keys_with_valid_signatures) = ArchiveReader::from_config(file, config?)?;
-    if matches.get_flag("all_keys_must_have_valid_signature") {
-        match matches.get_many::<PathBuf>("public_keys") {
-            Some(public_keys) => {
-                if public_keys.count() != keys_with_valid_signatures.len() {
-                    return Err(MlarError::Mla(Error::NoValidSignatureFound));
-                }
-            }
-            None => return Err(MlarError::Mla(Error::NoValidSignatureFound)),
+    if let Some(public_keys) = matches.get_many::<PathBuf>("public_keys") {
+        if public_keys.count() != keys_with_valid_signatures.len()
+            && !matches.get_flag("only_one_key_with_valid_signature_is_ok")
+        {
+            return Err(MlarError::Mla(Error::NoValidSignatureFound));
         }
     }
     Ok(reader)
@@ -1227,9 +1224,9 @@ fn app() -> clap::Command {
             .long("accept-unencrypted")
             .help("Accept to operate on unencrypted archives")
             .action(ArgAction::SetTrue),
-        Arg::new("all_keys_must_have_valid_signature")
-            .long("all-keys-must-have-valid-signature")
-            .help("If multiple public signing verification keys are given, the archive must be correctly signed with all of them")
+        Arg::new("only_one_key_with_valid_signature_is_ok")
+            .long("only-one-key-with-valid-signature-is-ok")
+            .help("If multiple public signing verification keys are given, by default the archive must be correctly signed with all of them. This flag ")
             .action(ArgAction::SetTrue),
         Arg::new("skip_signature_verification")
             .long("skip-signature-verification")
