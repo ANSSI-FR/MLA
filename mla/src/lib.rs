@@ -2919,7 +2919,7 @@ pub(crate) mod tests {
         let reader_result = ArchiveReader::from_config(buf, config);
 
         assert!(
-            reader_result.is_err(),
+            matches!(reader_result, Err(Error::NoValidSignatureFound)),
             "Verification should fail if Ed25519 signature is corrupted"
         );
     }
@@ -2963,7 +2963,7 @@ pub(crate) mod tests {
         let reader_result = ArchiveReader::from_config(buf, config);
 
         assert!(
-            reader_result.is_err(),
+            matches!(reader_result, Err(Error::NoValidSignatureFound)),
             "Verification should fail if MlDsa87 signature is corrupted"
         );
     }
