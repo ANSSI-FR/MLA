@@ -248,8 +248,10 @@ fn test_create_filelist_stdin() {
 fn test_create_list_tar() {
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
     let tar_file = NamedTempFile::new("output.tar").unwrap();
-    let public_key = Path::new("../samples/test_mlakey.mlapub");
-    let private_key = Path::new("../samples/test_mlakey.mlapriv");
+    let sender_public_key = Path::new("../samples/test_mlakey_archive_v2_sender.mlapub");
+    let sender_private_key = Path::new("../samples/test_mlakey_archive_v2_sender.mlapriv");
+    let receiver_public_key = Path::new("../samples/test_mlakey_archive_v2_receiver.mlapub");
+    let receiver_private_key = Path::new("../samples/test_mlakey_archive_v2_receiver.mlapriv");
 
     // Create files
     let testfs = setup();
@@ -257,14 +259,12 @@ fn test_create_list_tar() {
     // `mlar create -o output.mla -p samples/test_mlakey.mlapub file1.bin file2.bin file3.bin`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
-        .arg("-l")
-        .arg("compress")
-        .arg("-l")
-        .arg("encrypt")
         .arg("-o")
         .arg(mlar_file.path())
         .arg("-p")
-        .arg(public_key);
+        .arg(receiver_public_key)
+        .arg("-k")
+        .arg(sender_private_key);
 
     let mut file_list = String::new();
     for file in &testfs.files {
@@ -281,11 +281,12 @@ fn test_create_list_tar() {
     // `mlar list -i output.mla -k samples/test_mlakey.mlapriv`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
-        .arg("--skip-signature-verification")
         .arg("-i")
         .arg(mlar_file.path())
+        .arg("-p")
+        .arg(sender_public_key)
         .arg("-k")
-        .arg(private_key);
+        .arg(receiver_private_key);
 
     println!("{cmd:?}");
     let assert = cmd.assert();
@@ -294,11 +295,12 @@ fn test_create_list_tar() {
     // `mlar to-tar -i output.mla -k samples/test_mlakey.mlapriv -o output.tar`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("to-tar")
-        .arg("--skip-signature-verification")
         .arg("-i")
         .arg(mlar_file.path())
+        .arg("-p")
+        .arg(sender_public_key)
         .arg("-k")
-        .arg(private_key)
+        .arg(receiver_private_key)
         .arg("-o")
         .arg(tar_file.path());
 
