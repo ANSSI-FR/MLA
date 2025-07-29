@@ -131,7 +131,7 @@ int test_reader_extract()
 {
     FILE *kf = NULL;
 
-    if (fopen_s(&kf, "../../../../samples/test_mlakey_archive_v2.mlapriv", "r") != 0)
+    if (fopen_s(&kf, "../../../../samples/test_mlakey_archive_v2_receiver.mlapriv", "r") != 0)
     {
         fprintf(stderr, " [!] Could not open private key file\n");
         return errno;
