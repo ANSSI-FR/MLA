@@ -1,6 +1,6 @@
 use ed25519_dalek::{SigningKey as Ed25519SigningKey, VerifyingKey as Ed25519VerifyingKey};
 use hkdf::Hkdf;
-use ml_dsa::{B32, EncodedVerifyingKey, KeyGen as _, MlDsa87, SigningKey, VerifyingKey};
+use ml_dsa::{B32, EncodedVerifyingKey, KeyGen as _, KeyPair, MlDsa87, SigningKey, VerifyingKey};
 use rand::SeedableRng as _;
 use rand_chacha::ChaCha20Rng;
 use rand_chacha::rand_core::CryptoRngCore;
@@ -203,6 +203,30 @@ impl MLDSASeed {
         Self::from_xi_32(xi_array)
     }
 
+    // Linked to issue https://github.com/RustCrypto/signatures/issues/1024 : Windows stack overflow when using ML-DSA
+    fn key_gen_internal(xi: &B32) -> KeyPair<MlDsa87> {
+        #[cfg(windows)]
+        {
+            use std::thread;
+
+            // Clone `xi` because the closure must own its data
+            let xi = xi.clone();
+
+            let builder = thread::Builder::new().stack_size(8 * 1024 * 1024); // 8 MB stack
+
+            let handle = builder
+                .spawn(move || MlDsa87::key_gen_internal(&xi))
+                .expect("Failed to spawn thread with increased stack");
+
+            handle.join().expect("Thread panicked")
+        }
+
+        #[cfg(not(windows))]
+        {
+            MlDsa87::key_gen_internal(xi)
+        }
+    }
+
     /// Creates an MLDSASeed from a 32-byte array.
     fn from_xi_32(xi: [u8; 32]) -> Self {
         let xi = B32::from(xi);
@@ -210,11 +234,11 @@ impl MLDSASeed {
     }
 
     pub(crate) fn to_signing_key(&self) -> SigningKey<MlDsa87> {
-        MlDsa87::key_gen_internal(&self.xi).signing_key().clone()
+        Self::key_gen_internal(&self.xi).signing_key().clone()
     }
 
     pub(crate) fn to_signing_verification_key(&self) -> VerifyingKey<MlDsa87> {
-        MlDsa87::key_gen_internal(&self.xi).verifying_key().clone()
+        Self::key_gen_internal(&self.xi).verifying_key().clone()
     }
 }
 
