@@ -341,7 +341,11 @@ fn readerconfig_from_matches(matches: &ArgMatches) -> Result<ArchiveReaderConfig
                 MlarError::Mla(Error::InvalidKeyFormat)
             })?;
 
-        Ok(incomplete_config.with_encryption(&private_dec_keys))
+        if matches.get_flag("accept_unencrypted") {
+            Ok(incomplete_config.with_encryption_accept_unencrypted(&private_dec_keys))
+        } else {
+            Ok(incomplete_config.with_encryption(&private_dec_keys))
+        }
     } else if matches.get_flag("accept_unencrypted") {
         Ok(incomplete_config.without_encryption())
     } else {
