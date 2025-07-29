@@ -210,12 +210,19 @@ impl MLDSASeed {
             use std::thread;
 
             // Clone `xi` because the closure must own its data
-            let xi = xi.clone();
+            let mut xi = xi.clone();
 
             let builder = thread::Builder::new().stack_size(8 * 1024 * 1024); // 8 MB stack
 
             let handle = builder
-                .spawn(move || MlDsa87::key_gen_internal(&xi))
+                .spawn(move || {
+                    let result = MlDsa87::key_gen_internal(&xi);
+
+                    // Zeroize cloned sensitive material AFTER use
+                    xi.zeroize();
+
+                    result
+                })
                 .expect("Failed to spawn thread with increased stack");
 
             handle.join().expect("Thread panicked")
