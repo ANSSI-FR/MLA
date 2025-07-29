@@ -44,6 +44,7 @@
 //! // for signing
 //! const SENDER_PRIV_KEY: &[u8] =
 //!     include_bytes!("../../samples/test_mlakey_archive_v2_sender.mlapriv");
+//!
 //! fn main() {
 //!     // For encryption, load the needed receiver public key
 //!     let (pub_enc_key, _pub_sig_verif_key) = MLAPublicKey::deserialize_public_key(RECEIVER_PUB_KEY)
