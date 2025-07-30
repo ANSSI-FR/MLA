@@ -370,6 +370,83 @@ mod entryname {
         let name = name.to_ascii_lowercase();
         WINDOWS_FORBIDDEN_NAMES.contains(&name.as_slice())
     }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[cfg(not(target_family = "windows"))]
+        #[test]
+        fn test_entry_name_allows_windows_reserved_on_unix() {
+            let names: &[&[u8]] = &[b"con", b"con.txt", b"com1.log", b"nul ", b"lpt9:", b"con."];
+
+            for &name in names {
+                let entry = EntryName::from_arbitrary_bytes(name).unwrap();
+                let result = entry.to_pathbuf();
+                assert!(
+                    result.is_ok(),
+                    "Expected {:?} to be accepted on Unix",
+                    std::str::from_utf8(name).unwrap_or("<invalid UTF-8>")
+                );
+            }
+        }
+
+        #[cfg(target_family = "windows")]
+        #[test]
+        fn test_windows_forbidden_last_components() {
+            let forbidden: &[&[u8]] = &[
+                b"con",
+                b"con.txt",
+                b"com1.log",
+                b"nul ",
+                b"lpt9:",
+                b"com3.data.bak",
+                b"con.",
+                b"lpt1 ",
+            ];
+
+            for &name in forbidden {
+                assert!(
+                    is_windows_forbidden_component(name),
+                    "Expected {:?} to be forbidden",
+                    std::str::from_utf8(name).unwrap_or("<invalid UTF-8>")
+                );
+            }
+
+            let allowed: &[&[u8]] = &[
+                b"content",
+                b"config.json",
+                b"compare1.txt",
+                b"compile.rs",
+                b"laptop9.txt",       // not lpt9
+                b"communication.log", // not comX
+            ];
+
+            for &name in allowed {
+                assert!(
+                    !is_windows_forbidden_component(name),
+                    "Expected {:?} to be allowed",
+                    std::str::from_utf8(name).unwrap_or("<invalid UTF-8>")
+                );
+            }
+        }
+
+        #[cfg(target_family = "windows")]
+        #[test]
+        fn test_entry_name_rejects_windows_reserved_names() {
+            let reserved: &[&[u8]] = &[b"con", b"con.txt", b"com1.log", b"nul ", b"lpt9:"];
+
+            for &name in reserved {
+                let entry = EntryName::from_arbitrary_bytes(name).unwrap();
+                let result = entry.to_pathbuf();
+                assert!(
+                    matches!(result, Err(EntryNameError::InvalidPathComponentContent)),
+                    "Expected {:?} to be rejected by to_pathbuf",
+                    std::str::from_utf8(name).unwrap_or("<invalid UTF-8>")
+                );
+            }
+        }
+    }
 }
 
 pub use entryname::{
