@@ -1617,4 +1617,95 @@ pub(crate) mod tests {
     fn verify_app() {
         app().debug_assert();
     }
+
+    #[test]
+    fn test_get_zone_identifier_path() {
+        let input_path = Path::new("C:\\path\\to\\file.txt");
+        let expected = Path::new("C:\\path\\to\\file.txt:Zone.Identifier");
+        let actual = get_zone_identifier_path(input_path).unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_zone_identifier_path_without_filename() {
+        for input in &[Path::new(""), Path::new("/")] {
+            let result = get_zone_identifier_path(input);
+            assert!(
+                result.is_err(),
+                "Expected error for input {input:?}, but got Ok: {result:?}",
+            );
+        }
+    }
+
+    #[cfg(target_family = "windows")]
+    #[test]
+    fn test_read_zone_identifier_ads() {
+        use std::{
+            fs, fs::File, fs::OpenOptions, io::Write, os::windows::fs::OpenOptionsExt, path::Path,
+        };
+        use winapi::um::winbase::FILE_FLAG_BACKUP_SEMANTICS;
+
+        let path = Path::new("test_file_ads.txt");
+        let ads_path_str = format!("{}:Zone.Identifier", path.display());
+
+        // Create dummy file
+        File::create(&path).unwrap();
+
+        // Open ADS stream with necessary flags and write data
+        let mut ads = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+            .open(&ads_path_str)
+            .unwrap();
+
+        ads.write_all(b"[ZoneTransfer]\nZoneId=3").unwrap();
+
+        // Assuming get_zone_identifier reads the ADS correctly
+        let result = get_zone_identifier(path).unwrap();
+        assert_eq!(result.unwrap(), b"[ZoneTransfer]\nZoneId=3");
+
+        // Cleanup
+        fs::remove_file(path).unwrap();
+    }
+
+    #[cfg(target_family = "unix")]
+    #[test]
+    fn test_zone_identifier_skipped_on_unix() {
+        let dummy_path = Path::new("/tmp/somefile.txt");
+        let result = get_zone_identifier(dummy_path);
+        assert!(result.unwrap().is_none());
+    }
+
+    #[cfg(target_family = "windows")]
+    #[test]
+    fn test_zone_identifier_invalid_utf8() {
+        use std::{
+            fs, fs::File, fs::OpenOptions, io::Write, os::windows::fs::OpenOptionsExt, path::Path,
+        };
+        use winapi::um::winbase::FILE_FLAG_BACKUP_SEMANTICS;
+
+        let path = Path::new("test_file_ads_invalid_utf8.txt");
+        let ads_path_str = format!("{}:Zone.Identifier", path.display());
+
+        // Create dummy file
+        File::create(&path).unwrap();
+
+        // Open ADS stream with necessary flags and write data
+        let mut ads = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+            .open(&ads_path_str)
+            .unwrap();
+
+        ads.write_all(b"[ZoneTransfer]\nZoneId=\xFF\xFE").unwrap();
+
+        // Should still return the raw bytes without error
+        let result = get_zone_identifier(path).unwrap();
+        assert_eq!(result.unwrap(), b"[ZoneTransfer]\nZoneId=\xFF\xFE");
+
+        // Cleanup
+        fs::remove_file(path).unwrap();
+    }
 }
