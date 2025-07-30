@@ -159,14 +159,14 @@ where
         let block_type = ArchiveEntryBlockType::deserialize(&mut src)?;
         match block_type {
             ArchiveEntryBlockType::EntryStart => {
-                let id = u64::deserialize(&mut src)?;
+                let id = ArchiveEntryId::deserialize(&mut src)?;
                 let name = deserialize_entry_name(&mut src)?;
                 let opts = Opts::from_reader(&mut src)?;
 
                 Ok(ArchiveEntryBlock::EntryStart { id, name, opts })
             }
             ArchiveEntryBlockType::EntryContent => {
-                let id = u64::deserialize(&mut src)?;
+                let id = ArchiveEntryId::deserialize(&mut src)?;
                 let opts = Opts::from_reader(&mut src)?;
                 let length = u64::deserialize(&mut src)?;
                 // /!\ WARNING: to avoid loading this entire subfileblock's contents
@@ -180,7 +180,7 @@ where
                 })
             }
             ArchiveEntryBlockType::EndOfEntry => {
-                let id = u64::deserialize(&mut src)?;
+                let id = ArchiveEntryId::deserialize(&mut src)?;
                 let opts = Opts::from_reader(&mut src)?;
                 let mut hash = Sha256Hash::default();
                 src.read_exact(&mut hash)?;
