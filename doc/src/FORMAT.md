@@ -99,9 +99,9 @@ If the `ArchiveEntryBlockType` is `EndOfEntry`, it is followed by an `ArchiveEnt
 
 If the `ArchiveEntryBlockType` is `EndOfArchiveData`, it is followed by nothing.
 
-`EntriesFooter` is a `Vec<EntryNameInfoMapElt>`. An `EntryNameInfoMapElt` is an `EntryName` followed by an `entry_blocks_offsets` which is a `Vec<EntryBlockOffset>` explained after, followed by an `entry_size` as u64. `entry_size` is the whole size of the content of the entry with the corresponding `EntryName`. For reproducibility, the `EntriesFooter` `Vec` is sorted by entry name (lexicographically by bytes values) before being serialized.
+`EntriesFooter` is a `Vec<EntryNameInfoMapElt>`. An `EntryNameInfoMapElt` is an `EntryName` followed by an `entry_blocks_info` which is a `Vec<EntryBlockInfo>` explained after. For reproducibility, the `EntriesFooter` `Vec` is sorted by entry name (lexicographically by bytes values) before being serialized.
 
-`EntryBlockOffset` is a u64 indicating at which offset from the begining of the MLA entries layer an `ArchiveEntryBlock` can be found for the given `EntryName`. All `EntryBlockOffset`s for each entry are recorded in `entry_blocks_offsets` and they are so in ascending order of offset.
+`EntryBlockInfo` has two fields: `block_offset` and `block_size`. The `block_offset` field is a u64 indicating at which offset from the begining of the MLA entries layer an `ArchiveEntryBlock` can be found for the given `EntryName`. The `block_size` field is a u64 indicating the size in bytes of the block content (0 except for `EntryContentChunk`). If it is an EntryContentChunk with `entry_content_data` containing 1 byte, `block_size` is 1. All `EntryBlockInfo`s for each entry are recorded in `entry_blocks_info` and they are so in ascending order of offset.
 
 ### Explanations
 
@@ -113,7 +113,7 @@ Once the `EndOfEntry` for `entry_i` is reached, the entry is completely read. It
 
 Between the last `EndOfEntry` block and `entries_footer`, there is the only `EndOfArchiveData` block. It is used when trying to read a truncated archive, to correctly separate the actual archive data from the footer.
 
-As blocks from different entries can be interleaved, the `entry_block_offsets` for an entry are the offsets in `entries_data` of its blocks.
+As blocks from different entries can be interleaved, the `entry_block_info` offsets for an entry are the offsets in `entries_data` of its blocks.
 
 For instance, if the blocks are:
 ```
@@ -126,4 +126,4 @@ Off5: [EndOfEntry ID 1]
 ...
 ```
 
-The `offsets` for the entry with ID 1 will be `Off0`, `Off2`, `Off3` and `Off5`.
+The offsets for the entry with ID 1 will be `Off0`, `Off2`, `Off3` and `Off5`.
