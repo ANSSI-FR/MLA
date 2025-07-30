@@ -873,6 +873,69 @@ mod tests {
     }
 
     #[test]
+    fn seek_internal_state_consistency() {
+        let (mut data_source, offsets) = create_normal_entry();
+        let mut reader = ArchiveEntryDataReader::new(&mut data_source, offsets)
+            .expect("Failed to create ArchiveEntryDataReader");
+
+        // Seek to start (offset 0) — should be Ready or just before content reading
+        reader.seek(std::io::SeekFrom::Start(0)).unwrap();
+        assert!(
+            matches!(reader.state, ArchiveEntryDataReaderState::Ready),
+            "Expected state Ready after SeekFrom::Start(0), got {:?}",
+            reader.state
+        );
+
+        // Seek inside first content block (offset 2)
+        reader.seek(std::io::SeekFrom::Start(2)).unwrap();
+        match &reader.state {
+            ArchiveEntryDataReaderState::InEntryContent(remaining) => {
+                // remaining should be length of content after offset 2
+                assert!(*remaining == 2);
+            }
+            _ => panic!("Expected InEntryContent state after seek inside content block"),
+        }
+
+        // Seek to end (offset equal to total content length, 8 here)
+        reader.seek(std::io::SeekFrom::Start(8)).unwrap();
+        assert!(
+            matches!(
+                reader.state,
+                ArchiveEntryDataReaderState::Ready | ArchiveEntryDataReaderState::Finish
+            ),
+            "Expected state Ready or Finish after seeking to end, got {:?}",
+            reader.state
+        );
+
+        // Seek beyond end (should error)
+        assert!(reader.seek(std::io::SeekFrom::Start(9)).is_err());
+
+        // Seek to end with SeekFrom::End(0) should result in Finish or Ready
+        reader.seek(std::io::SeekFrom::End(0)).unwrap();
+        assert!(
+            matches!(
+                reader.state,
+                ArchiveEntryDataReaderState::Ready | ArchiveEntryDataReaderState::Finish
+            ),
+            "Expected Ready or Finish after SeekFrom::End(0), got {:?}",
+            reader.state
+        );
+
+        // Seek backwards inside content using SeekFrom::End(-3)
+        reader.seek(std::io::SeekFrom::End(-3)).unwrap();
+        match &reader.state {
+            ArchiveEntryDataReaderState::InEntryContent(_) => (),
+            _ => panic!("Expected InEntryContent after SeekFrom::End(-3)"),
+        };
+
+        // Seek to start again and then finish reading all to reach Finish state
+        reader.seek(std::io::SeekFrom::Start(0)).unwrap();
+        let mut buf = Vec::new();
+        reader.read_to_end(&mut buf).unwrap();
+        assert_eq!(reader.state, ArchiveEntryDataReaderState::Finish);
+    }
+
+    #[test]
     fn entry_name_from_arbitrary_bytes_empty() {
         let res = entryname::EntryName::from_arbitrary_bytes(b"");
         assert!(matches!(
