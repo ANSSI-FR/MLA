@@ -35,3 +35,4 @@ ml-kem = "0.3.0-pre"
 assert_cmd = "2.0"
 assert_fs = "1.1"
 permutate = "0.3"
+winapi = { version = "0.3", features = ["winbase"] }
