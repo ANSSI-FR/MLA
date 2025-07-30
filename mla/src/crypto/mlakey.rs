@@ -1,8 +1,11 @@
+use ed25519_dalek::{SigningKey as Ed25519SigningKey, VerifyingKey as Ed25519VerifyingKey};
 use hkdf::Hkdf;
+use ml_dsa::{B32, EncodedVerifyingKey, KeyGen as _, KeyPair, MlDsa87, SigningKey, VerifyingKey};
 use rand::SeedableRng as _;
 use rand_chacha::ChaCha20Rng;
 use rand_chacha::rand_core::CryptoRngCore;
-use zeroize::Zeroize;
+use subtle::ConstantTimeEq as _;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use std::io::{Cursor, ErrorKind, Read, Write};
 
@@ -12,7 +15,6 @@ use sha2::Sha512;
 use x25519_dalek::{PublicKey, StaticSecret};
 
 use crate::base64::{base64_decode, base64_encode};
-use crate::crypto::hybrid::generate_keypair_from_seed;
 pub use crate::crypto::hybrid::{MLADecryptionPrivateKey, MLAEncryptionPublicKey};
 
 use crate::MLADeserialize;
@@ -23,14 +25,17 @@ use crate::layers::encrypt::get_crypto_rng;
 use super::hybrid::generate_keypair_from_rng;
 
 const MLA_PRIV_DEC_KEY_HEADER: &[u8] = b"MLA PRIVATE DECRYPTION KEY ";
-//const MLA_PRIV_SIG_KEY_HEADER: &[u8] = b"MLA PRIVATE SIGNATURE KEY ";
+const MLA_PRIV_SIG_KEY_HEADER: &[u8] = b"MLA PRIVATE SIGNING KEY ";
+
 const DEC_METHOD_ID_0_PRIV: &[u8] = b"mla-kem-private-x25519-mlkem1024";
-//const SIG_METHOD_ID_0_PRIV: &[u8] = b"mla-signature-private-ed25519-mldsa87";
+const SIG_METHOD_ID_0_PRIV: &[u8] = b"mla-signature-private-ed25519-mldsa87";
 
 const MLA_PUB_ENC_KEY_HEADER: &[u8] = b"MLA PUBLIC ENCRYPTION KEY ";
-//const MLA_PUB_SIGVERIF_KEY_HEADER: &[u8] = b"MLA PUBLIC SIGNATURE VERIFICATION KEY ";
+const MLA_PUB_SIGVERIF_KEY_HEADER: &[u8] = b"MLA PUBLIC SIGNATURE VERIFICATION KEY ";
 const ENC_METHOD_ID_0_PUB: &[u8] = b"mla-kem-public-x25519-mlkem1024";
-//const SIGVERIF_METHOD_ID_0_PUB: &[u8] = b"mla-signature-verification-public-ed25519-mldsa87";
+const SIGVERIF_METHOD_ID_0_PUB: &[u8] = b"mla-signature-verification-public-ed25519-mldsa87";
+
+const ED25519_PRIVKEY_SIZE: usize = 32;
 
 const PRIV_KEY_FILE_HEADER: &[u8] = b"DO NOT SEND THIS TO ANYONE - MLA PRIVATE KEY FILE V1";
 const PRIV_KEY_FILE_FOOTER: &[u8] = b"END OF MLA PRIVATE KEY FILE";
@@ -176,28 +181,166 @@ impl MLADecryptionPrivateKey {
     }
 }
 
+/// Represents a 32-bytes xi seed as described in FIPS 204 algorithm 6.
+///
+/// This seed is used internally in the ML-DSA signature scheme for
+/// deterministic key derivation.
 #[derive(Clone)]
-pub struct MLASignaturePrivateKey {}
+pub(crate) struct MLDSASeed {
+    xi: B32,
+}
 
-impl MLASignaturePrivateKey {
-    fn serialize_signature_private_key<W: Write>(&self, mut dst: W) -> Result<(), Error> {
-        dst.write_all(b"TODO\r\n").unwrap();
+const MLDSA_XI_SIZE: usize = 32;
+
+impl MLDSASeed {
+    fn as_slice(&self) -> &[u8] {
+        self.xi.as_slice()
+    }
+
+    fn generate_from_csprng(mut csprng: impl CryptoRngCore) -> Self {
+        let mut xi_array = [0u8; 32];
+        csprng.fill_bytes(&mut xi_array);
+        Self::from_xi_32(xi_array)
+    }
+
+    // Linked to issue https://github.com/RustCrypto/signatures/issues/1024 : Windows stack overflow when using ML-DSA
+    fn key_gen_internal(xi: &B32) -> KeyPair<MlDsa87> {
+        #[cfg(windows)]
+        {
+            use std::thread;
+
+            // Clone `xi` because the closure must own its data
+            let mut xi = xi.clone();
+
+            let builder = thread::Builder::new().stack_size(8 * 1024 * 1024); // 8 MB stack
+
+            let handle = builder
+                .spawn(move || {
+                    let result = MlDsa87::key_gen_internal(&xi);
+
+                    // Zeroize cloned sensitive material AFTER use
+                    xi.zeroize();
+
+                    result
+                })
+                .expect("Failed to spawn thread with increased stack");
+
+            handle.join().expect("Thread panicked")
+        }
+
+        #[cfg(not(windows))]
+        {
+            MlDsa87::key_gen_internal(xi)
+        }
+    }
+
+    /// Creates an MLDSASeed from a 32-byte array.
+    fn from_xi_32(xi: [u8; 32]) -> Self {
+        let xi = B32::from(xi);
+        Self { xi }
+    }
+
+    pub(crate) fn to_signing_key(&self) -> SigningKey<MlDsa87> {
+        Self::key_gen_internal(&self.xi).signing_key().clone()
+    }
+
+    pub(crate) fn to_signing_verification_key(&self) -> VerifyingKey<MlDsa87> {
+        Self::key_gen_internal(&self.xi).verifying_key().clone()
+    }
+}
+
+impl PartialEq for MLDSASeed {
+    fn eq(&self, other: &Self) -> bool {
+        self.xi.ct_eq(&other.xi).into()
+    }
+}
+
+impl Zeroize for MLDSASeed {
+    fn zeroize(&mut self) {
+        self.xi.zeroize();
+    }
+}
+
+impl Drop for MLDSASeed {
+    fn drop(&mut self) {
+        self.zeroize();
+    }
+}
+
+impl ZeroizeOnDrop for MLDSASeed {}
+
+#[derive(Clone)]
+pub struct MLASigningPrivateKey {
+    pub(crate) private_key_ed25519: Ed25519SigningKey,
+    pub(crate) private_key_seed_mldsa: MLDSASeed,
+    #[allow(dead_code)]
+    opts: KeyOpts,
+}
+
+impl MLASigningPrivateKey {
+    fn deserialize_signing_private_key(line: &[u8]) -> Result<Self, Error> {
+        let b64data = line
+            .strip_prefix(MLA_PRIV_SIG_KEY_HEADER)
+            .ok_or(Error::DeserializationError)?;
+        let data = base64_decode(b64data).map_err(|_| Error::DeserializationError)?;
+        let mut cursor = Cursor::new(data);
+        let mut method_id = [0; SIG_METHOD_ID_0_PRIV.len()];
+        cursor
+            .read_exact(&mut method_id)
+            .map_err(|_| Error::DeserializationError)?;
+        if method_id.as_slice() != SIG_METHOD_ID_0_PRIV {
+            return Err(Error::DeserializationError);
+        }
+        let _opts = KeyOpts::deserialize(&mut cursor)?;
+        let mut serialized_ecc_key = [0; ED25519_PRIVKEY_SIZE];
+        cursor
+            .read_exact(&mut serialized_ecc_key)
+            .map_err(|_| Error::DeserializationError)?;
+        let private_key_ed25519 = Ed25519SigningKey::from_bytes(&serialized_ecc_key);
+        serialized_ecc_key.zeroize();
+        let mut serialized_mldsa_seed = [0; MLDSA_XI_SIZE];
+        cursor
+            .read_exact(&mut serialized_mldsa_seed)
+            .map_err(|_| Error::DeserializationError)?;
+        let private_key_mldsa87 = MLDSASeed::from_xi_32(serialized_mldsa_seed);
+        cursor.into_inner().zeroize();
+        Ok(Self {
+            private_key_ed25519,
+            private_key_seed_mldsa: private_key_mldsa87,
+            opts: KeyOpts,
+        })
+    }
+
+    fn serialize_signing_private_key<W: Write>(&self, mut dst: W) -> Result<(), Error> {
+        const KEY_OPTS_LEN: usize = 4;
+
+        dst.write_all(MLA_PRIV_SIG_KEY_HEADER)?;
+        let mut b64data = vec![];
+        b64data.extend_from_slice(SIG_METHOD_ID_0_PRIV);
+        b64data.extend_from_slice(&[0u8; KEY_OPTS_LEN]); // key opts, empty length for the moment
+        b64data.extend_from_slice(&self.private_key_ed25519.to_bytes());
+        b64data.extend_from_slice(self.private_key_seed_mldsa.as_slice());
+        let mut encoded = base64_encode(&b64data);
+        dst.write_all(&encoded)?;
+        encoded.zeroize();
+        dst.write_all(b"\r\n")?;
         Ok(())
     }
 }
 
-impl Drop for MLASignaturePrivateKey {
+impl Drop for MLASigningPrivateKey {
     fn drop(&mut self) {
         // TODO
     }
 }
 
+/// Contains an `MLADecryptionPrivateKey` and an `MLASigningPrivateKey`. Usually loaded from an MLA key file.
 #[derive(Clone)]
 pub struct MLAPrivateKey {
     // zeroized on drop for both ecc and mlkem keys
     decryption_private_key: MLADecryptionPrivateKey,
     // TODO: zeroize on drop
-    signature_private_key: MLASignaturePrivateKey,
+    signing_private_key: MLASigningPrivateKey,
     opts: KeyOpts,
 }
 
@@ -221,22 +364,22 @@ impl MLAPrivateKey {
         let decryption_private_key =
             MLADecryptionPrivateKey::deserialize_decryption_private_key(lines[1])?;
         // TODO: deserialize signature private key when implemented
-        let signature_private_key = MLASignaturePrivateKey {};
+        let signing_private_key = MLASigningPrivateKey::deserialize_signing_private_key(lines[2])?;
         content.zeroize();
         Ok(Self {
             decryption_private_key,
-            signature_private_key,
+            signing_private_key,
             opts: KeyOpts,
         })
     }
 
     pub fn from_decryption_and_signature_keys(
         decryption_private_key: MLADecryptionPrivateKey,
-        signature_private_key: MLASignaturePrivateKey,
+        signing_private_key: MLASigningPrivateKey,
     ) -> Self {
         MLAPrivateKey {
             decryption_private_key,
-            signature_private_key,
+            signing_private_key,
             opts: KeyOpts,
         }
     }
@@ -245,12 +388,12 @@ impl MLAPrivateKey {
         &self.decryption_private_key
     }
 
-    pub fn get_private_keys(self) -> (MLADecryptionPrivateKey, MLASignaturePrivateKey) {
-        (self.decryption_private_key, self.signature_private_key)
+    pub fn get_private_keys(self) -> (MLADecryptionPrivateKey, MLASigningPrivateKey) {
+        (self.decryption_private_key, self.signing_private_key)
     }
 
-    pub fn get_signature_private_key(&self) -> &MLASignaturePrivateKey {
-        &self.signature_private_key
+    pub fn get_signing_private_key(&self) -> &MLASigningPrivateKey {
+        &self.signing_private_key
     }
 
     /// Serialize the MLA private key into `dst`.
@@ -261,8 +404,8 @@ impl MLAPrivateKey {
         dst.write_all(b"\r\n")?;
         self.decryption_private_key
             .serialize_decryption_private_key(&mut dst)?;
-        self.signature_private_key
-            .serialize_signature_private_key(&mut dst)?;
+        self.signing_private_key
+            .serialize_signing_private_key(&mut dst)?;
         self.opts.serialize_key_opts(&mut dst)?;
         dst.write_all(PRIV_KEY_FILE_FOOTER)?;
         dst.write_all(b"\r\n")?;
@@ -323,18 +466,71 @@ impl MLAEncryptionPublicKey {
 }
 
 #[derive(Clone)]
-pub struct MLASignatureVerificationPublicKey {}
+pub struct MLASignatureVerificationPublicKey {
+    pub(crate) public_key_ed25519: Ed25519VerifyingKey,
+    pub(crate) public_key_mldsa87: VerifyingKey<MlDsa87>,
+    #[allow(dead_code)]
+    opts: KeyOpts,
+}
 
 impl MLASignatureVerificationPublicKey {
+    fn deserialize_signature_verification_public_key(line: &[u8]) -> Result<Self, Error> {
+        let b64data = line
+            .strip_prefix(MLA_PUB_SIGVERIF_KEY_HEADER)
+            .ok_or(Error::DeserializationError)?;
+        let data = base64_decode(b64data).map_err(|_| Error::DeserializationError)?;
+        let mut cursor = Cursor::new(data);
+        let mut method_id = [0; SIGVERIF_METHOD_ID_0_PUB.len()];
+        cursor
+            .read_exact(&mut method_id)
+            .map_err(|_| Error::DeserializationError)?;
+        if method_id.as_slice() != SIGVERIF_METHOD_ID_0_PUB {
+            return Err(Error::DeserializationError);
+        }
+        let _opts = KeyOpts::deserialize(&mut cursor)?;
+        let mut serialized_ecc_key = [0; ECC_PUBKEY_SIZE];
+        cursor
+            .read_exact(&mut serialized_ecc_key)
+            .map_err(|_| Error::DeserializationError)?;
+        let public_key_ed25519 = Ed25519VerifyingKey::from_bytes(&serialized_ecc_key)
+            .map_err(|_| Error::DeserializationError)?;
+        let mut serialized_mldsa_key = Vec::new();
+        cursor
+            .read_to_end(&mut serialized_mldsa_key)
+            .map_err(|_| Error::DeserializationError)?;
+        let encoded_signing_mldsa87_key =
+            EncodedVerifyingKey::<MlDsa87>::try_from(serialized_mldsa_key.as_slice())
+                .map_err(|_| Error::DeserializationError)?;
+        let public_key_mldsa87 = VerifyingKey::<MlDsa87>::decode(&encoded_signing_mldsa87_key);
+
+        Ok(Self {
+            public_key_ed25519,
+            public_key_mldsa87,
+            opts: KeyOpts,
+        })
+    }
+
     fn serialize_signature_verification_public_key<W: Write>(
         &self,
         mut dst: W,
     ) -> Result<(), Error> {
-        dst.write_all(b"TODO\r\n").unwrap();
+        const KEY_OPTS_LEN: usize = 4;
+
+        dst.write_all(MLA_PUB_SIGVERIF_KEY_HEADER)?;
+        let mut b64data = vec![];
+        b64data.extend_from_slice(SIGVERIF_METHOD_ID_0_PUB);
+        b64data.extend_from_slice(&[0u8; KEY_OPTS_LEN]); // key opts, empty length for the moment
+        b64data.extend_from_slice(self.public_key_ed25519.as_bytes());
+        b64data.extend_from_slice(self.public_key_mldsa87.encode().as_slice());
+        let mut encoded = base64_encode(&b64data);
+        dst.write_all(&encoded)?;
+        encoded.zeroize();
+        dst.write_all(b"\r\n")?;
         Ok(())
     }
 }
 
+/// Contains an `MLAEncryptionPublicKey` and an `MLASignatureVerificationPublicKey`. Usually loaded from an MLA key file.
 #[derive(Clone)]
 pub struct MLAPublicKey {
     encryption_public_key: MLAEncryptionPublicKey,
@@ -354,7 +550,10 @@ impl MLAPublicKey {
         }
         let encryption_public_key =
             MLAEncryptionPublicKey::deserialize_encryption_public_key(lines[1])?;
-        let signature_verification_public_key = MLASignatureVerificationPublicKey {};
+        let signature_verification_public_key =
+            MLASignatureVerificationPublicKey::deserialize_signature_verification_public_key(
+                lines[2],
+            )?;
         content.zeroize();
         Ok(Self {
             encryption_public_key,
@@ -403,9 +602,29 @@ impl MLAPublicKey {
     }
 }
 
+fn generate_signature_keypair_from_rng(
+    mut csprng: impl CryptoRngCore,
+) -> (MLASigningPrivateKey, MLASignatureVerificationPublicKey) {
+    let private_key_ed25519 = Ed25519SigningKey::generate(&mut csprng);
+    let public_key_ed25519 = private_key_ed25519.verifying_key();
+    let private_key_seed_mldsa = MLDSASeed::generate_from_csprng(&mut csprng);
+    let public_key_mldsa87 = private_key_seed_mldsa.to_signing_verification_key();
+    let privkey = MLASigningPrivateKey {
+        private_key_ed25519,
+        private_key_seed_mldsa,
+        opts: KeyOpts,
+    };
+    let pubkey = MLASignatureVerificationPublicKey {
+        public_key_ed25519,
+        public_key_mldsa87,
+        opts: KeyOpts,
+    };
+    (privkey, pubkey)
+}
+
 /// Generate an MLA key pair using the current Operating System CSPRNG
-pub fn generate_mla_keypair() -> (MLAPrivateKey, MLAPublicKey) {
-    generate_mla_keypair_from_rng(get_crypto_rng())
+pub fn generate_mla_keypair() -> Result<(MLAPrivateKey, MLAPublicKey), Error> {
+    Ok(generate_mla_keypair_from_rng(get_crypto_rng()?))
 }
 
 /// WARNING: the seed is as secret as the private key.
@@ -420,14 +639,11 @@ pub fn generate_mla_keypair_from_seed(seed: [u8; 32]) -> (MLAPrivateKey, MLAPubl
 
 fn generate_mla_keypair_from_rng(mut csprng: impl CryptoRngCore) -> (MLAPrivateKey, MLAPublicKey) {
     let (decryption_private_key, encryption_public_key) = generate_keypair_from_rng(&mut csprng);
-    // TODO: generate a real signature keypair
-    let (signature_private_key, signature_verification_public_key) = (
-        MLASignaturePrivateKey {},
-        MLASignatureVerificationPublicKey {},
-    );
+    let (signing_private_key, signature_verification_public_key) =
+        generate_signature_keypair_from_rng(&mut csprng);
     let priv_key = MLAPrivateKey {
         decryption_private_key,
-        signature_private_key,
+        signing_private_key,
         opts: KeyOpts,
     };
     let pub_key = MLAPublicKey {
@@ -479,24 +695,26 @@ fn apply_derive(path: &[u8], src: MLADecryptionPrivateKey) -> [u8; 32] {
 fn derive_one_path_component(
     path: &[u8],
     privkey: MLADecryptionPrivateKey,
-) -> (MLADecryptionPrivateKey, MLAEncryptionPublicKey) {
+) -> (MLAPrivateKey, MLAPublicKey) {
     let seed = apply_derive(path, privkey);
-    generate_keypair_from_seed(seed)
+    generate_mla_keypair_from_seed(seed)
 }
 
-/// Return a KeyPair based on a succession of path components and an hybrid private key.
-/// Return None if `path_components` is empty.
+/// This is for advanced use cases: see KEY_DERIVATION.md.
 ///
-/// See `doc/KEY_DERIVATION.md`.
+/// Return a key pair based on a succession of derivation path components and
+/// a private key.
+/// Return None if `path_components` is empty.
 pub fn derive_keypair_from_path<'a>(
     path_components: impl Iterator<Item = &'a [u8]>,
-    src: MLADecryptionPrivateKey,
-) -> Option<(MLADecryptionPrivateKey, MLAEncryptionPublicKey)> {
+    src: MLAPrivateKey,
+) -> Option<(MLAPrivateKey, MLAPublicKey)> {
     // None for public key: we do not have one at the beginning
     let initial_keypair = (src, None);
     // Use a fold to feed each newly generated keypair into next derive_one_path_component
     let (privkey, opt_pubkey) = path_components.fold(initial_keypair, |keypair, path| {
-        let (privkey, pubkey) = derive_one_path_component(path, keypair.0);
+        let (previous_private_decryption_key, _) = keypair.0.get_private_keys();
+        let (privkey, pubkey) = derive_one_path_component(path, previous_private_decryption_key);
         (privkey, Some(pubkey))
     });
     // opt_pubkey will be None iff path_components is empty
@@ -505,6 +723,7 @@ pub fn derive_keypair_from_path<'a>(
 
 #[cfg(test)]
 mod tests {
+    use crate::crypto::hybrid::generate_keypair_from_seed;
     use std::io::{Seek, SeekFrom};
 
     use super::*;
@@ -541,7 +760,7 @@ mod tests {
     /// Ensure the generated keypair is coherent and re-readable
     #[test]
     fn keypair_serialize_deserialize_and_check() {
-        let (priv_key, pub_key) = generate_mla_keypair();
+        let (priv_key, pub_key) = generate_mla_keypair().unwrap();
 
         let mut cursor = Cursor::new(Vec::new());
         priv_key.serialize_private_key(&mut cursor).unwrap();
@@ -637,16 +856,7 @@ mod tests {
             crate::crypto::mlakey::MLAPrivateKey::deserialize_private_key(ser_priv).unwrap();
         // Safe to unwrap, there is at least one derivation path
         let path = [b"pathcomponent1".as_slice(), b"pathcomponent2".as_slice()];
-        let (decryption_private_key, _) = derive_keypair_from_path(
-            path.into_iter(),
-            secret.get_decryption_private_key().clone(),
-        )
-        .unwrap();
-        let privkey = MLAPrivateKey::from_decryption_and_signature_keys(
-            decryption_private_key,
-            // TODO: fix MLASignaturePrivateKey after implementing it
-            MLASignaturePrivateKey {},
-        );
+        let (privkey, _) = derive_keypair_from_path(path.into_iter(), secret).unwrap();
         let mut computed_ser_derived_priv = Vec::new();
         privkey
             .serialize_private_key(&mut computed_ser_derived_priv)

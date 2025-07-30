@@ -1,3 +1,4 @@
+//! Handling of archive entries and their name
 use std::io::{ErrorKind, Read, Seek, SeekFrom, Write};
 
 use crate::{MLADeserialize, MLASerialize, errors::Error, format::ArchiveEntryBlock};

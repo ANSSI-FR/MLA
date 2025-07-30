@@ -131,7 +131,7 @@ int test_reader_extract()
 {
     FILE *kf = NULL;
 
-    if (fopen_s(&kf, "../../../../samples/test_mlakey_archive_v2.mlapriv", "r") != 0)
+    if (fopen_s(&kf, "../../../../samples/test_mlakey_archive_v2_receiver.mlapriv", "r") != 0)
     {
         fprintf(stderr, " [!] Could not open private key file\n");
         return errno;
@@ -177,7 +177,7 @@ int test_reader_extract()
 
     MLAReaderConfigHandle hConfig = NULL;
     const char *const keys[] = {(const char *const)keyData};
-    MLAStatus status = create_mla_reader_config_with_private_keys(&hConfig, keys, 1);
+    MLAStatus status = create_mla_reader_config_with_encryption_without_signature_verification(&hConfig, keys, 1);
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
     {
         fprintf(stderr, " [!] Private key set failed with code %" PRIX64 "\n", (uint64_t)status);
@@ -195,7 +195,8 @@ int test_reader_extract()
 
     CreateDirectory(TEXT("extracted"), NULL);
 
-    status = mla_roarchive_extract(&hConfig, read_cb, seek_cb, file_cb, 0, f);
+    uint32_t number_of_keys_with_valid_signature = 0;
+    status = mla_roarchive_extract(&hConfig, read_cb, seek_cb, file_cb, f, 0, &number_of_keys_with_valid_signature);
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
     {
         fprintf(stderr, " [!] Archive read failed with code %" PRIX64 "\n", (uint64_t)status);

@@ -7,8 +7,7 @@ use crate::{MLADeserialize, MLASerialize};
 use hkdf::Hkdf;
 use kem::{Decapsulate, Encapsulate};
 use ml_kem::{B32, KemCore, MlKem1024};
-use rand::{Rng, SeedableRng};
-use rand_chacha::ChaCha20Rng;
+use rand::Rng;
 use rand_chacha::rand_core::CryptoRngCore;
 use sha2::Sha512;
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
@@ -260,13 +259,6 @@ impl Drop for MLKEMSeed {
 
 impl ZeroizeOnDrop for MLKEMSeed {}
 
-/// Private key for hybrid cryptography.
-///
-/// Made of:
-/// - an X25519 key, for ECC (pre-quantum) cryptography
-/// - an ML-KEM 1024 key, for post-quantum cryptography
-///
-/// Supports KEM decapsulation
 #[derive(Clone)]
 pub struct MLADecryptionPrivateKey {
     pub(crate) private_key_ecc: X25519StaticSecret,
@@ -330,11 +322,6 @@ impl Decapsulate<HybridMultiRecipientEncapsulatedKey, HybridKemSharedSecret>
     }
 }
 
-/// Public key for hybrid cryptography
-///
-/// Made of:
-/// - an X25519 key, for ECC (pre-quantum) cryptography
-/// - an ML-KEM 1024 key, for post-quantum cryptography
 #[derive(Clone)]
 pub struct MLAEncryptionPublicKey {
     pub(crate) public_key_ecc: X25519PublicKey,
@@ -412,10 +399,12 @@ impl Encapsulate<HybridMultiRecipientEncapsulatedKey, HybridKemSharedSecret>
 /// You should probably rather use the `generate_keypair` function.
 ///
 /// Generate an Hybrid key pair using the provided seed
+#[cfg(test)]
 pub fn generate_keypair_from_seed(
     seed: [u8; 32],
 ) -> (MLADecryptionPrivateKey, MLAEncryptionPublicKey) {
-    let mut csprng = ChaCha20Rng::from_seed(seed);
+    use rand::SeedableRng;
+    let mut csprng = rand_chacha::ChaCha20Rng::from_seed(seed);
     generate_keypair_from_rng(&mut csprng)
 }
 
@@ -661,7 +650,7 @@ mod tests {
     /// Test the generation of a key pair
     #[test]
     fn test_generate_keypair() {
-        let (private_key, public_key) = generate_mla_keypair();
+        let (private_key, public_key) = generate_mla_keypair().unwrap();
 
         // Ensure the ECC private key correspond to the ECC public key
         let public_key_ecc =
@@ -730,7 +719,7 @@ mod tests {
 
     #[test]
     fn test_seed_to_and_from_dz64() {
-        let original_seed = MLKEMSeed::generate_from_csprng(&mut ChaCha20Rng::from_seed([0u8; 32]));
+        let original_seed = MLKEMSeed::generate_from_csprng(&mut rand::rngs::OsRng);
         let dz64 = original_seed.to_d_z_64();
         let recovered = MLKEMSeed::from_d_z_64(*dz64);
         assert!(original_seed == recovered);
@@ -754,7 +743,7 @@ mod tests {
 
     #[test]
     fn test_seed_to_keypair_roundtrip() {
-        let seed = MLKEMSeed::generate_from_csprng(&mut ChaCha20Rng::from_seed([0u8; 32]));
+        let seed = MLKEMSeed::generate_from_csprng(&mut rand::rngs::OsRng);
         let privkey = seed.to_privkey();
         let pubkey = seed.to_pubkey();
 
