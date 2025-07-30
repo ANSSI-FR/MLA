@@ -12,6 +12,7 @@ Multi Layer Archive (MLA)
 MLA is an archive file format with the following features:
 
 * Support for traditional and post-quantum encryption hybridation with asymmetric keys (HPKE with AES256-GCM and a KEM based on an hybridation of X25519 and post-quantum ML-KEM 1024)
+* Support for traditional and post-quantum signing hybridation
 * Support for compression (based on [`rust-brotli`](https://github.com/dropbox/rust-brotli/))
 * Streamable archive creation:
   * An archive can be built even over a data-diode
@@ -20,7 +21,7 @@ MLA is an archive file format with the following features:
 * Architecture agnostic and portable to some extent (written entirely in Rust)
 * Archive reading is seekable, even if compressed or encrypted. An entry can be accessed in the middle of the archive without reading from the beginning
 * If truncated, archives can be repaired to some extent. Two modes are available:
-  * Authenticated repair (default): only authenticated encrypted chunks of data are retrieved
+  * Authenticated repair (default): only authenticated (as in AEAD, there is no signature verification) encrypted chunks of data are retrieved
   * Unauthenticated repair: authenticated and unauthenticated encrypted chunks of data are retrieved. Use at your own risk.
 * Arguably less prone to bugs, especially while parsing an untrusted archive (Rust safety)
 
@@ -44,41 +45,39 @@ Quick command-line usage
 Here are some commands to use ``mlar`` in order to work with archives in MLA format.
 
 ```sh
-# Generate an MLA key pair {key, key.pub}
-mlar keygen key
+# Generate MLA key pairs.
+mlar keygen sender
+mlar keygen receiver
 
-# Create an archive with some files, using the public key
-mlar create -p key.pub -o my_archive.mla /etc/./os-release /etc/security/../issue ../file.txt
+# Create an archive with some files.
+mlar create -k sender.mlapriv -p receiver.mlapub -o my_archive.mla /etc/./os-release /etc/security/../issue ../file.txt
 
-# Create an archive of a web file and utf-8 string, without encryption
-(curl https://raw.githubusercontent.com/ANSSI-FR/MLA/refs/heads/master/README.md; echo "SEP"; echo "All Hail MLA!") | mlar create -l -o my_archive.mla --separator "SEP" --filenames great_readme.md -
-
-# List the content of the archive, using the private key.
+# List the content of the archive.
 # Note that order may vary, root dir are stripped,
 # paths are normalized and listing is encoded as described in
 # `doc/ESCAPING.md`.
 # This outputs:
-# ```
+# ``
 # etc/issue
 # etc/os%2drelease
 # file.txt
-# ```
-mlar list -k key.mlapriv -i my_archive.mla
+# ``
+mlar list -k receiver.mlapriv -p sender.mlapub -i my_archive.mla
 
 # Extract the content of the archive into a new directory.
 # In this example, this creates two files:
 # extracted_content/etc/issue and extracted_content/etc/os-release
-mlar extract -k key.mlapriv -i my_archive.mla -o extracted_content
+mlar extract -k receiver.mlapriv -p sender.mlapub -i my_archive.mla -o extracted_content
 
 # Display the content of a file in the archive
-mlar cat -k key.mlapriv -i my_archive.mla etc/os-release
+mlar cat -k receiver.mlapriv -p sender.mlapub -i my_archive.mla etc/os-release
 
 # Convert the archive to a long-term one, removing encryption and using the best
 # and slower compression level
-mlar convert -k key.mlapriv -i my_archive.mla -o longterm.mla -l compress -q 11
+mlar convert -k receiver.mlapriv -p sender.mlapub -i my_archive.mla -o longterm.mla -l compress -q 11
 
-# Create an archive with multiple recipient
-mlar create -p archive.mlapub -p client1.mlapub -o my_archive.mla ...
+# Create an archive with multiple recipients and without signature nor compression
+mlar create -l encrypt -p archive.mlapub -p client1.mlapub -o my_archive.mla ...
 
 # List an archive containing an entry with a name that cannot be interpreted as path.
 # This outputs:
@@ -87,12 +86,15 @@ mlar create -p archive.mlapub -p client1.mlapub -o my_archive.mla ...
 # NUL, RTLO, newline, terminal escape sequence, carriage return,
 # HTML, surrogate code unit, U+0085 weird newline, fake unicode slash.
 # Please note that some of these characters may appear in valid a path.
-mlar list -k test_mlakey.mlapriv -i archive_weird.mla --raw-escaped-names
+mlar list -k test_mlakey_archive_v2_receiver.mlapriv -p test_mlakey_archive_v2_sender.mlapub -i archive_weird.mla --raw-escaped-names
 
 # Get its content.
 # This displays:
 # `' OR 1=1`
-mlar cat -k test_mlakey.mlapriv -i archive_weird.mla --raw-escaped-names c%3a%2f%00%3b%e2%80%ae%0ac%0dd%1b%5b1%3b31ma%3cscript%3eevil%5c..%2f%d8%01%c2%85%e2%88%95
+mlar cat -k test_mlakey_archive_v2_receiver.mlapriv -p test_mlakey_archive_v2_sender.mlapub -i archive_weird.mla --raw-escaped-names c%3a%2f%00%3b%e2%80%ae%0ac%0dd%1b%5b1%3b31ma%3cscript%3eevil%5c..%2f%d8%01%c2%85%e2%88%95
+
+# Create an archive of a web file and utf-8 string, without encryption and without signature
+(curl https://raw.githubusercontent.com/ANSSI-FR/MLA/refs/heads/master/README.md; echo "SEP"; echo "All Hail MLA!") | mlar create -l -o my_archive.mla --separator "SEP" --filenames great_readme.md -
 ```
 
 `mlar` can be obtained:
@@ -160,7 +162,7 @@ For instance (from the understanding of the author):
   when unpacking unknown archive
 * `journald` format is not streamable. Also, one writter / multiple reader is
   not needed here, thus releasing some constraints `journald` format have
-* any archive + `age`: [age](https://age-encryption.org/) does not yet support post quantum encryption
+* any archive + `age`: [age](https://age-encryption.org/) does not, as of MLA 2.0 release, support post quantum encryption nor signatures.
 * Backup formats are generally written to avoid things such as duplication,
   hence their need to keep bigger structures in memory, or not being 
   streamable

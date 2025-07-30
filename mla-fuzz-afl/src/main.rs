@@ -158,7 +158,7 @@ fn run(data: &[u8]) {
     let private_key = parse_mlakey_privkey_pem(PRIV_KEY).unwrap();
     let mut config = ArchiveReaderConfig::new();
     config.add_private_keys(&[private_key]);
-    let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
+    let mut mla_read = ArchiveReader::from_config(buf, config).unwrap().0;
 
     // Check the list of files is correct
     let mut flist: Vec<String> = mla_read.list_entries().unwrap().cloned().collect();
@@ -185,7 +185,7 @@ fn run(data: &[u8]) {
     let mut config = ArchiveReaderConfig::new();
     let private_key = parse_mlakey_privkey_pem(PRIV_KEY).unwrap();
     config.add_private_keys(&[private_key]);
-    let mut mla_fsread = TruncatedArchiveReader::from_config(buf, config).unwrap();
+    let mut mla_fsread = TruncatedArchiveReader::from_config(buf, config).unwrap().0;
 
     // Repair the archive (without any damage, but trigger the corresponding code)
     let mut dest_w = Vec::new();

@@ -30,7 +30,7 @@ const UNCOMPRESSED_DATA_SIZE: u32 = 4 * 1024 * 1024;
 ///
 /// According to benchmarking on compression of representative data, level 5
 /// seems to be a good choice
-const DEFAULT_COMPRESSION_LEVEL: u32 = 5;
+pub const DEFAULT_COMPRESSION_LEVEL: u32 = 5;
 
 /// Default value which seems advised by brotli libraries
 const BROTLI_LOG_WINDOW: u32 = 22;
@@ -1293,7 +1293,8 @@ mod tests {
         let bytes = data.as_slice();
 
         let file = Vec::new();
-        let config = ArchiveWriterConfig::without_encryption()
+        let config = ArchiveWriterConfig::without_encryption_without_signature()
+            .unwrap()
             .with_compression_level(0)
             .unwrap();
         let mut comp = Box::new(
@@ -1306,7 +1307,8 @@ mod tests {
         comp.write_all(bytes).unwrap();
 
         let file2 = Vec::new();
-        let config2 = ArchiveWriterConfig::without_encryption()
+        let config2 = ArchiveWriterConfig::without_encryption_without_signature()
+            .unwrap()
             .with_compression_level(5)
             .unwrap();
         let mut comp2 = Box::new(

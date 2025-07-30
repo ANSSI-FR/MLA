@@ -13,8 +13,10 @@
 #define MLA_STATUS(x) (x)
 #endif
 
-// from samples/test_mlakey.mlariv
-const char * const szPrivkey = "REPLACE WITH PRIVATE KEY FROM SAMPLE";
+// from samples/test_mlakey_archive_v2_receiver.mlapriv
+const char * const szDecryptionPrivkey = "REPLACE WITH PRIVATE ARCHIVE V2 RECEIVER PRIVATE KEY FROM SAMPLE";
+// from samples/test_mlakey_archive_v2_sender.mlapub
+const char * const szSignatureVerificationPublickey = "REPLACE WITH PRIVATE ARCHIVE V2 SENDER PUBLIC KEY FROM SAMPLE";
 
 static int32_t read_cb(uint8_t *buffer, uint32_t buffer_len, void *context, uint32_t *bytes_read)
 {
@@ -89,8 +91,9 @@ int main()
     mkdir("extracted", S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
 
     MLAReaderConfigHandle hConfig = NULL;
-    const char *const keys[] = {(const char *const) szPrivkey};
-    MLAStatus status = create_mla_reader_config_with_private_keys(&hConfig, keys, 1);
+    const char *const decryption_keys[] = {(const char *const) szDecryptionPrivkey};
+    const char *const signature_verification_keys[] = {(const char *const) szSignatureVerificationPublickey};
+    MLAStatus status = create_mla_reader_config_with_encryption_with_signature_verification(&hConfig, decryption_keys, 1, signature_verification_keys, 1);
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
     {
         fprintf(stderr, " [!] Private key set failed with code %" PRIX64 "\n", (uint64_t)status);
@@ -104,12 +107,20 @@ int main()
         return 1;
     }
 
-    status = mla_roarchive_extract(&hConfig, read_cb, seek_cb, file_cb, 0, f);
+    uint32_t number_of_keys_with_valid_signature = 0;
+    status = mla_roarchive_extract(&hConfig, read_cb, seek_cb, file_cb, f, 0, &number_of_keys_with_valid_signature);
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
     {
         fprintf(stderr, " [!] Archive read failed with code %" PRIX64 "\n", (uint64_t)status);
         fclose(f);
         return (int)status;
+    }
+
+    // just to check, if it was not at least one, we would have received an error
+    if (number_of_keys_with_valid_signature != 1) {
+        fprintf(stderr, " [!] wrong number of keys with valid signature \n");
+        fclose(f);
+        return 2;
     }
 
     fclose(f);

@@ -58,10 +58,11 @@ fn writer_from_matches(matches: &ArgMatches) -> mla::ArchiveWriter<'static, File
                     .get_public_keys()
             })
             .collect::<(Vec<_>, Vec<_>)>();
-        ArchiveWriterConfig::with_public_keys(&pub_encryption_keys)
+        ArchiveWriterConfig::with_encryption_without_signature(&pub_encryption_keys)
     } else {
-        ArchiveWriterConfig::without_encryption()
-    };
+        ArchiveWriterConfig::without_encryption_without_signature()
+    }
+    .unwrap();
     let out_file_path = matches.get_one::<PathBuf>("output").unwrap();
     let out_file = File::create(out_file_path).unwrap();
     mla::ArchiveWriter::from_config(out_file, config).unwrap()
@@ -148,7 +149,7 @@ pub(crate) mod tests {
         let input = "archive_v1.mla";
         let output = temp_dir.join("archive_v2.mla");
         let private_keys = "test_x25519_archive_v1.pem";
-        let public_keys = "test_mlakey_archive_v2.mlapub";
+        let public_keys = "test_mlakey_archive_v2_receiver.mlapub";
 
         // temporary locations
         let temp_input = temp_dir.join(input);

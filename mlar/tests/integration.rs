@@ -156,6 +156,10 @@ fn test_create_from_dir() {
     // `mlar create -o output.mla -p samples/test_mlakey.mlapub <tmp_dir>`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
+        .arg("-l")
+        .arg("compress")
+        .arg("-l")
+        .arg("encrypt")
         .arg("-o")
         .arg(mlar_file.path())
         .arg("-p")
@@ -175,6 +179,7 @@ fn test_create_from_dir() {
     // `mlar list -i output.mla -k samples/test_mlakey.mlapriv`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
+        .arg("--skip-signature-verification")
         .arg("-i")
         .arg(mlar_file.path())
         .arg("-k")
@@ -198,6 +203,10 @@ fn test_create_filelist_stdin() {
     // `mlar create -o output.mla -p samples/test_mlakey.mlapub -`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
+        .arg("-l")
+        .arg("compress")
+        .arg("-l")
+        .arg("encrypt")
         .arg("-o")
         .arg(mlar_file.path())
         .arg("-p")
@@ -224,6 +233,7 @@ fn test_create_filelist_stdin() {
     // `mlar list -i output.mla -k samples/test_mlakey.mlapriv`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
+        .arg("--skip-signature-verification")
         .arg("-i")
         .arg(mlar_file.path())
         .arg("-k")
@@ -238,8 +248,10 @@ fn test_create_filelist_stdin() {
 fn test_create_list_tar() {
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
     let tar_file = NamedTempFile::new("output.tar").unwrap();
-    let public_key = Path::new("../samples/test_mlakey.mlapub");
-    let private_key = Path::new("../samples/test_mlakey.mlapriv");
+    let sender_public_key = Path::new("../samples/test_mlakey_archive_v2_sender.mlapub");
+    let sender_private_key = Path::new("../samples/test_mlakey_archive_v2_sender.mlapriv");
+    let receiver_public_key = Path::new("../samples/test_mlakey_archive_v2_receiver.mlapub");
+    let receiver_private_key = Path::new("../samples/test_mlakey_archive_v2_receiver.mlapriv");
 
     // Create files
     let testfs = setup();
@@ -250,7 +262,9 @@ fn test_create_list_tar() {
         .arg("-o")
         .arg(mlar_file.path())
         .arg("-p")
-        .arg(public_key);
+        .arg(receiver_public_key)
+        .arg("-k")
+        .arg(sender_private_key);
 
     let mut file_list = String::new();
     for file in &testfs.files {
@@ -269,8 +283,10 @@ fn test_create_list_tar() {
     cmd.arg("list")
         .arg("-i")
         .arg(mlar_file.path())
+        .arg("-p")
+        .arg(sender_public_key)
         .arg("-k")
-        .arg(private_key);
+        .arg(receiver_private_key);
 
     println!("{cmd:?}");
     let assert = cmd.assert();
@@ -281,8 +297,10 @@ fn test_create_list_tar() {
     cmd.arg("to-tar")
         .arg("-i")
         .arg(mlar_file.path())
+        .arg("-p")
+        .arg(sender_public_key)
         .arg("-k")
-        .arg(private_key)
+        .arg(receiver_private_key)
         .arg("-o")
         .arg(tar_file.path());
 
@@ -308,6 +326,10 @@ fn test_truncated_repair_list_tar() {
     // `mlar create -o output.mla -p samples/test_mlakey.mlapub file1.bin file2.bin file3.bin`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
+        .arg("-l")
+        .arg("compress")
+        .arg("-l")
+        .arg("encrypt")
         .arg("-o")
         .arg(mlar_file.path())
         .arg("-p")
@@ -347,12 +369,15 @@ fn test_truncated_repair_list_tar() {
     // `mlar repair -i output.mla -k samples/test_mlakey.mlapriv -p samples/test_mlakey.mlapub -o repaired.mla`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("repair")
+        .arg("--skip-signature-verification")
         .arg("-i")
         .arg(mlar_file.path())
         .arg("-k")
         .arg(private_key)
-        .arg("-p")
+        .arg("--out-pub")
         .arg(public_key)
+        .arg("-l")
+        .arg("encrypt")
         .arg("-o")
         .arg(mlar_repaired_file.path());
 
@@ -363,6 +388,7 @@ fn test_truncated_repair_list_tar() {
     // `mlar list -i repaired.mla -k samples/test_mlakey.mlapriv`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
+        .arg("--skip-signature-verification")
         .arg("-i")
         .arg(mlar_repaired_file.path())
         .arg("-k")
@@ -377,6 +403,7 @@ fn test_truncated_repair_list_tar() {
     // `mlar to-tar -i output.mla -k samples/test_mlakey.mlapriv -o output.tar`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("to-tar")
+        .arg("--skip-signature-verification")
         .arg("-i")
         .arg(mlar_repaired_file.path())
         .arg("-k")
@@ -445,6 +472,10 @@ fn test_multiple_keys() {
     // `mlar create -o output.mla -p samples/test_mlakey_pub.mlapriv -p samples/test_mlakey_3.mlapub file1.bin file2.bin file3.bin`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
+        .arg("-l")
+        .arg("compress")
+        .arg("-l")
+        .arg("encrypt")
         .arg("-o")
         .arg(mlar_file.path())
         .arg("-p")
@@ -472,6 +503,7 @@ fn test_multiple_keys() {
     // `mlar list -i output.mla -k samples/test_mlakey.mlapriv -k samples/test_mlakey_2.mlapriv`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
+        .arg("--skip-signature-verification")
         .arg("-i")
         .arg(mlar_file.path())
         .arg("-k")
@@ -486,6 +518,7 @@ fn test_multiple_keys() {
     // `mlar list -i output.mla -k samples/test_mlakey_3.mlapriv`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
+        .arg("--skip-signature-verification")
         .arg("-i")
         .arg(mlar_file.path())
         .arg("-k")
@@ -498,6 +531,7 @@ fn test_multiple_keys() {
     // `mlar list -i output.mla -k samples/test_mlakey_2.mlapriv`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
+        .arg("--skip-signature-verification")
         .arg("-i")
         .arg(mlar_file.path())
         .arg("-k")
@@ -552,6 +586,7 @@ fn test_multiple_compression_level() {
         // `mlar to-tar -i {src} -o {tar_name}`
         let mut cmd = Command::cargo_bin(UTIL).unwrap();
         cmd.arg("to-tar")
+            .arg("--skip-signature-verification")
             .arg("--accept-unencrypted")
             .arg("-i")
             .arg(src.path())
@@ -584,6 +619,10 @@ fn test_convert() {
     // `mlar create -o output.mla -p samples/public_1024.mlapub file1.bin file2.bin file3.bin`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
+        .arg("-l")
+        .arg("compress")
+        .arg("-l")
+        .arg("encrypt")
         .arg("-o")
         .arg(mlar_file.path())
         .arg("-p")
@@ -604,6 +643,7 @@ fn test_convert() {
     // `mlar convert -i output.mla -k samples/private_1024.mlapriv -l encrypt -o convert.mla -p samples/public_2048.mlapub`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("convert")
+        .arg("--skip-signature-verification")
         .arg("-i")
         .arg(mlar_file.path())
         .arg("-k")
@@ -612,7 +652,7 @@ fn test_convert() {
         .arg("encrypt")
         .arg("-o")
         .arg(mlar_file_converted.path())
-        .arg("-p")
+        .arg("--out-pub")
         .arg(public_key2);
 
     println!("{cmd:?}");
@@ -629,6 +669,7 @@ fn test_convert() {
     // `mlar to-tar -i convert.mla -k samples/private_2048.mlapriv -o output.tar`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("to-tar")
+        .arg("--skip-signature-verification")
         .arg("-i")
         .arg(mlar_file_converted.path())
         .arg("-k")
@@ -658,6 +699,10 @@ fn test_stdio() {
     // `mlar create -o - -p samples/test_mlakey.mlapub file1.bin file2.bin file3.bin`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
+        .arg("-l")
+        .arg("compress")
+        .arg("-l")
+        .arg("encrypt")
         .arg("-o")
         .arg("-")
         .arg("-p")
@@ -683,6 +728,7 @@ fn test_stdio() {
     // `mlar to-tar -i output.mla -k samples/test_mlakey.mlapriv -o output.tar`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("to-tar")
+        .arg("--skip-signature-verification")
         .arg("-i")
         .arg(mlar_file.path())
         .arg("-k")
@@ -726,6 +772,10 @@ fn test_multi_fileorders() {
         // `mlar create -o output.mla -p samples/test_mlakey.mlapub file1.bin file2.bin file3.bin`
         let mut cmd = Command::cargo_bin(UTIL).unwrap();
         cmd.arg("create")
+            .arg("-l")
+            .arg("compress")
+            .arg("-l")
+            .arg("encrypt")
             .arg("-o")
             .arg(mlar_file.path())
             .arg("-p")
@@ -746,6 +796,7 @@ fn test_multi_fileorders() {
         // `mlar to-tar -i convert.mla -k samples/test_mlakey.mlapriv -o output.tar`
         let mut cmd = Command::cargo_bin(UTIL).unwrap();
         cmd.arg("to-tar")
+            .arg("--skip-signature-verification")
             .arg("-i")
             .arg(mlar_file.path())
             .arg("-k")
@@ -769,7 +820,11 @@ fn test_verbose_listing() {
 
     // `mlar create -l -o output.mla
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
-    cmd.arg("create").arg("-l").arg("-o").arg(mlar_file.path());
+    cmd.arg("create")
+        .arg("-l")
+        .arg("compress")
+        .arg("-o")
+        .arg(mlar_file.path());
 
     let mut file_list = String::new();
     for file in &testfs.files {
@@ -786,6 +841,7 @@ fn test_verbose_listing() {
     // `mlar list -i output.mla`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
+        .arg("--skip-signature-verification")
         .arg("--accept-unencrypted")
         .arg("-i")
         .arg(mlar_file.path());
@@ -797,6 +853,7 @@ fn test_verbose_listing() {
     // `mlar list -v -i output.mla`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
+        .arg("--skip-signature-verification")
         .arg("--accept-unencrypted")
         .arg("-v")
         .arg("-i")
@@ -809,6 +866,7 @@ fn test_verbose_listing() {
     // `mlar list -vv -i output.mla`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
+        .arg("--skip-signature-verification")
         .arg("--accept-unencrypted")
         .arg("-vv")
         .arg("-i")
@@ -854,6 +912,7 @@ fn test_extract() {
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-l")
+        .arg("compress")
         .arg("-o")
         .arg(mlar_file.path())
         .arg("--separator")
@@ -876,6 +935,7 @@ fn test_extract() {
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("extract")
         .arg("-v")
+        .arg("--skip-signature-verification")
         .arg("--accept-unencrypted")
         .arg("-i")
         .arg(mlar_file.path())
@@ -899,6 +959,7 @@ fn test_extract() {
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("extract")
         .arg("-v")
+        .arg("--skip-signature-verification")
         .arg("--accept-unencrypted")
         .arg("-i")
         .arg(mlar_file.path())
@@ -932,6 +993,7 @@ fn test_extract() {
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("extract")
         .arg("-v")
+        .arg("--skip-signature-verification")
         .arg("--accept-unencrypted")
         .arg("-i")
         .arg(mlar_file.path())
@@ -957,7 +1019,11 @@ fn test_cat() {
 
     // `mlar create -l -o output.mla
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
-    cmd.arg("create").arg("-l").arg("-o").arg(mlar_file.path());
+    cmd.arg("create")
+        .arg("-l")
+        .arg("compress")
+        .arg("-o")
+        .arg(mlar_file.path());
 
     let mut file_list = String::new();
     for file in &testfs.files {
@@ -976,6 +1042,7 @@ fn test_cat() {
     cmd.arg("cat")
         .arg("-i")
         .arg(mlar_file.path())
+        .arg("--skip-signature-verification")
         .arg("--accept-unencrypted")
         .arg(normalize(&testfs.files_archive_order[2]));
 
@@ -1008,6 +1075,10 @@ fn test_keygen() {
     // `mlar create -p tempdir/key.pub -o output.mla file1 file2 file3`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
+        .arg("-l")
+        .arg("compress")
+        .arg("-l")
+        .arg("encrypt")
         .arg("-p")
         .arg(&pub_path)
         .arg("-o")
@@ -1028,6 +1099,7 @@ fn test_keygen() {
     // `mlar list -k tempdir/key -i output.mla`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
+        .arg("--skip-signature-verification")
         .arg("-k")
         .arg(&priv_path)
         .arg("-i")
@@ -1039,13 +1111,13 @@ fn test_keygen() {
 }
 
 const PRIVATE_KEY_TESTSEED_SHA256: [u8; 32] = [
-    239, 245, 13, 179, 44, 156, 74, 71, 231, 123, 190, 119, 211, 255, 188, 22, 116, 117, 16, 196,
-    126, 189, 175, 242, 235, 125, 36, 175, 144, 175, 33, 36,
+    171, 203, 214, 39, 195, 210, 188, 152, 227, 36, 24, 90, 1, 205, 194, 21, 203, 119, 153, 203,
+    112, 207, 248, 69, 206, 249, 159, 209, 198, 198, 38, 36,
 ];
 
 const PRIVATE_KEY_TESTSEED2_SHA256: [u8; 32] = [
-    85, 144, 39, 211, 71, 114, 123, 218, 196, 108, 205, 109, 69, 92, 55, 111, 239, 235, 125, 8,
-    191, 128, 8, 241, 117, 191, 133, 117, 192, 139, 24, 223,
+    17, 3, 32, 197, 51, 208, 40, 91, 226, 177, 99, 168, 223, 174, 41, 231, 253, 62, 61, 176, 248,
+    110, 187, 40, 221, 118, 54, 65, 193, 22, 192, 153,
 ];
 
 #[test]
@@ -1204,7 +1276,6 @@ fn test_keyderive() {
 #[test]
 fn test_verbose_info() {
     let public_key = Path::new("../samples/test_mlakey.mlapub");
-    let private_key = Path::new("../samples/test_mlakey.mlapriv");
     let public_key_2 = Path::new("../samples/test_mlakey_2.mlapub");
 
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
@@ -1232,28 +1303,20 @@ fn test_verbose_info() {
 
     // `mlar info -k <key> -i output.mla`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
-    cmd.arg("info")
-        .arg("-k")
-        .arg(private_key)
-        .arg("-i")
-        .arg(mlar_file.path());
+    cmd.arg("info").arg("-i").arg(mlar_file.path());
 
     println!("{cmd:?}");
     let assert = cmd.assert();
     assert.success().stdout(
         "Format version: 2
 Encryption: true
+Signature: false
 ",
     );
 
     // `mlar info -k <key> -v -i output.mla`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
-    cmd.arg("info")
-        .arg("-k")
-        .arg(private_key)
-        .arg("-v")
-        .arg("-i")
-        .arg(mlar_file.path());
+    cmd.arg("info").arg("-v").arg("-i").arg(mlar_file.path());
 
     println!("{cmd:?}");
     let assert = cmd.assert();
@@ -1297,6 +1360,7 @@ fn test_no_open_on_encrypt() {
     cmd.arg("list")
         .arg("-i")
         .arg(mlar_file.path())
+        .arg("--skip-signature-verification")
         .arg("-k")
         .arg(private_key);
 
@@ -1340,6 +1404,7 @@ fn test_extract_lot_files() {
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-l")
+        .arg("compress")
         .arg("-o")
         .arg(mlar_file.path())
         .arg("--separator")
@@ -1362,6 +1427,7 @@ fn test_extract_lot_files() {
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("extract")
         .arg("-v")
+        .arg("--skip-signature-verification")
         .arg("--accept-unencrypted")
         .arg("-i")
         .arg(mlar_file.path())
@@ -1385,6 +1451,7 @@ fn test_extract_lot_files() {
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("extract")
         .arg("-v")
+        .arg("--skip-signature-verification")
         .arg("--accept-unencrypted")
         .arg("-i")
         .arg(mlar_file.path())
@@ -1418,6 +1485,7 @@ fn test_extract_lot_files() {
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("extract")
         .arg("-v")
+        .arg("--skip-signature-verification")
         .arg("--accept-unencrypted")
         .arg("-i")
         .arg(mlar_file.path())
@@ -1447,6 +1515,7 @@ fn test_stdin() {
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-l")
+        .arg("compress")
         .arg("-o")
         .arg(mlar_file.path())
         .arg("--filenames")
@@ -1465,6 +1534,7 @@ fn test_stdin() {
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("extract")
         .arg("-v")
+        .arg("--skip-signature-verification")
         .arg("--accept-unencrypted")
         .arg("-i")
         .arg(mlar_file.path())
@@ -1507,6 +1577,7 @@ fn test_consecutive_sep_stdin() {
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-l")
+        .arg("compress")
         .arg("-o")
         .arg(mlar_file.path())
         .arg("--separator")
@@ -1523,6 +1594,7 @@ fn test_consecutive_sep_stdin() {
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("extract")
         .arg("-v")
+        .arg("--skip-signature-verification")
         .arg("--accept-unencrypted")
         .arg("-i")
         .arg(mlar_file.path())

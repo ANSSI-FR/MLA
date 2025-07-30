@@ -52,6 +52,13 @@ int main()
         return 2;
     }
 
+    if (archive_info.is_signature_enabled != 1)
+    {
+        fprintf(stderr, " [!] Signature should be enabled\n");
+        fclose(f);
+        return 2;
+    }
+
     fclose(f);
     printf("SUCCESS\n");
     return 0;

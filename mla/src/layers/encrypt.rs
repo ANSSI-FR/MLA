@@ -2,6 +2,7 @@ use crate::crypto::aesgcm::{
     AesGcm256, ConstantTimeEq, KEY_COMMITMENT_SIZE, Key, Nonce, TAG_LENGTH, Tag,
 };
 
+use crate::crypto::MaybeSeededRNG;
 use crate::crypto::hpke::{compute_nonce, key_schedule_base_hybrid_kem};
 use crate::crypto::hybrid::{
     HybridKemSharedSecret, HybridMultiRecipientEncapsulatedKey, HybridMultiRecipientsPublicKeys,
@@ -111,7 +112,7 @@ impl<R: Read> MLADeserialize<R> for KeyCommitmentAndTag {
 }
 
 /// Return a Cryptographic random number generator
-pub(crate) fn get_crypto_rng() -> ChaCha20Rng {
+pub(crate) fn get_crypto_rng() -> Result<ChaCha20Rng, Error> {
     // Use OsRng from crate rand, that uses getrandom() from crate getrandom.
     // getrandom provides implementations for many systems, listed on
     // https://docs.rs/getrandom/0.1.14/getrandom/
@@ -129,7 +130,7 @@ pub(crate) fn get_crypto_rng() -> ChaCha20Rng {
     // https://docs.rs/rand/0.7.3/rand/trait.SeedableRng.html#method.from_entropy
     //
     // For the same reasons, force at compile time that the Rng implements CryptoRngCore
-    ChaCha20Rng::from_entropy()
+    Ok(ChaCha20Rng::from_entropy())
 }
 
 #[derive(Zeroize, ZeroizeOnDrop)]
@@ -178,34 +179,11 @@ impl<R: Read> MLADeserialize<R> for EncryptionPersistentConfig {
     }
 }
 
-#[derive(Default)]
 /// ArchiveWriterConfig specific configuration for the Encryption, to let API users specify encryption options
 pub(crate) struct EncryptionConfig {
     /// Public keys of recipients
     public_keys: HybridMultiRecipientsPublicKeys,
-    pub(crate) rng: EncapsulationRNG,
-}
-
-pub(crate) enum EncapsulationRNG {
-    System,
-    #[allow(dead_code)]
-    Seed([u8; 32]),
-}
-
-impl EncapsulationRNG {
-    fn get_rng(&self) -> ChaCha20Rng {
-        match self {
-            EncapsulationRNG::System => get_crypto_rng(),
-            EncapsulationRNG::Seed(s) => ChaCha20Rng::from_seed(*s),
-        }
-    }
-}
-
-#[allow(clippy::derivable_impls)]
-impl Default for EncapsulationRNG {
-    fn default() -> Self {
-        EncapsulationRNG::System
-    }
+    pub(crate) rng: MaybeSeededRNG,
 }
 
 impl EncryptionConfig {
@@ -216,19 +194,22 @@ impl EncryptionConfig {
     /// will results in several materials
     pub(crate) fn to_persistent(
         &self,
-    ) -> Result<(EncryptionPersistentConfig, InternalEncryptionConfig), ConfigError> {
+    ) -> Result<(EncryptionPersistentConfig, InternalEncryptionConfig), Error> {
         // Generate then encapsulate the main key for each recipients
         let (hybrid_multi_recipient_encapsulate_key, ss_hybrid) =
-            self.public_keys.encapsulate(&mut self.rng.get_rng())?;
+            self.public_keys.encapsulate(&mut self.rng.get_rng()?)?;
 
         // Generate the main encrypt layer nonce and keep the main key for internal use
-        let cryptographic_material = InternalEncryptionConfig::from(ss_hybrid)
-            .or(Err(ConfigError::KeyWrappingComputationError))?;
+        let cryptographic_material = InternalEncryptionConfig::from(ss_hybrid).or(Err(
+            Error::ConfigError(ConfigError::KeyWrappingComputationError),
+        ))?;
 
         // Add a key commitment
         let key_commitment =
             build_key_commitment_chain(&cryptographic_material.key, &cryptographic_material.nonce)
-                .or(Err(ConfigError::KeyCommitmentComputationError))?;
+                .or(Err(Error::ConfigError(
+                    ConfigError::KeyCommitmentComputationError,
+                )))?;
 
         // Create the persistent version, to be exported
         Ok((
@@ -240,12 +221,19 @@ impl EncryptionConfig {
         ))
     }
 
-    pub(crate) fn add_public_keys(
-        &mut self,
-        keys: &[MLAEncryptionPublicKey],
-    ) -> &mut EncryptionConfig {
-        self.public_keys.keys.extend_from_slice(keys);
-        self
+    pub(crate) fn new(
+        encryption_public_keys: &[MLAEncryptionPublicKey],
+    ) -> Result<Self, ConfigError> {
+        if encryption_public_keys.is_empty() {
+            return Err(ConfigError::EncryptionKeyIsMissing);
+        }
+        let public_keys = HybridMultiRecipientsPublicKeys {
+            keys: encryption_public_keys.to_vec(),
+        };
+        Ok(Self {
+            public_keys,
+            rng: MaybeSeededRNG::default(),
+        })
     }
 }
 
@@ -327,9 +315,7 @@ impl<'a, W: 'a + InnerWriterTrait> Write for EncryptionLayerWriter<'a, W> {
 
 impl<'a, W: 'a + InnerWriterTrait> LayerWriter<'a, W> for EncryptionLayerWriter<'a, W> {
     fn finalize(self: Box<Self>) -> Result<W, Error> {
-        let mut out = Box::new(self.0).finalize()?;
-        out.write_all(EMPTY_TAIL_OPTS_SERIALIZATION)?;
-        Ok(out)
+        Box::new(self.0).finalize()
     }
 }
 
@@ -399,6 +385,8 @@ impl<'a, W: 'a + InnerWriterTrait> LayerWriter<'a, W> for InternalEncryptionLaye
         let final_tag = self.renew_cipher()?;
         self.inner.write_all(&final_tag)?;
 
+        self.inner.write_all(EMPTY_TAIL_OPTS_SERIALIZATION)?;
+
         // Recursive call
         self.inner.finalize()
     }
@@ -440,7 +428,7 @@ impl<W: InnerWriterTrait> Write for InternalEncryptionLayerWriter<'_, W> {
 
 // ---------- Reader ----------
 
-fn read_encryption_header_after_magic<R: Read>(
+pub(crate) fn read_encryption_header_after_magic<R: Read>(
     src: &mut R,
 ) -> Result<(EncryptionPersistentConfig, u64), Error> {
     let mut src = PositionLayerReader::new(src);
@@ -878,7 +866,8 @@ mod tests {
         encrypt_w.write_all(&FAKE_FILE[..21]).unwrap();
         encrypt_w.write_all(&FAKE_FILE[21..]).unwrap();
 
-        let out = encrypt_w.finalize().unwrap();
+        let mut out = encrypt_w.finalize().unwrap();
+        out.resize(out.len() - EMPTY_TAIL_OPTS_SERIALIZATION.len(), 0);
         assert_eq!(out.len(), FAKE_FILE.len() + TAG_LENGTH + FINAL_BLOCK_SIZE);
         assert_ne!(out[..FAKE_FILE.len()], FAKE_FILE);
         out
@@ -1002,7 +991,8 @@ mod tests {
         let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(0);
         let data: Vec<u8> = Alphanumeric.sample_iter(&mut rng).take(length).collect();
         encrypt_w.write_all(&data).unwrap();
-        let out = encrypt_w.finalize().unwrap();
+        let mut out = encrypt_w.finalize().unwrap();
+        out.resize(out.len() - EMPTY_TAIL_OPTS_SERIALIZATION.len(), 0);
 
         assert_eq!(out.len(), length + 2 * TAG_LENGTH + FINAL_BLOCK_SIZE);
         assert_ne!(&out[..length], data.as_slice());
