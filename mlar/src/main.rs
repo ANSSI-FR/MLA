@@ -15,6 +15,7 @@ use mla::{ArchiveReader, ArchiveWriter, TruncatedArchiveReader, entry::ArchiveEn
 use sha2::{Digest, Sha512};
 use std::collections::{HashMap, HashSet};
 use std::error;
+use std::ffi::OsStr;
 use std::fmt;
 use std::fs::{self, File, read_dir};
 use std::io::{self, BufReader, Read, Seek, Write};
@@ -454,6 +455,7 @@ impl ExtractFileNameMatcher {
 fn create_file<P1: AsRef<Path>>(
     output_dir: P1,
     entry_name: &EntryName,
+    zone_id: &Option<Vec<u8>>,
 ) -> Result<Option<(File, PathBuf)>, MlarError> {
     let output_dir_path = output_dir.as_ref();
     let entry_name_pathbuf = entry_name
@@ -490,16 +492,28 @@ fn create_file<P1: AsRef<Path>>(
             return Ok(None);
         }
     }
-    Ok(Some((
-        File::create(&extracted_path).map_err(|err| {
+
+    let created_file = File::create(&extracted_path).map_err(|err| {
+        eprintln!(
+            " [!] Unable to create \"{}\" ({err:?})",
+            escaped_path_to_string(&entry_name_pathbuf)
+        );
+        err
+    })?;
+
+    // Propagate zone identifier
+    if let Some(zone_id) = zone_id.as_ref() {
+        let zone_id_path = get_zone_identifier_path(&extracted_path)?;
+        fs::write(zone_id_path, zone_id).map_err(|err| {
             eprintln!(
-                " [!] Unable to create \"{}\" ({err:?})",
+                " [!] Unable to propagate zone identifier \"{}\" ({err:?})",
                 escaped_path_to_string(&entry_name_pathbuf)
             );
             err
-        })?,
-        extracted_path,
-    )))
+        })?;
+    }
+
+    Ok(Some((created_file, extracted_path)))
 }
 
 /// Wrapper with Write, to append data to a file
@@ -804,12 +818,55 @@ fn list(matches: &ArgMatches) -> Result<(), MlarError> {
     Ok(())
 }
 
+fn get_zone_identifier_path(orig_path: &Path) -> Result<PathBuf, MlarError> {
+    let mut zone_id_name = orig_path
+        .file_name()
+        .ok_or(MlarError::IO(io::Error::other(
+            "Internal error: should not have been called on a path without file_name",
+        )))?
+        .to_os_string();
+    zone_id_name.push(OsStr::new(":Zone.Identifier"));
+    let mut path_with_zone_id = orig_path.to_owned();
+    path_with_zone_id.set_file_name(zone_id_name);
+    Ok(path_with_zone_id)
+}
+
+#[cfg(target_family = "unix")]
+fn get_zone_identifier_os(_orig_path: &Path) -> Result<Option<Vec<u8>>, MlarError> {
+    Ok(None)
+}
+
+#[cfg(target_family = "windows")]
+fn get_zone_identifier_os(orig_path: &Path) -> Result<Option<Vec<u8>>, MlarError> {
+    use std::io::ErrorKind;
+
+    let zone_id_path = get_zone_identifier_path(orig_path)?;
+    match fs::read(zone_id_path) {
+        Ok(zone_id) => Ok(Some(zone_id)),
+        Err(e) => {
+            let err_kind = e.kind();
+            if err_kind == ErrorKind::NotFound || err_kind == ErrorKind::InvalidFilename {
+                Ok(None)
+            } else {
+                Err(io::Error::other("Failed to read zone identifier").into())
+            }
+        }
+    }
+}
+
+fn get_zone_identifier(path: &Path) -> Result<Option<Vec<u8>>, MlarError> {
+    get_zone_identifier_os(path)
+}
+
 fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
     let file_name_matcher = ExtractFileNameMatcher::from_matches(matches)?;
     let output_dir = Path::new(matches.get_one::<PathBuf>("outputdir").unwrap());
     let verbose = matches.get_flag("verbose");
 
     let mut mla = open_mla_file(matches)?;
+
+    let input_path = matches.get_one::<PathBuf>("input").unwrap();
+    let zone_id = get_zone_identifier(input_path)?;
 
     // Create the output directory, if it does not exist
     if !output_dir.exists() {
@@ -844,7 +901,7 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
         ));
         let mut export: HashMap<&EntryName, FileWriter> = HashMap::new();
         for entry_name in &entries_names {
-            match create_file(&output_dir, entry_name)? {
+            match create_file(&output_dir, entry_name, &zone_id)? {
                 Some((_file, path)) => {
                     export.insert(
                         entry_name,
@@ -894,7 +951,7 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
             }
             Ok(Some(subfile)) => subfile,
         };
-        let (mut extracted_file, _path) = match create_file(&output_dir, &entry_name)? {
+        let (mut extracted_file, _path) = match create_file(&output_dir, &entry_name, &zone_id)? {
             Some(file) => file,
             None => continue,
         };
@@ -1559,5 +1616,96 @@ pub(crate) mod tests {
     #[test]
     fn verify_app() {
         app().debug_assert();
+    }
+
+    #[test]
+    fn test_get_zone_identifier_path() {
+        let input_path = Path::new("C:\\path\\to\\file.txt");
+        let expected = Path::new("C:\\path\\to\\file.txt:Zone.Identifier");
+        let actual = get_zone_identifier_path(input_path).unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_zone_identifier_path_without_filename() {
+        for input in &[Path::new(""), Path::new("/")] {
+            let result = get_zone_identifier_path(input);
+            assert!(
+                result.is_err(),
+                "Expected error for input {input:?}, but got Ok: {result:?}",
+            );
+        }
+    }
+
+    #[cfg(target_family = "windows")]
+    #[test]
+    fn test_read_zone_identifier_ads() {
+        use std::{
+            fs, fs::File, fs::OpenOptions, io::Write, os::windows::fs::OpenOptionsExt, path::Path,
+        };
+        use winapi::um::winbase::FILE_FLAG_BACKUP_SEMANTICS;
+
+        let path = Path::new("test_file_ads.txt");
+        let ads_path_str = format!("{}:Zone.Identifier", path.display());
+
+        // Create dummy file
+        File::create(&path).unwrap();
+
+        // Open ADS stream with necessary flags and write data
+        let mut ads = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+            .open(&ads_path_str)
+            .unwrap();
+
+        ads.write_all(b"[ZoneTransfer]\nZoneId=3").unwrap();
+
+        // Assuming get_zone_identifier reads the ADS correctly
+        let result = get_zone_identifier(path).unwrap();
+        assert_eq!(result.unwrap(), b"[ZoneTransfer]\nZoneId=3");
+
+        // Cleanup
+        fs::remove_file(path).unwrap();
+    }
+
+    #[cfg(target_family = "unix")]
+    #[test]
+    fn test_zone_identifier_skipped_on_unix() {
+        let dummy_path = Path::new("/tmp/somefile.txt");
+        let result = get_zone_identifier(dummy_path);
+        assert!(result.unwrap().is_none());
+    }
+
+    #[cfg(target_family = "windows")]
+    #[test]
+    fn test_zone_identifier_invalid_utf8() {
+        use std::{
+            fs, fs::File, fs::OpenOptions, io::Write, os::windows::fs::OpenOptionsExt, path::Path,
+        };
+        use winapi::um::winbase::FILE_FLAG_BACKUP_SEMANTICS;
+
+        let path = Path::new("test_file_ads_invalid_utf8.txt");
+        let ads_path_str = format!("{}:Zone.Identifier", path.display());
+
+        // Create dummy file
+        File::create(&path).unwrap();
+
+        // Open ADS stream with necessary flags and write data
+        let mut ads = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+            .open(&ads_path_str)
+            .unwrap();
+
+        ads.write_all(b"[ZoneTransfer]\nZoneId=\xFF\xFE").unwrap();
+
+        // Should still return the raw bytes without error
+        let result = get_zone_identifier(path).unwrap();
+        assert_eq!(result.unwrap(), b"[ZoneTransfer]\nZoneId=\xFF\xFE");
+
+        // Cleanup
+        fs::remove_file(path).unwrap();
     }
 }
