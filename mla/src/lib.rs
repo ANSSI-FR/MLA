@@ -213,7 +213,7 @@
 //!     println!(
 //!         "{} ({} bytes)",
 //!         entry.name.to_pathbuf_escaped_string().unwrap(),
-//!         entry.size
+//!         entry.get_size()
 //!     );
 //!     let mut output = Vec::new();
 //!     std::io::copy(&mut entry.data, &mut output).unwrap();
@@ -818,10 +818,14 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
 
     /// Add the current offset to the corresponding list if the file id is not
     /// the current one, ie. if blocks are not continuous
-    fn record_offset_in_index(&mut self, id: ArchiveEntryId) -> Result<(), Error> {
+    fn record_offset_and_size_in_index(
+        &mut self,
+        id: ArchiveEntryId,
+        size: u64,
+    ) -> Result<(), Error> {
         let offset = self.dest.position();
         match self.ids_info.get_mut(&id) {
-            Some(file_info) => file_info.offsets.push(offset),
+            Some(file_info) => file_info.offsets_and_sizes.push((offset, size)),
             None => {
                 return Err(Error::WrongWriterState(
                     "[mark_continuous_block] Unable to find the ID".to_string(),
@@ -829,19 +833,6 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
             }
         };
         self.current_id = id;
-        Ok(())
-    }
-
-    /// Add the current block size to the total size of the corresponding file id
-    fn extend_file_size(&mut self, id: ArchiveEntryId, block_size: u64) -> Result<(), Error> {
-        match self.ids_info.get_mut(&id) {
-            Some(file_info) => file_info.size += block_size,
-            None => {
-                return Err(Error::WrongWriterState(
-                    "[extend_file_size] Unable to find the ID".to_string(),
-                ));
-            }
-        }
         Ok(())
     }
 
@@ -867,8 +858,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         self.ids_info.insert(
             id,
             EntryInfo {
-                offsets: vec![self.dest.position()],
-                size: 0,
+                offsets_and_sizes: vec![(self.dest.position(), 0)],
             },
         );
         // Use std::io::Empty as a readable placeholder type
@@ -911,8 +901,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
             return Ok(());
         }
 
-        self.record_offset_in_index(id)?;
-        self.extend_file_size(id, size)?;
+        self.record_offset_and_size_in_index(id, size)?;
         let src = self.state.wrap_with_hash(id, src)?;
 
         ArchiveEntryBlock::EntryContent {
@@ -944,7 +933,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
             }
         };
 
-        self.record_offset_in_index(id)?;
+        self.record_offset_and_size_in_index(id, 0)?;
         // Use std::io::Empty as a readable placeholder type
         ArchiveEntryBlock::EndOfEntry::<std::io::Empty> {
             id,
@@ -1052,6 +1041,14 @@ impl<R: Read> MLADeserialize<R> for u8 {
     }
 }
 
+impl<W: Write, A: MLASerialize<W>, B: MLASerialize<W>> MLASerialize<W> for (A, B) {
+    fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
+        let mut serialization_length = self.0.serialize(dest)?;
+        serialization_length += self.1.serialize(dest)?;
+        Ok(serialization_length)
+    }
+}
+
 impl<W: Write, T: MLASerialize<W>> MLASerialize<W> for Vec<T> {
     fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
         let u64len = u64::try_from(self.len()).map_err(|_| Error::SerializationError)?;
@@ -1102,25 +1099,20 @@ pub(crate) struct EntryInfo {
     /// Entry information to save in the footer
     ///
     /// Offsets of chunks of `ArchiveEntryBlock`
-    offsets: Vec<u64>,
-    /// Size of the file, in bytes
-    size: u64,
+    offsets_and_sizes: Vec<(u64, u64)>,
 }
 
 impl<W: Write> MLASerialize<W> for EntryInfo {
     fn serialize(&self, mut dest: &mut W) -> Result<u64, Error> {
-        let mut serialization_length = self.offsets.serialize(&mut dest)?;
-        serialization_length += self.size.serialize(&mut dest)?;
-        Ok(serialization_length)
+        self.offsets_and_sizes.serialize(&mut dest)
     }
 }
 
 impl<R: Read> MLADeserialize<R> for EntryInfo {
     fn deserialize(src: &mut R) -> Result<Self, Error> {
-        let offsets = MLADeserialize::deserialize(src)?;
-        let size = u64::deserialize(src)?;
+        let offsets_and_sizes = MLADeserialize::deserialize(src)?;
 
-        Ok(Self { offsets, size })
+        Ok(Self { offsets_and_sizes })
     }
 }
 
@@ -1298,10 +1290,11 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
             };
             // Set the inner layer at the start of the EoE tag
             let eoe_offset = file_info
-                .offsets
+                .offsets_and_sizes
                 .last()
-                .ok_or(Error::DeserializationError)?;
-            self.src.seek(SeekFrom::Start(*eoe_offset))?;
+                .ok_or(Error::DeserializationError)?
+                .0;
+            self.src.seek(SeekFrom::Start(eoe_offset))?;
 
             // Return the file hash
             match ArchiveEntryBlock::from(&mut self.src)? {
@@ -1333,19 +1326,15 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
                 None => return Ok(None),
                 Some(finfo) => finfo,
             };
-            if file_info.offsets.is_empty() {
+            if file_info.offsets_and_sizes.is_empty() {
                 return Err(Error::WrongReaderState(
                     "[ArchiveReader] A file must have at least one offset".to_string(),
                 ));
             }
 
             // Instantiate the file representation
-            let reader = ArchiveEntryDataReader::new(&mut self.src, &file_info.offsets)?;
-            Ok(Some(ArchiveEntry {
-                name,
-                data: reader,
-                size: file_info.size,
-            }))
+            let reader = ArchiveEntryDataReader::new(&mut self.src, &file_info.offsets_and_sizes)?;
+            Ok(Some(ArchiveEntry { name, data: reader }))
         } else {
             Err(Error::MissingMetadata)
         }
@@ -2295,7 +2284,13 @@ pub(crate) mod tests {
 
             for (fname, data) in &files {
                 let id = files_info.get(fname).unwrap();
-                let size = ids_info.get(id).unwrap().size;
+                let size: u64 = ids_info
+                    .get(id)
+                    .unwrap()
+                    .offsets_and_sizes
+                    .iter()
+                    .map(|p| p.1)
+                    .sum();
                 assert_eq!(size, data.len() as u64);
             }
 
@@ -2306,7 +2301,7 @@ pub(crate) mod tests {
 
             for (fname, data) in &files {
                 let mla_file = mla_read.get_entry(fname.clone()).unwrap().unwrap();
-                assert_eq!(mla_file.size, data.len() as u64);
+                assert_eq!(mla_file.get_size(), data.len() as u64);
             }
         }
     }
@@ -2545,8 +2540,8 @@ pub(crate) mod tests {
         assert_eq!(
             Sha256::digest(&raw_mla).as_slice(),
             [
-                211, 176, 56, 42, 146, 73, 166, 146, 32, 42, 135, 40, 48, 107, 53, 26, 227, 46,
-                209, 181, 189, 217, 108, 246, 166, 188, 243, 188, 84, 195, 22, 200
+                112, 210, 45, 237, 22, 196, 83, 21, 245, 50, 241, 185, 107, 48, 3, 233, 152, 179,
+                196, 96, 60, 9, 28, 216, 245, 88, 137, 148, 213, 20, 148, 52
             ]
         )
     }
@@ -2658,8 +2653,8 @@ pub(crate) mod tests {
         assert_eq!(
             Sha256::digest(&file).as_slice(),
             [
-                122, 103, 65, 17, 27, 40, 233, 183, 141, 0, 122, 14, 193, 132, 202, 92, 209, 27,
-                168, 9, 80, 212, 226, 47, 162, 50, 233, 148, 108, 118, 131, 54
+                178, 107, 121, 4, 21, 173, 69, 162, 3, 174, 37, 176, 61, 105, 36, 89, 176, 48, 195,
+                220, 48, 247, 186, 130, 213, 255, 133, 10, 160, 98, 166, 42
             ]
         )
     }

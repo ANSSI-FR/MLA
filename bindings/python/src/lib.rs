@@ -923,7 +923,7 @@ impl MLAFile {
                                         "EntryNot found (escaped name): {}",
                                         fname.raw_content_to_escaped_string()
                                     )))?
-                                    .size,
+                                    .get_size(),
                             );
                         }
                         if include_hash {
