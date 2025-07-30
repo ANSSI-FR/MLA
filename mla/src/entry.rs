@@ -23,6 +23,47 @@ mod entryname {
     pub static ENTRY_NAME_RAW_CONTENT_ALLOWED_BYTES: [u8; 63] =
         *b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.";
 
+    // https://github.com/MicrosoftDocs/win32/blob/63e70903d18b0637e62ffab6656c4a388ef0f2ce/desktop-src/FileIO/naming-a-file.md
+    #[cfg(target_family = "windows")]
+    static WINDOWS_FORBIDDEN_PATH_BYTES: [u8; 40] = [
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+        25, 26, 27, 28, 29, 30, 31, b'"', b'*', b':', b'<', b'>', b'?', 0x5C, b'|',
+    ];
+    #[cfg(target_family = "windows")]
+    static WINDOWS_FORBIDDEN_NAMES: [&[u8]; 31] = [
+        b"con",
+        b"prn",
+        b"aux",
+        b"nul",
+        b"com1",
+        b"com2",
+        b"com3",
+        b"com4",
+        b"com5",
+        b"com6",
+        b"com7",
+        b"com8",
+        b"com9",
+        b"com\xc2\xb2",
+        b"com\xc2\xb3",
+        b"com\xc2\xb9",
+        b"lpt1",
+        b"lpt2",
+        b"lpt3",
+        b"lpt4",
+        b"lpt5",
+        b"lpt6",
+        b"lpt7",
+        b"lpt8",
+        b"lpt9",
+        b"lpt\xc2\xb2",
+        b"lpt\xc2\xb3",
+        b"lpt\xc2\xb9",
+        b"clock$",
+        b"conin$",
+        b"conout$",
+    ];
+
     #[derive(Debug)]
     pub enum EntryNameError {
         ForbiddenPathTraversalComponent,
@@ -168,7 +209,10 @@ mod entryname {
         /// Unicode chars like U+0085 or RTLO, etc.
         ///
         /// Please also keep in mind that two different `EntryName` or returned
-        /// `PathBuf` may map to same path on OS (eg. Windows case insensitivity).
+        /// `PathBuf` may map to same path on OS (eg. Windows case
+        /// insensitivity; Windows trailing dots, whitespace (including
+        /// things like ogham space mark); zero-width unicode chars on
+        /// HFS+; etc.).
         ///
         /// The OS may not allow creating files with the returned `PathBuf` if
         /// it contains some forbidden characters (eg. Windows).
@@ -188,6 +232,7 @@ mod entryname {
         ///
         /// See `EntryName::from_path`.
         pub fn to_pathbuf(&self) -> Result<PathBuf, EntryNameError> {
+            check_os_indep_path_rules(&self.name)?;
             to_pathbuf_os(&self.name)
         }
 
@@ -240,28 +285,28 @@ mod entryname {
     fn to_pathbuf_os(bytes: &[u8]) -> Result<PathBuf, EntryNameError> {
         use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 
-        check_os_indep_path_rules(bytes)?;
         Ok(PathBuf::from(OsStr::from_bytes(bytes)))
     }
 
     #[cfg(target_family = "windows")]
     fn to_pathbuf_os(bytes: &[u8]) -> Result<PathBuf, EntryNameError> {
-        check_os_indep_path_rules(bytes)?;
-        if bytes.get(1) == Some(&b':') {
-            Err(EntryNameError::ForbiddenPathTraversalComponent)
-        } else {
-            let components = bytes.split(|b| *b == b'/');
-            components
-                .map(|component| {
-                    if is_invalid_os_indep_component(component) || component.contains(&b'\\') {
-                        Err(EntryNameError::InvalidPathComponentContent)
-                    } else {
-                        str::from_utf8(component)
-                            .map_err(|_| EntryNameError::InvalidPathComponentContent)
-                    }
-                })
-                .collect::<Result<PathBuf, EntryNameError>>()
+        // check windows specific forbidden bytes
+        if bytes
+            .iter()
+            .any(|b| WINDOWS_FORBIDDEN_PATH_BYTES.as_slice().contains(b))
+        {
+            return Err(EntryNameError::InvalidPathComponentContent);
         }
+        let components = bytes.split(|b| *b == b'/');
+        if components.clone().any(is_windows_forbidden_component) {
+            return Err(EntryNameError::InvalidPathComponentContent);
+        }
+        // convert to PathBuf
+        components
+            .map(|component| {
+                str::from_utf8(component).map_err(|_| EntryNameError::InvalidPathComponentContent)
+            })
+            .collect::<Result<PathBuf, EntryNameError>>()
     }
 
     fn to_normal_component_osstr(component: Component) -> Result<&OsStr, EntryNameError> {
@@ -313,6 +358,17 @@ mod entryname {
             || component.contains(&0)
             || (component == b".")
             || (component == b"..")
+    }
+
+    // https://googleprojectzero.blogspot.com/2016/02/the-definitive-guide-on-win32-to-nt.html
+    #[cfg(target_family = "windows")]
+    fn is_windows_forbidden_component(name: &[u8]) -> bool {
+        // strip everything after '.', ':' or ' '
+        let name = name.split(|b| *b == b'.').next().unwrap_or_default();
+        let name = name.split(|b| *b == b':').next().unwrap_or_default();
+        let name = name.split(|b| *b == b' ').next().unwrap_or_default();
+        let name = name.to_ascii_lowercase();
+        WINDOWS_FORBIDDEN_NAMES.contains(&name.as_slice())
     }
 }
 
