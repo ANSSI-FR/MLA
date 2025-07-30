@@ -15,6 +15,7 @@ use mla::{ArchiveReader, ArchiveWriter, TruncatedArchiveReader, entry::ArchiveEn
 use sha2::{Digest, Sha512};
 use std::collections::{HashMap, HashSet};
 use std::error;
+use std::ffi::OsStr;
 use std::fmt;
 use std::fs::{self, File, read_dir};
 use std::io::{self, BufReader, Read, Seek, Write};
@@ -454,6 +455,7 @@ impl ExtractFileNameMatcher {
 fn create_file<P1: AsRef<Path>>(
     output_dir: P1,
     entry_name: &EntryName,
+    zone_id: &Option<Vec<u8>>,
 ) -> Result<Option<(File, PathBuf)>, MlarError> {
     let output_dir_path = output_dir.as_ref();
     let entry_name_pathbuf = entry_name
@@ -490,16 +492,28 @@ fn create_file<P1: AsRef<Path>>(
             return Ok(None);
         }
     }
-    Ok(Some((
-        File::create(&extracted_path).map_err(|err| {
+
+    let created_file = File::create(&extracted_path).map_err(|err| {
+        eprintln!(
+            " [!] Unable to create \"{}\" ({err:?})",
+            escaped_path_to_string(&entry_name_pathbuf)
+        );
+        err
+    })?;
+
+    // Propagate zone identifier
+    if let Some(zone_id) = zone_id.as_ref() {
+        let zone_id_path = get_zone_identifier_path(&extracted_path)?;
+        fs::write(zone_id_path, zone_id).map_err(|err| {
             eprintln!(
-                " [!] Unable to create \"{}\" ({err:?})",
+                " [!] Unable to propagate zone identifier \"{}\" ({err:?})",
                 escaped_path_to_string(&entry_name_pathbuf)
             );
             err
-        })?,
-        extracted_path,
-    )))
+        })?;
+    }
+
+    Ok(Some((created_file, extracted_path)))
 }
 
 /// Wrapper with Write, to append data to a file
@@ -804,12 +818,55 @@ fn list(matches: &ArgMatches) -> Result<(), MlarError> {
     Ok(())
 }
 
+fn get_zone_identifier_path(orig_path: &Path) -> Result<PathBuf, MlarError> {
+    let mut zone_id_name = orig_path
+        .file_name()
+        .ok_or(MlarError::IO(io::Error::other(
+            "Internal error: should not have been called on a path without file_name",
+        )))?
+        .to_os_string();
+    zone_id_name.push(OsStr::new(":Zone.Identifier"));
+    let mut path_with_zone_id = orig_path.to_owned();
+    path_with_zone_id.set_file_name(zone_id_name);
+    Ok(path_with_zone_id)
+}
+
+#[cfg(target_family = "unix")]
+fn get_zone_identifier_os(_orig_path: &Path) -> Result<Option<Vec<u8>>, MlarError> {
+    Ok(None)
+}
+
+#[cfg(target_family = "windows")]
+fn get_zone_identifier_os(orig_path: &Path) -> Result<Option<Vec<u8>>, MlarError> {
+    use std::io::ErrorKind;
+
+    let zone_id_path = get_zone_identifier_path(orig_path)?;
+    match fs::read(zone_id_path) {
+        Ok(zone_id) => Ok(Some(zone_id)),
+        Err(e) => {
+            let err_kind = e.kind();
+            if err_kind == ErrorKind::NotFound || err_kind == ErrorKind::InvalidFilename {
+                Ok(None)
+            } else {
+                Err(io::Error::other("Failed to read zone identifier").into())
+            }
+        }
+    }
+}
+
+fn get_zone_identifier(path: &Path) -> Result<Option<Vec<u8>>, MlarError> {
+    get_zone_identifier_os(path)
+}
+
 fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
     let file_name_matcher = ExtractFileNameMatcher::from_matches(matches)?;
     let output_dir = Path::new(matches.get_one::<PathBuf>("outputdir").unwrap());
     let verbose = matches.get_flag("verbose");
 
     let mut mla = open_mla_file(matches)?;
+
+    let input_path = matches.get_one::<PathBuf>("input").unwrap();
+    let zone_id = get_zone_identifier(input_path)?;
 
     // Create the output directory, if it does not exist
     if !output_dir.exists() {
@@ -844,7 +901,7 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
         ));
         let mut export: HashMap<&EntryName, FileWriter> = HashMap::new();
         for entry_name in &entries_names {
-            match create_file(&output_dir, entry_name)? {
+            match create_file(&output_dir, entry_name, &zone_id)? {
                 Some((_file, path)) => {
                     export.insert(
                         entry_name,
@@ -894,7 +951,7 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
             }
             Ok(Some(subfile)) => subfile,
         };
-        let (mut extracted_file, _path) = match create_file(&output_dir, &entry_name)? {
+        let (mut extracted_file, _path) = match create_file(&output_dir, &entry_name, &zone_id)? {
             Some(file) => file,
             None => continue,
         };
