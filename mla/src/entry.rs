@@ -1,5 +1,5 @@
 //! Handling of archive entries and their name
-use std::io::{ErrorKind, Read, Seek, SeekFrom, Write};
+use std::io::{self, ErrorKind, Read, Seek, SeekFrom, Write};
 
 use crate::{MLADeserialize, MLASerialize, errors::Error, format::ArchiveEntryBlock};
 
@@ -498,6 +498,7 @@ impl<'a, T> ArchiveEntry<'a, T> {
 enum ArchiveEntryDataReaderState {
     // Remaining size
     InEntryContent(u64),
+    // underlying position is at a block header
     Ready,
     Finish,
 }
@@ -509,8 +510,8 @@ pub struct ArchiveEntryDataReader<'a, R> {
     state: ArchiveEntryDataReaderState,
     /// id of the File being read
     id: ArchiveEntryId,
-    /// position in `offsets` of the last offset used
-    current_offsets_index: usize,
+    /// index in `offsets_and_sizes` of the block to read at next ArchiveEntryDataReader.read() call
+    current_offsets_and_sizes_index: usize,
     /// List of offsets of continuous blocks corresponding to where the file can be read
     offsets_and_sizes: &'a [(u64, u64)],
 }
@@ -538,14 +539,14 @@ impl<'a, R: Read + Seek> ArchiveEntryDataReader<'a, R> {
             src,
             state: ArchiveEntryDataReaderState::Ready,
             id,
-            current_offsets_index: 1,
+            current_offsets_and_sizes_index: 1,
             offsets_and_sizes,
         })
     }
 
-    fn increment_current_offsets_index(&mut self) -> Result<(), Error> {
-        self.current_offsets_index += 1;
-        if self.current_offsets_index >= self.offsets_and_sizes.len() {
+    fn increment_current_offsets_and_sizes_index(&mut self) -> Result<(), Error> {
+        self.current_offsets_and_sizes_index += 1;
+        if self.current_offsets_and_sizes_index >= self.offsets_and_sizes.len() {
             Err(Error::WrongReaderState(
                 "[BlocksToFileReader] No more continuous blocks".to_string(),
             ))
@@ -555,59 +556,11 @@ impl<'a, R: Read + Seek> ArchiveEntryDataReader<'a, R> {
     }
 
     /// Move `self.src` to the next continuous block
-    fn move_to_block_at_current_offsets_index(&mut self) -> Result<(), Error> {
+    fn move_to_block_at_current_offsets_and_sizes_index(&mut self) -> Result<(), Error> {
         self.src.seek(SeekFrom::Start(
-            self.offsets_and_sizes[self.current_offsets_index].0,
+            self.offsets_and_sizes[self.current_offsets_and_sizes_index].0,
         ))?;
         Ok(())
-    }
-
-    // inefficient, we walk from start of entry
-    fn get_current_position_in_entry(&mut self) -> Result<u64, Error> {
-        let offsets_index_at_function_entry = self.current_offsets_index;
-        let start_offset = get_start_offset_in_src(self.offsets_and_sizes)?;
-        self.src.seek(SeekFrom::Start(start_offset))?;
-        self.current_offsets_index = 0;
-        let mut total = 0;
-        while self.current_offsets_index < offsets_index_at_function_entry {
-            let current_src_offset = self.offsets_and_sizes[self.current_offsets_index].0;
-            self.src.seek(SeekFrom::Start(current_src_offset))?;
-            let content_len = match ArchiveEntryBlock::from(&mut self.src)? {
-                ArchiveEntryBlock::EntryStart { .. } => Ok(0),
-                ArchiveEntryBlock::EntryContent { length, .. } => Ok(length),
-                ArchiveEntryBlock::EndOfEntry { .. } => Err(Error::WrongReaderState(
-                    "We shouldn't be at EndOfEntry".to_owned(),
-                )),
-                ArchiveEntryBlock::EndOfArchiveData => Err(Error::WrongReaderState(
-                    "We shouldn't be at EndOfArchiveData".to_owned(),
-                )),
-            }?;
-            total += content_len;
-            self.increment_current_offsets_index()?;
-            self.move_to_block_at_current_offsets_index()?;
-        }
-        let offset_in_content_chunk_at_function_entry = match self.state {
-            ArchiveEntryDataReaderState::InEntryContent(remaining) => {
-                if let ArchiveEntryBlock::EntryContent { length, .. } =
-                    ArchiveEntryBlock::from(&mut self.src)?
-                {
-                    let offset_in_content_chunk_at_function_entry = length - remaining;
-                    // restore position
-                    self.src.seek(SeekFrom::Current(u64_as_i64(
-                        offset_in_content_chunk_at_function_entry,
-                    )?))?;
-                    offset_in_content_chunk_at_function_entry
-                } else {
-                    return Err(Error::WrongReaderState(
-                        "We should be in an EntryContent".to_owned(),
-                    ));
-                }
-            }
-            ArchiveEntryDataReaderState::Ready => 0,
-            ArchiveEntryDataReaderState::Finish => 0,
-        };
-        total += offset_in_content_chunk_at_function_entry;
-        Ok(total)
     }
 }
 
@@ -619,18 +572,17 @@ impl<T: Read + Seek> Read for ArchiveEntryDataReader<'_, T> {
                 match ArchiveEntryBlock::from(&mut self.src)? {
                     ArchiveEntryBlock::EntryContent { length, id, .. } => {
                         if id != self.id {
-                            self.move_to_block_at_current_offsets_index()?;
+                            self.move_to_block_at_current_offsets_and_sizes_index()?;
                             return self.read(into);
                         } else {
                             let count = self.src.by_ref().take(length).read(into)?;
-                            self.increment_current_offsets_index()?;
                             let count_as_u64 = usize_as_u64(count)?;
                             (length - count_as_u64, count)
                         }
                     }
                     ArchiveEntryBlock::EndOfEntry { id, .. } => {
                         if id != self.id {
-                            self.move_to_block_at_current_offsets_index()?;
+                            self.move_to_block_at_current_offsets_and_sizes_index()?;
                             return self.read(into);
                         } else {
                             self.state = ArchiveEntryDataReaderState::Finish;
@@ -638,14 +590,11 @@ impl<T: Read + Seek> Read for ArchiveEntryDataReader<'_, T> {
                         }
                     }
                     ArchiveEntryBlock::EntryStart { id, .. } => {
-                        if id != self.id {
-                            self.move_to_block_at_current_offsets_index()?;
-                            return self.read(into);
+                        if id == self.id {
+                            self.increment_current_offsets_and_sizes_index()?;
                         }
-                        return Err(Error::WrongReaderState(
-                            "[BlocksToFileReader] Start with a wrong block type".to_string(),
-                        )
-                        .into());
+                        self.move_to_block_at_current_offsets_and_sizes_index()?;
+                        return self.read(into);
                     }
                     ArchiveEntryBlock::EndOfArchiveData => {
                         return Err(Error::WrongReaderState(
@@ -668,6 +617,7 @@ impl<T: Read + Seek> Read for ArchiveEntryDataReader<'_, T> {
             self.state = ArchiveEntryDataReaderState::InEntryContent(remaining);
         } else {
             // remaining is 0 (> never happens thanks to take)
+            self.current_offsets_and_sizes_index += 1;
             self.state = ArchiveEntryDataReaderState::Ready;
         }
         Ok(count)
@@ -675,129 +625,107 @@ impl<T: Read + Seek> Read for ArchiveEntryDataReader<'_, T> {
 }
 
 impl<T: Read + Seek> Seek for ArchiveEntryDataReader<'_, T> {
-    /// Not really efficient implementation because we don't maintain an index of each entry chunk size. If seeked beyond end of content, places cursor at the end.
-    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
         match pos {
             SeekFrom::Start(asked_seek_offset) => {
-                // walk each block of our entry from start and get its content length
-                let start_offset_in_src = get_start_offset_in_src(self.offsets_and_sizes)?;
-                self.src.seek(SeekFrom::Start(start_offset_in_src))?;
-                self.current_offsets_index = 0;
-                let mut total_skipped = 0;
-                let number_of_chunks = self.offsets_and_sizes.len();
-                // -2 because we don't want the last chunk (EndOfEntry)
-                let last_content_chunk_index =
-                    number_of_chunks.checked_sub(2).ok_or_else(|| {
-                        Error::WrongReaderState(
-                            "An entry should have at least 2 offsets in footer".to_owned(),
-                        )
-                    })?;
-                loop {
-                    if self.current_offsets_index > last_content_chunk_index {
-                        // we don't want to get to the point of reading EndOfEntry
-                        self.state = ArchiveEntryDataReaderState::Finish;
+                let mut sum = 0;
+                let mut found = None;
+                // look for block containing asked_seek_offset
+                for (index, (offset, size)) in self.offsets_and_sizes.iter().copied().enumerate() {
+                    sum += size;
+                    if sum > asked_seek_offset {
+                        // return found info and index
+                        found = Some((offset, size, index));
                         break;
-                    } else {
-                        let current_src_offset =
-                            self.offsets_and_sizes[self.current_offsets_index].0;
-                        self.src.seek(SeekFrom::Start(current_src_offset))?;
-                        match ArchiveEntryBlock::from(&mut self.src)? {
-                            ArchiveEntryBlock::EntryStart { .. } => {
-                                self.increment_current_offsets_index()?;
-                                self.move_to_block_at_current_offsets_index()?;
-                            }
-                            ArchiveEntryBlock::EntryContent { length, .. } => {
-                                if asked_seek_offset > total_skipped + length {
-                                    self.increment_current_offsets_index()?;
-                                    self.move_to_block_at_current_offsets_index()?;
-                                    total_skipped += length;
-                                } else {
-                                    let remaining_to_skip = asked_seek_offset - total_skipped;
-                                    self.src
-                                        .seek(SeekFrom::Current(u64_as_i64(remaining_to_skip)?))?;
-                                    total_skipped += remaining_to_skip;
-                                    let remaining_readable = length - remaining_to_skip;
-                                    self.state = if remaining_readable == 0 {
-                                        ArchiveEntryDataReaderState::Finish
-                                    } else {
-                                        ArchiveEntryDataReaderState::InEntryContent(
-                                            remaining_readable,
-                                        )
-                                    };
-                                    break;
-                                }
-                            }
-                            ArchiveEntryBlock::EndOfEntry { .. } => {
-                                return Err(Error::WrongReaderState(
-                                    "We shouldn't be at EndOfEntry".to_owned(),
-                                )
-                                .into());
-                            }
-                            ArchiveEntryBlock::EndOfArchiveData => {
-                                return Err(Error::WrongReaderState(
-                                    "We shouldn't be at EndOfArchiveData".to_owned(),
-                                )
-                                .into());
-                            }
-                        }
                     }
                 }
-                Ok(total_skipped)
+
+                if sum == asked_seek_offset {
+                    // we seeked to end offset
+                    let last_index = self.offsets_and_sizes.len() - 1;
+                    let (offset, size) = self.offsets_and_sizes[last_index];
+                    found = Some((offset, size, last_index));
+                }
+
+                if let Some((offset, size, index)) = found {
+                    self.src.seek(SeekFrom::Start(offset))?;
+                    self.state = ArchiveEntryDataReaderState::Ready;
+                    self.current_offsets_and_sizes_index = index;
+                    let mut v = Vec::new();
+                    let offset_from_block_start = usize::try_from(asked_seek_offset - (sum - size))
+                        .map_err(|_| io::Error::from(ErrorKind::InvalidInput))?;
+                    v.resize(offset_from_block_start, 0);
+                    self.read_exact(&mut v)?;
+                    Ok(asked_seek_offset)
+                } else {
+                    Err(ErrorKind::InvalidInput.into())
+                }
             }
             SeekFrom::End(asked_seek_offset) => {
-                // manually position ourself at end and call self.seek(SeekFrom::Current(asked_seek_offset))
-                let number_of_chunks = self.offsets_and_sizes.len();
-                // -2 because we don't want the last chunk (EndOfEntry)
-                let last_content_chunk_index =
-                    number_of_chunks.checked_sub(2).ok_or_else(|| {
-                        Error::WrongReaderState(
-                            "An entry should have at least 2 offsets in footer".to_owned(),
-                        )
-                    })?;
-                let last_content_chunk_offset = self
-                    .offsets_and_sizes
-                    .get(last_content_chunk_index)
-                    .ok_or_else(|| {
-                        Error::WrongReaderState(
-                            "An entry should have at least 2 offsets in footer".to_owned(),
-                        )
-                    })?
-                    .0;
-                self.src.seek(SeekFrom::Start(last_content_chunk_offset))?;
-                match ArchiveEntryBlock::from(&mut self.src)? {
-                    ArchiveEntryBlock::EntryStart { .. } => {
-                        assert_eq!(number_of_chunks, 2);
-                        if asked_seek_offset > 0 {
-                            self.seek(SeekFrom::Start(0))
-                        } else {
-                            Err(ErrorKind::InvalidInput.into())
-                        }
+                let offset_from_end = 0u64
+                    .checked_add_signed(-asked_seek_offset)
+                    .ok_or(io::Error::from(ErrorKind::InvalidInput))?;
+                let mut sum = 0;
+                let mut found = None;
+                // look for block containing asked_seek_offset from end (.rev())
+                for (index, (offset, size)) in
+                    self.offsets_and_sizes.iter().copied().enumerate().rev()
+                {
+                    sum += size;
+                    if sum > offset_from_end {
+                        // return found info and index
+                        found = Some((offset, size, index));
+                        break;
                     }
-                    ArchiveEntryBlock::EntryContent { length, .. } => {
-                        self.src.seek(SeekFrom::Current(u64_as_i64(length)?))?;
-                        self.state = ArchiveEntryDataReaderState::InEntryContent(0);
-                        self.current_offsets_index = last_content_chunk_index;
-                        self.seek(SeekFrom::Current(asked_seek_offset))
-                    }
-                    ArchiveEntryBlock::EndOfEntry { .. } => Err(Error::WrongReaderState(
-                        "We shouldn't be at EndOfEntry".to_owned(),
-                    )
-                    .into()),
-                    ArchiveEntryBlock::EndOfArchiveData => Err(Error::WrongReaderState(
-                        "We shouldn't be at EndOfArchiveData".to_owned(),
-                    )
-                    .into()),
+                }
+
+                if sum == offset_from_end {
+                    // we seeked to start
+                    let (offset, size) = self.offsets_and_sizes[0];
+                    found = Some((offset, size, 0));
+                }
+
+                if let Some((offset, _size, index)) = found {
+                    self.src.seek(SeekFrom::Start(offset))?;
+                    self.state = ArchiveEntryDataReaderState::Ready;
+                    self.current_offsets_and_sizes_index = index;
+                    let mut v = Vec::new();
+                    let offset_from_block_start = usize::try_from(sum - offset_from_end)
+                        .map_err(|_| io::Error::from(ErrorKind::InvalidInput))?;
+                    v.resize(offset_from_block_start, 0);
+                    self.read_exact(&mut v)?;
+
+                    Ok(self.offsets_and_sizes.iter().map(|p| p.1).sum())
+                } else {
+                    Err(ErrorKind::InvalidInput.into())
                 }
             }
-            SeekFrom::Current(asked_seek_offset) => {
-                // inefficient
-                let current_position_in_entry = self.get_current_position_in_entry()?;
-                // inefficient too, we walk again from start
-                let new_position_in_entry = current_position_in_entry
-                    .checked_add_signed(asked_seek_offset)
-                    .ok_or(ErrorKind::InvalidInput)?;
-                self.seek(SeekFrom::Start(new_position_in_entry))
-            }
+            SeekFrom::Current(asked_seek_offset) => match self.state {
+                ArchiveEntryDataReaderState::InEntryContent(remaining) => {
+                    let offset_from_start = self.offsets_and_sizes
+                        [..self.current_offsets_and_sizes_index + 1]
+                        .iter()
+                        .map(|p| p.1)
+                        .sum::<u64>()
+                        - remaining;
+                    let new_pos = offset_from_start
+                        .checked_add_signed(asked_seek_offset)
+                        .ok_or(io::Error::from(ErrorKind::InvalidInput))?;
+                    self.seek(SeekFrom::Start(new_pos))
+                }
+                ArchiveEntryDataReaderState::Ready => {
+                    let offset_from_start = self.offsets_and_sizes
+                        [..self.current_offsets_and_sizes_index]
+                        .iter()
+                        .map(|p| p.1)
+                        .sum::<u64>();
+                    let new_pos = offset_from_start
+                        .checked_add_signed(asked_seek_offset)
+                        .ok_or(io::Error::from(ErrorKind::InvalidInput))?;
+                    self.seek(SeekFrom::Start(new_pos))
+                }
+                ArchiveEntryDataReaderState::Finish => self.seek(SeekFrom::End(asked_seek_offset)),
+            },
         }
     }
 }
@@ -814,10 +742,6 @@ fn get_start_offset_in_src(offsets_and_sizes: &[(u64, u64)]) -> Result<u64, Erro
 
 fn usize_as_u64(n: usize) -> Result<u64, Error> {
     u64::try_from(n).map_err(|_| Error::WrongWriterState("Unsupported arch".into()))
-}
-
-fn u64_as_i64(n: u64) -> Result<i64, Error> {
-    i64::try_from(n).map_err(|_| Error::WrongReaderState("Too big offset asked".into()))
 }
 
 #[cfg(test)]
@@ -924,10 +848,7 @@ mod tests {
         reader.read_to_end(&mut output).unwrap();
         assert_eq!(output, &[]);
         output.clear();
-        reader.seek(SeekFrom::End(1)).unwrap();
-        reader.read_to_end(&mut output).unwrap();
-        assert_eq!(output, &[]);
-        output.clear();
+        assert!(reader.seek(SeekFrom::End(1)).is_err());
         reader.seek(SeekFrom::End(-1)).unwrap();
         reader.read_to_end(&mut output).unwrap();
         assert_eq!(output, &[8]);
@@ -940,6 +861,15 @@ mod tests {
         reader.read_to_end(&mut output).unwrap();
         assert_eq!(output, &[4, 5, 6, 7, 8]);
         output.clear();
+        reader.seek(SeekFrom::Start(0)).unwrap();
+        let mut buf = [0; 4];
+        reader.read_exact(&mut buf).unwrap();
+        #[allow(clippy::seek_from_current)]
+        reader.seek(SeekFrom::Current(0)).unwrap();
+        reader.read_to_end(&mut output).unwrap();
+        assert_eq!(output, &[5, 6, 7, 8]);
+        output.clear();
+        assert!(reader.seek(SeekFrom::End(-9)).is_err());
     }
 
     #[test]
