@@ -751,8 +751,8 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
             },
             files_info: HashMap::new(),
             ids_info: HashMap::new(),
-            next_id: 0,
-            current_id: 0,
+            next_id: ArchiveEntryId(0),
+            current_id: ArchiveEntryId(0),
         })
     }
 
@@ -859,7 +859,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
 
         // Create ID for this file
         let id = self.next_id;
-        self.next_id += 1;
+        self.next_id = ArchiveEntryId(self.next_id.0 + 1);
         self.current_id = id;
         self.files_info.insert(name.clone(), id);
 
@@ -1700,7 +1700,7 @@ pub(crate) mod tests {
     #[test]
     fn dump_block() {
         let mut buf = Vec::new();
-        let id = 0;
+        let id = ArchiveEntryId(0);
         let hash = Sha256Hash::default();
 
         // std::io::Empty is used because a type with Read is needed

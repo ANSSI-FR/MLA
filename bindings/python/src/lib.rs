@@ -10,7 +10,7 @@ use mla::{
     config::{ArchiveReaderConfig, ArchiveWriterConfig, DEFAULT_COMPRESSION_LEVEL},
     crypto::mlakey::{MLAPrivateKey, MLAPublicKey},
 };
-use mla::entry::EntryName as RustEntryName;
+use mla::entry::{ArchiveEntryId, EntryName as RustEntryName};
 use pyo3::{
     create_exception,
     exceptions::{PyKeyError, PyRuntimeError, PyTypeError},
@@ -717,7 +717,7 @@ impl ExplicitWriter {
 
     fn start_entry(&mut self, key: RustEntryName) -> Result<u64, mla::errors::Error> {
         match self {
-            ExplicitWriter::FileWriter(writer) => writer.start_entry(key),
+            ExplicitWriter::FileWriter(writer) => Ok(writer.start_entry(key)?.0),
         }
     }
 
@@ -729,14 +729,14 @@ impl ExplicitWriter {
     ) -> Result<(), mla::errors::Error> {
         match self {
             ExplicitWriter::FileWriter(writer) => {
-                writer.append_entry_content(id, size as u64, data)
+                writer.append_entry_content(ArchiveEntryId(id), size as u64, data)
             }
         }
     }
 
     fn end_entry(&mut self, id: u64) -> Result<(), mla::errors::Error> {
         match self {
-            ExplicitWriter::FileWriter(writer) => writer.end_entry(id),
+            ExplicitWriter::FileWriter(writer) => writer.end_entry(ArchiveEntryId(id)),
         }
     }
 }
