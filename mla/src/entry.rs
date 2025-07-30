@@ -17,11 +17,11 @@ mod entryname {
     use crate::{FILENAME_MAX_SIZE, helpers::mla_percent_escape};
 
     /// Allowed bytes in `EntryName::to_pathbuf_escaped_string` output. Documented there.
-    pub static ENTRY_NAME_PATHBUF_ESCAPED_STRING_ALLOWED_BYTES: [u8; 64] =
-        *b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789./";
+    pub static ENTRY_NAME_PATHBUF_ESCAPED_STRING_ALLOWED_BYTES: [u8; 66] =
+        *b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.-_/";
     /// Allowed bytes in `EntryName::raw_content_to_escaped_string` output. Documented there.
-    pub static ENTRY_NAME_RAW_CONTENT_ALLOWED_BYTES: [u8; 63] =
-        *b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.";
+    pub static ENTRY_NAME_RAW_CONTENT_ALLOWED_BYTES: [u8; 65] =
+        *b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.-_";
 
     // https://github.com/MicrosoftDocs/win32/blob/63e70903d18b0637e62ffab6656c4a388ef0f2ce/desktop-src/FileIO/naming-a-file.md
     #[cfg(target_family = "windows")]
