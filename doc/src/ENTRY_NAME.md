@@ -45,13 +45,13 @@ To prevent some security risks, proposed string representations of entry names
 are given with `EntryName::to_pathbuf_escaped_string` and
 `EntryName::raw_content_to_escaped_string` and are used by `mlar`.
 
-Other representations may be preferred depending on its usage context.
+Other representations may be preferred depending on their usage context.
 
 The idea of this representation is that unwanted bytes are replaced with a
 percent and their hexadecimal representation. Details follow.
 
 For an entry name interpreted as raw bytes, below generic escaping is applied
-with ASCII alphanumeric chars and ASCII dot as preserved bytes. This is used by
+with ASCII alphanumeric, dot, dash and underscore as preserved bytes. This is used by
 `mlar list --raw-escaped-names`.
 
 For an entry name interpreted as a path, below generic escaping is applied
