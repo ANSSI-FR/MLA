@@ -5,7 +5,20 @@ use crate::{MLADeserialize, MLASerialize, errors::Error, format::ArchiveEntryBlo
 
 /// Represents a unique identifier for an entry in the archive.
 /// Used to maintain references to entries while writing an archive.
-pub type ArchiveEntryId = u64;
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+pub struct ArchiveEntryId(pub u64);
+
+impl<W: Write> MLASerialize<W> for ArchiveEntryId {
+    fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
+        self.0.serialize(dest)
+    }
+}
+
+impl<R: Read> MLADeserialize<R> for ArchiveEntryId {
+    fn deserialize(src: &mut R) -> Result<Self, Error> {
+        Ok(ArchiveEntryId(u64::deserialize(src)?))
+    }
+}
 
 mod entryname {
     use std::{
@@ -813,7 +826,7 @@ mod tests {
     fn create_normal_entry() -> (std::io::Cursor<Vec<u8>>, &'static [u64]) {
         // Create several blocks
         let mut buf = Vec::new();
-        let id = 0;
+        let id = ArchiveEntryId(0);
         let hash = Sha256Hash::default();
 
         let mut block = ArchiveEntryBlock::EntryStart::<&[u8]> {
