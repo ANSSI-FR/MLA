@@ -799,6 +799,33 @@ mod tests {
         (std::io::Cursor::new(buf), offsets)
     }
 
+    fn create_empty_entry() -> (std::io::Cursor<Vec<u8>>, &'static [(u64, u64)]) {
+        // Create several blocks
+        let mut buf = Vec::new();
+        let id = ArchiveEntryId(0);
+        let hash = Sha256Hash::default();
+
+        let mut block = ArchiveEntryBlock::EntryStart::<&[u8]> {
+            id,
+            name: EntryName::from_arbitrary_bytes(b"empty").unwrap(),
+            opts: Opts,
+        };
+        block.dump(&mut buf).unwrap();
+
+        // std::io::Empty is used because a type with Read is needed
+        ArchiveEntryBlock::EndOfEntry::<Empty> {
+            id,
+            hash,
+            opts: Opts,
+        }
+        .dump(&mut buf)
+        .unwrap();
+
+        let offsets = [(0, 0), (22, 0)].as_slice();
+
+        (std::io::Cursor::new(buf), offsets)
+    }
+
     #[test]
     fn blocks_to_file() {
         let (mut data_source, offsets) = create_normal_entry();
@@ -933,6 +960,46 @@ mod tests {
         let mut buf = Vec::new();
         reader.read_to_end(&mut buf).unwrap();
         assert_eq!(reader.state, ArchiveEntryDataReaderState::Finish);
+    }
+
+    #[test]
+    fn seek_internal_state_consistency_empty_entry() {
+        let (mut data_source, offsets) = create_empty_entry();
+        let mut reader = ArchiveEntryDataReader::new(&mut data_source, offsets)
+            .expect("Failed to create ArchiveEntryDataReader");
+
+        // Seek to start (offset 0) — should be Ready or just before content reading
+        reader.seek(std::io::SeekFrom::Start(0)).unwrap();
+        assert!(
+            matches!(reader.state, ArchiveEntryDataReaderState::Ready),
+            "Expected state Ready after SeekFrom::Start(0), got {:?}",
+            reader.state
+        );
+
+        // Seek to end (offset equal to total content length, 0 here)
+        reader.seek(std::io::SeekFrom::Start(0)).unwrap();
+        assert!(
+            matches!(
+                reader.state,
+                ArchiveEntryDataReaderState::Ready | ArchiveEntryDataReaderState::Finish
+            ),
+            "Expected state Ready or Finish after seeking to end, got {:?}",
+            reader.state
+        );
+
+        // Seek beyond end (should error)
+        assert!(reader.seek(std::io::SeekFrom::Start(2)).is_err());
+
+        // Seek to end with SeekFrom::End(0) should result in Finish or Ready
+        reader.seek(std::io::SeekFrom::End(0)).unwrap();
+        assert!(
+            matches!(
+                reader.state,
+                ArchiveEntryDataReaderState::Ready | ArchiveEntryDataReaderState::Finish
+            ),
+            "Expected Ready or Finish after SeekFrom::End(0), got {:?}",
+            reader.state
+        );
     }
 
     #[test]
