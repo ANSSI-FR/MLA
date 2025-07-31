@@ -38,6 +38,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "afl"
+version = "0.15.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3d197cb6a514b7dffadc7ccab0d1215bed207bcd7532306fe433678541bc3a9"
+dependencies = [
+ "home",
+ "libc",
+ "rustc_version",
+ "xdg",
+]
+
+[[package]]
 name = "aho-corasick"
 version = "1.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -778,6 +790,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "home"
+version = "0.5.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "589533453244b0995c858700322199b2becb13b627df2851f64a2775d024abcf"
+dependencies = [
+ "windows-sys",
+]
+
+[[package]]
 name = "hpke"
 version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1043,6 +1064,14 @@ dependencies = [
 name = "mla-bindings-c"
 version = "1.0.0"
 dependencies = [
+ "mla 2.0.0",
+]
+
+[[package]]
+name = "mla-fuzz-afl"
+version = "0.2.0"
+dependencies = [
+ "afl",
  "mla 2.0.0",
 ]
 
@@ -1757,6 +1786,12 @@ dependencies = [
  "libc",
  "rustix",
 ]
+
+[[package]]
+name = "xdg"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2fb433233f2df9344722454bc7e96465c9d03bff9d77c248f9e7523fe79585b5"
 
 [[package]]
 name = "zerocopy"
