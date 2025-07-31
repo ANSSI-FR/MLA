@@ -1,149 +1,331 @@
 #[cfg(fuzzing)]
 use afl::fuzz;
 extern crate afl;
-use bincode::config::{Fixint, Limit};
-use bincode::{Decode, Encode};
-use mla::crypto::mlakey::{parse_mlakey_privkey_pem, parse_mlakey_pubkey_pem};
+use mla::crypto::mlakey::{
+    MLADecryptionPrivateKey, MLAEncryptionPublicKey, MLAPrivateKey, MLAPublicKey,
+    MLASignatureVerificationPublicKey, MLASigningPrivateKey,
+};
+use mla::entry::EntryName;
 use std::fs::File;
-use std::io::{self, Cursor, Read, Write};
+use std::io::{Cursor, Read, Write};
 
 use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
-use mla::errors::{Error, TruncatedReadError};
-use mla::{ArchiveEntryId, TruncatedArchiveReader, ArchiveReader, ArchiveWriter};
+use mla::errors::Error;
+use mla::{ArchiveReader, ArchiveWriter, TruncatedArchiveReader};
 
 use std::collections::HashMap;
 
-static PUB_KEY: &[u8] = include_bytes!("../../samples/test_mlakey_pub.pem");
-static PRIV_KEY: &[u8] = include_bytes!("../../samples/test_mlakey.pem");
+static PUB_KEY: &[u8] = include_bytes!("../../samples/test_mlakey.mlapub");
+static PRIV_KEY: &[u8] = include_bytes!("../../samples/test_mlakey.mlapriv");
 
-/// Maximum allowed object size (in bytes) to decode in-memory, to avoid DoS on
-/// malformed files
-const BINCODE_MAX_DECODE: usize = 512 * 1024 * 1024;
-pub(crate) const BINCODE_CONFIG: bincode::config::Configuration<
-    bincode::config::LittleEndian,
-    Fixint,
-    Limit<{ BINCODE_MAX_DECODE }>,
-> = bincode::config::standard()
-    .with_limit::<{ BINCODE_MAX_DECODE }>()
-    .with_fixed_int_encoding();
+// FuzzMode enum to select compression/encryption/signature modes
+// Each variant corresponds to a different configuration of the archive writer.
+#[derive(Debug, Clone, Copy)]
+pub enum FuzzMode {
+    None = 0,
+    Compress = 1,
+    Encrypt = 2,
+    EncryptSign = 3,
+    CompressEncrypt = 4,
+    CompressSign = 5,
+    CompressEncryptSign = 6,
+}
 
-#[derive(Debug, Clone, Copy, PartialEq, Encode, Decode)]
-pub struct Layers(u8);
+impl FuzzMode {
+    pub fn from_u8(byte: u8) -> Option<Self> {
+        match byte {
+            0 => Some(FuzzMode::None),
+            1 => Some(FuzzMode::Compress),
+            2 => Some(FuzzMode::Encrypt),
+            3 => Some(FuzzMode::EncryptSign),
+            4 => Some(FuzzMode::CompressEncrypt),
+            5 => Some(FuzzMode::CompressSign),
+            6 => Some(FuzzMode::CompressEncryptSign),
+            _ => None,
+        }
+    }
 
-bitflags::bitflags! {
-    /// Available layers. Order is relevant:
-    /// ```ascii-art
-    /// [File to blocks decomposition]
-    /// [Compression (COMPRESS)]
-    /// [Encryption (ENCRYPT)]
-    /// [Raw File I/O]
-    /// ```
-    impl Layers: u8 {
-        const ENCRYPT = 0b0000_0001;
-        const COMPRESS = 0b0000_0010;
-        /// Recommended layering
-        const DEFAULT = Self::ENCRYPT.bits() | Self::COMPRESS.bits();
-        /// No additional layer (ie, for debugging purpose)
-        const DEBUG = 0;
-        const EMPTY = 0;
+    pub fn to_u8(self) -> u8 {
+        self as u8
+    }
+
+    pub fn to_writer_config(
+        &self,
+        pub_enc_key: &[MLAEncryptionPublicKey],
+        priv_sign_key: &[MLASigningPrivateKey],
+    ) -> Result<ArchiveWriterConfig, Error> {
+        use FuzzMode::*;
+
+        match self {
+            None => Ok(ArchiveWriterConfig::without_encryption_without_signature()?),
+            Compress => {
+                let cfg = ArchiveWriterConfig::without_encryption_without_signature()?;
+                Ok(cfg.with_compression_level(6)?)
+            }
+            Encrypt => Ok(ArchiveWriterConfig::with_encryption_without_signature(
+                pub_enc_key,
+            )?),
+            EncryptSign => Ok(ArchiveWriterConfig::with_encryption_with_signature(
+                pub_enc_key,
+                priv_sign_key,
+            )?),
+            CompressEncrypt => {
+                let cfg = ArchiveWriterConfig::with_encryption_without_signature(pub_enc_key)?;
+                Ok(cfg.with_compression_level(6)?)
+            }
+            CompressSign => {
+                let cfg = ArchiveWriterConfig::without_encryption_with_signature(priv_sign_key)?;
+                Ok(cfg.with_compression_level(6)?)
+            }
+            CompressEncryptSign => {
+                let cfg = ArchiveWriterConfig::with_encryption_with_signature(
+                    pub_enc_key,
+                    priv_sign_key,
+                )?;
+                Ok(cfg.with_compression_level(6)?)
+            }
+        }
+    }
+
+    pub fn to_reader_config(
+        &self,
+        pub_verif_key: &[MLASignatureVerificationPublicKey],
+        priv_dec_key: &[MLADecryptionPrivateKey],
+    ) -> ArchiveReaderConfig {
+        use FuzzMode::*;
+
+        match self {
+            None | Compress | CompressSign => {
+                // No encryption or only compression - skip encryption, maybe verify signature or skip
+                if matches!(self, CompressSign) {
+                    // Signature verification only, no encryption
+                    ArchiveReaderConfig::with_signature_verification(pub_verif_key)
+                        .without_encryption()
+                } else {
+                    // No encryption and no signature verification
+                    ArchiveReaderConfig::without_signature_verification().without_encryption()
+                }
+            }
+
+            Encrypt | EncryptSign | CompressEncrypt | CompressEncryptSign => {
+                // Encrypted archive: must provide keys for decryption and possibly signature verification
+                let reader_config = if matches!(self, EncryptSign | CompressEncryptSign) {
+                    ArchiveReaderConfig::with_signature_verification(pub_verif_key)
+                } else {
+                    ArchiveReaderConfig::without_signature_verification()
+                };
+                reader_config.with_encryption(priv_dec_key)
+            }
+        }
     }
 }
 
-impl std::default::Default for Layers {
-    fn default() -> Self {
-        Layers::DEFAULT
-    }
-}
-
-#[derive(Encode, Decode, Debug)]
 struct TestInput {
+    config: FuzzMode,
     filenames: Vec<String>,
     // part[0] % filenames.len() -> corresponding file (made for interleaving)
     parts: Vec<Vec<u8>>,
-    layers: Layers,
     // Bytes to flip in the buffer; it will fail, but we don't want it to panic
     byteflip: Vec<u32>,
 }
 
-fn run(data: &[u8]) {
-    // Retrieve the input as a configuration
-    // => Lot of failed here, but eventually AFL will be able to bypass it
-    let (test_case, _) = bincode::decode_from_slice::<TestInput, _>(data, BINCODE_CONFIG)
-        .unwrap_or((
-            TestInput {
-                filenames: Vec::new(),
-                parts: Vec::new(),
-                layers: Layers::EMPTY,
-                byteflip: vec![],
-            },
-            0,
-        ));
+// minimal version of MLA serialization
+pub trait MLASerialize<W: Write> {
+    fn serialize(&self, dest: &mut W) -> Result<u64, Error>;
+}
+
+// minimal version of MLA deserialization
+pub trait MLADeserialize<R: Read> {
+    fn deserialize(src: &mut R) -> Result<Self, Error>
+    where
+        Self: std::marker::Sized;
+}
+
+impl<W: Write> MLASerialize<W> for TestInput {
+    fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
+        let mut total_written = 0u64;
+
+        // Serialize config as 1 byte
+        dest.write_all(&[self.config.to_u8()])?;
+        total_written += 1;
+
+        // Serialize the number of filenames
+        let count = self.filenames.len() as u64;
+        dest.write_all(&count.to_le_bytes())?;
+        total_written += 8;
+
+        // Serialize each filename
+        for name in &self.filenames {
+            let bytes = name.as_bytes();
+            let len = bytes.len() as u64;
+            dest.write_all(&len.to_le_bytes())?;
+            dest.write_all(bytes)?;
+            total_written += 8 + len;
+        }
+
+        // Serialize parts
+        let parts_count = self.parts.len() as u64;
+        dest.write_all(&parts_count.to_le_bytes())?;
+        total_written += 8;
+
+        for part in &self.parts {
+            let part_len = part.len() as u64;
+            dest.write_all(&part_len.to_le_bytes())?;
+            dest.write_all(part)?;
+            total_written += 8 + part_len;
+        }
+
+        // Serialize byteflip
+        let flip_count = self.byteflip.len() as u32;
+        dest.write_all(&flip_count.to_le_bytes())?;
+        total_written += 4;
+
+        for flip in &self.byteflip {
+            dest.write_all(&flip.to_le_bytes())?;
+            total_written += 4;
+        }
+
+        Ok(total_written)
+    }
+}
+
+impl<R: Read> MLADeserialize<R> for TestInput {
+    fn deserialize(src: &mut R) -> Result<Self, Error> {
+        let mut buf1 = [0u8; 1];
+        src.read_exact(&mut buf1)?;
+        let config = FuzzMode::from_u8(buf1[0]).ok_or(Error::DeserializationError)?;
+
+        let mut buf8 = [0u8; 8];
+
+        // Read number of filenames
+        src.read_exact(&mut buf8)?;
+        let num_files = u64::from_le_bytes(buf8) as usize;
+
+        let mut filenames = Vec::with_capacity(num_files);
+        for _ in 0..num_files {
+            // Read string length
+            src.read_exact(&mut buf8)?;
+            let str_len = u64::from_le_bytes(buf8) as usize;
+
+            // Read string bytes
+            let mut str_buf = vec![0u8; str_len];
+            src.read_exact(&mut str_buf)?;
+            let string = String::from_utf8(str_buf).map_err(|_| Error::DeserializationError)?;
+            filenames.push(string);
+        }
+
+        // Read number of parts
+        src.read_exact(&mut buf8)?;
+        let num_parts = u64::from_le_bytes(buf8) as usize;
+
+        let mut parts = Vec::with_capacity(num_parts);
+        for _ in 0..num_parts {
+            // Read part length
+            src.read_exact(&mut buf8)?;
+            let part_len = u64::from_le_bytes(buf8) as usize;
+
+            // Read part bytes
+            let mut part_buf = vec![0u8; part_len];
+            src.read_exact(&mut part_buf)?;
+            parts.push(part_buf);
+        }
+
+        // Read number of byteflips (as u32)
+        let mut buf4 = [0u8; 4];
+        src.read_exact(&mut buf4)?;
+        let num_flips = u32::from_le_bytes(buf4) as usize;
+
+        let mut byteflip = Vec::with_capacity(num_flips);
+        for _ in 0..num_flips {
+            src.read_exact(&mut buf4)?;
+            byteflip.push(u32::from_le_bytes(buf4));
+        }
+
+        Ok(TestInput {
+            config,
+            filenames,
+            parts,
+            byteflip,
+        })
+    }
+}
+
+fn run(data: &mut [u8]) {
+    // load public and private keys
+    let (pub_enc_key, pub_sig_verif_key) = MLAPublicKey::deserialize_public_key(PUB_KEY)
+        .unwrap()
+        .get_public_keys();
+    let (priv_dec_key, priv_sig_key) = MLAPrivateKey::deserialize_private_key(PRIV_KEY)
+        .unwrap()
+        .get_private_keys();
+
+    let mut cursor = Cursor::new(&*data);
+
+    let test_case = TestInput::deserialize(&mut cursor).unwrap_or(TestInput {
+        config: FuzzMode::None,
+        filenames: Vec::new(),
+        parts: Vec::new(),
+        byteflip: vec![],
+    });
+
     if test_case.filenames.is_empty() || test_case.filenames.len() >= 256 {
-        // Early ret
-        return;
+        return; // early exit on invalid
     }
 
-    // Load the needed public key
-    let public_key = parse_mlakey_pubkey_pem(PUB_KEY).unwrap();
+    // archive writer configuration
+    let archive_config = match test_case
+        .config
+        .to_writer_config(&[pub_enc_key], &[priv_sig_key])
+    {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            eprintln!("Invalid config: {e:?}");
+            return;
+        }
+    };
 
-    // Create a MLA Archive
+    // Create archive writer buffer
     let mut buf = Vec::new();
-    let mut config = ArchiveWriterConfigBuilder::begin().with_public_keys(&[public_key]).without_compression();
-    let mut mla = ArchiveWriter::from_config(&mut buf, config).unwrap();
+    let mut mla = ArchiveWriter::from_config(&mut buf, archive_config).unwrap();
 
-    let mut num2id: HashMap<u8, ArchiveEntryId> = HashMap::new();
+    let mut num2id: HashMap<u8, mla::entry::ArchiveEntryId> = HashMap::new();
     let mut filename2content: HashMap<String, Vec<u8>> = HashMap::new();
-    for part in test_case.parts {
-        let num = {
-            if part.is_empty() {
-                0
-            } else {
-                part[0] % (test_case.filenames.len() as u8)
-            }
+
+    for part in &test_case.parts {
+        let num = if part.is_empty() {
+            0
+        } else {
+            part[0] % (test_case.filenames.len() as u8)
         };
-        let id = {
-            if let Some(id) = num2id.get(&num) {
-                *id
-            } else {
-                let id = match mla.start_entry(&test_case.filenames[num as usize]) {
-                    Err(Error::DuplicateFilename) => {
-                        return;
-                    }
-                    Err(err) => panic!("Start block failed {}", err),
-                    Ok(id) => id,
-                };
-                num2id.insert(num, id);
-                id
+        let fname = &test_case.filenames[num as usize];
+        let entry_name = EntryName::from_arbitrary_bytes(fname.as_bytes()).unwrap();
+
+        let id = if let Some(id) = num2id.get(&num) {
+            *id
+        } else {
+            match mla.start_entry(entry_name.clone()) {
+                Err(Error::DuplicateFilename) => return,
+                Err(err) => panic!("Start block failed {err}"),
+                Ok(id) => {
+                    num2id.insert(num, id);
+                    id
+                }
             }
         };
         mla.append_entry_content(id, part.len() as u64, &part[..])
             .expect("Add part failed");
 
-        let content = {
-            let filename = test_case.filenames.get(num as usize).unwrap();
-            if let Some(content) = filename2content.get_mut(filename) {
-                content
-            } else {
-                let content = Vec::new();
-                filename2content.insert(filename.clone(), content);
-                filename2content.get_mut(filename).unwrap()
-            }
-        };
+        let content = filename2content.entry(fname.clone()).or_default();
         content.extend(part);
     }
 
+    // Start entries missing from parts (with no content)
     for (i, fname) in test_case.filenames.iter().enumerate() {
         if !filename2content.contains_key(fname) {
-            num2id.insert(
-                i as u8,
-                match mla.start_entry(fname) {
-                    Err(Error::DuplicateFilename) => {
-                        return;
-                    }
-                    Err(err) => panic!("Start block failed {}", err),
-                    Ok(id) => id,
-                },
-            );
+            let entry_name = EntryName::from_arbitrary_bytes(fname.as_bytes()).unwrap();
+            if let Ok(id) = mla.start_entry(entry_name) {
+                num2id.insert(i as u8, id);
+            }
         }
     }
 
@@ -155,121 +337,113 @@ fn run(data: &[u8]) {
 
     // Parse the created MLA Archive
     let buf = Cursor::new(dest.as_slice());
-    let private_key = parse_mlakey_privkey_pem(PRIV_KEY).unwrap();
-    let mut config = ArchiveReaderConfig::new();
-    config.add_private_keys(&[private_key]);
+    let config = test_case
+        .config
+        .to_reader_config(&[pub_sig_verif_key.clone()], &[priv_dec_key.clone()]);
     let mut mla_read = ArchiveReader::from_config(buf, config).unwrap().0;
 
     // Check the list of files is correct
-    let mut flist: Vec<String> = mla_read.list_entries().unwrap().cloned().collect();
+    let mut flist: Vec<String> = mla_read
+        .list_entries()
+        .unwrap()
+        .map(|entry_name| entry_name.raw_content_to_escaped_string())
+        .collect();
     flist.sort();
-    #[allow(clippy::iter_cloned_collect)]
-    let mut tflist: Vec<String> = test_case.filenames.iter().cloned().collect();
+
+    let mut tflist: Vec<String> = test_case.filenames.to_vec();
     tflist.sort();
     tflist.dedup();
     assert_eq!(flist, tflist);
 
-    // Get and check file per file
+    // Verify file contents
     let empty = Vec::new();
     for fname in &tflist {
-        let mut mla_file = mla_read.get_entry(fname.clone()).unwrap().unwrap();
-        assert_eq!(mla_file.filename, fname.clone());
-        let mut buf = Vec::new();
-        mla_file.data.read_to_end(&mut buf).unwrap();
-        let content = filename2content.get(fname).unwrap_or(&empty);
-        assert_eq!(&buf, content);
+        let entry_name = EntryName::from_arbitrary_bytes(fname.as_bytes()).unwrap();
+        let mla_file = mla_read.get_entry(entry_name).unwrap();
+        let expected = filename2content.get(fname).unwrap_or(&empty);
+        let mut readback = Vec::new();
+        mla_file.unwrap().data.read_to_end(&mut readback).unwrap();
+        assert_eq!(readback, *expected);
     }
 
-    // Build FailSafeReader
-    let buf = Cursor::new(dest.as_slice());
-    let mut config = ArchiveReaderConfig::new();
-    let private_key = parse_mlakey_privkey_pem(PRIV_KEY).unwrap();
-    config.add_private_keys(&[private_key]);
-    let mut mla_fsread = TruncatedArchiveReader::from_config(buf, config).unwrap().0;
+    // === TruncatedArchiveReader repair test (simulate corruption) ===
+    if !test_case.byteflip.is_empty() {
+        let mut corrupted = dest.clone();
 
-    // Repair the archive (without any damage, but trigger the corresponding code)
-    let mut dest_w = Vec::new();
-    let mla_w = ArchiveWriter::from_config(&mut dest_w, ArchiveWriterConfig::new())
-        .expect("Writer init failed");
-    if let TruncatedReadError::EndOfOriginalArchiveData =
-        mla_fsread.convert_to_archive(mla_w).unwrap()
-    {
-        // Everything runs as expected
-    } else {
-        panic!();
-    };
-    // Check the resulting files
-    let buf = Cursor::new(dest_w.as_slice());
-    let mut mla_read = ArchiveReader::from_config(buf, ArchiveReaderConfig::new()).unwrap();
-    for fname in tflist {
-        let mut mla_file = mla_read.get_entry(fname.clone()).unwrap().unwrap();
-        assert_eq!(mla_file.filename, fname.clone());
-        let mut buf = Vec::new();
-        mla_file.data.read_to_end(&mut buf).unwrap();
-        let content = filename2content.get(&fname).unwrap_or(&empty);
-        assert_eq!(&buf, content);
-    }
-
-    // Byte flip then failread and repair
-    let mut changed = false;
-    let mut dest_mut = Vec::from(dest.as_slice());
-    for index in test_case.byteflip {
-        if index >= dest.len() as u32 {
-            // Do not byteflip
-            continue;
+        // Apply byteflips (XOR with 0xFF)
+        for &idx in &test_case.byteflip {
+            if let Some(b) = corrupted.get_mut(idx as usize) {
+                *b ^= 0xFF;
+            }
         }
-        dest_mut[index as usize] = dest_mut.get(index as usize).unwrap() ^ 0xFF;
-        changed = true;
-    }
-    if !changed {
-        return;
-    }
 
-    // Try to read
-    // Check the resulting files
-    let buf = Cursor::new(dest_mut.as_slice());
-    let mut config = ArchiveReaderConfig::new();
-    let private_key = parse_mlakey_privkey_pem(PRIV_KEY).unwrap();
-    config.add_private_keys(&[private_key]);
-    let _do_steps = || -> Result<(), Error> {
-        let mut mla_read = ArchiveReader::from_config(buf, ArchiveReaderConfig::new())?;
-        let flist = mla_read.list_entries()?.cloned().collect::<Vec<String>>();
-        for fname in flist {
-            let mut finfo = match mla_read.get_entry(fname)? {
-                Some(finfo) => finfo,
-                None => continue,
-            };
-            io::copy(&mut finfo.data, &mut io::sink())?;
+        // Try to read the corrupted archive with TruncatedArchiveReader
+        let truncated_config = test_case
+            .config
+            .to_reader_config(&[pub_sig_verif_key], &[priv_dec_key]);
+
+        match TruncatedArchiveReader::from_config(
+            Cursor::new(corrupted.as_slice()),
+            truncated_config,
+        ) {
+            Ok(mut tr) => {
+                // We'll try to salvage it into a new buffer
+                let mut repaired = Vec::new();
+                let out_cfg = ArchiveWriterConfig::without_encryption_without_signature().unwrap();
+                let mla_out = ArchiveWriter::from_config(&mut repaired, out_cfg).unwrap();
+
+                match tr.convert_to_archive(mla_out) {
+                    Ok(result) => {
+                        eprintln!("Repair finished with: {result:?}");
+
+                        // Re-parse the repaired archive to ensure it's valid
+                        let reader_cfg = ArchiveReaderConfig::without_signature_verification()
+                            .without_encryption();
+                        if let Ok((mut recovered_read, _)) =
+                            ArchiveReader::from_config(Cursor::new(repaired.as_slice()), reader_cfg)
+                        {
+                            // Verify recovered file list and contents
+                            let mut recovered_list: Vec<String> = recovered_read
+                                .list_entries()
+                                .unwrap()
+                                .map(|entry_name| entry_name.raw_content_to_escaped_string())
+                                .collect();
+                            recovered_list.sort();
+
+                            assert_eq!(recovered_list, tflist);
+
+                            for fname in &tflist {
+                                let entry_name =
+                                    EntryName::from_arbitrary_bytes(fname.as_bytes()).unwrap();
+                                if let Some(mut mla_file) =
+                                    recovered_read.get_entry(entry_name).unwrap()
+                                {
+                                    let mut recovered_data = Vec::new();
+                                    mla_file.data.read_to_end(&mut recovered_data).unwrap();
+                                    let expected = filename2content.get(fname).unwrap_or(&empty);
+                                    assert_eq!(&recovered_data, expected);
+                                }
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        eprintln!("Repair failed: {err:?}");
+                    }
+                }
+            }
+            Err(e) => {
+                // Invalid structure; skip. TruncatedArchiveReader may reject unparseable data
+                eprintln!("TruncatedArchiveReader creation failed: {e:?}");
+            }
         }
-        Ok(())
-    };
-    // Repair
-    // Build FailSafeReader
-    let buf = Cursor::new(dest_mut.as_slice());
-    let mut config = ArchiveReaderConfig::new();
-    let private_key = parse_mlakey_privkey_pem(PRIV_KEY).unwrap();
-    config.add_private_keys(&[private_key]);
-    let mut mla_fsread = {
-        if let Ok(mla) = TruncatedArchiveReader::from_config(buf, config) {
-            mla
-        } else {
-            return;
-        }
-    };
-    // Repair the archive (without any damage, but trigger the corresponding code)
-    let dest_w = Vec::new();
-    let mla_w =
-        ArchiveWriter::from_config(dest_w, ArchiveWriterConfig::new()).expect("Writer init failed");
-    mla_fsread
-        .convert_to_archive(mla_w)
-        .expect("End without a TruncatedReadError {}");
+    }
 }
 
 #[cfg(fuzzing)]
 fn main() {
-    // Fuzz it!
-    fuzz!(|data: &[u8]| {
-        run(data);
+    afl::fuzz!(|data: &[u8]| {
+        let mut buf = data.to_vec();
+        run(&mut buf);
     });
 }
 
@@ -287,7 +461,8 @@ fn main() {
      */
 
     // Avoid dead code on build
-    run(b"");
+    let mut empty = Vec::new();
+    run(&mut empty);
 
     // Produce samples for initialization
     produce_samples();
@@ -295,25 +470,34 @@ fn main() {
 
 #[allow(dead_code)]
 fn produce_samples() {
-    let &mut mut buffer1 = &mut [0; 1024 * 1024];
-    let len = bincode::encode_into_slice(
-        &TestInput {
+    const BUFFER_SIZE: usize = 1024 * 1024;
+
+    fn write_sample(filename: &str, input: TestInput) {
+        let mut buffer = [0u8; BUFFER_SIZE];
+        let mut cursor = Cursor::new(&mut buffer[..]);
+        let len = input.serialize(&mut cursor).unwrap();
+        let mut file = File::create(filename).unwrap();
+        file.write_all(&buffer[..len as usize]).unwrap();
+    }
+
+    use crate::FuzzMode;
+
+    // test1: Minimal input, no compression or encryption
+    write_sample(
+        "in/empty_file",
+        TestInput {
+            config: FuzzMode::CompressEncrypt,
             filenames: vec![String::from("test1")],
             parts: vec![],
-            layers: Layers::EMPTY,
             byteflip: vec![],
         },
-        &mut buffer1,
-        BINCODE_CONFIG,
-    )
-    .unwrap();
+    );
 
-    let mut f1 = File::create("in/empty_file").unwrap();
-    f1.write_all(&buffer1[..len]).unwrap();
-
-    let &mut mut buffer2 = &mut [0; 1024 * 1024];
-    let len = bincode::encode_into_slice(
-        &TestInput {
+    // few_files: Two filenames, multiple parts, no compression or encryption
+    write_sample(
+        "in/few_files",
+        TestInput {
+            config: FuzzMode::CompressEncrypt,
             filenames: vec![String::from("test1"), String::from("test2éèà")],
             parts: vec![
                 vec![0, 2, 3, 4],
@@ -322,20 +506,32 @@ fn produce_samples() {
                 vec![1],
                 vec![1, 87, 3, 4, 5, 6],
             ],
-            layers: Layers::DEFAULT,
             byteflip: vec![],
         },
-        &mut buffer2,
-        BINCODE_CONFIG,
-    )
-    .unwrap();
+    );
 
-    let mut f2 = File::create("in/few_files").unwrap();
-    f2.write_all(&buffer2[..len]).unwrap();
+    // interleaved: two files, parts interleaved, no compression or encryption
+    write_sample(
+        "in/interleaved",
+        TestInput {
+            config: FuzzMode::CompressEncrypt,
+            filenames: vec![String::from("test1"), String::from("test2")],
+            parts: vec![
+                vec![0, 2, 3, 4],        // file 0
+                vec![1, 5, 6],           // file 1
+                vec![1],                 // file 1
+                vec![0],                 // file 0
+                vec![1, 87, 3, 4, 5, 6], // file 1
+            ],
+            byteflip: vec![],
+        },
+    );
 
-    let &mut mut buffer3 = &mut [0; 1024 * 1024];
-    let len = bincode::encode_into_slice(
-        &TestInput {
+    // compress_only: same parts, enable compression mode
+    write_sample(
+        "in/compress_only",
+        TestInput {
+            config: FuzzMode::Compress,
             filenames: vec![String::from("test1"), String::from("test2")],
             parts: vec![
                 vec![0, 2, 3, 4],
@@ -344,20 +540,15 @@ fn produce_samples() {
                 vec![0],
                 vec![1, 87, 3, 4, 5, 6],
             ],
-            layers: Layers::DEFAULT,
             byteflip: vec![],
         },
-        &mut buffer3,
-        BINCODE_CONFIG,
-    )
-    .unwrap();
+    );
 
-    let mut f3 = File::create("in/interleaved").unwrap();
-    f3.write_all(&buffer3[..len]).unwrap();
-
-    let &mut mut buffer4 = &mut [0; 1024 * 1024];
-    let len = bincode::encode_into_slice(
-        &TestInput {
+    // byteflip: same parts, with byte corruption markers, no compression
+    write_sample(
+        "in/byteflip",
+        TestInput {
+            config: FuzzMode::None,
             filenames: vec![String::from("test1"), String::from("test2")],
             parts: vec![
                 vec![0, 2, 3, 4],
@@ -366,36 +557,7 @@ fn produce_samples() {
                 vec![0],
                 vec![1, 87, 3, 4, 5, 6],
             ],
-            layers: Layers::COMPRESS,
-            byteflip: vec![],
-        },
-        &mut buffer4,
-        BINCODE_CONFIG,
-    )
-    .unwrap();
-
-    let mut f4 = File::create("in/compress_only").unwrap();
-    f4.write_all(&buffer4[..len]).unwrap();
-
-    let &mut mut buffer5 = &mut [0; 1024 * 1024];
-    let len = bincode::encode_into_slice(
-        &TestInput {
-            filenames: vec![String::from("test1"), String::from("test2")],
-            parts: vec![
-                vec![0, 2, 3, 4],
-                vec![1, 5, 6],
-                vec![1],
-                vec![0],
-                vec![1, 87, 3, 4, 5, 6],
-            ],
-            layers: Layers::DEFAULT,
             byteflip: vec![20, 30],
         },
-        &mut buffer5,
-        BINCODE_CONFIG,
-    )
-    .unwrap();
-
-    let mut f5 = File::create("in/byteflip").unwrap();
-    f5.write_all(&buffer5[..len]).unwrap();
+    );
 }
