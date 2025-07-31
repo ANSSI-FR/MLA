@@ -395,7 +395,7 @@ fn add_file_to_tar<R: Read + Seek, W: Write>(
 ) -> Result<(), MlarError> {
     // Use indexes to avoid in-memory copy
     let mut header = Header::new_gnu();
-    header.set_size(entry.size);
+    header.set_size(entry.get_size());
     header.set_mode(0o444); // Create files as read-only
     header.set_cksum();
 
@@ -805,8 +805,8 @@ fn list(matches: &ArgMatches) -> Result<(), MlarError> {
             println!("{name_to_display}");
         } else {
             let mla_file = mla.get_entry(fname)?.expect("Unable to get the file");
+            let size = mla_file.get_size().format_size(DECIMAL);
             let filename = mla_file.name;
-            let size = mla_file.size.format_size(DECIMAL);
             if matches.get_count("verbose") == 1 {
                 println!("{name_to_display} - {size}");
             } else if matches.get_count("verbose") >= 2 {
@@ -1177,7 +1177,8 @@ fn convert(matches: &ArgMatches) -> Result<(), MlarError> {
             }
             Ok(Some(mla)) => mla,
         };
-        mla_out.add_entry(sub_file.name, sub_file.size, sub_file.data)?;
+        let size = sub_file.get_size();
+        mla_out.add_entry(sub_file.name, size, sub_file.data)?;
     }
     mla_out.finalize().expect("Finalization error");
 
