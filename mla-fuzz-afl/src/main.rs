@@ -441,7 +441,7 @@ fn run(data: &mut [u8]) {
 
 #[cfg(fuzzing)]
 fn main() {
-    afl::fuzz!(|data: &[u8]| {
+    fuzz!(|data: &[u8]| {
         let mut buf = data.to_vec();
         run(&mut buf);
     });
@@ -456,8 +456,8 @@ fn main() {
     //
     // Or:
     //
-    let data: &'static [u8] = include_bytes!("..");
-    run(data);
+    // let mut data: Vec<u8> = include_bytes!("..").to_vec();
+    // run(&mut data);
      */
 
     // Avoid dead code on build
