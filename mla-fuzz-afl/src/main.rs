@@ -126,7 +126,10 @@ impl FuzzMode {
         use FuzzMode::*;
 
         if matches!(self, Encrypt | EncryptSign | CompressEncryptSign) {
-            TruncatedReaderConfig::without_signature_verification_with_encryption(priv_dec_key, mla::config::TruncatedReaderDecryptionMode::DataEvenUnauthenticated)
+            TruncatedReaderConfig::without_signature_verification_with_encryption(
+                priv_dec_key,
+                mla::config::TruncatedReaderDecryptionMode::DataEvenUnauthenticated,
+            )
         } else {
             TruncatedReaderConfig::without_signature_verification_without_encryption()
         }
@@ -391,9 +394,7 @@ fn run(data: &mut [u8]) {
         }
 
         // Try to read the corrupted archive with TruncatedArchiveReader
-        let truncated_config = test_case
-            .config
-            .to_truncated_reader_config(&[priv_dec_key]);
+        let truncated_config = test_case.config.to_truncated_reader_config(&[priv_dec_key]);
 
         match TruncatedArchiveReader::from_config(
             Cursor::new(corrupted.as_slice()),
