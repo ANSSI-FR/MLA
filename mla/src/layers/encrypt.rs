@@ -964,7 +964,6 @@ impl<R: Read + Seek> Seek for InternalEncryptionLayerReader<R> {
 
 pub(crate) struct EncryptionLayerFailSafeReader<'a, R: Read> {
     inner: InternalEncryptionLayerReader<Box<dyn 'a + LayerFailSafeReader<'a, R>>>,
-    truncated_decryption_mode: TruncatedReaderDecryptionMode,
 }
 
 impl<'a, R: 'a + Read> EncryptionLayerFailSafeReader<'a, R> {
@@ -977,10 +976,7 @@ impl<'a, R: 'a + Read> EncryptionLayerFailSafeReader<'a, R> {
             InternalEncryptionLayerReader::new(inner, config, Some(truncated_decryption_mode))?;
         inner.load_in_cache()?;
 
-        Ok(Self {
-            inner,
-            truncated_decryption_mode,
-        })
+        Ok(Self { inner })
     }
 
     pub(crate) fn new_skip_magic(
@@ -1000,21 +996,7 @@ impl<'a, R: 'a + Read> LayerFailSafeReader<'a, R> for EncryptionLayerFailSafeRea
 
 impl<R: Read> Read for EncryptionLayerFailSafeReader<'_, R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        match self.truncated_decryption_mode {
-            TruncatedReaderDecryptionMode::OnlyAuthenticatedData => {
-                // catch AuthenticatedDecryptionWrongTag to gracefully stop the reading
-                match self.inner.read_internal(buf) {
-                    Ok(size) => Ok(size),
-                    Err(Error::AuthenticatedDecryptionWrongTag)
-                    | Err(Error::TruncatedTag)
-                    | Err(Error::UnknownTagPosition) => Ok(0),
-                    Err(e) => Err(mla_error_to_io_error(e)),
-                }
-            }
-            TruncatedReaderDecryptionMode::DataEvenUnauthenticated => {
-                self.inner.read_internal(buf).map_err(mla_error_to_io_error)
-            }
-        }
+        self.inner.read_internal(buf).map_err(mla_error_to_io_error)
     }
 }
 
@@ -1193,7 +1175,7 @@ mod tests {
         )
         .unwrap();
         let mut output = Vec::new();
-        encrypt_r.read_to_end(&mut output).unwrap();
+        assert!(encrypt_r.read_to_end(&mut output).is_err());
         // We should have correctly read 2*CHUNK_SIZE inner data, the last 128 bytes being unauthenticated
         assert_eq!(output.len(), 2 * NORMAL_CHUNK_PT_SIZE as usize);
         assert_eq!(output, data[..output.len()]);
