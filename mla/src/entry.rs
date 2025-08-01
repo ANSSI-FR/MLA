@@ -794,7 +794,7 @@ mod tests {
         .dump(&mut buf)
         .unwrap();
 
-        let offsets = [(0, 0), (24, 4), (46, 4), (68, 0)].as_slice();
+        let offsets = [(0, 0), (28, 4), (54, 4), (80, 0)].as_slice();
 
         (std::io::Cursor::new(buf), offsets)
     }
