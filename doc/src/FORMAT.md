@@ -58,9 +58,7 @@ A `PerRecipientEncapsulatedKey` is an `mlkem1024_encapsulated_s` field followed 
 
 `KeyCommitmentAndTag` is the key commitment described in `CRYPTO.md`. It is a 64-bytes ciphertext followed by a 16-bytes tag.
 
-`encrypted_inner_layer` is the AES-256-GCM encrypted inner layer with the `global_secret` key. `encrypted_inner_layer` is a sequence of `M0EncryptedChunk` followed by one `M0FinalEncryptedChunk`. Each `M0EncryptedChunk` has an `encrypted_content` (128*1024)-bytes field (last `M0EncryptedChunk` may be smaller) followed by a `tag` 16-bytes field. `encrypted_content` is the inner_layer encrypted chunk, and `tag` its GCM tag. `M0FinalEncryptedChunk` has a 10-bytes `encrypted_content` field followed by a 16-bytes `tag`.
-
-The last `M0EncryptedChunk`'s `encrypted_content` size is the remainder of inner layer size divided by (128*1024).
+`encrypted_inner_layer` is the AES-256-GCM encrypted inner layer with the `global_secret` key. `encrypted_inner_layer` is a sequence of `M0EncryptedChunk` followed by one `M0FinalEncryptedChunk`. Each `M0EncryptedChunk` has an ASCII magic "M0ENCCNK" followed by a u64 `chunk_number`, followed by an `encrypted_content` (128*1024)-bytes field (last `M0EncryptedChunk` may be smaller) followed by a `tag` 16-bytes field. `encrypted_content` is the inner_layer encrypted chunk, and `tag` its GCM tag. `M0FinalEncryptedChunk` has an ASCII magic "M0FNLBLK" followed by a 10-bytes `encrypted_content` field followed by a 16-bytes `tag`. `chunk_number` is the number of the `M0EncryptedChunk` in the stream, starting at 1.
 
 To protect from a truncation attack, before using an archive, it must be checked that the `tag` of the `M0FinalEncryptedChunk` is correct and that its decrypted `encrypted_content` is the ASCII `FINALBLOCK`.
 
