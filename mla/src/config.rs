@@ -215,3 +215,63 @@ impl IncompleteArchiveReaderConfig {
         }
     }
 }
+
+/// TruncatedReader decryption mode
+#[derive(Default, Clone, Copy, Eq, PartialEq, Debug)]
+pub enum TruncatedReaderDecryptionMode {
+    /// Returns only the data that have been authenticated (in AEAD meaning, there will be NO signature verification) on decryption
+    #[default]
+    OnlyAuthenticatedData,
+    /// Returns all data, even if not authenticated. In the case where the last content chunk has its aes-gcm tag truncated, this may handle the tag interpreted as encrypted data, thus producing up to 15 bytes of garbage in output.
+    DataEvenUnauthenticated,
+}
+
+pub struct TruncatedReaderConfig {
+    pub(crate) accept_unencrypted: bool,
+    // Layers specifics
+    pub(crate) encrypt: EncryptionReaderConfig,
+    pub(crate) truncated_decryption_mode: TruncatedReaderDecryptionMode,
+}
+
+impl TruncatedReaderConfig {
+    /// Will refuse to open an archive without encryption.
+    pub fn without_signature_verification_with_encryption(
+        decryption_private_keys: &[MLADecryptionPrivateKey],
+        failsafe_mode: TruncatedReaderDecryptionMode,
+    ) -> TruncatedReaderConfig {
+        let mut encrypt = EncryptionReaderConfig::default();
+        encrypt.set_private_keys(decryption_private_keys);
+        TruncatedReaderConfig {
+            accept_unencrypted: false,
+            encrypt,
+            truncated_decryption_mode: failsafe_mode,
+        }
+    }
+
+    /// WARNING: This will accept reading unencrypted archives !
+    ///
+    /// If you do not know if an archive is encrypted or not and want to read even if it is NOT, you may use this function.
+    /// This avoids having to open the archive a second time after decryption failure, for example to save the cost of doing signature check twice.
+    pub fn without_signature_verification_with_encryption_accept_unencrypted(
+        decryption_private_keys: &[MLADecryptionPrivateKey],
+        failsafe_mode: TruncatedReaderDecryptionMode,
+    ) -> TruncatedReaderConfig {
+        let mut encrypt = EncryptionReaderConfig::default();
+        encrypt.set_private_keys(decryption_private_keys);
+        TruncatedReaderConfig {
+            accept_unencrypted: false,
+            encrypt,
+            truncated_decryption_mode: failsafe_mode,
+        }
+    }
+
+    /// Will NOT accept encrypted archives.
+    pub fn without_signature_verification_without_encryption() -> TruncatedReaderConfig {
+        let encrypt = EncryptionReaderConfig::default();
+        TruncatedReaderConfig {
+            accept_unencrypted: true,
+            encrypt,
+            truncated_decryption_mode: Default::default(),
+        }
+    }
+}

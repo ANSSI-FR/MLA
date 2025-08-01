@@ -9,7 +9,7 @@ use mla::entry::EntryName;
 use std::fs::File;
 use std::io::{Cursor, Read, Write};
 
-use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
+use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig, TruncatedReaderConfig};
 use mla::errors::Error;
 use mla::{ArchiveReader, ArchiveWriter, TruncatedArchiveReader};
 
@@ -116,6 +116,19 @@ impl FuzzMode {
                 };
                 reader_config.with_encryption(priv_dec_key)
             }
+        }
+    }
+
+    pub fn to_truncated_reader_config(
+        &self,
+        priv_dec_key: &[MLADecryptionPrivateKey],
+    ) -> TruncatedReaderConfig {
+        use FuzzMode::*;
+
+        if matches!(self, Encrypt | EncryptSign | CompressEncryptSign) {
+            TruncatedReaderConfig::without_signature_verification_with_encryption(priv_dec_key, mla::config::TruncatedReaderDecryptionMode::DataEvenUnauthenticated)
+        } else {
+            TruncatedReaderConfig::without_signature_verification_without_encryption()
         }
     }
 }
@@ -380,7 +393,7 @@ fn run(data: &mut [u8]) {
         // Try to read the corrupted archive with TruncatedArchiveReader
         let truncated_config = test_case
             .config
-            .to_reader_config(&[pub_sig_verif_key], &[priv_dec_key]);
+            .to_truncated_reader_config(&[priv_dec_key]);
 
         match TruncatedArchiveReader::from_config(
             Cursor::new(corrupted.as_slice()),
