@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0-alpha] – 2025-08-01
+
+### Added/Changed
+
+- MLA2 is now the default; it is **incompatible** with MLA1. MLA1 enters **low maintenance mode**
+- Hybrid traditional/post-quantum encryption using **X25519 + ML-KEM1024**
+- Archive signing using hybrid traditional/post-quantum signatures
+- Switched to **Rust 2024 edition**
+- Key commitment support for AES-GCM
+- New archive format, enabling improved cryptographic and performance characteristics
+- Cryptographic layer reworked to **protect against truncation attacks**
+- Redesigned APIs and CLI for improved **simplicity, safety, and semver compatibility**
+- Support for **authenticated truncated archive reading**
+- Support for **seeking inside archive entries**
+- Create archive from **stdin** input
+- **Mark-of-the-Web (MotW)** propagation support
+- Comprehensive documentation overhaul
+- Published the **MLA Book**, a comprehensive guide and reference for MLA usage and concepts
+- Introduced `mlar-upgrader`: a tool to **upgrade MLA1 archives to MLA2 format**
+- Bumped dependencies as part of pre-alpha maintenance: `brotli`, `clap`, `rand`, and others via Dependabot (April 2025)
+- GitHub Actions workflows updated to **use pinned versions** for increased CI/CD security
+- Minor documentation corrections and CI improvements merged ahead of alpha release
+
+### Fixed
+
+- Minor doc and CI fixes improving build stability
+
 ## [1.4.0] - 2023-10-02
 
 ### Added/Changed
