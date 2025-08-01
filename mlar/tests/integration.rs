@@ -536,6 +536,7 @@ fn test_repair_auth_unauth() {
     let assert = cmd.assert();
     let output_auth = assert.get_output();
 
+    std::fs::remove_file(mlar_repaired_file.path()).unwrap();
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("repair")
         .arg("--allow-unauthenticated-data")
@@ -936,6 +937,8 @@ fn test_multi_fileorders() {
 
         // Inspect the created TAR file
         ensure_tar_content(tar_file.path(), &testfs.files);
+        std::fs::remove_file(mlar_file.path()).unwrap();
+        std::fs::remove_file(tar_file.path()).unwrap();
     }
 }
 
@@ -1252,6 +1255,7 @@ fn test_keygen_seed() {
     let output_dir = TempDir::new().unwrap();
     let base_path = output_dir.path().join("key");
     let priv_path = base_path.with_extension("mlapriv");
+    let pub_path = base_path.with_extension("mlapub");
 
     // `mlar keygen tempdir/key -s TESTSEED`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
@@ -1266,6 +1270,8 @@ fn test_keygen_seed() {
     // Check the SHA256, as private key are ~3KB long
     let hash_testseed = Sha256::digest(&pkey_testseed);
     assert_eq!(hash_testseed, PRIVATE_KEY_TESTSEED_SHA256.into());
+    std::fs::remove_file(&priv_path).unwrap();
+    std::fs::remove_file(&pub_path).unwrap();
 
     // `mlar keygen tempdir/key -s TESTSEED2`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
