@@ -2,7 +2,7 @@
 name = "mla-bindings-c"
 version = "2.0.0-alpha"
 authors = ["Matthieu Buffet <matthieu.buffet@ssi.gouv.fr>","ANSSI <opensource@ssi.gouv.fr>"]
-edition = "2018"
+edition = "2024"
 
 [lib]
 name = "mla"
