@@ -35,7 +35,7 @@ zeroize = { version = "1.8", default-features = false}
 ml-kem = { version = "0.3.0-pre", default-features = false, features = ["deterministic", "zeroize"] }
 kem = {version = "0.3.0-pre.0", default-features = false }
 # Wait that all MLA dependencies upgrade below crate to do it too as there is a trait modification (CryptoRngCore -> CryptoRng + RngCore)
-hpke = { version = "0.12", default-features = false, features = ["alloc", "x25519"] }
+hpke = { version = "0.13", default-features = false, features = ["alloc", "x25519"] }
 curve25519-dalek = { version = "4.1", default-features = false}
 ed25519-dalek = { version = "2.2", default-features = false, features = ["digest", "fast", "rand_core", "zeroize"] }
 ml-dsa = { version = "0.0.4", default-features = false, features = ["rand_core", "zeroize"] }
