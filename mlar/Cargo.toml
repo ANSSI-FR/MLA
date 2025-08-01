@@ -1,7 +1,7 @@
 [package]
 name = "mlar"
 description = "A wrapper around the MLA library for common use cases"
-version = "2.0.0"
+version = "2.0.0-alpha"
 authors = ["ANSSI <opensource@ssi.gouv.fr>"]
 edition = "2024"
 license = "LGPL-3.0-only"
@@ -15,7 +15,7 @@ readme = "../README.md"
 [dependencies]
 clap = { version = "4.5", features = ["wrap_help"] }
 glob = "0.3"
-mla = { path = "../mla", version = "2" }
+mla = { path = "../mla", version = "2.0.0-alpha" }
 # Wait that all MLA dependencies upgrade below crate to do it too as there is a trait modification (CryptoRngCore -> CryptoRng + RngCore)
 rand = "0.9"
 x25519-dalek = "2.0"
