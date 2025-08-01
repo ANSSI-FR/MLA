@@ -1,6 +1,6 @@
 [package]
 name = "pymla"
-version = "0.3.0"
+version = "2.0.0-alpha"
 edition = "2024"
 authors = ["ANSSI <opensource@ssi.gouv.fr>"]
 license = "LGPL-3.0-only"
@@ -20,5 +20,5 @@ crate-type = ["cdylib"]
 
 [dependencies]
 pyo3 = "0.25"
-mla = { version = "2", features = ["send"], path = "../../mla"}
+mla = { version = "2.0.0-alpha", features = ["send"], path = "../../mla"}
 ml-kem = "0.3.0-pre"
