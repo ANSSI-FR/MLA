@@ -70,6 +70,12 @@ pub enum Error {
     NoValidSignatureFound,
     // Signature verification was asked but no signature layer was found
     SignatureVerificationAskedButNoSignatureLayerFound,
+    // MissingEndOfEncryptedInnerLayerMagic
+    MissingEndOfEncryptedInnerLayerMagic,
+    // TruncatedTag
+    TruncatedTag,
+    // UnknownTagPosition
+    UnknownTagPosition,
 }
 
 impl fmt::Display for Error {
