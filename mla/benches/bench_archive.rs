@@ -69,8 +69,12 @@ fn build_archive(
     let dest = mla.finalize().unwrap();
 
     // Instantiate the reader
-    let config = ArchiveReaderConfig::without_signature_verification()
-        .with_encryption(&[private_key.get_decryption_private_key().clone()]);
+    let config = ArchiveReaderConfig::without_signature_verification();
+    let config = if encryption {
+        config.with_encryption(&[private_key.get_decryption_private_key().clone()])
+    } else {
+        config.without_encryption()
+    };
     (dest, config)
 }
 

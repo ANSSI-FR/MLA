@@ -1,4 +1,6 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
+use mla::ArchiveReader;
+use mla::ArchiveWriter;
 use mla::config::ArchiveReaderConfig;
 use mla::config::ArchiveWriterConfig;
 use mla::config::IncompleteArchiveReaderConfig;
@@ -13,11 +15,9 @@ use mla::entry::EntryName;
 use mla::errors::ConfigError;
 use mla::errors::Error as MLAError;
 use mla::helpers::linear_extract;
-use mla::ArchiveReader;
-use mla::ArchiveWriter;
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use std::ffi::{c_void, CStr};
+use std::ffi::{CStr, c_void};
 use std::io::{Read, Seek, Write};
 use std::mem::MaybeUninit;
 use std::os::raw::c_char;
@@ -347,7 +347,7 @@ where
 /// `private_keys_pointers` is an array of pointers to private keys null terminated strings in MLA key format.
 ///
 /// `public_keys_pointers` is an array of pointers to public keys null terminated strings in MLA key format.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn create_mla_writer_config_with_encryption_with_signature(
     handle_out: *mut MLAWriterConfigHandle,
     private_keys_pointers: *const *const c_char,
@@ -393,7 +393,7 @@ pub extern "C" fn create_mla_writer_config_with_encryption_with_signature(
 /// See rust doc for `ArchiveWriterConfig::with_encryption_without_signature` for more info.
 ///
 /// `public_keys_pointers` is an array of pointers to public keys null terminated strings in MLA key format.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn create_mla_writer_config_with_encryption_without_signature(
     handle_out: *mut MLAWriterConfigHandle,
     public_keys_pointers: *const *const c_char,
@@ -427,7 +427,7 @@ pub extern "C" fn create_mla_writer_config_with_encryption_without_signature(
 /// See rust doc for `ArchiveWriterConfig::without_encryption_with_signature` for more info.
 ///
 /// `private_keys_pointers` is an array of pointers to private keys null terminated strings in MLA key format.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn create_mla_writer_config_without_encryption_with_signature(
     handle_out: *mut MLAWriterConfigHandle,
     private_keys_pointers: *const *const c_char,
@@ -459,7 +459,7 @@ pub extern "C" fn create_mla_writer_config_without_encryption_with_signature(
 /// return a handle to it.
 ///
 /// See rust doc for `ArchiveWriterConfig::without_encryption_without_signature_verification` for more info.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn create_mla_writer_config_without_encryption_without_signature(
     handle_out: *mut MLAWriterConfigHandle,
 ) -> MLAStatus {
@@ -480,7 +480,7 @@ pub extern "C" fn create_mla_writer_config_without_encryption_without_signature(
 /// Currently this level can only be an integer N with 0 <= N <= 11,
 /// and bigger values cause denser but slower compression.
 /// Previous handle value becomes invalid after this call.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn mla_writer_config_with_compression_level(
     handle_inout: *mut MLAWriterConfigHandle,
     level: u32,
@@ -508,7 +508,7 @@ pub extern "C" fn mla_writer_config_with_compression_level(
 
 /// Change handle to same config without compression.
 /// Previous handle value becomes invalid after this call.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn mla_writer_config_without_compression(
     handle_inout: *mut MLAWriterConfigHandle,
 ) -> MLAStatus {
@@ -534,7 +534,7 @@ pub extern "C" fn mla_writer_config_without_compression(
 /// `private_keys_pointers` is an array of pointers to private keys null terminated strings in MLA key format.
 ///
 /// `public_keys_pointers` is an array of pointers to public keys null terminated strings in MLA key format.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn create_mla_reader_config_with_encryption_with_signature_verification(
     handle_out: *mut MLAReaderConfigHandle,
     private_keys_pointers: *const *const c_char,
@@ -562,7 +562,7 @@ pub extern "C" fn create_mla_reader_config_with_encryption_with_signature_verifi
 /// `private_keys_pointers` is an array of pointers to private keys null terminated strings in MLA key format.
 ///
 /// `public_keys_pointers` is an array of pointers to public keys null terminated strings in MLA key format.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn create_mla_reader_config_with_encryption_accept_unencrypted_with_signature_verification(
     handle_out: *mut MLAReaderConfigHandle,
     private_keys_pointers: *const *const c_char,
@@ -627,7 +627,7 @@ where
 /// See rust doc for `ArchiveReaderConfig::without_signature_verification` and `IncompleteArchiveReaderConfig::with_encryption` for more info.
 ///
 /// `private_keys_pointers` is an array of pointers to private keys null terminated strings in MLA key format.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn create_mla_reader_config_with_encryption_without_signature_verification(
     handle_out: *mut MLAReaderConfigHandle,
     private_keys_pointers: *const *const c_char,
@@ -649,7 +649,7 @@ pub extern "C" fn create_mla_reader_config_with_encryption_without_signature_ver
 /// See rust doc for `ArchiveReaderConfig::without_signature_verification` and `IncompleteArchiveReaderConfig::with_encryption_accept_unencrypted` for more info.
 ///
 /// `private_keys_pointers` is an array of pointers to private keys null terminated strings in MLA key format.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn create_mla_reader_config_with_encryption_accept_unencrypted_without_signature_verification(
     handle_out: *mut MLAReaderConfigHandle,
     private_keys_pointers: *const *const c_char,
@@ -757,7 +757,7 @@ pub fn create_mla_reader_config_without_encryption_without_signature_verificatio
 /// through the write_callback, and flushed at least at the end when the last byte is
 /// written. The context pointer can be used to hold any information, and is passed
 /// as an argument when any of the two callbacks are called.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn mla_archive_new(
     config: *mut MLAWriterConfigHandle,
     write_callback: MLAWriteCallback,
@@ -812,7 +812,7 @@ pub extern "C" fn mla_archive_new(
 /// bytes of `name_size` length.
 /// See documentation of rust function `EntryName::from_arbitrary_bytes`.
 /// Returns MLA_STATUS_SUCCESS on success, or an error code.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn mla_archive_start_entry_with_arbitrary_bytes_name(
     archive: MLAArchiveHandle,
     entry_name_arbitrary_bytes: *const u8,
@@ -863,7 +863,7 @@ fn start_entry(
 /// Notably, on Windows, given `entry_name` must be valid slash separated UTF-8.
 /// See documentation of rust function `EntryName::from_path`.
 /// Returns MLA_STATUS_SUCCESS on success, or an error code.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn mla_archive_start_entry_with_path_as_name(
     archive: MLAArchiveHandle,
     entry_name: *const c_char,
@@ -909,7 +909,7 @@ fn path_to_bytes_os(p: &Path) -> Option<&[u8]> {
 /// Append data to the end of an already opened file identified by the
 /// handle returned by mla_archive_start_entry_with_path_as_name(). Returns MLA_STATUS_SUCCESS on
 /// success, or an error code.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn mla_archive_file_append(
     archive: MLAArchiveHandle,
     file: MLAArchiveFileHandle,
@@ -939,7 +939,7 @@ pub extern "C" fn mla_archive_file_append(
 /// Flush any data to be written buffered in MLA to the write_callback,
 /// then calls the flush_callback given during archive initialization.
 /// Returns MLA_STATUS_SUCCESS on success, or an error code.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn mla_archive_flush(archive: MLAArchiveHandle) -> MLAStatus {
     if archive.is_null() {
         return MLAStatus::BadAPIArgument;
@@ -959,7 +959,7 @@ pub extern "C" fn mla_archive_flush(archive: MLAArchiveHandle) -> MLAStatus {
 /// archive. The file handle must be passed as a mutable reference so it is
 /// cleared and cannot be reused after free by accident. Returns
 /// MLA_STATUS_SUCCESS on success, or an error code.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn mla_archive_file_close(
     archive: MLAArchiveHandle,
     file: *mut MLAArchiveFileHandle,
@@ -993,7 +993,7 @@ pub extern "C" fn mla_archive_file_close(
 /// handle must be passed as a mutable reference so it is cleared and
 /// cannot be reused after free by accident. Returns MLA_STATUS_SUCCESS on success,
 /// or an error code.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn mla_archive_close(archive: *mut MLAArchiveHandle) -> MLAStatus {
     if archive.is_null() {
         return MLAStatus::BadAPIArgument;
@@ -1064,7 +1064,7 @@ impl Seek for CallbackInputRead {
 /// are given as argument to `file_callback`. This is dangerous, see Rust lib `EntryName::raw_content_as_bytes` documentation.
 /// Else, it is given the almost arbitraty bytes (still some dangers) of `EntryName::to_pathbuf` (encoded as UTF-8 on Windows).
 /// See Rust lib `EntryName::to_pathbuf` documentation.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn mla_roarchive_extract(
     config: *mut MLAReaderConfigHandle,
     read_callback: MlaReadCallback,
@@ -1197,7 +1197,7 @@ pub struct ArchiveInfo {
 }
 
 /// Get info on an existing MLA archive
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn mla_roarchive_info(
     read_callback: MlaReadCallback,
     context: *mut c_void,
