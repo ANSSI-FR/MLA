@@ -86,7 +86,7 @@ The layer `entries_layer_magic` ASCII magic is "MLAENAAA".
 `entries_data` is followed by `entries_footer` of type `Tail<EntriesFooter>`, where `EntriesFooter` is described below.
 `entries_footer` is followed by `entries_footer_options` of type `Tail<Opts>`.
 
-`entries_data` is a succession of `ArchiveEntryBlock` of different type. An `ArchiveEntryBlock` begins with an `ArchiveEntryBlockType` u8 determining the type of `ArchiveEntryBlock`:
+`entries_data` is a succession of `ArchiveEntryBlock` of different type. An `ArchiveEntryBlock` begins with an ASCII magic "MAEB" followed by an `ArchiveEntryBlockType` u8 determining the type of `ArchiveEntryBlock`:
 * 0x00 means `EntryStart`
 * 0x01 means `EntryContentChunk`
 * 0xFE means `EndOfArchiveData`

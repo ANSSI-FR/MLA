@@ -11,6 +11,8 @@ use crate::{
     read_layer_magic, serialize_entry_name,
 };
 
+const ARCHIVE_ENTRY_BLOCK_MAGIC: &[u8; 4] = b"MAEB";
+
 pub(crate) struct ArchiveHeader {
     pub(crate) format_version_number: u32,
 }
@@ -110,6 +112,7 @@ where
     T: Read,
 {
     pub(crate) fn dump<U: Write>(&mut self, dest: &mut U) -> Result<(), Error> {
+        dest.write_all(ARCHIVE_ENTRY_BLOCK_MAGIC)?;
         match self {
             ArchiveEntryBlock::EntryStart { name, id, opts } => {
                 ArchiveEntryBlockType::EntryStart.serialize(dest)?;
@@ -156,6 +159,8 @@ where
     }
 
     pub(crate) fn from(mut src: &mut T) -> Result<Self, Error> {
+        // just read 4 bytes for the magic, we won't use it
+        u32::deserialize(&mut src)?;
         let block_type = ArchiveEntryBlockType::deserialize(&mut src)?;
         match block_type {
             ArchiveEntryBlockType::EntryStart => {
