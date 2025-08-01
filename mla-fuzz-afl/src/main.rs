@@ -366,14 +366,24 @@ fn run(data: &mut [u8]) {
         .collect();
     flist.sort();
 
-    let mut tflist: Vec<String> = test_case.filenames.to_vec();
+    // Read expected filenames, convert to escaped EntryName strings
+    let mut tflist: Vec<String> = test_case
+        .filenames
+        .iter()
+        .map(|fname| {
+            EntryName::from_arbitrary_bytes(fname.as_bytes())
+                .unwrap()
+                .raw_content_to_escaped_string()
+        })
+        .collect();
     tflist.sort();
     tflist.dedup();
+
     assert_eq!(flist, tflist);
 
     // Verify file contents
     let empty = Vec::new();
-    for fname in &tflist {
+    for fname in &test_case.filenames {
         let entry_name = EntryName::from_arbitrary_bytes(fname.as_bytes()).unwrap();
         let mla_file = mla_read.get_entry(entry_name).unwrap();
         let expected = filename2content.get(fname).unwrap_or(&empty);
@@ -470,7 +480,7 @@ fn main() {
     //
     // Or:
     //
-    // let mut data: Vec<u8> = include_bytes!("..").to_vec();
+    // let mut data = include_bytes!("../out/default/crashes/my_crash").to_vec();
     // run(&mut data);
      */
 
