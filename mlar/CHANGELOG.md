@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0-alpha] – 2025-08-01
+
+### Added/Changed
+
+- MLA2 is now the default; it is **incompatible** with MLA1. MLA1 enters **low maintenance mode**
+- New archive format, enabling improved cryptographic and performance characteristics
+- Cryptographic layer reworked to **protect against truncation attacks**
+- Redesigned APIs and CLI for improved **simplicity, safety, and semver compatibility**
+- Support for **authenticated truncated archive reading**
+- Support for **seeking inside archive entries**
+- Create archive from **stdin** input
+- **Mark-of-the-Web (MotW)** propagation support
+- Introduced `mlar-upgrader`: a tool to **upgrade MLA1 archives to MLA2 format**
+
+### Fixed
+
 ## [1.3.0] - 2023-10-06
 
 ### Thanks
