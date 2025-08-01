@@ -297,7 +297,7 @@ fn destination_from_output_argument(output_argument: &PathBuf) -> Result<OutputT
     let destination = if output_argument.as_os_str() != "-" {
         let path = Path::new(&output_argument);
         OutputTypes::File {
-            file: File::create(path)?,
+            file: File::create_new(path)?,
         }
     } else {
         OutputTypes::Stdout
@@ -519,7 +519,7 @@ fn create_file<P1: AsRef<Path>>(
         }
     }
 
-    let created_file = File::create(&extracted_path).map_err(|err| {
+    let created_file = File::create_new(&extracted_path).map_err(|err| {
         eprintln!(
             " [!] Unable to create \"{}\" ({err:?})",
             escaped_path_to_string(&entry_name_pathbuf)
@@ -1216,9 +1216,9 @@ fn keygen(matches: &ArgMatches) -> Result<(), MlarError> {
     // Safe to use unwrap() because of the requirement
     let output_base = matches.get_one::<PathBuf>("output-prefix").unwrap();
 
-    let mut output_pub = File::create(output_base.with_extension("mlapub"))
+    let mut output_pub = File::create_new(output_base.with_extension("mlapub"))
         .expect("Unable to create the public file");
-    let mut output_priv = File::create(output_base.with_extension("mlapriv"))
+    let mut output_priv = File::create_new(output_base.with_extension("mlapriv"))
         .expect("Unable to create the private file");
 
     // handle seed
@@ -1251,9 +1251,9 @@ fn keyderive(matches: &ArgMatches) -> Result<(), MlarError> {
     // Safe to use unwrap() because of the requirement
     let output_base = matches.get_one::<PathBuf>("output-prefix").unwrap();
 
-    let mut output_pub = File::create(output_base.with_extension("mlapub"))
+    let mut output_pub = File::create_new(output_base.with_extension("mlapub"))
         .expect("Unable to create the public file");
-    let mut output_priv = File::create(output_base.with_extension("mlapriv"))
+    let mut output_priv = File::create_new(output_base.with_extension("mlapriv"))
         .expect("Unable to create the private file");
 
     // Safe to use unwrap() because of the requirement
