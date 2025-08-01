@@ -76,6 +76,8 @@ pub enum Error {
     TruncatedTag,
     // UnknownTagPosition
     UnknownTagPosition,
+    // Arbitrary String error
+    Other(String),
 }
 
 impl fmt::Display for Error {

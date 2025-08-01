@@ -73,6 +73,7 @@ pub enum MLAStatus {
     MissingEndOfEncryptedInnerLayerMagic = 0x220000,
     TruncatedTag = 0x230000,
     UnknownTagPosition = 0x240000,
+    Other = 0x250000,
     // Keep 0xF10000 slot for backward compatibility
     // Curve25519ParserError = 0xF10000,
     MlaKeyParserError = 0xF20000,
@@ -227,6 +228,7 @@ impl From<MLAError> for MLAStatus {
             }
             MLAError::TruncatedTag => MLAStatus::TruncatedTag,
             MLAError::UnknownTagPosition => MLAStatus::UnknownTagPosition,
+            MLAError::Other(_) => MLAStatus::Other,
         }
     }
 }

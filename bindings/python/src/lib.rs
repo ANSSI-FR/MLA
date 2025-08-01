@@ -154,6 +154,7 @@ create_exception!(mla, SignatureVerificationAskedButNoSignatureLayerFound, MLAEr
 create_exception!(mla, MissingEndOfEncryptedInnerLayerMagic, MLAError, "MissingEndOfEncryptedInnerLayerMagic");
 create_exception!(mla, TruncatedTag, MLAError, "TruncatedTag");
 create_exception!(mla, UnknownTagPosition, MLAError, "UnknownTagPosition");
+create_exception!(mla, MLAOther, MLAError, "Other MLA Error");
 
 // Convert potentials errors to the wrapped type
 
@@ -285,6 +286,9 @@ impl From<WrappedError> for PyErr {
                 }
                 mla::errors::Error::UnknownTagPosition => {
                     PyErr::new::<UnknownTagPosition, _>("UnknownTagPosition")
+                }
+                mla::errors::Error::Other(err) => {
+                    PyErr::new::<MLAOther, _>(format!("{err:}"))
                 }
             },
             WrappedError::WrappedPy(inner_err) => inner_err,
@@ -1296,6 +1300,7 @@ fn pymla(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("MissingEndOfEncryptedInnerLayerMagic", py.get_type::<MissingEndOfEncryptedInnerLayerMagic>())?;
     m.add("TruncatedTag", py.get_type::<TruncatedTag>())?;
     m.add("UnknownTagPosition", py.get_type::<UnknownTagPosition>())?;
+    m.add("MLAOther", py.get_type::<MLAOther>())?;
 
     // Add constants
     m.add("DEFAULT_COMPRESSION_LEVEL", DEFAULT_COMPRESSION_LEVEL)?;
