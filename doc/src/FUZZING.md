@@ -21,7 +21,7 @@ cargo run
 2. build and launch AFL
 ```sh
 cargo afl build
-cargo afl run -i in -o out ../target/debug/mla-fuzz-afl
+cargo afl fuzz -i in -o out ../target/debug/mla-fuzz-afl
 ```
 
 If you have found crashes, try to replay them with either:
