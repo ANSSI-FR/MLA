@@ -19,8 +19,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Redesigned APIs and CLI for improved **simplicity, safety, and semver compatibility**
 - Support for **authenticated truncated archive reading**
 - Support for **seeking inside archive entries**
-- Create archive from **stdin** input
-- **Mark-of-the-Web (MotW)** propagation support
 - Comprehensive documentation overhaul
 - Published the **MLA Book**, a comprehensive guide and reference for MLA usage and concepts
 - Introduced `mlar-upgrader`: a tool to **upgrade MLA1 archives to MLA2 format**
