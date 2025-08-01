@@ -463,121 +463,144 @@ fn test_repair_auth_unauth() {
     // Create files
     let testfs = setup();
 
-    // `mlar create -o output.mla -l encrypt -p samples/test_x25519_pub.pem file1.bin`
-    let mut cmd = Command::cargo_bin(UTIL).unwrap();
-    cmd.arg("create")
-        .arg("-o")
-        .arg(mlar_file.path())
-        .arg("-l")
-        .arg("encrypt")
-        .arg("-p")
-        .arg(public_key)
-        .arg(testfs.files[0].path());
+    for i in 0..3 {
+        let mut cmd = Command::cargo_bin(UTIL).unwrap();
+        cmd.arg("create")
+            .arg("-o")
+            .arg(mlar_file.path())
+            .arg("-l")
+            .arg("encrypt")
+            .arg("-p")
+            .arg(public_key)
+            .arg(testfs.files[i].path());
 
-    let entry_name = EntryName::from_path(testfs.files[0].path()).unwrap();
-    let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
-    let file_list = format!("{escaped}\n");
+        let entry_name = EntryName::from_path(testfs.files[i].path()).unwrap();
+        let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
+        let file_list = format!("{escaped}\n");
 
-    println!("{cmd:?}");
-    let assert = cmd.assert();
-    assert.success().stderr(String::from(&file_list));
+        println!("{cmd:?}");
+        let assert = cmd.assert();
+        assert.success().stderr(String::from(&file_list));
 
-    let mut cmd = Command::cargo_bin(UTIL).unwrap();
-    cmd.arg("list")
-        .arg("--skip-signature-verification")
-        .arg("-i")
-        .arg(mlar_file.path())
-        .arg("-k")
-        .arg(private_key);
+        let mut cmd = Command::cargo_bin(UTIL).unwrap();
+        cmd.arg("list")
+            .arg("--skip-signature-verification")
+            .arg("-i")
+            .arg(mlar_file.path())
+            .arg("-k")
+            .arg(private_key);
 
-    println!("{cmd:?}");
-    let assert = cmd.assert();
-    assert.success().stdout(file_list.clone());
+        println!("{cmd:?}");
+        let assert = cmd.assert();
+        assert.success().stdout(file_list.clone());
 
-    // Truncate output.mla
-    let mut data = Vec::new();
-    File::open(mlar_file.path())
-        .unwrap()
-        .read_to_end(&mut data)
-        .unwrap();
-    File::create(mlar_file.path())
-        .unwrap()
-        .write_all(&data[..data.len() * 6 / 7])
-        .unwrap();
+        // Truncate output.mla
+        let mut data = Vec::new();
+        File::open(mlar_file.path())
+            .unwrap()
+            .read_to_end(&mut data)
+            .unwrap();
+        File::create(mlar_file.path())
+            .unwrap()
+            .write_all(&data[..data.len() * 6 / 7])
+            .unwrap();
 
-    let mut cmd = Command::cargo_bin(UTIL).unwrap();
-    cmd.arg("repair")
-        .arg("--skip-signature-verification")
-        .arg("-i")
-        .arg(mlar_file.path())
-        .arg("-k")
-        .arg(private_key)
-        .arg("--out-pub")
-        .arg(public_key)
-        .arg("-o")
-        .arg(mlar_repaired_file.path())
-        .arg("-l")
-        .arg("encrypt");
+        let mut cmd = Command::cargo_bin(UTIL).unwrap();
+        cmd.arg("repair")
+            .arg("--skip-signature-verification")
+            .arg("-i")
+            .arg(mlar_file.path())
+            .arg("-k")
+            .arg(private_key)
+            .arg("--out-pub")
+            .arg(public_key)
+            .arg("-o")
+            .arg(mlar_repaired_file.path())
+            .arg("-l")
+            .arg("encrypt");
 
-    println!("{cmd:?}");
-    let assert = cmd.assert();
-    assert.success();
+        println!("{cmd:?}");
+        let assert = cmd.assert();
+        if testfs.files[i]
+            .path()
+            .to_string_lossy()
+            .into_owned()
+            .contains("file3.bin")
+        {
+            assert.failure();
+        } else {
+            assert.success();
+        }
 
-    let mut cmd = Command::cargo_bin(UTIL).unwrap();
-    cmd.arg("cat")
-        .arg("--skip-signature-verification")
-        .arg("-i")
-        .arg(mlar_repaired_file.path())
-        .arg("-k")
-        .arg(private_key)
-        .arg(testfs.files[0].path());
+        let mut cmd = Command::cargo_bin(UTIL).unwrap();
+        cmd.arg("cat")
+            .arg("--skip-signature-verification")
+            .arg("-i")
+            .arg(mlar_repaired_file.path())
+            .arg("-k")
+            .arg(private_key)
+            .arg(testfs.files[i].path());
 
-    println!("{cmd:?}");
-    let assert = cmd.assert();
-    let output_auth = assert.get_output();
+        println!("{cmd:?}");
+        let assert = cmd.assert();
+        let output_auth = assert.get_output();
 
-    std::fs::remove_file(mlar_repaired_file.path()).unwrap();
-    let mut cmd = Command::cargo_bin(UTIL).unwrap();
-    cmd.arg("repair")
-        .arg("--allow-unauthenticated-data")
-        .arg("--skip-signature-verification")
-        .arg("-i")
-        .arg(mlar_file.path())
-        .arg("-k")
-        .arg(private_key)
-        .arg("--out-pub")
-        .arg(public_key)
-        .arg("-o")
-        .arg(mlar_repaired_file.path())
-        .arg("-l")
-        .arg("encrypt");
+        let _ = std::fs::remove_file(mlar_repaired_file.path());
+        let mut cmd = Command::cargo_bin(UTIL).unwrap();
+        cmd.arg("repair")
+            .arg("--allow-unauthenticated-data")
+            .arg("--skip-signature-verification")
+            .arg("-i")
+            .arg(mlar_file.path())
+            .arg("-k")
+            .arg(private_key)
+            .arg("--out-pub")
+            .arg(public_key)
+            .arg("-o")
+            .arg(mlar_repaired_file.path())
+            .arg("-l")
+            .arg("encrypt");
 
-    println!("{cmd:?}");
-    let assert = cmd.assert();
-    assert.success();
+        println!("{cmd:?}");
+        let assert = cmd.assert();
+        assert.success();
 
-    // `mlar cat -i repaired.mla -k samples/test_x25519.pem file1.bin`
-    let mut cmd = Command::cargo_bin(UTIL).unwrap();
-    cmd.arg("cat")
-        .arg("--skip-signature-verification")
-        .arg("-i")
-        .arg(mlar_repaired_file.path())
-        .arg("-k")
-        .arg(private_key)
-        .arg(testfs.files[0].path());
+        // `mlar cat -i repaired.mla -k samples/test_x25519.pem file1.bin`
+        let mut cmd = Command::cargo_bin(UTIL).unwrap();
+        cmd.arg("cat")
+            .arg("--skip-signature-verification")
+            .arg("-i")
+            .arg(mlar_repaired_file.path())
+            .arg("-k")
+            .arg(private_key)
+            .arg(testfs.files[i].path());
 
-    println!("{cmd:?}");
-    let assert = cmd.assert();
-    let output_unauth = assert.get_output();
+        println!("{cmd:?}");
+        let assert = cmd.assert();
+        let output_unauth = assert.get_output();
 
-    // Output unauthenticated must be longer than the authenticated one
-    assert!(output_unauth.stdout.len() > output_auth.stdout.len());
+        // Output unauthenticated must be longer than the authenticated one
+        if testfs.files[i]
+            .path()
+            .to_string_lossy()
+            .into_owned()
+            .contains("file3.bin")
+        {
+            // for file3, the truncation falls in MLA entries layer magic, thus we cannot recover anything
+            assert_eq!(output_unauth.stdout.len(), 0);
+            assert_eq!(output_auth.stdout.len(), 0);
+        } else {
+            assert!(output_unauth.stdout.len() >= output_auth.stdout.len());
+        }
 
-    // Data must be the same
-    assert_eq!(
-        output_auth.stdout,
-        output_unauth.stdout[..output_auth.stdout.len()]
-    );
+        // Data must be the same
+        assert_eq!(
+            output_auth.stdout,
+            output_unauth.stdout[..output_auth.stdout.len()]
+        );
+        let _ = std::fs::remove_file(mlar_file.path());
+        let _ = std::fs::remove_file(mlar_repaired_file.path());
+    }
 }
 
 #[test]
@@ -937,8 +960,8 @@ fn test_multi_fileorders() {
 
         // Inspect the created TAR file
         ensure_tar_content(tar_file.path(), &testfs.files);
-        std::fs::remove_file(mlar_file.path()).unwrap();
-        std::fs::remove_file(tar_file.path()).unwrap();
+        let _ = std::fs::remove_file(mlar_file.path());
+        let _ = std::fs::remove_file(tar_file.path());
     }
 }
 
@@ -1270,8 +1293,8 @@ fn test_keygen_seed() {
     // Check the SHA256, as private key are ~3KB long
     let hash_testseed = Sha256::digest(&pkey_testseed);
     assert_eq!(hash_testseed, PRIVATE_KEY_TESTSEED_SHA256.into());
-    std::fs::remove_file(&priv_path).unwrap();
-    std::fs::remove_file(&pub_path).unwrap();
+    let _ = std::fs::remove_file(&priv_path);
+    let _ = std::fs::remove_file(&pub_path);
 
     // `mlar keygen tempdir/key -s TESTSEED2`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
