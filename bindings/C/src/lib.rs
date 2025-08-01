@@ -70,6 +70,9 @@ pub enum MLAStatus {
     WrongEndMagic = 0x190000,
     NoValidSignatureFound = 0x200000,
     SignatureVerificationAskedButNoSignatureLayerFound = 0x210000,
+    MissingEndOfEncryptedInnerLayerMagic = 0x220000,
+    TruncatedTag = 0x230000,
+    UnknownTagPosition = 0x240000,
     // Keep 0xF10000 slot for backward compatibility
     // Curve25519ParserError = 0xF10000,
     MlaKeyParserError = 0xF20000,
@@ -219,6 +222,11 @@ impl From<MLAError> for MLAStatus {
             MLAError::SignatureVerificationAskedButNoSignatureLayerFound => {
                 MLAStatus::SignatureVerificationAskedButNoSignatureLayerFound
             }
+            MLAError::MissingEndOfEncryptedInnerLayerMagic => {
+                MLAStatus::MissingEndOfEncryptedInnerLayerMagic
+            }
+            MLAError::TruncatedTag => MLAStatus::TruncatedTag,
+            MLAError::UnknownTagPosition => MLAStatus::UnknownTagPosition,
         }
     }
 }

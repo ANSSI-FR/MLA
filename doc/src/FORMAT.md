@@ -45,7 +45,8 @@ The layer `encryption_layer_magic` ASCII magic is "ENCMLAAA".
 `encryption_header_options` is followed by a `encryption_method_id` u16, described below.
 `encryption_method_id` is followed by `encryption_metadata`, a sequence of bytes described below.
 `encryption_metadata` is followed by `encrypted_inner_layer`, a sequence of bytes described below.
-`encrypted_inner_layer` is followed by one `encryption_footer_options` of type `Tail<Opts>`.
+`encrypted_inner_layer` is followed by one `end_of_encrypted_inner_layer_magic` ASCII magic "ENCMLAAB"
+`end_of_encrypted_inner_layer_magic` is followed by one `encryption_footer_options` of type `Tail<Opts>`.
 
 The only `encryption_method_id` valid `encryption_method_id` for the moment is 0. It is the encryption method described in `CRYPTO.md`.
 
