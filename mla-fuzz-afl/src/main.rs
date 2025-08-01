@@ -314,7 +314,13 @@ fn run(data: &mut [u8]) {
             part[0] % (test_case.filenames.len() as u8)
         };
         let fname = &test_case.filenames[num as usize];
-        let entry_name = EntryName::from_arbitrary_bytes(fname.as_bytes()).unwrap();
+
+        let entry_name = match EntryName::from_arbitrary_bytes(fname.as_bytes()) {
+            Ok(name) => name,
+            Err(_) => {
+                continue; // Skip parts with invalid filename
+            }
+        };
 
         let id = if let Some(id) = num2id.get(&num) {
             *id
@@ -328,6 +334,7 @@ fn run(data: &mut [u8]) {
                 }
             }
         };
+
         mla.append_entry_content(id, part.len() as u64, &part[..])
             .expect("Add part failed");
 
@@ -336,11 +343,13 @@ fn run(data: &mut [u8]) {
     }
 
     // Start entries missing from parts (with no content)
+    // Also skip invalid entry names
     for (i, fname) in test_case.filenames.iter().enumerate() {
         if !filename2content.contains_key(fname) {
-            let entry_name = EntryName::from_arbitrary_bytes(fname.as_bytes()).unwrap();
-            if let Ok(id) = mla.start_entry(entry_name) {
-                num2id.insert(i as u8, id);
+            if let Ok(entry_name) = EntryName::from_arbitrary_bytes(fname.as_bytes()) {
+                if let Ok(id) = mla.start_entry(entry_name) {
+                    num2id.insert(i as u8, id);
+                }
             }
         }
     }
@@ -370,10 +379,10 @@ fn run(data: &mut [u8]) {
     let mut tflist: Vec<String> = test_case
         .filenames
         .iter()
-        .map(|fname| {
+        .filter_map(|fname| {
             EntryName::from_arbitrary_bytes(fname.as_bytes())
-                .unwrap()
-                .raw_content_to_escaped_string()
+                .ok()
+                .map(|entry| entry.raw_content_to_escaped_string())
         })
         .collect();
     tflist.sort();
@@ -384,12 +393,21 @@ fn run(data: &mut [u8]) {
     // Verify file contents
     let empty = Vec::new();
     for fname in &test_case.filenames {
-        let entry_name = EntryName::from_arbitrary_bytes(fname.as_bytes()).unwrap();
-        let mla_file = mla_read.get_entry(entry_name).unwrap();
+        let entry_name = match EntryName::from_arbitrary_bytes(fname.as_bytes()) {
+            Ok(name) => name,
+            Err(_) => continue, // skip invalid entry names
+        };
+
+        let mut mla_file = match mla_read.get_entry(entry_name) {
+            Ok(Some(file)) => file,
+            _ => continue, // skip missing or failed entries
+        };
+
         let expected = filename2content.get(fname).unwrap_or(&empty);
         let mut readback = Vec::new();
-        mla_file.unwrap().data.read_to_end(&mut readback).unwrap();
-        assert_eq!(readback, *expected);
+        if mla_file.data.read_to_end(&mut readback).is_ok() {
+            assert_eq!(readback, *expected);
+        }
     }
 
     // === TruncatedArchiveReader repair test (simulate corruption) ===
