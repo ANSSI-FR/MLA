@@ -424,7 +424,7 @@ pub mod errors;
 use crate::errors::{Error, TruncatedReadError};
 
 pub mod config;
-use crate::config::{ArchiveReaderConfig, ArchiveWriterConfig};
+use crate::config::{ArchiveReaderConfig, ArchiveWriterConfig, TruncatedReaderConfig};
 
 pub mod crypto;
 use crate::crypto::hash::{HashWrapperReader, HashWrapperWriter, Sha256Hash};
@@ -1372,19 +1372,15 @@ macro_rules! update_error {
 
 impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
     /// Create a `TruncatedArchiveReader` with given config.
-    pub fn from_config(mut src: R, config: ArchiveReaderConfig) -> Result<Self, Error> {
+    pub fn from_config(mut src: R, config: TruncatedReaderConfig) -> Result<Self, Error> {
         ArchiveHeader::deserialize(&mut src)?;
 
         // Enable layers depending on user option. Order is relevant
         let mut src: Box<dyn 'b + LayerFailSafeReader<'b, R>> =
             Box::new(RawLayerFailSafeReader::new(src));
         let accept_unencrypted = config.accept_unencrypted;
+        let truncated_decryption_mode = config.truncated_decryption_mode;
         let mut magic = read_layer_magic(&mut src)?;
-        if config.signature_reader_config.signature_check {
-            return Err(Error::BadAPIArgument(
-                "Cannot check signatures with TruncatedArchiveReader".into(),
-            ));
-        }
         if magic == SIGNATURE_LAYER_MAGIC {
             src = Box::new(SignatureLayerFailSafeReader::new_skip_magic(src)?);
             magic = read_layer_magic(&mut src)?;
@@ -1394,6 +1390,7 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
                 src,
                 config.encrypt,
                 None,
+                truncated_decryption_mode,
             )?);
             magic = read_layer_magic(&mut src)?;
         } else if !accept_unencrypted {
@@ -1660,6 +1657,7 @@ pub mod info;
 
 #[cfg(test)]
 pub(crate) mod tests {
+    use crate::config::TruncatedReaderDecryptionMode;
     use crate::crypto::mlakey::{MLAPrivateKey, MLAPublicKey, generate_mla_keypair_from_seed};
 
     use super::*;
@@ -1752,6 +1750,159 @@ pub(crate) mod tests {
         let buf = Cursor::new(dest.as_slice());
         let config =
             ArchiveReaderConfig::without_signature_verification().with_encryption(&[private_key]);
+        let mut mla_read = ArchiveReader::from_config(buf, config).unwrap().0;
+
+        let mut file = mla_read
+            .get_entry(EntryName::from_path("my_file").unwrap())
+            .unwrap()
+            .unwrap();
+        let mut rez = Vec::new();
+        file.data.read_to_end(&mut rez).unwrap();
+        assert_eq!(rez, vec![1, 2, 3, 4]);
+        // Explicit drop here, because otherwise mla_read.get_entry() cannot be
+        // recall. It is not detected by the NLL analysis
+        drop(file);
+        let mut file2 = mla_read
+            .get_entry(EntryName::from_path("my_file2").unwrap())
+            .unwrap()
+            .unwrap();
+        let mut rez2 = Vec::new();
+        file2.data.read_to_end(&mut rez2).unwrap();
+        assert_eq!(rez2, vec![5, 6, 7, 8, 9, 10, 11, 12]);
+    }
+
+    #[test]
+    fn new_encryption_only_mla() {
+        let file = Vec::new();
+        // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
+        let (private_key, public_key) = generate_keypair_from_seed([0; 32]);
+        let config = ArchiveWriterConfig::with_encryption_without_signature(&[public_key])
+            .unwrap()
+            .without_compression();
+        let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
+
+        let fake_file = vec![1, 2, 3, 4];
+        mla.add_entry(
+            EntryName::from_path("my_file").unwrap(),
+            fake_file.len() as u64,
+            fake_file.as_slice(),
+        )
+        .unwrap();
+        let fake_file = vec![5, 6, 7, 8];
+        let fake_file2 = vec![9, 10, 11, 12];
+        let id = mla
+            .start_entry(EntryName::from_path("my_file2").unwrap())
+            .unwrap();
+        mla.append_entry_content(id, fake_file.len() as u64, fake_file.as_slice())
+            .unwrap();
+        mla.append_entry_content(id, fake_file2.len() as u64, fake_file2.as_slice())
+            .unwrap();
+        mla.end_entry(id).unwrap();
+
+        let dest = mla.finalize().unwrap();
+        let buf = Cursor::new(dest.as_slice());
+        let config =
+            ArchiveReaderConfig::without_signature_verification().with_encryption(&[private_key]);
+        let mut mla_read = ArchiveReader::from_config(buf, config).unwrap().0;
+
+        let mut file = mla_read
+            .get_entry(EntryName::from_path("my_file").unwrap())
+            .unwrap()
+            .unwrap();
+        let mut rez = Vec::new();
+        file.data.read_to_end(&mut rez).unwrap();
+        assert_eq!(rez, vec![1, 2, 3, 4]);
+        // Explicit drop here, because otherwise mla_read.get_entry() cannot be
+        // recall. It is not detected by the NLL analysis
+        drop(file);
+        let mut file2 = mla_read
+            .get_entry(EntryName::from_path("my_file2").unwrap())
+            .unwrap()
+            .unwrap();
+        let mut rez2 = Vec::new();
+        file2.data.read_to_end(&mut rez2).unwrap();
+        assert_eq!(rez2, vec![5, 6, 7, 8, 9, 10, 11, 12]);
+    }
+
+    #[test]
+    fn new_naked_mla() {
+        let file = Vec::new();
+        // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
+        let config = ArchiveWriterConfig::without_encryption_without_signature()
+            .unwrap()
+            .without_compression();
+        let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
+
+        let fake_file = vec![1, 2, 3, 4];
+        mla.add_entry(
+            EntryName::from_path("my_file").unwrap(),
+            fake_file.len() as u64,
+            fake_file.as_slice(),
+        )
+        .unwrap();
+        let fake_file = vec![5, 6, 7, 8];
+        let fake_file2 = vec![9, 10, 11, 12];
+        let id = mla
+            .start_entry(EntryName::from_path("my_file2").unwrap())
+            .unwrap();
+        mla.append_entry_content(id, fake_file.len() as u64, fake_file.as_slice())
+            .unwrap();
+        mla.append_entry_content(id, fake_file2.len() as u64, fake_file2.as_slice())
+            .unwrap();
+        mla.end_entry(id).unwrap();
+
+        let dest = mla.finalize().unwrap();
+        let buf = Cursor::new(dest.as_slice());
+        let config = ArchiveReaderConfig::without_signature_verification().without_encryption();
+        let mut mla_read = ArchiveReader::from_config(buf, config).unwrap().0;
+
+        let mut file = mla_read
+            .get_entry(EntryName::from_path("my_file").unwrap())
+            .unwrap()
+            .unwrap();
+        let mut rez = Vec::new();
+        file.data.read_to_end(&mut rez).unwrap();
+        assert_eq!(rez, vec![1, 2, 3, 4]);
+        // Explicit drop here, because otherwise mla_read.get_entry() cannot be
+        // recall. It is not detected by the NLL analysis
+        drop(file);
+        let mut file2 = mla_read
+            .get_entry(EntryName::from_path("my_file2").unwrap())
+            .unwrap()
+            .unwrap();
+        let mut rez2 = Vec::new();
+        file2.data.read_to_end(&mut rez2).unwrap();
+        assert_eq!(rez2, vec![5, 6, 7, 8, 9, 10, 11, 12]);
+    }
+
+    #[test]
+    fn new_compression_only_mla() {
+        let file = Vec::new();
+        // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
+        let config = ArchiveWriterConfig::without_encryption_without_signature().unwrap();
+        let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
+
+        let fake_file = vec![1, 2, 3, 4];
+        mla.add_entry(
+            EntryName::from_path("my_file").unwrap(),
+            fake_file.len() as u64,
+            fake_file.as_slice(),
+        )
+        .unwrap();
+        let fake_file = vec![5, 6, 7, 8];
+        let fake_file2 = vec![9, 10, 11, 12];
+        let id = mla
+            .start_entry(EntryName::from_path("my_file2").unwrap())
+            .unwrap();
+        mla.append_entry_content(id, fake_file.len() as u64, fake_file.as_slice())
+            .unwrap();
+        mla.append_entry_content(id, fake_file2.len() as u64, fake_file2.as_slice())
+            .unwrap();
+        mla.end_entry(id).unwrap();
+
+        let dest = mla.finalize().unwrap();
+        let buf = Cursor::new(dest.as_slice());
+        let config = ArchiveReaderConfig::without_signature_verification().without_encryption();
         let mut mla_read = ArchiveReader::from_config(buf, config).unwrap().0;
 
         let mut file = mla_read
@@ -2115,8 +2266,10 @@ pub(crate) mod tests {
         let (dest, _sender_key, receiver_key, files) = build_archive(true, true, false, false);
 
         // Prepare the failsafe reader
-        let config = ArchiveReaderConfig::without_signature_verification()
-            .with_encryption(&[receiver_key.0.get_decryption_private_key().clone()]);
+        let config = TruncatedReaderConfig::without_signature_verification_with_encryption(
+            &[receiver_key.0.get_decryption_private_key().clone()],
+            TruncatedReaderDecryptionMode::OnlyAuthenticatedData,
+        );
         let mut mla_fsread = TruncatedArchiveReader::from_config(dest.as_slice(), config).unwrap();
 
         // Prepare the writer
@@ -2177,8 +2330,10 @@ pub(crate) mod tests {
             };
 
             for remove in &[1, 10, 30, 50, 70, 95, 100] {
-                let config = ArchiveReaderConfig::without_signature_verification()
-                    .with_encryption(&[receiver_key.0.get_decryption_private_key().clone()]);
+                let config = TruncatedReaderConfig::without_signature_verification_with_encryption(
+                    &[receiver_key.0.get_decryption_private_key().clone()],
+                    TruncatedReaderDecryptionMode::DataEvenUnauthenticated,
+                );
                 let mut mla_fsread = TruncatedArchiveReader::from_config(
                     &dest[..dest.len() - footer_size - remove],
                     config,
@@ -2330,7 +2485,7 @@ pub(crate) mod tests {
         // Prepare the failsafe reader
         let mut mla_fsread = TruncatedArchiveReader::from_config(
             dest.as_slice(),
-            ArchiveReaderConfig::without_signature_verification().without_encryption(),
+            TruncatedReaderConfig::without_signature_verification_without_encryption(),
         )
         .unwrap();
 
@@ -2540,8 +2695,8 @@ pub(crate) mod tests {
         assert_eq!(
             Sha256::digest(&raw_mla).as_slice(),
             [
-                112, 210, 45, 237, 22, 196, 83, 21, 245, 50, 241, 185, 107, 48, 3, 233, 152, 179,
-                196, 96, 60, 9, 28, 216, 245, 88, 137, 148, 213, 20, 148, 52
+                37, 115, 207, 24, 252, 103, 197, 215, 240, 129, 28, 110, 5, 131, 230, 101, 240,
+                222, 174, 173, 137, 69, 66, 110, 238, 136, 83, 175, 78, 117, 43, 37
             ]
         )
     }
@@ -2569,8 +2724,10 @@ pub(crate) mod tests {
         let mut mla_read = ArchiveReader::from_config(buf, config).unwrap().0;
 
         // Build FailSafeReader
-        let config =
-            ArchiveReaderConfig::without_signature_verification().with_encryption(&[privkey]);
+        let config = TruncatedReaderConfig::without_signature_verification_with_encryption(
+            &[privkey],
+            TruncatedReaderDecryptionMode::OnlyAuthenticatedData,
+        );
         let mut mla_fsread = TruncatedArchiveReader::from_config(mla_data, config).unwrap();
 
         // Repair the archive (without any damage, but trigger the corresponding code)
@@ -2653,8 +2810,8 @@ pub(crate) mod tests {
         assert_eq!(
             Sha256::digest(&file).as_slice(),
             [
-                178, 107, 121, 4, 21, 173, 69, 162, 3, 174, 37, 176, 61, 105, 36, 89, 176, 48, 195,
-                220, 48, 247, 186, 130, 213, 255, 133, 10, 160, 98, 166, 42
+                77, 180, 53, 233, 197, 160, 202, 202, 132, 28, 32, 228, 218, 140, 195, 54, 111,
+                240, 122, 12, 172, 76, 173, 22, 192, 37, 62, 135, 243, 116, 243, 54
             ]
         )
     }

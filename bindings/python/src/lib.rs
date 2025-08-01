@@ -151,6 +151,9 @@ create_exception!(mla, EntryNameError, MLAError, "An MLA entry name is invalid f
 create_exception!(mla, WrongEndMagic, MLAError, "Wrong end magic, must be \"EMLAAAAA\"");
 create_exception!(mla, NoValidSignatureFound, MLAError, "Cannot validate any signature");
 create_exception!(mla, SignatureVerificationAskedButNoSignatureLayerFound, MLAError, "Signature verification was asked but no signature layer was found");
+create_exception!(mla, MissingEndOfEncryptedInnerLayerMagic, MLAError, "MissingEndOfEncryptedInnerLayerMagic");
+create_exception!(mla, TruncatedTag, MLAError, "TruncatedTag");
+create_exception!(mla, UnknownTagPosition, MLAError, "UnknownTagPosition");
 
 // Convert potentials errors to the wrapped type
 
@@ -273,6 +276,15 @@ impl From<WrappedError> for PyErr {
                 }
                 mla::errors::Error::SignatureVerificationAskedButNoSignatureLayerFound => {
                     PyErr::new::<SignatureVerificationAskedButNoSignatureLayerFound, _>("Signature verification was asked but no signature layer was found")
+                }
+                mla::errors::Error::MissingEndOfEncryptedInnerLayerMagic => {
+                    PyErr::new::<MissingEndOfEncryptedInnerLayerMagic, _>("MissingEndOfEncryptedInnerLayerMagic")
+                }
+                mla::errors::Error::TruncatedTag => {
+                    PyErr::new::<TruncatedTag, _>("TruncatedTag")
+                }
+                mla::errors::Error::UnknownTagPosition => {
+                    PyErr::new::<UnknownTagPosition, _>("UnknownTagPosition")
                 }
             },
             WrappedError::WrappedPy(inner_err) => inner_err,
@@ -1281,6 +1293,9 @@ fn pymla(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("WrongEndMagic", py.get_type::<WrongEndMagic>())?;
     m.add("NoValidSignatureFound", py.get_type::<NoValidSignatureFound>())?;
     m.add("SignatureVerificationAskedButNoSignatureLayerFound", py.get_type::<SignatureVerificationAskedButNoSignatureLayerFound>())?;
+    m.add("MissingEndOfEncryptedInnerLayerMagic", py.get_type::<MissingEndOfEncryptedInnerLayerMagic>())?;
+    m.add("TruncatedTag", py.get_type::<TruncatedTag>())?;
+    m.add("UnknownTagPosition", py.get_type::<UnknownTagPosition>())?;
 
     // Add constants
     m.add("DEFAULT_COMPRESSION_LEVEL", DEFAULT_COMPRESSION_LEVEL)?;

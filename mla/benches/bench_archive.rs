@@ -4,7 +4,9 @@ use criterion::BenchmarkId;
 use criterion::Throughput;
 
 use mla::TruncatedArchiveReader;
-use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
+use mla::config::{
+    ArchiveReaderConfig, ArchiveWriterConfig, TruncatedReaderConfig, TruncatedReaderDecryptionMode,
+};
 use mla::crypto::mlakey::{MLAEncryptionPublicKey, generate_mla_keypair_from_seed};
 use mla::entry::EntryName;
 use mla::helpers::linear_extract;
@@ -69,6 +71,55 @@ fn build_archive(
     // Instantiate the reader
     let config = ArchiveReaderConfig::without_signature_verification()
         .with_encryption(&[private_key.get_decryption_private_key().clone()]);
+    (dest, config)
+}
+
+/// Build an archive with `iters` files of `size` bytes each and `layers` enabled
+///
+/// Files names are `file_{i}`
+fn build_truncated_archive(
+    iters: u64,
+    size: u64,
+    compression: bool,
+    encryption: bool,
+) -> (Vec<u8>, TruncatedReaderConfig) {
+    // Setup
+    let mut rng = ChaChaRng::seed_from_u64(0);
+    let (private_key, public_key) = generate_mla_keypair_from_seed([0; 32]);
+    let file = Vec::new();
+    // Create the initial archive with `iters` files of `size` bytes
+    let config = if encryption {
+        ArchiveWriterConfig::with_encryption_without_signature(&[public_key
+            .get_encryption_public_key()
+            .clone()])
+    } else {
+        ArchiveWriterConfig::without_encryption_without_signature()
+    };
+    let config = if compression {
+        config.unwrap()
+    } else {
+        config.unwrap().without_compression()
+    };
+    let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
+    for i in 0..iters {
+        let data: Vec<u8> = Alphanumeric
+            .sample_iter(&mut rng)
+            .take(size as usize)
+            .collect();
+        let id = mla
+            .start_entry(EntryName::from_path(format!("file_{i}")).unwrap())
+            .unwrap();
+        mla.append_entry_content(id, data.len() as u64, data.as_slice())
+            .unwrap();
+        mla.end_entry(id).unwrap();
+    }
+    let dest = mla.finalize().unwrap();
+
+    // Instantiate the reader
+    let config = TruncatedReaderConfig::without_signature_verification_with_encryption(
+        &[private_key.get_decryption_private_key().clone()],
+        TruncatedReaderDecryptionMode::OnlyAuthenticatedData,
+    );
     (dest, config)
 }
 
@@ -361,7 +412,7 @@ pub fn reader_multiple_layers_multiple_block_size_multifiles_linear(c: &mut Crit
 ///
 /// Return the time taken by the repair operation
 fn repair_archive(iters: u64, size: u64, compression: bool, encryption: bool) -> Duration {
-    let (data, config) = build_archive(iters, size, compression, encryption);
+    let (data, config) = build_truncated_archive(iters, size, compression, encryption);
     let buf = Cursor::new(data);
     let dest = Vec::new();
 

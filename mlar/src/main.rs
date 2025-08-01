@@ -2,7 +2,9 @@ use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use glob::Pattern;
 use humansize::{DECIMAL, FormatSize};
 use lru::LruCache;
-use mla::config::{ArchiveReaderConfig, ArchiveWriterConfig};
+use mla::config::{
+    ArchiveReaderConfig, ArchiveWriterConfig, TruncatedReaderConfig, TruncatedReaderDecryptionMode,
+};
 use mla::crypto::mlakey::{
     MLADecryptionPrivateKey, MLAEncryptionPublicKey, MLAPrivateKey, MLAPublicKey,
     MLASignatureVerificationPublicKey, MLASigningPrivateKey, derive_keypair_from_path,
@@ -378,7 +380,31 @@ fn open_mla_file<'a>(matches: &ArgMatches) -> Result<ArchiveReader<'a, File>, Ml
 fn open_failsafe_mla_file<'a>(
     matches: &ArgMatches,
 ) -> Result<TruncatedArchiveReader<'a, File>, MlarError> {
-    let config = readerconfig_from_matches(matches);
+    let truncated_decryption_mode = if matches.get_flag("allow_unauthenticated_data") {
+        TruncatedReaderDecryptionMode::DataEvenUnauthenticated
+    } else {
+        TruncatedReaderDecryptionMode::OnlyAuthenticatedData
+    };
+    let config = if matches.contains_id("private_keys") {
+        let (private_dec_keys, _private_sig_keys) = open_private_keys(matches, "private_keys")
+            .map_err(|error| {
+                eprintln!("[ERROR] Unable to open private keys: {error}");
+                MlarError::Mla(Error::InvalidKeyFormat)
+            })?;
+        if matches.get_flag("accept_unencrypted") {
+            TruncatedReaderConfig::without_signature_verification_with_encryption_accept_unencrypted(
+                &private_dec_keys,
+                truncated_decryption_mode,
+            )
+        } else {
+            TruncatedReaderConfig::without_signature_verification_with_encryption(
+                &private_dec_keys,
+                truncated_decryption_mode,
+            )
+        }
+    } else {
+        TruncatedReaderConfig::without_signature_verification_without_encryption()
+    };
 
     // Safe to use unwrap() because the option is required()
     let mla_file = matches.get_one::<PathBuf>("input").unwrap();
@@ -386,7 +412,7 @@ fn open_failsafe_mla_file<'a>(
     let file = File::open(path)?;
 
     // Instantiate reader
-    Ok(TruncatedArchiveReader::from_config(file, config?)?)
+    Ok(TruncatedArchiveReader::from_config(file, config)?)
 }
 
 fn add_file_to_tar<R: Read + Seek, W: Write>(
@@ -1473,6 +1499,13 @@ fn app() -> clap::Command {
                         .num_args(1)
                         .action(ArgAction::Append)
                         .value_parser(value_parser!(PathBuf)),
+                )
+                .arg(
+                    Arg::new("allow_unauthenticated_data")
+                        .long("allow-unauthenticated-data")
+                        .help("Allow extraction of unauthenticated data from the archive. USE THIS OPTION ONLY IF NECESSARY")
+                        .action(ArgAction::SetTrue)
+                        .required(false),
                 )
                 .arg(
                     Arg::new("out_priv")
