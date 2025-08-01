@@ -1,15 +1,13 @@
 [package]
 name = "mla-fuzz-afl"
-version = "0.1.0"
-authors = ["Camille Mougey <camille.mougey@ssi.gouv.fr>"]
+version = "0.2.0"
+authors = ["ANSSI <opensource@ssi.gouv.fr>"]
 edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 afl = "0.15"
-bincode = "2.0"
-bitflags = { version = "2.9", default-features = false }
 mla = { path = "../mla" }
 
 [lints.rust]

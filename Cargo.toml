@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "mla",
+    "mla-fuzz-afl",
     "mlar",
     "mlar/mlar-upgrader",
     "bindings/C",
