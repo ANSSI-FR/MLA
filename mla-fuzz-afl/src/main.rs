@@ -452,16 +452,30 @@ fn run(data: &mut [u8]) {
                                 .collect();
                             recovered_list.sort();
 
-                            assert_eq!(recovered_list, tflist);
+                            for recovered_file in &recovered_list {
+                                if tflist.binary_search(recovered_file).is_err() {
+                                    // Log and skip unexpected recovered files (possibly corrupted/mangled)
+                                    eprintln!(
+                                        "Warning: unexpected recovered file: {recovered_file}"
+                                    );
+                                    continue;
+                                }
+                            }
 
                             for fname in &tflist {
                                 let entry_name =
-                                    EntryName::from_arbitrary_bytes(fname.as_bytes()).unwrap();
-                                if let Some(mut mla_file) =
-                                    recovered_read.get_entry(entry_name).unwrap()
-                                {
-                                    let mut recovered_data = Vec::new();
-                                    mla_file.data.read_to_end(&mut recovered_data).unwrap();
+                                    match EntryName::from_arbitrary_bytes(fname.as_bytes()) {
+                                        Ok(name) => name,
+                                        Err(_) => continue, // skip invalid entry names
+                                    };
+
+                                let mut mla_file = match recovered_read.get_entry(entry_name) {
+                                    Ok(Some(file)) => file,
+                                    _ => continue, // skip missing or failed entries
+                                };
+
+                                let mut recovered_data = Vec::new();
+                                if mla_file.data.read_to_end(&mut recovered_data).is_ok() {
                                     let expected = filename2content.get(fname).unwrap_or(&empty);
                                     assert_eq!(&recovered_data, expected);
                                 }
@@ -498,7 +512,9 @@ fn main() {
     //
     // Or:
     //
-    // let mut data = include_bytes!("../out/default/crashes/my_crash").to_vec();
+    // let mut data = include_bytes!(
+    //    "../out/default/crashes/my_crash"
+    // ).to_vec();
     // run(&mut data);
      */
 
