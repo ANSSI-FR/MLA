@@ -251,20 +251,6 @@ fn config_from_matches(
         } else {
             ArchiveWriterConfig::with_encryption_without_signature(&pub_enc_keys)
         }
-    } else if matches.contains_id("private_keys") {
-        if !layers.contains(&"sign") {
-            eprintln!(
-                "[WARNING] 'private_keys' was given, but sign layer was not asked. Enabling it"
-            );
-        }
-
-        let (_private_decryption_keys, private_sig_keys) =
-            open_private_keys(matches, output_private_keys_arg_name).map_err(|error| {
-                eprintln!("[ERROR] Unable to open private keys: {error}");
-                MlarError::Mla(Error::InvalidKeyFormat)
-            })?;
-
-        ArchiveWriterConfig::without_encryption_with_signature(&private_sig_keys)
     } else {
         ArchiveWriterConfig::without_encryption_without_signature()
     }?;
