@@ -55,11 +55,11 @@ mlar create -k sender.mlapriv -p receiver.mlapub -o my_archive.mla /etc/./os-rel
 # List the content of the archive.
 # Note that order may vary, root dir are stripped,
 # paths are normalized and listing is encoded as described in
-# `doc/ESCAPING.md`.
+# `doc/src/ENTRY_NAME.md`.
 # This outputs:
 # ``
 # etc/issue
-# etc/os%2drelease
+# etc/os-release
 # file.txt
 # ``
 mlar list -k receiver.mlapriv -p sender.mlapub -i my_archive.mla
@@ -74,7 +74,7 @@ mlar cat -k receiver.mlapriv -p sender.mlapub -i my_archive.mla etc/os-release
 
 # Convert the archive to a long-term one, removing encryption and using the best
 # and slower compression level
-mlar convert -k receiver.mlapriv -p sender.mlapub -i my_archive.mla -o longterm.mla -l compress -q 11
+mlar convert -k receiver.mlapriv -i my_archive.mla -o longterm.mla -l compress -q 11 --skip-signature-verification
 
 # Create an archive with multiple recipients and without signature nor compression
 mlar create -l encrypt -p archive.mlapub -p client1.mlapub -o my_archive.mla ...
@@ -86,15 +86,15 @@ mlar create -l encrypt -p archive.mlapub -p client1.mlapub -o my_archive.mla ...
 # NUL, RTLO, newline, terminal escape sequence, carriage return,
 # HTML, surrogate code unit, U+0085 weird newline, fake unicode slash.
 # Please note that some of these characters may appear in valid a path.
-mlar list -k test_mlakey_archive_v2_receiver.mlapriv -p test_mlakey_archive_v2_sender.mlapub -i archive_weird.mla --raw-escaped-names
+mlar list -k samples/test_mlakey_archive_v2_receiver.mlapriv -p samples/test_mlakey_archive_v2_sender.mlapub -i samples/archive_weird.mla --raw-escaped-names
 
 # Get its content.
 # This displays:
 # `' OR 1=1`
-mlar cat -k test_mlakey_archive_v2_receiver.mlapriv -p test_mlakey_archive_v2_sender.mlapub -i archive_weird.mla --raw-escaped-names c%3a%2f%00%3b%e2%80%ae%0ac%0dd%1b%5b1%3b31ma%3cscript%3eevil%5c..%2f%d8%01%c2%85%e2%88%95
+mlar cat -k samples/test_mlakey_archive_v2_receiver.mlapriv -p samples/test_mlakey_archive_v2_sender.mlapub -i samples/archive_weird.mla --raw-escaped-names c%3a%2f%00%3b%e2%80%ae%0ac%0dd%1b%5b1%3b31ma%3cscript%3eevil%5c..%2f%d8%01%c2%85%e2%88%95
 
-# Create an archive of a web file and utf-8 string, without encryption and without signature
-(curl https://raw.githubusercontent.com/ANSSI-FR/MLA/refs/heads/master/README.md; echo "SEP"; echo "All Hail MLA!") | mlar create -l -o my_archive.mla --separator "SEP" --filenames great_readme.md -
+# Create an archive of a web file and utf-8 string, without compression, without encryption and without signature
+(curl https://raw.githubusercontent.com/ANSSI-FR/MLA/refs/heads/main/LICENSE.md; echo "SEP"; echo "All Hail MLA!") | mlar create -l -o my_archive.mla --separator "SEP" --filenames great_license.md -
 ```
 
 `mlar` can be obtained:
@@ -129,7 +129,7 @@ Security
 
 * Please keep in mind, it is generally not safe to extract in a place where at least one ancestor is writable by others (symbolic link attacks).
 * Even if encrypted with an authenticated cipher, if you receive an unsigned archive , it may have been crafted by anyone having your public key and thus can contain arbitrary data.
-* Read API documentation and mlar help before using their functionnalities. They sometimes provide important security warnings. `doc/ENTRY_NAME.md` is also of particular interest.
+* Read API documentation and mlar help before using their functionalities. They sometimes provide important security warnings. `doc/src/ENTRY_NAME.md` is also of particular interest.
 * mlar escapes entry names on output to avoid security issues.
 * Except for symbolic link attacks, mlar will not extract outside given output directory.
 
@@ -160,8 +160,8 @@ For instance (from the understanding of the author):
 * `7zip` format requires to rebuild the entire archive while adding files to it
   (not streamable). It is also quite complex, and so harder to audit / trust
   when unpacking unknown archive
-* `journald` format is not streamable. Also, one writter / multiple reader is
-  not needed here, thus releasing some constraints `journald` format have
+* `journald` format is not streamable. Also, one writer / multiple reader is
+  not needed here, thus releasing some constraints `journald` format has
 * any archive + `age`: [age](https://age-encryption.org/) does not, as of MLA 2.0 release, support post quantum encryption nor signatures.
 * Backup formats are generally written to avoid things such as duplication,
   hence their need to keep bigger structures in memory, or not being 

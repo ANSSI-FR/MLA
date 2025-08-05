@@ -127,7 +127,7 @@ fn build_truncated_archive(
     (dest, config)
 }
 
-/// Wrapper on `build_archive` returning an already instancied `ArchiveReader`
+/// Wrapper on `build_archive` returning an already instantiated `ArchiveReader`
 fn build_archive_reader<'a>(
     iters: u64,
     size: u64,
@@ -165,7 +165,7 @@ fn layers_to_config(
 /// Big blocks (> 4MB) are also use to force the use of several blocks inside boundaries
 pub fn writer_multiple_layers_multiple_block_size(c: &mut Criterion) {
     // Setup
-    // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
+    // Use a deterministic RNG in tests, for reproducibility. DO NOT DO THIS IS IN ANY RELEASED BINARY!
     let mut rng = ChaChaRng::seed_from_u64(0);
     let (_private_key, public_key) = generate_mla_keypair_from_seed([0; 32]);
 
@@ -212,13 +212,13 @@ pub fn writer_multiple_layers_multiple_block_size(c: &mut Criterion) {
 ///
 /// It should be noted the Throughput obtained depends on the data received and
 /// do not represent the size of the emitted data.
-/// Additionnals tests should be done to measure the compression gain between
+/// Additional tests should be done to measure the compression gain between
 /// the different levels
 pub fn multiple_compression_quality(c: &mut Criterion) {
     let size = 256 * KB;
 
     // Setup
-    // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
+    // Use a deterministic RNG in tests, for reproducibility. DO NOT DO THIS IS IN ANY RELEASED BINARY!
     let mut rng = ChaChaRng::seed_from_u64(0);
 
     let mut group = c.benchmark_group("multiple_compression_quality");
@@ -355,7 +355,7 @@ pub fn reader_multiple_layers_multiple_block_size_multifiles_random(c: &mut Crit
 }
 
 /// Create an archive with a `iters` files of `size` bytes using `layers` and
-/// measure the time needed to read them (linearyly)
+/// measure the time needed to read them (linearly)
 ///
 /// This function is used to measure only `linear_extract` time without the cost
 /// of archive creation

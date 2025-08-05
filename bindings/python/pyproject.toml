@@ -6,9 +6,9 @@ build-backend = "maturin"
 name = "mla-archive"
 description = "Bindings for MLA Archive manipulation"
 authors = [
-    { name="Mougey Camille", email="camille.mougey@ssi.gouv.fr" },
+    { name="ANSSI", email="opensource@ssi.gouv.fr" },
 ]
-requires-python = ">=3.8"
+requires-python = ">=3.11"
 keywords = ["archive", "mla"]
 license = {file = "LICENSE.md"}
 classifiers = [

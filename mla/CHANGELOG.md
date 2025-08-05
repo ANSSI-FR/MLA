@@ -37,7 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Code cleaning
 - Bump dependencies
 - Benchmarking: reduce the number of test case per test, add new scenarios
-- Explicitely ask for `zeroize` and `static_secrets` feature in `x25519-dalek`
+- Explicitly ask for `zeroize` and `static_secrets` feature in `x25519-dalek`
 
 ### Fixed
 

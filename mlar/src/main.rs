@@ -134,12 +134,12 @@ fn open_private_keys(
     if let Some(private_key_args) = matches.get_many::<PathBuf>(private_keys_arg_name) {
         for private_key_arg in private_key_args {
             let mut file = File::open(private_key_arg)?;
-            let (private_decryption_key, private_siging_key) =
+            let (private_decryption_key, private_signing_key) =
                 MLAPrivateKey::deserialize_private_key(&mut file)
                     .map_err(|_| Error::InvalidKeyFormat)?
                     .get_private_keys();
             private_decryption_keys.push(private_decryption_key);
-            private_signing_keys.push(private_siging_key);
+            private_signing_keys.push(private_signing_key);
         }
     };
 
@@ -251,20 +251,6 @@ fn config_from_matches(
         } else {
             ArchiveWriterConfig::with_encryption_without_signature(&pub_enc_keys)
         }
-    } else if matches.contains_id("private_keys") {
-        if !layers.contains(&"sign") {
-            eprintln!(
-                "[WARNING] 'private_keys' was given, but sign layer was not asked. Enabling it"
-            );
-        }
-
-        let (_private_decryption_keys, private_sig_keys) =
-            open_private_keys(matches, output_private_keys_arg_name).map_err(|error| {
-                eprintln!("[ERROR] Unable to open private keys: {error}");
-                MlarError::Mla(Error::InvalidKeyFormat)
-            })?;
-
-        ArchiveWriterConfig::without_encryption_with_signature(&private_sig_keys)
     } else {
         ArchiveWriterConfig::without_encryption_without_signature()
     }?;
@@ -1318,7 +1304,7 @@ fn app() -> clap::Command {
             .action(ArgAction::SetTrue),
         Arg::new("skip_signature_verification")
             .long("skip-signature-verification")
-            .help("Skip signature verification wether the archive is signed or not. This enables reading unsigned archives and reading signed archives without the cost of verification.")
+            .help("Skip signature verification whether the archive is signed or not. This enables reading unsigned archives and reading signed archives without the cost of verification.")
             .action(ArgAction::SetTrue),
     ];
     let output_args = vec![

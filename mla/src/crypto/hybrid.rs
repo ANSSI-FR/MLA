@@ -678,7 +678,7 @@ mod tests {
 
     #[test]
     fn test_generate_keypair_from_rng() {
-        // Ensure reproductability
+        // Ensure reproducibility
         let mut rng = ChaChaRng::seed_from_u64(0);
         let (private_key, public_key) = generate_keypair_from_rng(&mut rng);
         let mut rng = ChaChaRng::seed_from_u64(0);

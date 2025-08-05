@@ -325,7 +325,7 @@ impl FileMetadata {
 
 /// Represents multiple MLA Public Keys
 ///
-/// Instanciate string or bytes containing a public key in MLA key format
+/// Instantiate string or bytes containing a public key in MLA key format
 #[derive(Clone)]
 struct PublicKeysInner {
     keys: Vec<MLAPublicKey>,
@@ -396,7 +396,7 @@ impl PublicKeys {
 
 /// Represents multiple MLA Private Keys
 ///
-/// Instanciate string or bytes containing a private key in MLA key format
+/// Instantiate string or bytes containing a private key in MLA key format
 #[derive(Clone)]
 struct PrivateKeysInner {
     keys: Vec<MLAPrivateKey>,
@@ -687,9 +687,9 @@ impl ReaderConfig {
 
 /// `ArchiveWriter` is a generic type. To avoid generating several Python implementation
 /// (see https://pyo3.rs/v0.24.0/class#no-generic-parameters), this enum explicitely
-/// instanciate `ArchiveWriter` for common & expected types
+/// instantiate `ArchiveWriter` for common & expected types
 ///
-/// Additionnaly, as the GC in Python might drop objects at any time, we need to use
+/// Additionally, as the GC in Python might drop objects at any time, we need to use
 /// `'static` lifetime for the writer. This should not be a problem as the writer is not
 /// supposed to be used after the drop of the parent object
 /// (see https://pyo3.rs/v0.24.0/class#no-lifetime-parameters)
@@ -1014,7 +1014,7 @@ impl MLAFile {
         _traceback: Option<&Bound<'_, PyAny>>,
     ) -> Result<bool, WrappedError> {
         if exc_type.is_some() {
-            // An exception occured, let it be raised again
+            // An exception occurred, let it be raised again
             return Ok(false);
         }
 
@@ -1023,7 +1023,7 @@ impl MLAFile {
                 // Nothing to do, dropping this object should close the inner stream
             }
             OpeningModeInner::Write(ref mut opt_writer) => {
-                // Finalize. If an exception occured, raise it
+                // Finalize. If an exception occurred, raise it
                 finalize_if_not_already(opt_writer)?;
             }
         }
@@ -1146,8 +1146,8 @@ struct EntryName {
 
 impl PartialEq for EntryName {
     fn eq(&self, other: &EntryName) -> bool {
-        let lhs = self.inner.lock().expect("Mutex poisonned");
-        let rhs = other.inner.lock().expect("Mutex poisonned");
+        let lhs = self.inner.lock().expect("Mutex poisoned");
+        let rhs = other.inner.lock().expect("Mutex poisoned");
         lhs.eq(&rhs)
     }
 }
@@ -1156,7 +1156,7 @@ impl Eq for EntryName {}
 
 impl Hash for EntryName {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.inner.lock().expect("Mutex poisonned").hash(state);
+        self.inner.lock().expect("Mutex poisoned").hash(state);
     }
 }
 
@@ -1168,7 +1168,7 @@ impl EntryName {
     }
 
     fn to_rust_entry_name(&self) -> RustEntryName {
-        self.inner.lock().expect("Mutex poisonned").clone()
+        self.inner.lock().expect("Mutex poisoned").clone()
     }
 }
 
@@ -1210,26 +1210,26 @@ impl EntryName {
     #[getter]
     /// SECURITY WARNING: See Rust `EntryName::as_arbitrary_bytes` doc to read what this returns
     fn arbitrary_bytes(&self) -> Vec<u8> {
-        self.inner.lock().expect("Mutex poisonned").as_arbitrary_bytes().to_vec()
+        self.inner.lock().expect("Mutex poisoned").as_arbitrary_bytes().to_vec()
     }
 
     /// See Rust `EntryName::raw_content_to_escaped_string` doc to read what this function does
     fn raw_content_to_escaped_string(&self) -> String {
-        self.inner.lock().expect("Mutex poisonned").raw_content_to_escaped_string()
+        self.inner.lock().expect("Mutex poisoned").raw_content_to_escaped_string()
     }
 
     /// SECURITY WARNING: See Rust `EntryName::to_pathbuf` doc to read what this function does
     fn to_pathbuf(&self) -> Result<PathBuf, WrappedError> {
-        self.inner.lock().expect("Mutex poisonned").to_pathbuf().map_err(|_| WrappedError::EntryNameError)
+        self.inner.lock().expect("Mutex poisoned").to_pathbuf().map_err(|_| WrappedError::EntryNameError)
     }
 
     /// See Rust `EntryName::to_pathbuf_escaped_string` doc to read what this function does
     fn to_pathbuf_escaped_string(&self) -> Result<String, WrappedError> {
-        self.inner.lock().expect("Mutex poisonned").to_pathbuf_escaped_string().map_err(|_| WrappedError::EntryNameError)
+        self.inner.lock().expect("Mutex poisoned").to_pathbuf_escaped_string().map_err(|_| WrappedError::EntryNameError)
     }
 
     fn __richcmp__(&self, other: &EntryName, op: CompareOp) -> bool {
-        op.matches(self.inner.lock().expect("Mutex poisonned").cmp(&other.inner.lock().expect("Mutex poisonned")))
+        op.matches(self.inner.lock().expect("Mutex poisoned").cmp(&other.inner.lock().expect("Mutex poisoned")))
     }
 
     fn __hash__(&self) -> u64 {
@@ -1241,7 +1241,7 @@ impl EntryName {
 
 // -------- Python module instanciation --------
 
-/// Instanciate the Python module
+/// Instantiate the Python module
 #[pymodule]
 #[pyo3(name = "mla")]
 fn pymla(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
