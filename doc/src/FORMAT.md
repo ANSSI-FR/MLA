@@ -100,7 +100,7 @@ If the `ArchiveEntryBlockType` is `EndOfArchiveData`, it is followed by nothing.
 
 `EntriesFooter` is a `Vec<EntryNameInfoMapElt>`. An `EntryNameInfoMapElt` is an `EntryName` followed by an `entry_blocks_info` which is a `Vec<EntryBlockInfo>` explained after. For reproducibility, the `EntriesFooter` `Vec` is sorted by entry name (lexicographically by bytes values) before being serialized.
 
-`EntryBlockInfo` has two fields: `block_offset` and `block_size`. The `block_offset` field is a u64 indicating at which offset from the begining of the MLA entries layer an `ArchiveEntryBlock` can be found for the given `EntryName`. The `block_size` field is a u64 indicating the size in bytes of the block content (0 except for `EntryContentChunk`). If it is an EntryContentChunk with `entry_content_data` containing 1 byte, `block_size` is 1. All `EntryBlockInfo`s for each entry are recorded in `entry_blocks_info` and they are so in ascending order of offset.
+`EntryBlockInfo` has two fields: `block_offset` and `block_size`. The `block_offset` field is a u64 indicating at which offset from the beginning of the MLA entries layer an `ArchiveEntryBlock` can be found for the given `EntryName`. The `block_size` field is a u64 indicating the size in bytes of the block content (0 except for `EntryContentChunk`). If it is an EntryContentChunk with `entry_content_data` containing 1 byte, `block_size` is 1. All `EntryBlockInfo`s for each entry are recorded in `entry_blocks_info` and they are so in ascending order of offset.
 
 ### Explanations
 

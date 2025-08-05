@@ -134,12 +134,12 @@ fn open_private_keys(
     if let Some(private_key_args) = matches.get_many::<PathBuf>(private_keys_arg_name) {
         for private_key_arg in private_key_args {
             let mut file = File::open(private_key_arg)?;
-            let (private_decryption_key, private_siging_key) =
+            let (private_decryption_key, private_signing_key) =
                 MLAPrivateKey::deserialize_private_key(&mut file)
                     .map_err(|_| Error::InvalidKeyFormat)?
                     .get_private_keys();
             private_decryption_keys.push(private_decryption_key);
-            private_signing_keys.push(private_siging_key);
+            private_signing_keys.push(private_signing_key);
         }
     };
 
