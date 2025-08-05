@@ -129,7 +129,7 @@ Security
 
 * Please keep in mind, it is generally not safe to extract in a place where at least one ancestor is writable by others (symbolic link attacks).
 * Even if encrypted with an authenticated cipher, if you receive an unsigned archive , it may have been crafted by anyone having your public key and thus can contain arbitrary data.
-* Read API documentation and mlar help before using their functionnalities. They sometimes provide important security warnings. `doc/ENTRY_NAME.md` is also of particular interest.
+* Read API documentation and mlar help before using their functionalities. They sometimes provide important security warnings. `doc/src/ENTRY_NAME.md` is also of particular interest.
 * mlar escapes entry names on output to avoid security issues.
 * Except for symbolic link attacks, mlar will not extract outside given output directory.
 
@@ -160,8 +160,8 @@ For instance (from the understanding of the author):
 * `7zip` format requires to rebuild the entire archive while adding files to it
   (not streamable). It is also quite complex, and so harder to audit / trust
   when unpacking unknown archive
-* `journald` format is not streamable. Also, one writter / multiple reader is
-  not needed here, thus releasing some constraints `journald` format have
+* `journald` format is not streamable. Also, one writer / multiple reader is
+  not needed here, thus releasing some constraints `journald` format has
 * any archive + `age`: [age](https://age-encryption.org/) does not, as of MLA 2.0 release, support post quantum encryption nor signatures.
 * Backup formats are generally written to avoid things such as duplication,
   hence their need to keep bigger structures in memory, or not being 

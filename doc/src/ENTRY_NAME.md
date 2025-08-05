@@ -68,7 +68,7 @@ For every input byte:
 ### Generic unescaping, implemented by `helpers::mla_percent_unescape`
 
 A `bytes_to_allow` parameter tells which bytes are not escaped.
-Unescaping fails if feeded with anything else than bytes listed in
+Unescaping fails if fed with anything else than bytes listed in
 `bytes_to_allow` and `%xx` where `xx` is the hexadecimal representation of a
 byte not listed in `bytes_to_allow`. Otherwise it reverses the process described
 in `Generic escaping`.

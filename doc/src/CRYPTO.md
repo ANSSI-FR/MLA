@@ -1,6 +1,6 @@
 # Cryptography in MLA
 
-MLA uses cryptographic primitives essentially for the purpose of the Encrytion and Signature layers.
+MLA uses cryptographic primitives essentially for the purpose of the Encryption and Signature layers.
 
 This document introduces the primitives used, arguments for the choice made and some security considerations.
 
@@ -8,7 +8,7 @@ Keys used for encryption and signature are generated and used separately.
 
 ### Signature
 
-As described in `FORMAT.md` an archive can be signed. Implementation must ensure users explicitely choose if signature is made and verified.
+As described in `FORMAT.md` an archive can be signed. Implementation must ensure users explicitly choose if signature is made and verified.
 
 A PQ/T key consists of a pair of a post-quantum key and a traditional key. An archive is considered correctly signed for a PQ/T key if and only if it is correctly signed for its post-quantum part AND its traditional part.
 
@@ -18,7 +18,7 @@ For method `MLAEd25519SigMethod`, `signature_data` is the Ed25519ph (as describe
 
 For method `MLAMLDSA87SigMethod`, `signature_data` is the ML-DSA-87 signature (as described in FIPS 204 [^fips204], not HashML-DSA) of `h` (not `m` this time) with the ASCII `MLAMLDSA87SigMethod` as context. Signature verification and key generation are done as described in FIPS 204. Key storage is described in `KEY_FORMAT.md`.
 
-An archive can be signed with multiple signing keys. If a user provides a set of PQ/T keys for signature verification, implementations should give a way for the user to know if archive is correctly signed for at least one key. Implementations may give a way for users to know if archive is correctly signed for all keys. Users must explicitely know if they are validating against at least one or all keys. Implementations may also give a way for users to know which PQ/T keys correspond to valid signatures or their number.
+An archive can be signed with multiple signing keys. If a user provides a set of PQ/T keys for signature verification, implementations should give a way for the user to know if archive is correctly signed for at least one key. Implementations may give a way for users to know if archive is correctly signed for all keys. Users must explicitly know if they are validating against at least one or all keys. Implementations may also give a way for users to know which PQ/T keys correspond to valid signatures or their number.
 
 ### Encryption high-level overview
 
@@ -100,12 +100,12 @@ The implementation also includes tests (including some test vectors) and comment
 - $\textrm{DHKEM.Encapsulate}$ and $\textrm{DHKEM.Decapsulate}$: key encapsulation methods with X25519, as defined in RFC 9180, section 4 [^hpke]
 - $\textrm{MLKEM.Encapsulate}$ and $\textrm{MLKEM.Decapsulate}$: key encapsulation methods on MLKEM-1024, as defined in FIPS 203 [^fips203]
 - $ss_{recipients}$: a 32-bytes secret, produced by a cryptographic RNG. Informally, this is the secret shared among recipients, encapsulated separately for each recipient
-- $\textrm{KeySchedule}_{recipient}$: `KeySchedule` function from RFC 9180 [^hpke], instanciated with:
+- $\textrm{KeySchedule}_{recipient}$: `KeySchedule` function from RFC 9180 [^hpke], instantiated with:
     - Mode: "Base"
     - KDF: HKDF-SHA-512
     - AEAD: AES-256-GCM
     - KEM: a custom KEM ID, numbered 0x1120
-- $\textrm{Encrypt}_{AES\ 256\ GCM}$: AES-256-GCM encryption, returning the encrypted data concatened with the associated tag
+- $\textrm{Encrypt}_{AES\ 256\ GCM}$: AES-256-GCM encryption, returning the encrypted data concatenated with the associated tag
 - $\textrm{Decrypt}_{AES\ 256\ GCM}$: AES-256-GCM decryption, returning the decrypted data after verifying the tag
 - $\textrm{Serialize}$ and $\textrm{Deserialize}$: respectively produce a byte string encoding the data in argument, and produce the data from the byte string in argument
 
@@ -259,7 +259,7 @@ $\hspace{1cm}\mathtt{throw\ KeyNotFoundError}$
 ##### Arguments
 
 - The shared secret is cryptographically generated, so it can later be used as a shared secret in HPKE encryption
-- This secret is unique per archive, as it is generated on archive creation. Even "converting" or "repairing" an archive in `mlar` CLI will force a newly fresh secret. It is a new secret as there is no edit feature implemented, even if it is doable. Hence, a new random symetric key is used to encrypt its content while "converting" or "repairing" an archive. 
+- This secret is unique per archive, as it is generated on archive creation. Even "converting" or "repairing" an archive in `mlar` CLI will force a newly fresh secret. It is a new secret as there is no edit feature implemented, even if it is doable. Hence, a new random symmetric key is used to encrypt its content while "converting" or "repairing" an archive. 
 - Even if the AEAD decryption worked for an non legitimate recipient, for instance following an intentional manipulation, the shared secret obtained will later be checked using Key commitment before decrypting actual data (see below)
 - Optimization would have been possible here, such as sharing a common ephemeral key for the DHKEM. But the size gain is not worth enough regarding the ciphertext size of MLKEM and would move the implementation away from the DHKEM in RFC 9180
 
@@ -273,7 +273,7 @@ The "Multi-Recipient Hybrid KEM" process described above is noted:
 
 `KeyCommitmentChain` is defined as the array of 64-bytes: `-KEY COMMITMENT--KEY COMMITMENT--KEY COMMITMENT--KEY COMMITMENT-`.
 
-$\textrm{KeySchedule}_{hybrid}$: `KeySchedule` function from RFC 9180 [^hpke], instanciated with:
+$\textrm{KeySchedule}_{hybrid}$: `KeySchedule` function from RFC 9180 [^hpke], instantiated with:
 
 - Mode: "Base"
 - KDF: HKDF-SHA-512
@@ -393,7 +393,7 @@ j &= pos \div 128KiB\\
 \end{align*}
 $$
 
-Where $\div$ is the Euclidian division.
+Where $\div$ is the Euclidean division.
 
 Then:
 $$
@@ -452,7 +452,7 @@ $$
 To derive a key using a `seed`, a `ChaCha20Rng` is used.
 If a `seed` is provided, the `ChaCha20Rng` is seeded with the first 32-bytes of $\mathrm{SHA512}(seed)$. Otherwise, the seed comes from OS Cryptographic RNG sources.
 
-A ChaCha20Rng is the ChaCha20[^rfc8439] stream cipher feeded with a seed as key and 8 null bytes as nonce.
+A ChaCha20Rng is the ChaCha20[^rfc8439] stream cipher fed with a seed as key and 8 null bytes as nonce.
 
 The CSRNG is then provided to MLA deterministic APIs.
 

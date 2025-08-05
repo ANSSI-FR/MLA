@@ -257,7 +257,7 @@ mod tests {
 
         // --------- SETUP ----------
         let file = Vec::new();
-        // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
+        // Use a deterministic RNG in tests, for reproducibility. DO NOT DO THIS IS IN ANY RELEASED BINARY!
         let mut rng = ChaChaRng::seed_from_u64(0);
         let (private_key, public_key) = generate_keypair_from_seed([0; 32]);
         let config = ArchiveWriterConfig::with_encryption_without_signature(&[public_key]).unwrap();
