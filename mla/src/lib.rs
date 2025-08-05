@@ -1507,7 +1507,7 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
                             // Limit the reader to at most the file's content
                             let src = &mut (&mut self.src).take(length);
 
-                            // `Read` trait normally garantees that if an error is returned by `.read()`, no data
+                            // `Read` trait normally guarantees that if an error is returned by `.read()`, no data
                             // has been read
                             //
                             // It must then be equivalent to
@@ -1723,7 +1723,7 @@ pub(crate) mod tests {
     #[test]
     fn new_mla() {
         let file = Vec::new();
-        // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
+        // Use a deterministic RNG in tests, for reproducibility. DO NOT DO THIS IS IN ANY RELEASED BINARY!
         let (private_key, public_key) = generate_keypair_from_seed([0; 32]);
         let config = ArchiveWriterConfig::with_encryption_without_signature(&[public_key]).unwrap();
         let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
@@ -1774,7 +1774,7 @@ pub(crate) mod tests {
     #[test]
     fn new_encryption_only_mla() {
         let file = Vec::new();
-        // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
+        // Use a deterministic RNG in tests, for reproducibility. DO NOT DO THIS IS IN ANY RELEASED BINARY!
         let (private_key, public_key) = generate_keypair_from_seed([0; 32]);
         let config = ArchiveWriterConfig::with_encryption_without_signature(&[public_key])
             .unwrap()
@@ -1827,7 +1827,7 @@ pub(crate) mod tests {
     #[test]
     fn new_naked_mla() {
         let file = Vec::new();
-        // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
+        // Use a deterministic RNG in tests, for reproducibility. DO NOT DO THIS IS IN ANY RELEASED BINARY!
         let config = ArchiveWriterConfig::without_encryption_without_signature()
             .unwrap()
             .without_compression();
@@ -1878,7 +1878,7 @@ pub(crate) mod tests {
     #[test]
     fn new_compression_only_mla() {
         let file = Vec::new();
-        // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
+        // Use a deterministic RNG in tests, for reproducibility. DO NOT DO THIS IS IN ANY RELEASED BINARY!
         let config = ArchiveWriterConfig::without_encryption_without_signature().unwrap();
         let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
 
@@ -1927,7 +1927,7 @@ pub(crate) mod tests {
     #[test]
     fn new_sig_mla() {
         let file = Vec::new();
-        // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
+        // Use a deterministic RNG in tests, for reproducibility. DO NOT DO THIS IS IN ANY RELEASED BINARY!
         let (private_key, public_key) = generate_mla_keypair_from_seed([0; 32]);
         let config = ArchiveWriterConfig::without_encryption_with_signature(&[private_key
             .get_signing_private_key()
@@ -2013,7 +2013,7 @@ pub(crate) mod tests {
     ) {
         // Build an archive with 3 files
         let file = Vec::new();
-        // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
+        // Use a deterministic RNG in tests, for reproducibility. DO NOT DO THIS IS IN ANY RELEASED BINARY!
         let (sender_private_key, sender_public_key) = generate_mla_keypair_from_seed([0; 32]);
         let (receiver_private_key, receiver_public_key) = generate_mla_keypair_from_seed([1; 32]);
         let config = if encryption {
@@ -2150,7 +2150,7 @@ pub(crate) mod tests {
         // Test the building-then-reading of a file using different layering
         // approach
 
-        // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
+        // Use a deterministic RNG in tests, for reproducibility. DO NOT DO THIS IS IN ANY RELEASED BINARY!
         let (private_key, public_key) = generate_keypair_from_seed([0; 32]);
         let config_nolayer = ArchiveWriterConfig::without_encryption_without_signature()
             .unwrap()
@@ -2860,7 +2860,7 @@ pub(crate) mod tests {
     #[test]
     #[ignore]
     fn more_than_u32_file() {
-        // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
+        // Use a deterministic RNG in tests, for reproducibility. DO NOT DO THIS IS IN ANY RELEASED BINARY!
         let mut rng = ChaChaRng::seed_from_u64(0);
         let mut rng_data = ChaChaRng::seed_from_u64(0);
 

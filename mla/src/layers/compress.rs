@@ -75,7 +75,7 @@ enum CompressionLayerReaderState<R: Read> {
         read: u32,
         uncompressed_size: u32,
         /// Use a Box to avoid a too big enum
-        /// Use a `Take` to instanciate the `Decompressor` only on the current block's compressed bytes
+        /// Use a `Take` to instantiate the `Decompressor` only on the current block's compressed bytes
         decompressor: Box<brotli::Decompressor<Take<R>>>,
     },
     /// Empty is a placeholder to allow state replacement
@@ -155,7 +155,7 @@ pub struct CompressionLayerReader<'a, R: 'a + Read> {
     //      |            The inner layer is here
     //      We're actually here
     //
-    // Additionnaly, the `brotli` implementation may consume more or less bytes
+    // Additionally, the `brotli` implementation may consume more or less bytes
     // than presumed. For instance, the compression may dump n bytes, while the
     // decompressor is able to recover the decompressed part with only n -
     // epsilon bytes.

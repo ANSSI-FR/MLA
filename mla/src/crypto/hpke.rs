@@ -365,7 +365,7 @@ mod tests {
 
     /// RFC 9180 §A.6.1.1
     ///
-    /// As AES and previous values from RFC are already tested, this test is optionnal
+    /// As AES and previous values from RFC are already tested, this test is optional
     /// But it helps to ensure we correctly implements HPKE
     #[test]
     fn test_rfc_a6_encryption() {

@@ -780,7 +780,7 @@ mod tests {
     /// Ensure the keypair generation is deterministic
     #[test]
     fn keypair_deterministic() {
-        // Use a deterministic RNG in tests, for reproductability. DO NOT DO THIS IS IN ANY RELEASED BINARY!
+        // Use a deterministic RNG in tests, for reproducibility. DO NOT DO THIS IS IN ANY RELEASED BINARY!
 
         // Check the created key is deterministic
         let (priv1, pub1) = generate_mla_keypair_from_seed([0; 32]);

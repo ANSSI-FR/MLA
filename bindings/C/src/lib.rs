@@ -78,7 +78,7 @@ pub enum MLAStatus {
     // Curve25519ParserError = 0xF10000,
     MlaKeyParserError = 0xF20000,
 }
-/// Implemented by the developper. Takes a buffer of a certain number of bytes of MLA
+/// Implemented by the developer. Takes a buffer of a certain number of bytes of MLA
 /// file, and does whatever it wants with it (e.g. write it to a file, to a HTTP stream, etc.)
 /// If successful, returns 0 and sets the number of bytes actually written to its last
 /// parameter. Otherwise, returns an error code on failure.
@@ -97,7 +97,7 @@ type MLAWriteCallbackRaw = extern "C" fn(
     context: *mut c_void,
     bytes_written: *mut u32,
 ) -> i32;
-/// Implemented by the developper. Should ask the underlying medium (file buffering, HTTP
+/// Implemented by the developer. Should ask the underlying medium (file buffering, HTTP
 /// buffering, etc.) to flush any internal buffer.
 pub type MLAFlushCallback = Option<extern "C" fn(context: *mut c_void) -> i32>;
 // bindgen workaround, as Option<typedef> is gen as an opaque type
@@ -109,9 +109,9 @@ pub struct FileWriter {
     flush_callback: MLAFlushCallback,
     context: *mut c_void,
 }
-/// Implemented by the developper
+/// Implemented by the developer
 /// Return the desired `FileWriter` which is expected to be writable.
-/// WARNING, The callback developper is responsible all security checks and parent path creation.
+/// WARNING, The callback developer is responsible all security checks and parent path creation.
 /// See `mla_roarchive_extract` documentation for how to interpret `entry_name`.
 pub type MLAFileCallBack = Option<
     extern "C" fn(
@@ -128,7 +128,7 @@ type MLAFileCallBackRaw = extern "C" fn(
     filename_len: usize,
     file_writer: *mut FileWriter,
 ) -> i32;
-/// Implemented by the developper. Read between 0 and buffer_len into buffer.
+/// Implemented by the developer. Read between 0 and buffer_len into buffer.
 /// If successful, returns 0 and sets the number of bytes actually read to its last
 /// parameter. Otherwise, returns an error code on failure.
 pub type MlaReadCallback = Option<
@@ -146,7 +146,7 @@ type MlaReadCallbackRaw = extern "C" fn(
     context: *mut c_void,
     bytes_read: *mut u32,
 ) -> i32;
-/// Implemented by the developper. Seek in the source data.
+/// Implemented by the developer. Seek in the source data.
 /// If successful, returns 0 and sets the new position to its last
 /// parameter. Otherwise, returns an error code on failure.
 pub type MlaSeekCallback =
@@ -1166,12 +1166,12 @@ fn _mla_roarchive_extract<'a, R: Read + Seek + 'a>(
                     entry_name,
                     CallbackOutput {
                         write_callback: match file_writer.write_callback {
-                            // Rust FFI garantees Option<x> as equal to x
+                            // Rust FFI guarantees Option<x> as equal to x
                             Some(x) => x,
                             None => return MLAStatus::BadAPIArgument,
                         },
                         flush_callback: match file_writer.flush_callback {
-                            // Rust FFI garantees Option<x> as equal to x
+                            // Rust FFI guarantees Option<x> as equal to x
                             Some(x) => x,
                             None => return MLAStatus::BadAPIArgument,
                         },

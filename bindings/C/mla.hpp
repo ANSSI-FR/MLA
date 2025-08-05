@@ -59,7 +59,7 @@ using MLAWriterConfigHandle = void*;
 
 using MLAReaderConfigHandle = void*;
 
-/// Implemented by the developper. Takes a buffer of a certain number of bytes of MLA
+/// Implemented by the developer. Takes a buffer of a certain number of bytes of MLA
 /// file, and does whatever it wants with it (e.g. write it to a file, to a HTTP stream, etc.)
 /// If successful, returns 0 and sets the number of bytes actually written to its last
 /// parameter. Otherwise, returns an error code on failure.
@@ -68,7 +68,7 @@ using MLAWriteCallback = int32_t(*)(const uint8_t *buffer,
                                     void *context,
                                     uint32_t *bytes_written);
 
-/// Implemented by the developper. Should ask the underlying medium (file buffering, HTTP
+/// Implemented by the developer. Should ask the underlying medium (file buffering, HTTP
 /// buffering, etc.) to flush any internal buffer.
 using MLAFlushCallback = int32_t(*)(void *context);
 
@@ -76,7 +76,7 @@ using MLAArchiveHandle = void*;
 
 using MLAArchiveFileHandle = void*;
 
-/// Implemented by the developper. Read between 0 and buffer_len into buffer.
+/// Implemented by the developer. Read between 0 and buffer_len into buffer.
 /// If successful, returns 0 and sets the number of bytes actually read to its last
 /// parameter. Otherwise, returns an error code on failure.
 using MlaReadCallback = int32_t(*)(uint8_t *buffer,
@@ -84,7 +84,7 @@ using MlaReadCallback = int32_t(*)(uint8_t *buffer,
                                    void *context,
                                    uint32_t *bytes_read);
 
-/// Implemented by the developper. Seek in the source data.
+/// Implemented by the developer. Seek in the source data.
 /// If successful, returns 0 and sets the new position to its last
 /// parameter. Otherwise, returns an error code on failure.
 using MlaSeekCallback = int32_t(*)(int64_t offset, int32_t whence, void *context, uint64_t *new_pos);
@@ -95,9 +95,9 @@ struct FileWriter {
   void *context;
 };
 
-/// Implemented by the developper
+/// Implemented by the developer
 /// Return the desired `FileWriter` which is expected to be writable.
-/// WARNING, The callback developper is responsible all security checks and parent path creation.
+/// WARNING, The callback developer is responsible all security checks and parent path creation.
 /// See `mla_roarchive_extract` documentation for how to interpret `entry_name`.
 using MLAFileCallBack = int32_t(*)(void *context,
                                    const uint8_t *entry_name,
