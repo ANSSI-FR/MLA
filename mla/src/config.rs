@@ -147,7 +147,7 @@ impl ArchiveReaderConfig {
 
     /// WARNING: Will NOT verify archive signature.
     ///
-    /// This skips signature verification wether the archive is signed or not.
+    /// This skips signature verification whether the archive is signed or not.
     ///
     /// This enables reading unsigned archives and reading signed archives without the cost of verification.
     pub fn without_signature_verification() -> IncompleteArchiveReaderConfig {
