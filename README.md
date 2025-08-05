@@ -74,7 +74,7 @@ mlar cat -k receiver.mlapriv -p sender.mlapub -i my_archive.mla etc/os-release
 
 # Convert the archive to a long-term one, removing encryption and using the best
 # and slower compression level
-mlar convert -k receiver.mlapriv -p sender.mlapub -i my_archive.mla -o longterm.mla -l compress -q 11
+mlar convert -k receiver.mlapriv -i my_archive.mla -o longterm.mla -l compress -q 11 --skip-signature-verification
 
 # Create an archive with multiple recipients and without signature nor compression
 mlar create -l encrypt -p archive.mlapub -p client1.mlapub -o my_archive.mla ...
