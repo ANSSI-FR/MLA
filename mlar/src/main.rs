@@ -1318,7 +1318,7 @@ fn app() -> clap::Command {
             .action(ArgAction::SetTrue),
         Arg::new("skip_signature_verification")
             .long("skip-signature-verification")
-            .help("Skip signature verification wether the archive is signed or not. This enables reading unsigned archives and reading signed archives without the cost of verification.")
+            .help("Skip signature verification whether the archive is signed or not. This enables reading unsigned archives and reading signed archives without the cost of verification.")
             .action(ArgAction::SetTrue),
     ];
     let output_args = vec![
