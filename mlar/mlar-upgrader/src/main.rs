@@ -114,7 +114,7 @@ fn upgrade(matches: &ArgMatches) -> Result<(), Error> {
             }
             Ok(Some(mla)) => mla,
         };
-        let new_entry_name = match EntryName::from_arbitrary_bytes(sub_file.filename.as_bytes()) {
+        let new_entry_name = match EntryName::from_path(sub_file.filename) {
             Ok(name) => name,
             Err(_) => {
                 eprintln!("Invalid empty name");
