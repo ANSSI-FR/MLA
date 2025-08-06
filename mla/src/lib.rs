@@ -2153,13 +2153,13 @@ pub(crate) mod tests {
         // All combinations: (compress, encrypt, sign)
         let combinations = [
             (false, false, false), // naked
-            (true,  false, false), // compress only
-            (false, true,  false), // encrypt only
-            (false, false, true ), // signature only
-            (true,  true,  false), // compress + encrypt
-            (true,  false, true ), // compress + signature
-            (false, true,  true ), // encrypt + signature
-            (true,  true,  true ), // compress + encrypt + signature
+            (true, false, false),  // compress only
+            (false, true, false),  // encrypt only
+            (false, false, true),  // signature only
+            (true, true, false),   // compress + encrypt
+            (true, false, true),   // compress + signature
+            (false, true, true),   // encrypt + signature
+            (true, true, true),    // compress + encrypt + signature
         ];
 
         for (compress, encrypt, sign) in combinations {
@@ -2167,14 +2167,19 @@ pub(crate) mod tests {
                 (true, true) => ArchiveWriterConfig::with_encryption_with_signature(
                     &[pubkey.get_encryption_public_key().clone()],
                     &[privkey.get_signing_private_key().clone()],
-                ).unwrap(),
-                (true, false) => ArchiveWriterConfig::with_encryption_without_signature(
-                    &[pubkey.get_encryption_public_key().clone()]
-                ).unwrap(),
-                (false, true) => ArchiveWriterConfig::without_encryption_with_signature(
-                    &[privkey.get_signing_private_key().clone()]
-                ).unwrap(),
-                (false, false) => ArchiveWriterConfig::without_encryption_without_signature().unwrap(),
+                )
+                .unwrap(),
+                (true, false) => ArchiveWriterConfig::with_encryption_without_signature(&[pubkey
+                    .get_encryption_public_key()
+                    .clone()])
+                .unwrap(),
+                (false, true) => ArchiveWriterConfig::without_encryption_with_signature(&[privkey
+                    .get_signing_private_key()
+                    .clone()])
+                .unwrap(),
+                (false, false) => {
+                    ArchiveWriterConfig::without_encryption_without_signature().unwrap()
+                }
             };
             if !compress {
                 config = config.without_compression();
@@ -2184,27 +2189,43 @@ pub(crate) mod tests {
             let file = Vec::new();
             let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
             let data = vec![1, 2, 3, 4, 5];
-            mla.add_entry(EntryName::from_path("testfile").unwrap(), data.len() as u64, data.as_slice()).unwrap();
+            mla.add_entry(
+                EntryName::from_path("testfile").unwrap(),
+                data.len() as u64,
+                data.as_slice(),
+            )
+            .unwrap();
             let archive = mla.finalize().unwrap();
 
             // Read archive
             let buf = Cursor::new(archive);
             let reader_config = match (encrypt, sign) {
-                (true, true) => ArchiveReaderConfig::with_signature_verification(
-                    &[pubkey.get_signature_verification_public_key().clone()]
-                ).with_encryption(&[privkey.get_decryption_private_key().clone()]),
+                (true, true) => ArchiveReaderConfig::with_signature_verification(&[pubkey
+                    .get_signature_verification_public_key()
+                    .clone()])
+                .with_encryption(&[privkey.get_decryption_private_key().clone()]),
                 (true, false) => ArchiveReaderConfig::without_signature_verification()
                     .with_encryption(&[privkey.get_decryption_private_key().clone()]),
-                (false, true) => ArchiveReaderConfig::with_signature_verification(
-                    &[pubkey.get_signature_verification_public_key().clone()]
-                ).without_encryption(),
-                (false, false) => ArchiveReaderConfig::without_signature_verification().without_encryption(),
+                (false, true) => ArchiveReaderConfig::with_signature_verification(&[pubkey
+                    .get_signature_verification_public_key()
+                    .clone()])
+                .without_encryption(),
+                (false, false) => {
+                    ArchiveReaderConfig::without_signature_verification().without_encryption()
+                }
             };
             let mut mla_read = ArchiveReader::from_config(buf, reader_config).unwrap().0;
-            let mut file = mla_read.get_entry(EntryName::from_path("testfile").unwrap()).unwrap().unwrap();
+            let mut file = mla_read
+                .get_entry(EntryName::from_path("testfile").unwrap())
+                .unwrap()
+                .unwrap();
             let mut out = Vec::new();
             file.data.read_to_end(&mut out).unwrap();
-            assert_eq!(out, vec![1, 2, 3, 4, 5], "Failed for combination compress={compress}, encrypt={encrypt}, sign={sign}");
+            assert_eq!(
+                out,
+                vec![1, 2, 3, 4, 5],
+                "Failed for combination compress={compress}, encrypt={encrypt}, sign={sign}"
+            );
         }
     }
 
