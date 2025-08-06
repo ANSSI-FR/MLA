@@ -5,6 +5,7 @@ https://crates.io/crates/mla)
 https://docs.rs/mla)
 [![Cargo MLAR](https://img.shields.io/badge/crates.io-mlar-red)](
 https://crates.io/crates/mlar)
+[![PyPI - Version](https://img.shields.io/pypi/v/mla-archive?label=PyPI%20%7C%20mla-archive)](https://pypi.org/project/mla-archive/)
 
 Multi Layer Archive (MLA)
 =
