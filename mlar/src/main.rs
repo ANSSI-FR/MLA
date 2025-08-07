@@ -366,13 +366,13 @@ fn open_mla_file<'a>(matches: &ArgMatches) -> Result<ArchiveReader<'a, File>, Ml
 
     // Instantiate reader
     let (reader, keys_with_valid_signatures) = ArchiveReader::from_config(file, config?)?;
-    if let Some(public_keys) = matches.get_many::<PathBuf>("public_keys") {
-        if public_keys.count() != keys_with_valid_signatures.len()
-            && !matches.get_flag("only_one_key_with_valid_signature_is_ok")
-        {
-            return Err(MlarError::Mla(Error::NoValidSignatureFound));
-        }
+    if let Some(public_keys) = matches.get_many::<PathBuf>("public_keys")
+        && public_keys.count() != keys_with_valid_signatures.len()
+        && !matches.get_flag("only_one_key_with_valid_signature_is_ok")
+    {
+        return Err(MlarError::Mla(Error::NoValidSignatureFound));
     }
+
     Ok(reader)
 }
 
@@ -715,13 +715,13 @@ fn process_chunk(
     fallback_filename: usize,
 ) -> Result<(), MlarError> {
     if let Ok(text) = std::str::from_utf8(chunk) {
-        if let Err(MlarError::IO(err)) = add_string_file(mla, text) {
-            if err.kind() == std::io::ErrorKind::InvalidData {
-                let filename = filename_iterator
-                    .next()
-                    .unwrap_or_else(|| format!("chunk{fallback_filename}.bin"));
-                add_binary(mla, &filename, chunk)?;
-            }
+        if let Err(MlarError::IO(err)) = add_string_file(mla, text)
+            && err.kind() == std::io::ErrorKind::InvalidData
+        {
+            let filename = filename_iterator
+                .next()
+                .unwrap_or_else(|| format!("chunk{fallback_filename}.bin"));
+            add_binary(mla, &filename, chunk)?;
         }
     } else {
         let filename = filename_iterator

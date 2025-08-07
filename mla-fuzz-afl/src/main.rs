@@ -340,12 +340,11 @@ fn run(data: &mut [u8]) {
     // Start entries missing from parts (with no content)
     // Also skip invalid entry names
     for (i, fname) in test_case.filenames.iter().enumerate() {
-        if !filename2content.contains_key(fname) {
-            if let Ok(entry_name) = EntryName::from_arbitrary_bytes(fname.as_bytes()) {
-                if let Ok(id) = mla.start_entry(entry_name) {
-                    num2id.insert(i as u8, id);
-                }
-            }
+        if !filename2content.contains_key(fname)
+            && let Ok(entry_name) = EntryName::from_arbitrary_bytes(fname.as_bytes())
+            && let Ok(id) = mla.start_entry(entry_name)
+        {
+            num2id.insert(i as u8, id);
         }
     }
 
@@ -357,9 +356,10 @@ fn run(data: &mut [u8]) {
 
     // Parse the created MLA Archive
     let buf = Cursor::new(dest.as_slice());
-    let config = test_case
-        .config
-        .to_reader_config(&[pub_sig_verif_key.clone()], &[priv_dec_key.clone()]);
+    let config = test_case.config.to_reader_config(
+        std::slice::from_ref(&pub_sig_verif_key),
+        std::slice::from_ref(&priv_dec_key),
+    );
     let mut mla_read = ArchiveReader::from_config(buf, config).unwrap().0;
 
     // Check the list of files is correct

@@ -322,7 +322,7 @@ mod entryname {
             .collect::<Result<PathBuf, EntryNameError>>()
     }
 
-    fn to_normal_component_osstr(component: Component) -> Result<&OsStr, EntryNameError> {
+    fn to_normal_component_osstr(component: Component<'_>) -> Result<&OsStr, EntryNameError> {
         match component {
             Component::Normal(component_osstr) => {
                 if component_osstr.is_empty() {
