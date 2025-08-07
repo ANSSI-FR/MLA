@@ -1,6 +1,6 @@
 # Summary
 
-- [Introduction](../../README.md)
+- [Introduction](INTRO.md)
 - [Format](FORMAT.md)
     - [Entry Name](ENTRY_NAME.md)
     - [MLA Key File](KEY_FORMAT.md)
