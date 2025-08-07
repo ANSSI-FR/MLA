@@ -5,7 +5,7 @@ import os
 import io
 
 import mla
-from mla import MLAFile, MLAError, EntryName
+from mla import MLAReader, MLAWriter, MLAError, EntryName
 
 # Test data
 FILES = {
@@ -18,17 +18,21 @@ FILES = {
 def basic_archive():
     "Create a temporary archive and return its path"
     fname = tempfile.mkstemp(suffix=".mla")[1]
-    archive = MLAFile(fname, "w", config=mla.WriterConfig.without_encryption_without_signature())
-    for name, data in FILES.items():
-        archive[name] = data
-    archive.finalize()
+    with MLAWriter(
+        fname, mla.WriterConfig.without_encryption_without_signature()
+    ) as archive:
+        for name, data in FILES.items():
+            archive[name] = data
     return fname
 
+
 def test_bad_mode():
-    "Ensure MLAFile with an unknown mode raise an error"
+    "Ensure MLAWriter/MLAReader with wrong config type raises error"
     target_file = "/tmp/must_not_exists"
-    with pytest.raises(mla.BadAPIArgument):
-        MLAFile(target_file, "x", config=mla.WriterConfig.without_encryption_without_signature())
+    with pytest.raises(TypeError):
+        MLAWriter(target_file, "NOT_A_CONFIG")
+    with pytest.raises(TypeError):
+        MLAReader(target_file, "NOT_A_CONFIG")
     # Ensure the file has not been created
     with pytest.raises(FileNotFoundError):
         open(target_file)
@@ -37,80 +41,77 @@ def test_bad_mode():
 def test_repr():
     "Ensure the repr is correct"
     path = tempfile.mkstemp(suffix=".mla")[1]
-    archive = MLAFile(path, "w", config=mla.WriterConfig.without_encryption_without_signature())
-    assert repr(archive) == "<MLAFile path='%s' mode='w'>" % path
+    archive = MLAWriter(path, mla.WriterConfig.without_encryption_without_signature())
+    assert repr(archive) == f"<MLAWriter path='{path}'>"
     archive.finalize()
+    archive = MLAReader(
+        path,
+        mla.ReaderConfig.without_encryption(
+            mla.SignatureConfig.without_signature_verification()
+        ),
+    )
+    assert repr(archive) == f"<MLAReader path='{path}'>"
 
 
 def test_forbidden_in_write_mode():
-    "Ensure some API cannot be called in write mode"
-    archive = MLAFile(tempfile.mkstemp(suffix=".mla")[1], "w", config=mla.WriterConfig.without_encryption_without_signature())
-
-    # .keys
-    with pytest.raises(mla.BadAPIArgument):
-        archive.keys()
-
-    # __contains__
-    with pytest.raises(mla.BadAPIArgument):
-        EntryName("name") in archive
-
-    # __getitem__
-    with pytest.raises(mla.BadAPIArgument):
-        archive[EntryName("name")]
-
-    # __len__
-    with pytest.raises(mla.BadAPIArgument):
-        len(archive)
-
-    # list_entries
-    with pytest.raises(mla.BadAPIArgument):
-        archive.list_entries()
+    "Ensure read-only API cannot be called in write mode"
+    archive = MLAWriter(
+        tempfile.mkstemp(suffix=".mla")[1],
+        mla.WriterConfig.without_encryption_without_signature(),
+    )
+    for method in ["keys", "list_entries", "__contains__", "__getitem__", "__len__"]:
+        with pytest.raises(AttributeError):
+            getattr(archive, method)
 
 
 def test_forbidden_in_read_mode(basic_archive):
-    "Ensure some API cannot be called in write mode"
-    archive = MLAFile(basic_archive, "r", config=mla.ReaderConfig.without_encryption(mla.SignatureConfig.without_signature_verification()))
-
+    "Ensure write-only API cannot be called in read mode"
+    archive = MLAReader(
+        basic_archive,
+        mla.ReaderConfig.without_encryption(
+            mla.SignatureConfig.without_signature_verification()
+        ),
+    )
     # __setitem__
-    with pytest.raises(mla.BadAPIArgument):
+    with pytest.raises(TypeError):
         archive[EntryName("file")] = b"data"
-
     # .finalize
-    with pytest.raises(mla.BadAPIArgument):
+    with pytest.raises(AttributeError):
         archive.finalize()
 
 
 def test_read_api(basic_archive):
     "Test basics read APIs"
-    archive = MLAFile(basic_archive, "r", config=mla.ReaderConfig.without_encryption(mla.SignatureConfig.without_signature_verification()))
-
+    archive = MLAReader(
+        basic_archive,
+        mla.ReaderConfig.without_encryption(
+            mla.SignatureConfig.without_signature_verification()
+        ),
+    )
     # .keys
     assert sorted(archive.keys()) == sorted(list(FILES.keys()))
-
     # __contains__
     assert EntryName("file1") in archive
     assert EntryName("file3") not in archive
-
     # __getitem__
     assert archive[EntryName("file1")] == FILES[EntryName("file1")]
     assert archive[EntryName("file2")] == FILES[EntryName("file2")]
     with pytest.raises(KeyError):
         archive[EntryName("file3")]
-
-    with pytest.raises(KeyError):
-        archive[EntryName("file3")]
-
     # __len__
     assert len(archive) == 2
 
 
 def test_list_entries(basic_archive):
     "Test list files possibilities"
-    archive = MLAFile(basic_archive, "r", config=mla.ReaderConfig.without_encryption(mla.SignatureConfig.without_signature_verification()))
-
+    archive = MLAReader(
+        basic_archive,
+        mla.ReaderConfig.without_encryption(
+            mla.SignatureConfig.without_signature_verification()
+        ),
+    )
     # Basic
     assert sorted(archive.list_entries()) == sorted(list(FILES.keys()))
-
     # With size
     assert sorted(
         [
@@ -118,7 +119,6 @@ def test_list_entries(basic_archive):
             for filename, info in archive.list_entries(include_size=True).items()
         ]
     ) == sorted([(filename, len(data)) for filename, data in FILES.items()])
-
     # With hash
     assert sorted(
         [
@@ -128,7 +128,6 @@ def test_list_entries(basic_archive):
     ) == sorted(
         [(filename, hashlib.sha256(data).digest()) for filename, data in FILES.items()]
     )
-
     # With size and hash
     assert sorted(
         [
@@ -148,7 +147,7 @@ def test_list_entries(basic_archive):
 def test_write_api():
     "Test basics write APIs"
     path = tempfile.mkstemp(suffix=".mla")[1]
-    archive = MLAFile(path, "w", config=mla.WriterConfig.without_encryption_without_signature())
+    archive = MLAWriter(path, mla.WriterConfig.without_encryption_without_signature())
 
     # __setitem__
     for name, data in FILES.items():
@@ -158,7 +157,12 @@ def test_write_api():
     archive.finalize()
 
     # Check the resulting archive
-    archive = MLAFile(path, "r", config=mla.ReaderConfig.without_encryption(mla.SignatureConfig.without_signature_verification()))
+    archive = MLAReader(
+        path,
+        mla.ReaderConfig.without_encryption(
+            mla.SignatureConfig.without_signature_verification()
+        ),
+    )
     assert sorted(archive.keys()) == sorted(list(FILES.keys()))
     assert archive[EntryName("file1")] == FILES[EntryName("file1")]
     assert archive[EntryName("file2")] == FILES[EntryName("file2")]
@@ -166,16 +170,23 @@ def test_write_api():
 
 def test_double_write():
     "Rewriting the file must raise an MLA error"
-    archive = MLAFile(tempfile.mkstemp(suffix=".mla")[1], "w", config=mla.WriterConfig.without_encryption_without_signature())
+    archive = MLAWriter(
+        tempfile.mkstemp(suffix=".mla")[1],
+        mla.WriterConfig.without_encryption_without_signature(),
+    )
     archive[EntryName("file1")] = FILES[EntryName("file1")]
-
     with pytest.raises(mla.DuplicateFilename):
         archive[EntryName("file1")] = FILES[EntryName("file1")]
 
 
 def test_context_read(basic_archive):
     "Test reading using a `with` statement (context management protocol)"
-    with MLAFile(basic_archive, "r", config=mla.ReaderConfig.without_encryption(mla.SignatureConfig.without_signature_verification())) as m:
+    with MLAReader(
+        basic_archive,
+        mla.ReaderConfig.without_encryption(
+            mla.SignatureConfig.without_signature_verification()
+        ),
+    ) as m:
         assert sorted(m.keys()) == sorted(list(FILES.keys()))
         for name, data in FILES.items():
             assert m[name] == data
@@ -184,12 +195,18 @@ def test_context_read(basic_archive):
 def test_context_write():
     "Test writing using a `with` statement (context management protocol)"
     path = tempfile.mkstemp(suffix=".mla")[1]
-    with MLAFile(path, "w", config=mla.WriterConfig.without_encryption_without_signature()) as m:
+
+    with MLAWriter(path, mla.WriterConfig.without_encryption_without_signature()) as m:
         for name, data in FILES.items():
             m[name] = data
 
     # Check the resulting file
-    with MLAFile(path, "r", config=mla.ReaderConfig.without_encryption(mla.SignatureConfig.without_signature_verification())) as m:
+    with MLAReader(
+        path,
+        mla.ReaderConfig.without_encryption(
+            mla.SignatureConfig.without_signature_verification()
+        ),
+    ) as m:
         assert sorted(m.keys()) == sorted(list(FILES.keys()))
         for name, data in FILES.items():
             assert m[name] == data
@@ -198,7 +215,10 @@ def test_context_write():
 def test_context_write_error():
     "Raise an error during the context write __exit__"
     with pytest.raises(mla.BadAPIArgument):
-        with MLAFile(tempfile.mkstemp(suffix=".mla")[1], "w", config=mla.WriterConfig.without_encryption_without_signature()) as archive:
+        with MLAWriter(
+            tempfile.mkstemp(suffix=".mla")[1],
+            mla.WriterConfig.without_encryption_without_signature(),
+        ) as archive:
             # INTENTIONNALY BUGGY
             # .finalize will be called twice, causing an exception
             archive.finalize()
@@ -208,9 +228,13 @@ def test_context_write_error_in_with():
     "Raise an error in the with statement, it must be re-raised"
     CustomException = type("CustomException", (Exception,), {})
     with pytest.raises(CustomException):
-        with MLAFile(tempfile.mkstemp(suffix=".mla")[1], "w", config=mla.WriterConfig.without_encryption_without_signature()) as m:
+        with MLAWriter(
+            tempfile.mkstemp(suffix=".mla")[1],
+            mla.WriterConfig.without_encryption_without_signature(),
+        ) as m:
             # INTENTIONNALY BUGGY
             raise CustomException
+
 
 def test_writer_config_compression():
     "Test compression API in WriterConfig creation"
@@ -283,6 +307,7 @@ def test_private_keys():
     )
     assert len(pkeys.keys) == 2
 
+
 def test_writer_config_public_keys():
     "Test public keys API in WriterConfig creation"
 
@@ -305,37 +330,49 @@ def test_writer_config_public_keys():
         )
     )
 
+
 def test_mlafile_bad_config():
-    "Try to create a MLAFile with the wrong config parameter"
+    "Try to create a MLAWriter/MLAReader with the wrong config parameter"
     with pytest.raises(TypeError):
-        MLAFile(tempfile.mkstemp(suffix=".mla")[1], "w", config="NOT A CONFIG")
-
+        MLAWriter(tempfile.mkstemp(suffix=".mla")[1], "NOT A CONFIG")
     with pytest.raises(TypeError):
-        MLAFile(tempfile.mkstemp(suffix=".mla")[1], "w", config=mla.ReaderConfig.without_encryption(mla.SignatureConfig.without_signature_verification()))
-
+        MLAWriter(
+            tempfile.mkstemp(suffix=".mla")[1],
+            mla.ReaderConfig.without_encryption(
+                mla.SignatureConfig.without_signature_verification()
+            ),
+        )
     with pytest.raises(TypeError):
-        MLAFile(tempfile.mkstemp(suffix=".mla")[1], "r", config=mla.WriterConfig.without_encryption_without_signature())
+        MLAReader(
+            tempfile.mkstemp(suffix=".mla")[1],
+            mla.WriterConfig.without_encryption_without_signature(),
+        )
 
 
 def test_reader_config_api():
     "Test the ReaderConfig API"
     # Add a remove private keys
-    config = mla.ReaderConfig(mla.PrivateKeys(open(os.path.join(SAMPLE_PATH, "test_mlakey.mlapriv"), "rb").read()), mla.SignatureConfig.without_signature_verification())
+    config = mla.ReaderConfig(
+        mla.PrivateKeys(
+            open(os.path.join(SAMPLE_PATH, "test_mlakey.mlapriv"), "rb").read()
+        ),
+        mla.SignatureConfig.without_signature_verification(),
+    )
     config = mla.ReaderConfig(
         private_keys=mla.PrivateKeys(
             open(os.path.join(SAMPLE_PATH, "test_mlakey.mlapriv"), "rb").read()
         ),
-        signature_config=mla.SignatureConfig.without_signature_verification()
+        signature_config=mla.SignatureConfig.without_signature_verification(),
     )
+
 
 def test_write_then_read_encrypted():
     "Create an encrypted archive, then read it"
     # Create the archive
     path = tempfile.mkstemp(suffix=".mla")[1]
-    with MLAFile(
+    with MLAWriter(
         path,
-        "w",
-        config=mla.WriterConfig.with_encryption_without_signature(
+        mla.WriterConfig.with_encryption_without_signature(
             mla.PublicKeys(
                 open(os.path.join(SAMPLE_PATH, "test_mlakey.mlapub"), "rb").read()
             )
@@ -345,14 +382,13 @@ def test_write_then_read_encrypted():
             archive[name] = data
 
     # Read the archive
-    with MLAFile(
+    with MLAReader(
         path,
-        "r", 
-        config=mla.ReaderConfig(
+        mla.ReaderConfig(
             private_keys=mla.PrivateKeys(
                 open(os.path.join(SAMPLE_PATH, "test_mlakey.mlapriv"), "rb").read()
             ),
-            signature_config=mla.SignatureConfig.without_signature_verification()
+            signature_config=mla.SignatureConfig.without_signature_verification(),
         ),
     ) as archive:
         assert sorted(archive.keys()) == sorted(list(FILES.keys()))
@@ -364,13 +400,12 @@ def test_read_encrypted_archive_bad_key():
     "Try to read an encrypted archive with a bad key"
     # Create the archive
     path = tempfile.mkstemp(suffix=".mla")[1]
-    with MLAFile(
+    with MLAWriter(
         path,
-        "w",
-        config=mla.WriterConfig.with_encryption_without_signature(
+        mla.WriterConfig.with_encryption_without_signature(
             mla.PublicKeys(
                 open(os.path.join(SAMPLE_PATH, "test_mlakey.mlapub"), "rb").read()
-            ),            
+            ),
         ),
     ) as archive:
         for name, data in FILES.items():
@@ -378,19 +413,25 @@ def test_read_encrypted_archive_bad_key():
 
     # Try to read without a key
     with pytest.raises(mla.PrivateKeyNeeded):
-        with MLAFile(path, "r", config=mla.ReaderConfig.without_encryption(mla.SignatureConfig.without_signature_verification())) as archive:
+        with MLAReader(
+            path,
+            mla.ReaderConfig.without_encryption(
+                mla.SignatureConfig.without_signature_verification()
+            ),
+        ) as archive:
             pass
 
     # Try to read with an incorrect key (mla.ConfigError: PrivateKeyNotFound)
     with pytest.raises(mla.ConfigError):
-        with MLAFile(
+        with MLAReader(
             path,
-            "r", 
-            config=mla.ReaderConfig(
+            mla.ReaderConfig(
                 private_keys=mla.PrivateKeys(
-                    open(os.path.join(SAMPLE_PATH, "test_mlakey_2.mlapriv"), "rb").read()
+                    open(
+                        os.path.join(SAMPLE_PATH, "test_mlakey_2.mlapriv"), "rb"
+                    ).read()
                 ),
-                signature_config=mla.SignatureConfig.without_signature_verification()
+                signature_config=mla.SignatureConfig.without_signature_verification(),
             ),
         ) as archive:
             pass
@@ -400,7 +441,12 @@ def test_write_entry_to_str(basic_archive):
     """Test archive.write_entry_to(), using the String output version"""
     # Temporary directory for extraction
     tmpdir = tempfile.mkdtemp()
-    with MLAFile(basic_archive, "r", config=mla.ReaderConfig.without_encryption(mla.SignatureConfig.without_signature_verification())) as archive:
+    with MLAReader(
+        basic_archive,
+        mla.ReaderConfig.without_encryption(
+            mla.SignatureConfig.without_signature_verification()
+        ),
+    ) as archive:
         # Extract all files using the String output version
         for name in archive.keys():
             archive.write_entry_to(name, os.path.join(tmpdir, name.to_pathbuf()))
@@ -414,7 +460,12 @@ def test_write_entry_to_file(basic_archive):
     """Test archive.write_entry_to(), using the File output version"""
     # Temporary directory for extraction
     tmpdir = tempfile.mkdtemp()
-    with MLAFile(basic_archive, "r", config=mla.ReaderConfig.without_encryption(mla.SignatureConfig.without_signature_verification())) as archive:
+    with MLAReader(
+        basic_archive,
+        mla.ReaderConfig.without_encryption(
+            mla.SignatureConfig.without_signature_verification()
+        ),
+    ) as archive:
         # Extract all files using the File output version
         for name in archive.keys():
             with open(os.path.join(tmpdir, name.to_pathbuf()), "wb") as f:
@@ -446,7 +497,12 @@ class BytesIOCounter(io.BytesIO):
 
 def test_write_entry_to_file_chunk_size(basic_archive):
     """Test archive.write_entry_to(), using the File output version"""
-    with MLAFile(basic_archive, "r", config=mla.ReaderConfig.without_encryption(mla.SignatureConfig.without_signature_verification())) as archive:
+    with MLAReader(
+        basic_archive,
+        mla.ReaderConfig.without_encryption(
+            mla.SignatureConfig.without_signature_verification()
+        ),
+    ) as archive:
         # Chunk size set to 1 -> expect 5 calls
         output = BytesIOCounter()
         archive.write_entry_to(EntryName("file1"), output, chunk_size=1)
@@ -468,9 +524,12 @@ def test_write_entry_to_file_chunk_size(basic_archive):
 
 def test_add_entry_from_str():
     "Test archive.add_entry_from(), using the String input version"
-    # Create the archive
     path = tempfile.mkstemp(suffix=".mla")[1]
-    with MLAFile(path, "w", config=mla.WriterConfig.without_encryption_without_signature()) as archive:
+
+    # Create the archive
+    with MLAWriter(
+        path, mla.WriterConfig.without_encryption_without_signature()
+    ) as archive:
         for name, data in FILES.items():
             # Create a file on disk to import
             fname = tempfile.mkstemp()[1]
@@ -480,7 +539,12 @@ def test_add_entry_from_str():
             archive.add_entry_from(name, fname)
 
     # Read the archive
-    with MLAFile(path, "r", config=mla.ReaderConfig.without_encryption(mla.SignatureConfig.without_signature_verification())) as archive:
+    with MLAReader(
+        path,
+        mla.ReaderConfig.without_encryption(
+            mla.SignatureConfig.without_signature_verification()
+        ),
+    ) as archive:
         assert sorted(archive.keys()) == sorted(list(FILES.keys()))
         for name, data in FILES.items():
             assert archive[name] == data
@@ -488,9 +552,12 @@ def test_add_entry_from_str():
 
 def test_add_entry_from_io():
     "Test archive.add_entry_from(), using the IO input version"
-    # Create the archive
     path = tempfile.mkstemp(suffix=".mla")[1]
-    with MLAFile(path, "w", config=mla.WriterConfig.without_encryption_without_signature()) as archive:
+
+    # Create the archive
+    with MLAWriter(
+        path, mla.WriterConfig.without_encryption_without_signature()
+    ) as archive:
         for name, data in FILES.items():
             # Use a buffered IO
             f = io.BytesIO(data)
@@ -498,7 +565,12 @@ def test_add_entry_from_io():
             archive.add_entry_from(name, f)
 
     # Read the archive
-    with MLAFile(path, "r", config=mla.ReaderConfig.without_encryption(mla.SignatureConfig.without_signature_verification())) as archive:
+    with MLAReader(
+        path,
+        mla.ReaderConfig.without_encryption(
+            mla.SignatureConfig.without_signature_verification()
+        ),
+    ) as archive:
         assert sorted(archive.keys()) == sorted(list(FILES.keys()))
         for name, data in FILES.items():
             assert archive[name] == data
@@ -507,10 +579,13 @@ def test_add_entry_from_io():
 def test_add_entry_from_io_chunk_size():
     "Test archive.add_entry_from(), using the IO input version"
     for chunk_size in [1, 2]:
-        # Create the archive
         path = tempfile.mkstemp(suffix=".mla")[1]
         data = FILES[EntryName("file1")]
-        with MLAFile(path, "w", config=mla.WriterConfig.without_encryption_without_signature()) as archive:
+
+        # Create the archive
+        with MLAWriter(
+            path, mla.WriterConfig.without_encryption_without_signature()
+        ) as archive:
             src = BytesIOCounter(data)
             archive.add_entry_from(EntryName("file1"), src, chunk_size=chunk_size)
 
@@ -523,5 +598,10 @@ def test_add_entry_from_io_chunk_size():
                 assert src.read_count == 4
 
         # Read the archive
-        with MLAFile(path, "r", config=mla.ReaderConfig.without_encryption(mla.SignatureConfig.without_signature_verification())) as archive:
+        with MLAReader(
+            path,
+            mla.ReaderConfig.without_encryption(
+                mla.SignatureConfig.without_signature_verification()
+            ),
+        ) as archive:
             assert archive[EntryName("file1")] == data

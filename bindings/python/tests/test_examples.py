@@ -3,7 +3,10 @@
 import subprocess
 import os
 
-EXAMPLES_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples"))
+EXAMPLES_DIR = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "examples")
+)
+
 
 def test_write_and_read_example(tmp_path):
     archive_path = tmp_path / "example.mla"
