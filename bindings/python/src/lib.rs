@@ -1,22 +1,22 @@
-use std::{
-    collections::HashMap,
-    hash::{DefaultHasher, Hash, Hasher},
-    io::{self, Read},
-    path::PathBuf,
-    sync::Mutex,
-};
+use mla::entry::{ArchiveEntryId, EntryName as RustEntryName};
 use mla::{
     ArchiveReader, ArchiveWriter,
     config::{ArchiveReaderConfig, ArchiveWriterConfig, DEFAULT_COMPRESSION_LEVEL},
     crypto::mlakey::{MLAPrivateKey, MLAPublicKey},
 };
-use mla::entry::{ArchiveEntryId, EntryName as RustEntryName};
 use pyo3::{
     create_exception,
     exceptions::{PyKeyError, PyRuntimeError, PyTypeError},
     prelude::*,
     pyclass::CompareOp,
     types::{PyBytes, PyString, PyTuple, PyType},
+};
+use std::{
+    collections::HashMap,
+    hash::{DefaultHasher, Hash, Hasher},
+    io::{self, Read},
+    path::PathBuf,
+    sync::Mutex,
 };
 
 // -------- Error handling --------
@@ -28,13 +28,18 @@ use pyo3::{
 enum WrappedError {
     WrappedMLA(mla::errors::Error),
     WrappedPy(PyErr),
-    EntryNameError
+    EntryNameError,
 }
 
 // Add a dedicated MLA Exception (mla.MLAError) and associated sub-Exception
 // IOError and AssertionError are not mapped, as they already map to Python Exception
 create_exception!(mla, MLAError, pyo3::exceptions::PyException);
-create_exception!(mla, WrongMagic, MLAError, "Wrong magic, must be \"MLAFAAAA\"");
+create_exception!(
+    mla,
+    WrongMagic,
+    MLAError,
+    "Wrong magic, must be \"MLAFAAAA\""
+);
 create_exception!(
     mla,
     UnsupportedVersion,
@@ -146,12 +151,42 @@ create_exception!(
 );
 create_exception!(mla, HPKEError, MLAError, "Error during HPKE computation");
 create_exception!(mla, InvalidLastTag, MLAError, "Wrong last block tag");
-create_exception!(mla, EncryptionAskedButNotMarkedPresent, MLAError, "User asked for encryption but archive was not marked as encrypted");
-create_exception!(mla, EntryNameError, MLAError, "An MLA entry name is invalid for the given operation");
-create_exception!(mla, WrongEndMagic, MLAError, "Wrong end magic, must be \"EMLAAAAA\"");
-create_exception!(mla, NoValidSignatureFound, MLAError, "Cannot validate any signature");
-create_exception!(mla, SignatureVerificationAskedButNoSignatureLayerFound, MLAError, "Signature verification was asked but no signature layer was found");
-create_exception!(mla, MissingEndOfEncryptedInnerLayerMagic, MLAError, "MissingEndOfEncryptedInnerLayerMagic");
+create_exception!(
+    mla,
+    EncryptionAskedButNotMarkedPresent,
+    MLAError,
+    "User asked for encryption but archive was not marked as encrypted"
+);
+create_exception!(
+    mla,
+    EntryNameError,
+    MLAError,
+    "An MLA entry name is invalid for the given operation"
+);
+create_exception!(
+    mla,
+    WrongEndMagic,
+    MLAError,
+    "Wrong end magic, must be \"EMLAAAAA\""
+);
+create_exception!(
+    mla,
+    NoValidSignatureFound,
+    MLAError,
+    "Cannot validate any signature"
+);
+create_exception!(
+    mla,
+    SignatureVerificationAskedButNoSignatureLayerFound,
+    MLAError,
+    "Signature verification was asked but no signature layer was found"
+);
+create_exception!(
+    mla,
+    MissingEndOfEncryptedInnerLayerMagic,
+    MLAError,
+    "MissingEndOfEncryptedInnerLayerMagic"
+);
 create_exception!(mla, TruncatedTag, MLAError, "TruncatedTag");
 create_exception!(mla, UnknownTagPosition, MLAError, "UnknownTagPosition");
 create_exception!(mla, MLAOther, MLAError, "Other MLA Error");
@@ -188,7 +223,23 @@ impl From<mla::entry::EntryNameError> for WrappedError {
     }
 }
 
-/// Convert back the wrapped type to Python errors
+/// Converts a `WrappedError` into a Python exception (`PyErr`) for use with PyO3 bindings.
+///
+/// This implementation maps each variant of `WrappedError` (and its inner error types)
+/// to a corresponding Python exception, providing a descriptive error message for each case.
+/// This allows Rust errors from the MLA library to be propagated as Python exceptions
+/// when called from Python code.
+///
+/// # Error Mapping
+/// - `WrappedError::WrappedMLA(inner_err)`: Maps MLA-specific errors to custom or standard Python exceptions.
+/// - `WrappedError::WrappedPy(inner_err)`: Directly returns the contained Python error.
+/// - `WrappedError::EntryNameError`: Returns a Python exception indicating an invalid MLA entry name.
+///
+/// # Examples
+/// ```rust
+/// let err = WrappedError::WrappedMLA(mla::errors::Error::IOError(io_err));
+/// let py_err: PyErr = err.into();
+/// ```
 impl From<WrappedError> for PyErr {
     fn from(err: WrappedError) -> PyErr {
         match err {
@@ -227,9 +278,7 @@ impl From<WrappedError> for PyErr {
                 )),
                 mla::errors::Error::WrongReaderState(msg) => PyErr::new::<WrongReaderState, _>(msg),
                 mla::errors::Error::WrongWriterState(msg) => PyErr::new::<WrongWriterState, _>(msg),
-                mla::errors::Error::RandError => {
-                    PyErr::new::<RandError, _>("Rand error")
-                }
+                mla::errors::Error::RandError => PyErr::new::<RandError, _>("Rand error"),
                 mla::errors::Error::PrivateKeyNeeded => PyErr::new::<PrivateKeyNeeded, _>(
                     "A Private Key is required to decrypt the encrypted cipher key",
                 ),
@@ -260,14 +309,14 @@ impl From<WrappedError> for PyErr {
                 mla::errors::Error::HKDFInvalidKeyLength => {
                     PyErr::new::<HKDFInvalidKeyLength, _>("Unable to expand while using the HKDF")
                 }
-                mla::errors::Error::HPKEError => {
-                    PyErr::new::<HPKEError, _>("HPKE error")
-                }
+                mla::errors::Error::HPKEError => PyErr::new::<HPKEError, _>("HPKE error"),
                 mla::errors::Error::InvalidLastTag => {
                     PyErr::new::<InvalidLastTag, _>("Wrong last block tag")
                 }
                 mla::errors::Error::EncryptionAskedButNotMarkedPresent => {
-                    PyErr::new::<EncryptionAskedButNotMarkedPresent, _>("User asked for encryption but archive was not marked as encrypted")
+                    PyErr::new::<EncryptionAskedButNotMarkedPresent, _>(
+                        "User asked for encryption but archive was not marked as encrypted",
+                    )
                 }
                 mla::errors::Error::WrongEndMagic => {
                     PyErr::new::<WrongEndMagic, _>("Wrong magic, must be \"EMLAAAAA\"")
@@ -276,23 +325,25 @@ impl From<WrappedError> for PyErr {
                     PyErr::new::<NoValidSignatureFound, _>("Cannot validate any signature")
                 }
                 mla::errors::Error::SignatureVerificationAskedButNoSignatureLayerFound => {
-                    PyErr::new::<SignatureVerificationAskedButNoSignatureLayerFound, _>("Signature verification was asked but no signature layer was found")
+                    PyErr::new::<SignatureVerificationAskedButNoSignatureLayerFound, _>(
+                        "Signature verification was asked but no signature layer was found",
+                    )
                 }
                 mla::errors::Error::MissingEndOfEncryptedInnerLayerMagic => {
-                    PyErr::new::<MissingEndOfEncryptedInnerLayerMagic, _>("MissingEndOfEncryptedInnerLayerMagic")
+                    PyErr::new::<MissingEndOfEncryptedInnerLayerMagic, _>(
+                        "MissingEndOfEncryptedInnerLayerMagic",
+                    )
                 }
-                mla::errors::Error::TruncatedTag => {
-                    PyErr::new::<TruncatedTag, _>("TruncatedTag")
-                }
+                mla::errors::Error::TruncatedTag => PyErr::new::<TruncatedTag, _>("TruncatedTag"),
                 mla::errors::Error::UnknownTagPosition => {
                     PyErr::new::<UnknownTagPosition, _>("UnknownTagPosition")
                 }
-                mla::errors::Error::Other(err) => {
-                    PyErr::new::<MLAOther, _>(format!("{err:}"))
-                }
+                mla::errors::Error::Other(err) => PyErr::new::<MLAOther, _>(err.to_string()),
             },
             WrappedError::WrappedPy(inner_err) => inner_err,
-            WrappedError::EntryNameError => PyErr::new::<EntryNameError, _>("An MLA entry name is invalid for the given operation")
+            WrappedError::EntryNameError => PyErr::new::<EntryNameError, _>(
+                "An MLA entry name is invalid for the given operation",
+            ),
         }
     }
 }
@@ -387,7 +438,11 @@ impl PublicKeys {
             .expect("Mutex poisoned")
             .keys
             .iter()
-            .map(|pubkey| {let mut v = Vec::new(); pubkey.serialize_public_key(&mut v)?; Ok(String::from_utf8(v).unwrap())})
+            .map(|pubkey| {
+                let mut v = Vec::new();
+                pubkey.serialize_public_key(&mut v)?;
+                Ok(String::from_utf8(v).unwrap())
+            })
             .collect()
     }
 }
@@ -450,7 +505,6 @@ impl PrivateKeys {
         })
     }
 
-
     /// String serializations of keys in MLA key format
     #[getter]
     fn keys(&self) -> Result<Vec<String>, WrappedError> {
@@ -459,7 +513,11 @@ impl PrivateKeys {
             .expect("Mutex poisoned")
             .keys
             .iter()
-            .map(|privkey| {let mut v = Vec::new(); privkey.serialize_private_key(&mut v)?; Ok(String::from_utf8(v).unwrap())})
+            .map(|privkey| {
+                let mut v = Vec::new();
+                privkey.serialize_private_key(&mut v)?;
+                Ok(String::from_utf8(v).unwrap())
+            })
             .collect()
     }
 }
@@ -484,11 +542,7 @@ struct WriterConfig {
 impl WriterConfig {
     #[new]
     #[pyo3(signature = (private_keys, public_keys))]
-    fn new(
-        private_keys: PrivateKeys,
-        public_keys: PublicKeys,
-    ) -> Result<Self, WrappedError> {
-
+    fn new(private_keys: PrivateKeys, public_keys: PublicKeys) -> Result<Self, WrappedError> {
         Ok(WriterConfig {
             inner: Mutex::new(WriterConfigInner {
                 compression_level: Some(DEFAULT_COMPRESSION_LEVEL),
@@ -500,7 +554,10 @@ impl WriterConfig {
 
     #[classmethod]
     #[pyo3(signature = (public_keys))]
-    fn with_encryption_without_signature(_cls: &Bound<PyType>, public_keys: PublicKeys) -> Result<Self, WrappedError> {
+    fn with_encryption_without_signature(
+        _cls: &Bound<PyType>,
+        public_keys: PublicKeys,
+    ) -> Result<Self, WrappedError> {
         Ok(WriterConfig {
             inner: Mutex::new(WriterConfigInner {
                 compression_level: Some(DEFAULT_COMPRESSION_LEVEL),
@@ -512,7 +569,10 @@ impl WriterConfig {
 
     #[classmethod]
     #[pyo3(signature = (private_keys))]
-    fn without_encryption_with_signature(_cls: &Bound<PyType>, private_keys: PrivateKeys) -> Result<Self, WrappedError> {
+    fn without_encryption_with_signature(
+        _cls: &Bound<PyType>,
+        private_keys: PrivateKeys,
+    ) -> Result<Self, WrappedError> {
         Ok(WriterConfig {
             inner: Mutex::new(WriterConfigInner {
                 compression_level: Some(DEFAULT_COMPRESSION_LEVEL),
@@ -541,15 +601,14 @@ impl WriterConfig {
         compression_level: u32,
     ) -> Result<PyRefMut<Self>, WrappedError> {
         // Check compression level is correct using a fake object
-        ArchiveWriterConfig::without_encryption_without_signature()?.with_compression_level(compression_level)?;
+        ArchiveWriterConfig::without_encryption_without_signature()?
+            .with_compression_level(compression_level)?;
 
         slf.inner.lock().expect("Mutex poisoned").compression_level = Some(compression_level);
         Ok(slf)
     }
 
-    fn without_compression(
-        slf: PyRefMut<Self>,
-    ) -> Result<PyRefMut<Self>, WrappedError> {
+    fn without_compression(slf: PyRefMut<Self>) -> Result<PyRefMut<Self>, WrappedError> {
         slf.inner.lock().expect("Mutex poisoned").compression_level = None;
         Ok(slf)
     }
@@ -561,22 +620,48 @@ impl WriterConfig {
         let inner = self.inner.lock().expect("Mutex poisoned");
         let config = match inner.public_keys.as_ref() {
             Some(public_keys) => {
-                let encryption_keys = public_keys.inner.lock().expect("Mutex poisoned").keys.iter().map(|k| k.get_encryption_public_key().clone()).collect::<Vec<_>>();
+                let encryption_keys = public_keys
+                    .inner
+                    .lock()
+                    .expect("Mutex poisoned")
+                    .keys
+                    .iter()
+                    .map(|k| k.get_encryption_public_key().clone())
+                    .collect::<Vec<_>>();
                 match inner.signature_config.as_ref() {
                     Some(private_keys) => {
-                        let signature_keys = private_keys.inner.lock().expect("Mutex poisoned").keys.iter().map(|k| k.get_signing_private_key().clone()).collect::<Vec<_>>();
-                        ArchiveWriterConfig::with_encryption_with_signature(&encryption_keys, &signature_keys)
+                        let signature_keys = private_keys
+                            .inner
+                            .lock()
+                            .expect("Mutex poisoned")
+                            .keys
+                            .iter()
+                            .map(|k| k.get_signing_private_key().clone())
+                            .collect::<Vec<_>>();
+                        ArchiveWriterConfig::with_encryption_with_signature(
+                            &encryption_keys,
+                            &signature_keys,
+                        )
                     }
-                    None => ArchiveWriterConfig::with_encryption_without_signature(&encryption_keys),
+                    None => {
+                        ArchiveWriterConfig::with_encryption_without_signature(&encryption_keys)
+                    }
                 }
             }
             None => match inner.signature_config.as_ref() {
                 Some(private_keys) => {
-                    let signature_keys = private_keys.inner.lock().expect("Mutex poisoned").keys.iter().map(|k| k.get_signing_private_key().clone()).collect::<Vec<_>>();
+                    let signature_keys = private_keys
+                        .inner
+                        .lock()
+                        .expect("Mutex poisoned")
+                        .keys
+                        .iter()
+                        .map(|k| k.get_signing_private_key().clone())
+                        .collect::<Vec<_>>();
                     ArchiveWriterConfig::without_encryption_with_signature(&signature_keys)
                 }
                 None => ArchiveWriterConfig::without_encryption_without_signature(),
-            }
+            },
         }?;
         let config = match inner.compression_level.as_ref() {
             Some(compression_level) => config.with_compression_level(*compression_level)?,
@@ -631,27 +716,55 @@ impl ReaderConfig {
     #[new]
     #[pyo3(signature = (private_keys, signature_config))]
     fn new(private_keys: PrivateKeys, signature_config: &SignatureConfig) -> Self {
-        let signature_config = signature_config.inner.lock().expect("Mutex poisoned").clone();
+        let signature_config = signature_config
+            .inner
+            .lock()
+            .expect("Mutex poisoned")
+            .clone();
         ReaderConfig {
-            inner: Mutex::new(ReaderConfigInner { accept_unencrypted: false, private_keys: Some(private_keys), signature_config }),
+            inner: Mutex::new(ReaderConfigInner {
+                accept_unencrypted: false,
+                private_keys: Some(private_keys),
+                signature_config,
+            }),
         }
     }
 
     #[classmethod]
     #[pyo3(signature = (private_keys, signature_config))]
-    fn with_private_keys_accept_unencrypted(_cls: &Bound<PyType>, private_keys: PrivateKeys, signature_config: &SignatureConfig) -> Self {
-        let signature_config = signature_config.inner.lock().expect("Mutex poisoned").clone();
+    fn with_private_keys_accept_unencrypted(
+        _cls: &Bound<PyType>,
+        private_keys: PrivateKeys,
+        signature_config: &SignatureConfig,
+    ) -> Self {
+        let signature_config = signature_config
+            .inner
+            .lock()
+            .expect("Mutex poisoned")
+            .clone();
         ReaderConfig {
-            inner: Mutex::new(ReaderConfigInner { accept_unencrypted: true, private_keys: Some(private_keys), signature_config }),
+            inner: Mutex::new(ReaderConfigInner {
+                accept_unencrypted: true,
+                private_keys: Some(private_keys),
+                signature_config,
+            }),
         }
     }
 
     #[classmethod]
     #[pyo3(signature = (signature_config))]
     fn without_encryption(_cls: &Bound<PyType>, signature_config: &SignatureConfig) -> Self {
-        let signature_config = signature_config.inner.lock().expect("Mutex poisoned").clone();
+        let signature_config = signature_config
+            .inner
+            .lock()
+            .expect("Mutex poisoned")
+            .clone();
         ReaderConfig {
-            inner: Mutex::new(ReaderConfigInner { accept_unencrypted: true, private_keys: None, signature_config }),
+            inner: Mutex::new(ReaderConfigInner {
+                accept_unencrypted: true,
+                private_keys: None,
+                signature_config,
+            }),
         }
     }
 }
@@ -662,14 +775,28 @@ impl ReaderConfig {
         let inner = self.inner.lock().expect("Mutex poisoned");
 
         let incomplete_config = if let Some(ref public_keys) = inner.signature_config {
-            let public_keys = public_keys.inner.lock().expect("Mutex poisoned").keys.iter().map(|k| k.get_signature_verification_public_key().clone()).collect::<Vec<_>>();
+            let public_keys = public_keys
+                .inner
+                .lock()
+                .expect("Mutex poisoned")
+                .keys
+                .iter()
+                .map(|k| k.get_signature_verification_public_key().clone())
+                .collect::<Vec<_>>();
             ArchiveReaderConfig::with_signature_verification(&public_keys)
         } else {
             ArchiveReaderConfig::without_signature_verification()
         };
 
         if let Some(ref private_keys) = inner.private_keys {
-            let private_keys = private_keys.inner.lock().expect("Mutex poisoned").keys.iter().map(|k| k.get_decryption_private_key().clone()).collect::<Vec<_>>();
+            let private_keys = private_keys
+                .inner
+                .lock()
+                .expect("Mutex poisoned")
+                .keys
+                .iter()
+                .map(|k| k.get_decryption_private_key().clone())
+                .collect::<Vec<_>>();
             if inner.accept_unencrypted {
                 incomplete_config.with_encryption_accept_unencrypted(&private_keys)
             } else {
@@ -683,81 +810,15 @@ impl ReaderConfig {
     }
 }
 
-// -------- mla.MLAFile --------
+// -------- mla.MLAReader --------
 
-/// `ArchiveWriter` is a generic type. To avoid generating several Python implementation
-/// (see https://pyo3.rs/v0.24.0/class#no-generic-parameters), this enum explicitely
-/// instantiate `ArchiveWriter` for common & expected types
-///
+/// `ArchiveReader` is a generic type. To avoid generating several Python implementation
+/// (see https://pyo3.rs/v0.25.1/class#no-generic-parameters), this enum explicitely
+/// instantiate `ArchiveReader` for common & expected types
 /// Additionally, as the GC in Python might drop objects at any time, we need to use
-/// `'static` lifetime for the writer. This should not be a problem as the writer is not
+/// `'static` lifetime for the reader. This should not be a problem as the reader is not
 /// supposed to be used after the drop of the parent object
-/// (see https://pyo3.rs/v0.24.0/class#no-lifetime-parameters)
-enum ExplicitWriter {
-    FileWriter(ArchiveWriter<'static, std::fs::File>),
-}
-
-fn finalize_if_not_already(opt_writer: &mut Option<Box<ExplicitWriter>>) -> Result<(), WrappedError> {
-    match opt_writer.take() {
-        Some(writer) => writer.finalize().map_err(WrappedError::from),
-        None => Err(mla::errors::Error::BadAPIArgument(
-            "Cannot call any API on already finalized MLAFile".to_owned(),
-        ).into())
-    }
-}
-
-/// Wrap calls to the inner type
-impl ExplicitWriter {
-    fn finalize(self) -> Result<(), mla::errors::Error> {
-        match self {
-            ExplicitWriter::FileWriter(writer) => {
-                writer.finalize()?;
-                Ok(())
-            }
-        }
-    }
-
-    fn add_entry<R: Read>(
-        &mut self,
-        key: RustEntryName,
-        size: u64,
-        reader: &mut R,
-    ) -> Result<(), mla::errors::Error> {
-        match self {
-            ExplicitWriter::FileWriter(writer) => {
-                writer.add_entry(key, size, reader)?;
-                Ok(())
-            }
-        }
-    }
-
-    fn start_entry(&mut self, key: RustEntryName) -> Result<u64, mla::errors::Error> {
-        match self {
-            ExplicitWriter::FileWriter(writer) => Ok(writer.start_entry(key)?.0),
-        }
-    }
-
-    fn append_entry_content(
-        &mut self,
-        id: u64,
-        size: usize,
-        data: &[u8],
-    ) -> Result<(), mla::errors::Error> {
-        match self {
-            ExplicitWriter::FileWriter(writer) => {
-                writer.append_entry_content(ArchiveEntryId(id), size as u64, data)
-            }
-        }
-    }
-
-    fn end_entry(&mut self, id: u64) -> Result<(), mla::errors::Error> {
-        match self {
-            ExplicitWriter::FileWriter(writer) => writer.end_entry(ArchiveEntryId(id)),
-        }
-    }
-}
-
-/// See `ExplicitWriter` for details
+/// (see https://pyo3.rs/v0.25.1/class#no-lifetime-parameters)
 enum ExplicitReader {
     FileReader(ArchiveReader<'static, std::fs::File>),
 }
@@ -771,137 +832,43 @@ impl ExplicitReader {
     }
 }
 
-/// Opening Mode for a MLAFile
-enum OpeningModeInner {
-    Read(ExplicitReader),
-    Write(Option<Box<ExplicitWriter>>),
-}
-
-pub struct MLAFileInner {
-    /// Wrapping over the rust object, depending on the opening mode
-    inner: OpeningModeInner,
-    /// Path of the file, used for messages
-    path: String,
-}
-
 #[pyclass]
-struct MLAFile {
-    inner: Mutex<MLAFileInner>,
-}
-
-impl MLAFile {
-    /// Used to check whether the opening mode is the expected one, and unwrap it
-    /// return a BadAPI argument error if not
-    /// ```text
-    /// self.with_reader(|inner| {});
-    /// ```
-    fn with_reader<F, R>(&self, f: F) -> Result<R, WrappedError>
-    where
-        F: FnOnce(&mut ExplicitReader) -> Result<R, WrappedError>,
-    {
-        let mut inner_lock = self.inner.lock().expect("Mutex poisoned");
-        match &mut inner_lock.inner {
-            OpeningModeInner::Read(inner) => f(inner),
-            OpeningModeInner::Write(_) => Err(mla::errors::Error::BadAPIArgument(
-                "This API is only callable in Read mode".to_owned(),
-            )
-            .into()),
-        }
-    }
-
-    /// Used to check whether the opening mode is the expected one, and unwrap it
-    /// return a BadAPI argument error if not
-    /// ```text
-    /// self.with_writer|inner| {});
-    /// ```
-    fn with_writer<F, R>(&self, f: F) -> Result<R, WrappedError>
-    where
-        F: FnOnce(&mut ExplicitWriter) -> Result<R, WrappedError>,
-    {
-        self.with_maybe_finalized_writer(|opt_inner| match opt_inner {
-            Some(inner) => f(inner),
-            None => Err(mla::errors::Error::BadAPIArgument(
-                "Cannot call any API on already finalized MLAFile".to_owned(),
-            ).into())
-        })
-    }
-
-    fn with_maybe_finalized_writer<F, R>(&self, f: F) -> Result<R, WrappedError>
-    where
-        F: FnOnce(&mut Option<Box<ExplicitWriter>>) -> Result<R, WrappedError>,
-    {
-        let mut inner_lock = self.inner.lock().expect("Mutex poisoned");
-        match &mut inner_lock.inner {
-            OpeningModeInner::Write(opt_inner) => f(opt_inner),
-            OpeningModeInner::Read(_) => Err(mla::errors::Error::BadAPIArgument(
-                "This API is only callable in Write mode".to_owned(),
-            )
-            .into()),
-        }
-    }
-
+/// Open an MLA archive for reading.
+///
+/// Example at examples/read.py
+struct MLAReader {
+    inner: Mutex<(ExplicitReader, String)>,
 }
 
 #[pymethods]
-impl MLAFile {
+impl MLAReader {
     #[new]
-    #[pyo3(signature = (path, mode, config))]
-    fn new(
-        path: &str,
-        mode: &str,
-        config: &Bound<'_, PyAny>,
-    ) -> Result<Self, WrappedError> {
-        match mode {
-            "r" => {
-                let rconfig = config
-                                .extract::<PyRef<ReaderConfig>>()?
-                                .to_archive_reader_config();
-                let input_file = std::fs::File::open(path)?;
-                let arch_reader = ArchiveReader::from_config(input_file, rconfig)?.0;
-                Ok(MLAFile {
-                    inner: Mutex::new(MLAFileInner {
-                        inner: OpeningModeInner::Read(ExplicitReader::FileReader(arch_reader)),
-                        path: path.to_owned(),
-                    }),
-                })
-            }
-            "w" => {
-                let wconfig = config
-                            .extract::<PyRef<WriterConfig>>()?
-                            .to_archive_writer_config()?;
-                let output_file = std::fs::File::create(path)?;
-                let arch_writer = ArchiveWriter::from_config(output_file, wconfig)?;
-                Ok(MLAFile {
-                    inner: Mutex::new(MLAFileInner {
-                        inner: OpeningModeInner::Write(Some(Box::new(ExplicitWriter::FileWriter(
-                            arch_writer,
-                        )))),
-                        path: path.to_owned(),
-                    }),
-                })
-            }
-            _ => Err(mla::errors::Error::BadAPIArgument(format!(
-                "Unknown mode {mode}, use 'r' or 'w'"
-            ))
-            .into()),
-        }
+    #[pyo3(signature = (path, config))]
+    fn new(path: &str, config: &Bound<'_, PyAny>) -> Result<Self, WrappedError> {
+        let rconfig = config
+            .extract::<PyRef<ReaderConfig>>()?
+            .to_archive_reader_config();
+        let input_file = std::fs::File::open(path)?;
+        let arch_reader = ArchiveReader::from_config(input_file, rconfig)?.0;
+        Ok(MLAReader {
+            inner: Mutex::new((ExplicitReader::FileReader(arch_reader), path.to_owned())),
+        })
     }
 
     fn __repr__(&self) -> String {
         let inner = self.inner.lock().expect("Mutex poisoned");
-        format!(
-            "<MLAFile path='{:}' mode='{:}'>",
-            inner.path,
-            match inner.inner {
-                OpeningModeInner::Read(_) => "r",
-                OpeningModeInner::Write(_) => "w",
-            }
-        )
+        format!("<MLAReader path='{}'>", inner.1)
     }
 
     /// Return the list of entry names in the archive as `EntryName`s
     fn keys(&self) -> Result<Vec<EntryName>, WrappedError> {
-        self.with_reader(|inner| Ok(inner.list_entries()?.cloned().map(EntryName::from_rust_entry_name).collect()))
+        let inner = self.inner.lock().expect("Mutex poisoned");
+        Ok(inner
+            .0
+            .list_entries()?
+            .cloned()
+            .map(EntryName::from_rust_entry_name)
+            .collect())
     }
 
     /// Return the list of the entries in the archive, along with metadata
@@ -920,50 +887,54 @@ impl MLAFile {
         include_size: bool,
         include_hash: bool,
     ) -> Result<HashMap<EntryName, FileMetadata>, WrappedError> {
-        self.with_reader(|inner| {
-            #[allow(clippy::mutable_key_type)]
-            let mut output = HashMap::new();
-            let iter: Vec<RustEntryName> = inner.list_entries()?.cloned().collect();
-            for fname in iter {
-                let mut metadata = FileMetadata {
-                    size: None,
-                    hash: None,
-                };
-                match inner {
-                    ExplicitReader::FileReader(reader) => {
-                        if include_size {
-                            metadata.size = Some(
-                                reader
-                                    .get_entry(fname.clone())?
-                                    .ok_or(PyRuntimeError::new_err(format!(
-                                        "EntryNot found (escaped name): {}",
-                                        fname.raw_content_to_escaped_string()
-                                    )))?
-                                    .get_size(),
-                            );
-                        }
-                        if include_hash {
-                            metadata.hash = Some(reader.get_hash(&fname)?.ok_or(
-                                PyRuntimeError::new_err(format!("EntryNot found (escaped name): {}", fname.raw_content_to_escaped_string())),
-                            )?);
-                        }
+        let mut inner = self.inner.lock().expect("Mutex poisoned");
+        #[allow(clippy::mutable_key_type)]
+        let mut output = HashMap::new();
+        let iter: Vec<RustEntryName> = inner.0.list_entries()?.cloned().collect();
+        for fname in iter {
+            let mut metadata = FileMetadata {
+                size: None,
+                hash: None,
+            };
+            match &mut inner.0 {
+                ExplicitReader::FileReader(reader) => {
+                    if include_size {
+                        metadata.size = Some(
+                            reader
+                                .get_entry(fname.clone())?
+                                .ok_or(PyRuntimeError::new_err(format!(
+                                    "EntryNot found (escaped name): {}",
+                                    fname.raw_content_to_escaped_string()
+                                )))?
+                                .get_size(),
+                        );
+                    }
+                    if include_hash {
+                        metadata.hash = Some(reader.get_hash(&fname)?.ok_or(
+                            PyRuntimeError::new_err(format!(
+                                "EntryNot found (escaped name): {}",
+                                fname.raw_content_to_escaped_string()
+                            )),
+                        )?);
                     }
                 }
-                output.insert(EntryName::from_rust_entry_name(fname), metadata);
             }
-            Ok(output)
-        })
+            output.insert(EntryName::from_rust_entry_name(fname), metadata);
+        }
+        Ok(output)
     }
 
     /// Return whether the given `EntryName` is in the archive
     fn __contains__(&self, key: &EntryName) -> Result<bool, WrappedError> {
         let rust_entry_name = key.to_rust_entry_name();
-        self.with_reader(|inner| Ok(inner.list_entries()?.any(|x| x == &rust_entry_name)))
+        let inner = self.inner.lock().expect("Mutex poisoned");
+        Ok(inner.0.list_entries()?.any(|x| x == &rust_entry_name))
     }
 
     /// Return the content of an entry indexed by its `EntryName` as bytes
     fn __getitem__(&mut self, key: &EntryName) -> Result<Vec<u8>, WrappedError> {
-        self.with_reader(|inner| match inner {
+        let mut inner = self.inner.lock().expect("Mutex poisoned");
+        match &mut inner.0 {
             ExplicitReader::FileReader(reader) => {
                 let file = reader.get_entry(key.to_rust_entry_name())?;
                 if let Some(mut archive_entry) = file {
@@ -971,66 +942,23 @@ impl MLAFile {
                     archive_entry.data.read_to_end(&mut buf)?;
                     Ok(buf)
                 } else {
-                    Err(PyKeyError::new_err(format!("EntryNot found (escaped name): {}", key.raw_content_to_escaped_string())).into())
+                    Err(PyKeyError::new_err(format!(
+                        "EntryNot found (escaped name): {}",
+                        key.raw_content_to_escaped_string()
+                    ))
+                    .into())
                 }
             }
-        })
-    }
-
-    /// Add an entry to the archive indexed by its `EntryName`
-    fn __setitem__(&mut self, key: &EntryName, value: &[u8]) -> Result<(), WrappedError> {
-        self.with_writer(|writer| match writer {
-            ExplicitWriter::FileWriter(writer) => {
-                let mut reader = std::io::Cursor::new(value);
-                writer.add_entry(key.to_rust_entry_name(), value.len() as u64, &mut reader)?;
-                Ok(())
-            }
-        })
+        }
     }
 
     /// Return the number of file in the archive
     fn __len__(&self) -> Result<usize, WrappedError> {
-        self.with_reader(|inner| Ok(inner.list_entries()?.count()))
+        let inner = self.inner.lock().expect("Mutex poisoned");
+        Ok(inner.0.list_entries()?.count())
     }
 
-    /// Finalize the archive creation. This API *must* be called or essential records will no be written
-    /// An archive can only be finalized once
-    fn finalize(&mut self) -> Result<(), WrappedError> {
-        self.with_maybe_finalized_writer(finalize_if_not_already)
-    }
-
-    // Context management protocol (PEP 0343)
-    // https://docs.python.org/3/reference/datamodel.html#context-managers
-    fn __enter__(slf: PyRef<Self>) -> PyRef<Self> {
-        slf
-    }
-
-    // cf. https://pyo3.rs/v0.24.0/function/signature.html
-    #[pyo3(signature = (exc_type=None, _exc_value=None, _traceback=None))]
-    fn __exit__(
-        &mut self,
-        exc_type: Option<&Bound<'_, PyAny>>,
-        _exc_value: Option<&Bound<'_, PyAny>>,
-        _traceback: Option<&Bound<'_, PyAny>>,
-    ) -> Result<bool, WrappedError> {
-        if exc_type.is_some() {
-            // An exception occurred, let it be raised again
-            return Ok(false);
-        }
-
-        match self.inner.lock().expect("Mutex poisoned").inner {
-            OpeningModeInner::Read(_) => {
-                // Nothing to do, dropping this object should close the inner stream
-            }
-            OpeningModeInner::Write(ref mut opt_writer) => {
-                // Finalize. If an exception occurred, raise it
-                finalize_if_not_already(opt_writer)?;
-            }
-        }
-        Ok(false)
-    }
-
-    /// alias for io.BufferedIOBase
+    /// Alias for io.BufferedIOBase
     // Purpose: only one import
     #[classattr]
     fn _buffered_type(py: Python) -> PyResult<Py<PyType>> {
@@ -1060,31 +988,191 @@ impl MLAFile {
         dest: &Bound<PyAny>,
         chunk_size: usize,
     ) -> Result<(), WrappedError> {
-        self.with_reader(|reader| {
-            let archive_entry = match reader {
-                ExplicitReader::FileReader(reader) => reader.get_entry(key.to_rust_entry_name())?,
-            };
+        let mut inner = self.inner.lock().expect("Mutex poisoned");
+        let archive_entry = match &mut inner.0 {
+            ExplicitReader::FileReader(reader) => reader.get_entry(key.to_rust_entry_name())?,
+        };
 
-            if let Ok(dest) = dest.downcast::<PyString>() {
-                let mut output = std::fs::File::create(dest.to_string())?;
-                io::copy(&mut archive_entry.unwrap().data, &mut output)?;
-            } else if dest.is_instance(&py.get_type::<MLAFile>().getattr("_buffered_type")?)? {
-                let src = &mut archive_entry.unwrap().data;
-                let mut buf = Vec::from_iter(std::iter::repeat_n(0, chunk_size));
-                while let Ok(n) = src.read(&mut buf) {
-                    if n == 0 {
-                        break;
-                    }
-                    dest.call_method1("write", (&buf[..n],))?;
+        if let Ok(dest) = dest.downcast::<PyString>() {
+            let mut output = std::fs::File::create(dest.to_string())?;
+            io::copy(&mut archive_entry.unwrap().data, &mut output)?;
+        } else if dest.is_instance(&py.get_type::<MLAReader>().getattr("_buffered_type")?)? {
+            let src = &mut archive_entry.unwrap().data;
+            let mut buf = Vec::from_iter(std::iter::repeat_n(0, chunk_size));
+            while let Ok(n) = src.read(&mut buf) {
+                if n == 0 {
+                    break;
                 }
-            } else {
-                return Err(PyTypeError::new_err(
-                    "Expected a string or a file-object like (subclass of io.RawIOBase)",
-                )
-                .into());
+                dest.call_method1("write", (&buf[..n],))?;
             }
-            Ok(())
+        } else {
+            return Err(PyTypeError::new_err(
+                "Expected a string or a file-object like (subclass of io.RawIOBase)",
+            )
+            .into());
+        }
+        Ok(())
+    }
+
+    // Context management protocol (PEP 0343)
+    // https://docs.python.org/3/reference/datamodel.html#context-managers
+    fn __enter__(slf: PyRef<Self>) -> PyRef<Self> {
+        slf
+    }
+
+    // cf. https://pyo3.rs/v0.25.1/function/signature.html
+    #[pyo3(signature = (_exc_type=None, _exc_value=None, _traceback=None))]
+    fn __exit__(
+        &mut self,
+        _exc_type: Option<&Bound<'_, PyAny>>,
+        _exc_value: Option<&Bound<'_, PyAny>>,
+        _traceback: Option<&Bound<'_, PyAny>>,
+    ) -> Result<bool, WrappedError> {
+        Ok(false)
+    }
+}
+
+// -------- mla.MLAWriter --------
+
+/// `ArchiveWriter` is a generic type. To avoid generating several Python implementation
+/// (see https://pyo3.rs/v0.25.1/class#no-generic-parameters), this enum explicitely
+/// instantiate `ArchiveWriter` for common & expected types
+/// Additionally, as the GC in Python might drop objects at any time, we need to use
+/// `'static` lifetime for the writer. This should not be a problem as the writer is not
+/// supposed to be used after the drop of the parent object
+/// (see https://pyo3.rs/v0.25.1/class#no-lifetime-parameters)
+enum ExplicitWriter {
+    FileWriter(ArchiveWriter<'static, std::fs::File>),
+}
+
+fn finalize_if_not_already(
+    opt_writer: &mut Option<Box<ExplicitWriter>>,
+) -> Result<(), WrappedError> {
+    match opt_writer.take() {
+        Some(writer) => writer.finalize().map_err(WrappedError::from),
+        None => Err(mla::errors::Error::BadAPIArgument(
+            "Cannot call any API on already finalized MLAWriter".to_owned(),
+        )
+        .into()),
+    }
+}
+
+/// Wrap calls to the inner type
+impl ExplicitWriter {
+    fn finalize(self) -> Result<(), mla::errors::Error> {
+        match self {
+            ExplicitWriter::FileWriter(writer) => {
+                writer.finalize()?;
+                Ok(())
+            }
+        }
+    }
+
+    #[allow(dead_code)]
+    fn add_entry<R: Read>(
+        &mut self,
+        key: RustEntryName,
+        size: u64,
+        reader: &mut R,
+    ) -> Result<(), mla::errors::Error> {
+        match self {
+            ExplicitWriter::FileWriter(writer) => {
+                writer.add_entry(key, size, reader)?;
+                Ok(())
+            }
+        }
+    }
+
+    #[allow(dead_code)]
+    fn start_entry(&mut self, key: RustEntryName) -> Result<u64, mla::errors::Error> {
+        match self {
+            ExplicitWriter::FileWriter(writer) => Ok(writer.start_entry(key)?.0),
+        }
+    }
+
+    #[allow(dead_code)]
+    fn append_entry_content(
+        &mut self,
+        id: u64,
+        size: usize,
+        data: &[u8],
+    ) -> Result<(), mla::errors::Error> {
+        match self {
+            ExplicitWriter::FileWriter(writer) => {
+                writer.append_entry_content(ArchiveEntryId(id), size as u64, data)
+            }
+        }
+    }
+
+    #[allow(dead_code)]
+    fn end_entry(&mut self, id: u64) -> Result<(), mla::errors::Error> {
+        match self {
+            ExplicitWriter::FileWriter(writer) => writer.end_entry(ArchiveEntryId(id)),
+        }
+    }
+}
+
+#[pyclass]
+/// Open an MLA archive for writing.
+///
+/// Example at examples/write.py
+struct MLAWriter {
+    inner: Mutex<(Option<Box<ExplicitWriter>>, String)>,
+}
+
+#[pymethods]
+impl MLAWriter {
+    #[new]
+    #[pyo3(signature = (path, config))]
+    fn new(path: &str, config: &Bound<'_, PyAny>) -> Result<Self, WrappedError> {
+        let wconfig = config
+            .extract::<PyRef<WriterConfig>>()?
+            .to_archive_writer_config()?;
+        let output_file = std::fs::File::create(path)?;
+        let arch_writer = ArchiveWriter::from_config(output_file, wconfig)?;
+        Ok(MLAWriter {
+            inner: Mutex::new((
+                Some(Box::new(ExplicitWriter::FileWriter(arch_writer))),
+                path.to_owned(),
+            )),
         })
+    }
+
+    fn __repr__(&self) -> String {
+        let inner = self.inner.lock().expect("Mutex poisoned");
+        format!("<MLAWriter path='{}'>", inner.1)
+    }
+
+    /// Add an entry to the archive indexed by its `EntryName`
+    fn __setitem__(&mut self, key: &EntryName, value: &[u8]) -> Result<(), WrappedError> {
+        let mut inner = self.inner.lock().expect("Mutex poisoned");
+        match inner.0.as_mut() {
+            Some(writer) => match writer.as_mut() {
+                ExplicitWriter::FileWriter(writer) => {
+                    let mut reader = std::io::Cursor::new(value);
+                    writer.add_entry(key.to_rust_entry_name(), value.len() as u64, &mut reader)?;
+                    Ok(())
+                }
+            },
+            None => Err(mla::errors::Error::BadAPIArgument(
+                "Cannot call any API on already finalized MLAWriter".to_owned(),
+            )
+            .into()),
+        }
+    }
+
+    /// Finalize the archive creation. This API *must* be called or essential records will no be written
+    /// An archive can only be finalized once
+    fn finalize(&mut self) -> Result<(), WrappedError> {
+        let mut inner = self.inner.lock().expect("Mutex poisoned");
+        finalize_if_not_already(&mut inner.0)
+    }
+
+    /// Alias for io.BufferedIOBase
+    // Purpose: only one import
+    #[classattr]
+    fn _buffered_type(py: Python) -> PyResult<Py<PyType>> {
+        py.import("io")?.getattr("BufferedIOBase")?.extract()
     }
 
     /// Add an entry named by @src `EntryName` to an archive from @src, which can be:
@@ -1110,34 +1198,77 @@ impl MLAFile {
         src: &Bound<PyAny>,
         chunk_size: usize,
     ) -> Result<(), WrappedError> {
-        let key = key.to_rust_entry_name();
-        self.with_writer(|writer| {
-            if let Ok(src) = src.downcast::<PyString>() {
-                let mut input = std::fs::File::open(src.to_string())?;
-                writer.add_entry(key, input.metadata()?.len(), &mut input)?;
-            } else if src.is_instance(&py.get_type::<MLAFile>().getattr("_buffered_type")?)? {
-                let id = writer.start_entry(key)?;
-                loop {
-                    let py_bytes = src
-                        .call_method1("read", (chunk_size,))?
-                        .extract::<Py<PyBytes>>()?;
-                    let data = py_bytes.as_bytes(py);
-                    if data.is_empty() {
-                        break;
+        let mut inner = self.inner.lock().expect("Mutex poisoned");
+        match inner.0.as_mut() {
+            Some(writer) => match writer.as_mut() {
+                ExplicitWriter::FileWriter(writer) => {
+                    if let Ok(src) = src.downcast::<PyString>() {
+                        let mut input = std::fs::File::open(src.to_string())?;
+                        writer.add_entry(
+                            key.to_rust_entry_name(),
+                            input.metadata()?.len(),
+                            &mut input,
+                        )?;
+                    } else if src
+                        .is_instance(&py.get_type::<MLAWriter>().getattr("_buffered_type")?)?
+                    {
+                        let id = writer.start_entry(key.to_rust_entry_name())?;
+                        loop {
+                            let py_bytes = src
+                                .call_method1("read", (chunk_size,))?
+                                .extract::<Py<PyBytes>>()?;
+                            let data = py_bytes.as_bytes(py);
+                            if data.is_empty() {
+                                break;
+                            }
+                            writer.append_entry_content(
+                                id,
+                                data.len().try_into().unwrap(),
+                                data,
+                            )?;
+                        }
+                        writer.end_entry(id)?;
+                    } else {
+                        return Err(PyTypeError::new_err(
+                            "Expected a string or a file-object like (subclass of io.RawIOBase)",
+                        )
+                        .into());
                     }
-                    writer.append_entry_content(id, data.len(), data)?;
+                    Ok(())
                 }
-                writer.end_entry(id)?;
-            } else {
-                return Err(PyTypeError::new_err(
-                    "Expected a string or a file-object like (subclass of io.RawIOBase)",
-                )
-                .into());
-            }
-            Ok(())
-        })
+            },
+            None => Err(mla::errors::Error::BadAPIArgument(
+                "Cannot call any API on already finalized MLAWriter".to_owned(),
+            )
+            .into()),
+        }
+    }
+
+    // Context management protocol (PEP 0343)
+    // https://docs.python.org/3/reference/datamodel.html#context-managers
+    fn __enter__(slf: PyRef<Self>) -> PyRef<Self> {
+        slf
+    }
+
+    // cf. https://pyo3.rs/v0.25.1/function/signature.html
+    #[pyo3(signature = (exc_type=None, _exc_value=None, _traceback=None))]
+    fn __exit__(
+        &mut self,
+        exc_type: Option<&Bound<'_, PyAny>>,
+        _exc_value: Option<&Bound<'_, PyAny>>,
+        _traceback: Option<&Bound<'_, PyAny>>,
+    ) -> Result<bool, WrappedError> {
+        if exc_type.is_some() {
+            // An exception occurred, let it be raised again
+            return Ok(false);
+        }
+        let mut inner = self.inner.lock().expect("Mutex poisoned");
+        finalize_if_not_already(&mut inner.0)?;
+        Ok(false)
     }
 }
+
+// -------- mla.EntryName --------
 
 #[pyclass]
 struct EntryName {
@@ -1163,7 +1294,7 @@ impl Hash for EntryName {
 impl EntryName {
     fn from_rust_entry_name(entry_name: RustEntryName) -> Self {
         Self {
-            inner: Mutex::new(entry_name)
+            inner: Mutex::new(entry_name),
         }
     }
 
@@ -1177,59 +1308,79 @@ impl EntryName {
     #[new]
     #[pyo3(signature = (str_path))]
     /// Builds an EntryName from a str interpreted like a path
-    /// 
+    ///
     /// See Rust `EntryName::from_path` doc to read what this function does
     fn new(str_path: &str) -> Result<Self, WrappedError> {
         Ok(Self {
-            inner: Mutex::new(RustEntryName::from_path(str_path)?)
+            inner: Mutex::new(RustEntryName::from_path(str_path)?),
         })
     }
 
     #[staticmethod]
     #[pyo3(signature = (path))]
     /// Builds an EntryName from an os.PathLike
-    /// 
+    ///
     /// See Rust `EntryName::from_path` doc to read what this function does
     fn from_path(path: PathBuf) -> Result<Self, WrappedError> {
         Ok(Self {
-            inner: Mutex::new(RustEntryName::from_path(path)?)
+            inner: Mutex::new(RustEntryName::from_path(path)?),
         })
     }
 
     #[staticmethod]
     #[pyo3(signature = (bytes))]
     /// Builds an EntryName from an os.PathLike
-    /// 
+    ///
     /// See Rust `EntryName::from_arbitrary_bytes` doc to read what this function does
     fn from_arbitrary_bytes(bytes: &[u8]) -> Result<Self, WrappedError> {
         Ok(Self {
-            inner: Mutex::new(RustEntryName::from_arbitrary_bytes(bytes)?)
+            inner: Mutex::new(RustEntryName::from_arbitrary_bytes(bytes)?),
         })
     }
 
     #[getter]
     /// SECURITY WARNING: See Rust `EntryName::as_arbitrary_bytes` doc to read what this returns
     fn arbitrary_bytes(&self) -> Vec<u8> {
-        self.inner.lock().expect("Mutex poisoned").as_arbitrary_bytes().to_vec()
+        self.inner
+            .lock()
+            .expect("Mutex poisoned")
+            .as_arbitrary_bytes()
+            .to_vec()
     }
 
     /// See Rust `EntryName::raw_content_to_escaped_string` doc to read what this function does
     fn raw_content_to_escaped_string(&self) -> String {
-        self.inner.lock().expect("Mutex poisoned").raw_content_to_escaped_string()
+        self.inner
+            .lock()
+            .expect("Mutex poisoned")
+            .raw_content_to_escaped_string()
     }
 
     /// SECURITY WARNING: See Rust `EntryName::to_pathbuf` doc to read what this function does
     fn to_pathbuf(&self) -> Result<PathBuf, WrappedError> {
-        self.inner.lock().expect("Mutex poisoned").to_pathbuf().map_err(|_| WrappedError::EntryNameError)
+        self.inner
+            .lock()
+            .expect("Mutex poisoned")
+            .to_pathbuf()
+            .map_err(|_| WrappedError::EntryNameError)
     }
 
     /// See Rust `EntryName::to_pathbuf_escaped_string` doc to read what this function does
     fn to_pathbuf_escaped_string(&self) -> Result<String, WrappedError> {
-        self.inner.lock().expect("Mutex poisoned").to_pathbuf_escaped_string().map_err(|_| WrappedError::EntryNameError)
+        self.inner
+            .lock()
+            .expect("Mutex poisoned")
+            .to_pathbuf_escaped_string()
+            .map_err(|_| WrappedError::EntryNameError)
     }
 
     fn __richcmp__(&self, other: &EntryName, op: CompareOp) -> bool {
-        op.matches(self.inner.lock().expect("Mutex poisoned").cmp(&other.inner.lock().expect("Mutex poisoned")))
+        op.matches(
+            self.inner
+                .lock()
+                .expect("Mutex poisoned")
+                .cmp(&other.inner.lock().expect("Mutex poisoned")),
+        )
     }
 
     fn __hash__(&self) -> u64 {
@@ -1246,7 +1397,8 @@ impl EntryName {
 #[pyo3(name = "mla")]
 fn pymla(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Classes
-    m.add_class::<MLAFile>()?;
+    m.add_class::<MLAReader>()?;
+    m.add_class::<MLAWriter>()?;
     m.add_class::<EntryName>()?;
     m.add_class::<FileMetadata>()?;
     m.add_class::<WriterConfig>()?;
@@ -1295,9 +1447,18 @@ fn pymla(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("HPKEError", py.get_type::<HPKEError>())?;
     m.add("InvalidLastTag", py.get_type::<InvalidLastTag>())?;
     m.add("WrongEndMagic", py.get_type::<WrongEndMagic>())?;
-    m.add("NoValidSignatureFound", py.get_type::<NoValidSignatureFound>())?;
-    m.add("SignatureVerificationAskedButNoSignatureLayerFound", py.get_type::<SignatureVerificationAskedButNoSignatureLayerFound>())?;
-    m.add("MissingEndOfEncryptedInnerLayerMagic", py.get_type::<MissingEndOfEncryptedInnerLayerMagic>())?;
+    m.add(
+        "NoValidSignatureFound",
+        py.get_type::<NoValidSignatureFound>(),
+    )?;
+    m.add(
+        "SignatureVerificationAskedButNoSignatureLayerFound",
+        py.get_type::<SignatureVerificationAskedButNoSignatureLayerFound>(),
+    )?;
+    m.add(
+        "MissingEndOfEncryptedInnerLayerMagic",
+        py.get_type::<MissingEndOfEncryptedInnerLayerMagic>(),
+    )?;
     m.add("TruncatedTag", py.get_type::<TruncatedTag>())?;
     m.add("UnknownTagPosition", py.get_type::<UnknownTagPosition>())?;
     m.add("MLAOther", py.get_type::<MLAOther>())?;
