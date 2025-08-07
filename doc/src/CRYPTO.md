@@ -193,7 +193,6 @@ If the decryption is a success, returns $ss_{recipients}$. Otherwise, returns an
     - An existing formal analysis [^hpkeanalysis]
     - Easier code and security auditing, thanks to the use of known bricks
     - Availability of test vectors in the RFC, making the implementation more reliable
-    - If signature is added to MLA in a future version, it could also be integrated using HPKE
 - To the knowledge of the author, no HPKE algorithm has been standardized for quantum hybridation, hence the custom algorithm
 - FIPS 203 is used as, at the time of writing:
     - It is the only KEM algorithm standardized by the NIST [^nist]
@@ -507,35 +506,6 @@ For now, it is therefore accepted by the author (as a trade-off) to use a MLKEM 
 If a reviewed implementation with acceptable dependency emerges in the future, it can be easily swapped in MLA. Thus, MLA would also satisfy the requirements to get a security visa evaluation in the second and third phases of these guidelines by including its PQC implementation.
 
 ## Security considerations
-
-### Absence of signature
-
-As there is no signature for now in MLA, an attacker knowing the recipient public key can always create a custom archive with arbitrary data.
-
-For this reason, several known attacks are considered acceptable, such as:
-
-- The bit indicating if the `Encrypt` layer is present is not protected in integrity
-
-An attacker can remove it, making the reader treating the archive as if encryption was absent. *The reader is responsible of checking for encryption bit if it was expected in the first place*.
-
-For instance, the `mlar` CLI will refuse to open an archive without the `Encrypt` bit unless `--accept-unencrypted` is provided on the command line.
-
-- An attacker with the ability to modify a real archive in transit can replace what the reader will be able to read with arbitrary data
-
-To perform this attack, the attacker will have to either remove the `Encrypt` bit or modify the key used for decryption with one she has.
-The remaining encrypted data will then act as random values.
-
-Still, the attacker could expect to gain enough privilege, like arbitrary code execution in the process, during the archive read. One can then try to reuse the provided key to decrypt, then act on the real data.
-
-Limiting this attack is beyond the scope of this document. It mainly involves the security features of Rust, reviewed implementation, testing & fuzzing, zeroizing secrets when possible [^issuezeroize], etc.
-
-- An attacker can truncate an archive and hope for repair
-
-This attack is based on a trade-off: should the `SafeReader` try to get as many bytes as possible, or should it return only data that have been authenticated?
-
-The choice has been made to report the decision to the user of the library[^issueallowunauth].
-
-### Other properties
 
 - Plaintext length
 
