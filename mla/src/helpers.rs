@@ -132,11 +132,11 @@ pub fn linear_extract<W1: InnerWriterTrait, R: InnerReaderTrait, S: BuildHasher>
                 let copy_src = &mut (&mut src).take(length);
                 // Is the file considered?
                 let mut extracted: bool = false;
-                if let Some(fname) = id2filename.get(&id) {
-                    if let Some(writer) = export.get_mut(fname) {
-                        io::copy(copy_src, writer)?;
-                        extracted = true;
-                    }
+                if let Some(fname) = id2filename.get(&id)
+                    && let Some(writer) = export.get_mut(fname)
+                {
+                    io::copy(copy_src, writer)?;
+                    extracted = true;
                 };
                 if !extracted {
                     // Exhaust the block to Sink to forward the reader

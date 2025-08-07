@@ -596,7 +596,7 @@ impl ArchiveWriterState {
         &mut self,
         id: ArchiveEntryId,
         src: R,
-    ) -> Result<HashWrapperReader<R>, Error> {
+    ) -> Result<HashWrapperReader<'_, R>, Error> {
         let hash = match self {
             ArchiveWriterState::OpenedFiles { hashes, .. } => match hashes.get_mut(&id) {
                 Some(hash) => hash,
@@ -1316,7 +1316,7 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
     pub fn get_entry(
         &mut self,
         name: EntryName,
-    ) -> Result<Option<ArchiveEntry<impl InnerReaderTrait>>, Error> {
+    ) -> Result<Option<ArchiveEntry<'_, impl InnerReaderTrait>>, Error> {
         if let Some(ArchiveFooter {
             entries_info: files_info,
         }) = &self.metadata
@@ -2717,7 +2717,7 @@ pub(crate) mod tests {
             .unwrap()
             .get_public_keys();
         let config = ArchiveReaderConfig::with_signature_verification(&[pubkey])
-            .with_encryption(&[privkey.clone()]);
+            .with_encryption(std::slice::from_ref(&privkey));
         let mut mla_read = ArchiveReader::from_config(buf, config).unwrap().0;
 
         // Build FailSafeReader
