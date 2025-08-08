@@ -7,23 +7,17 @@ Python bindings for the MLA (Multi-Layer Archive) format, enabling secure, compr
 Install from PyPI:
 
 ```sh
-pip install mla-archive
+pipx install mla-archive
 ```
 
 Or build from source:
 
 **Install maturin:**  
    `maturin` is a tool for building and publishing Rust-based Python packages.  
-   You can install it via pip:
+   You can install it via pipx:
 
    ```sh
-   pip install maturin
-   ```
-
-   Or, if you prefer, via cargo:
-
-   ```sh
-   cargo install maturin
+   pipx install maturin
    ```
 
 **Build the Python wheel:**
@@ -34,9 +28,11 @@ Or build from source:
 
    This creates a `.whl` file in the `target/wheels/` directory.
 
-**(Alternative) Install directly into your current Python environment:**
+**(Alternative) Install directly into a Python virtual environment:**
 
    ```sh
+   python -m venv .venv
+   source .venv/bin/activate
    maturin develop
    ```
 
