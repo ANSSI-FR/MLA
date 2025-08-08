@@ -80,6 +80,20 @@ with mla.MLARead("example.mla", config) as archive:
 
 See [tests](tests) for more usage examples.
 
+## Type stub files
+
+The MLA Python bindings include type stub files (`.pyi`) to provide static type information for tools like `mypy`, IDEs, and linters.
+
+- The bindings expose a native extension module `mla.mla` along with the top-level `mla` package.
+- To support static analysis, there are stub files both for the top-level package (`mla/__init__.pyi`) and the native submodule (`mla/mla.pyi`).
+- These stubs allow type checkers to understand the full API surface, since compiled native modules lack introspectable Python signatures.
+- When developing or modifying the bindings, ensure all `.pyi` files are kept alongside their respective Python or compiled modules so tools can locate them.
+- To verify your stubs correctly match the runtime API (with `mypy` as an example), use:
+
+```sh
+python3 -m mypy.stubtest mla
+```
+
 ## Testing
 
 Run the test suite with:
