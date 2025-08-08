@@ -1,126 +1,134 @@
-# MLA C/CPP Bindings
+# MLA C/C++ Bindings
 
-This project provides C and CPP bindings for the MLA format.
+This project provides C and C++ bindings for MLA.
 
 ## How-to
 
-The last version of libraries are available in the [Release section](https://github.com/ANSSI-FR/MLA/releases).
+The latest versions of the libraries are available in the [Releases section](https://github.com/ANSSI-FR/MLA/releases).
 
-It provides:
-* `.h` and `.hpp` headers. There are generated, but provided to ease the use of bindings without the Rust toolchain;
-* `libmla.a` for Linux x86-64 bits
-* `mla.lib` (static), `mla.dll` + `mla.dll.lib` (dynamic), `mla.pdb` (symbols) for Windows i686 and x86_64, in *release* and *debug* targets
+Each release provides:
 
-One can also compile them using the Rust toolchain:
+- `.h` and `.hpp` headers — generated automatically for easy integration, no Rust toolchain required.
+- `libmla.a` for Linux (x86-64)
+- `mla.lib` (static), `mla.dll` + `mla.dll.lib` (dynamic), and `mla.pdb` (debug symbols) for Windows (i686 and x86_64), in both *Release* and *Debug* builds.
+
+---
+
+## Build from source
+
+You can also compile the libraries manually using the Rust toolchain.
+
+### 1. Generate C/C++ bindings
+
+Install `cbindgen` if it's not already installed:
 
 ```sh
-# Install cbindgen
 cargo install cbindgen
-# Generate the .h header
+
+# Generate the C header
 cbindgen --config cbindgen_c.toml
-# Generate the .hpp header
+
+# Generate the C++ header
 cbindgen --config cbindgen_cpp.toml
-# Install the appropriate target toolchain
-# For instance, with rustup:
-rustup add target ...
-# Compile the Debug version
-cargo build --target ...
-# Compile the Release version
-cargo build --release --target ...
 ```
 
-Notes: when linking with `mla.lib`, `ntdll.lib` is also needed.
+### 2. Install a target toolchain
 
-## Example
-
-* Creating a new MLA (from [this file](tests/linux-gcc-g++/create.c) - Windows example [here](tests/windows-msvc/src/main.c))
-
-```C
-// Called to out Archive content to the actual output
-static int32_t callback_write(const uint8_t* pBuffer, uint32_t length, void *context, uint32_t *pBytesWritten)
-{
-    size_t res = fwrite(pBuffer, 1, length, (FILE*)context);
-    *pBytesWritten = (uint32_t)res;
-    if (ferror(context))
-    {
-        return errno;
-    }
-    return 0;
-}
-
-// Called to flush the actual output
-static int32_t callback_flush(void *context)
-{
-    if (fflush((FILE*)context) != 0)
-    {
-        return errno;
-    }
-    return 0;
-}
-
-[...]
-
-// Open the output file
-FILE* f = fopen("test.mla", "w");
-
-// Create a configuration for the archive writer
-MLAStatus status;
-MLAWriterConfigHandle hConfig = NULL;
-status = create_mla_writer_config_with_encryption_without_signature(&hConfig, szPubkey, 1);
-// Error code can be obtained with MLA_STATUS
-if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
-{
-    fprintf(stderr, " [!] Config creation failed with code %" PRIX64 "\n", (uint64_t)status);
-    return (int)status;
-}
-
-// For the sake of readability, checks are now omitted
-
-// Add a recipient
-
-// Create the archive writer
-// `callback_write` and `callback_flush` will received whatever context is given to `mla_archive_new`
-// Here, this is `f`, the output file descriptor
-MLAArchiveHandle hArchive = NULL;
-status = mla_archive_new(&hConfig, &callback_write, &callback_flush, f, &hArchive);
-
-// Start a new file in the archive
-// hFile will be used to identify this file inside the archive
-MLAArchiveFileHandle hFile = NULL;
-status = mla_archive_start_entry_with_path_as_name(hArchive, "test.txt", &hFile);
-
-// Append some content
-status = mla_archive_file_append(hArchive, hFile, (const uint8_t*)"Hello, World!\n", (uint32_t)strlen("Hello, World!\n"));
-
-// Finalize the file inside the archive
-status = mla_archive_file_close(hArchive, &hFile);
-
-// Finalize the archive
-status = mla_archive_close(&hArchive);
-
-// Clean-up
-fclose(f);
+```sh
+# Add the Windows MSVC target as an example
+rustup target add x86_64-pc-windows-msvc
 ```
+
+### 3. Compile
+
+```sh
+# Debug build for Windows MSVC target
+cargo build --target x86_64-pc-windows-msvc
+
+# Release build for Windows MSVC target
+cargo build --release --target x86_64-pc-windows-msvc
+```
+
+#### Linking notes for Windows
+
+If you are linking your own application against `mla.lib` (the static library), you must also link against `ntdll.lib`.
+
+To build or link properly on Windows:
+
+- Make sure the appropriate linker is available.
+- Install the **Microsoft Visual Studio Build Tools** (with C++ components).
+- Use a **Developer Command Prompt for Visual Studio** to ensure the environment is correctly configured.
+
+## Examples
+
+### Writing an MLA
+
+- Linux: [tests/linux-gcc-g++/create.c](tests/linux-gcc-g++/create.c)
+- Windows: [tests/windows-msvc/src/write.c](tests/windows-msvc/src/write.c)
+
+### Reading an MLA
+
+- Linux: [tests/linux-gcc-g++/open.c](tests/linux-gcc-g++/open.c)
+- Windows: [tests/windows-msvc/src/read.c](tests/windows-msvc/src/read.c)
 
 ## API
 
 The API is available in [mla.h](mla.h) and [mla.hpp](mla.hpp).
 
-For now, only the writer API is available.
+### Writer config creation
+
+- `create_mla_writer_config_with_encryption_with_signature(...)`
+- `create_mla_writer_config_with_encryption_without_signature(...)`
+- `create_mla_writer_config_without_encryption_with_signature(...)`
+- `create_mla_writer_config_without_encryption_without_signature(...)`
+
+### Reader config creation
+
+- `create_mla_reader_config(...)`
+  (Provide private keys for decryption and public keys for signature verification.)
+
+### Compression
+
+- `mla_writer_config_set_compression_level(hConfig, level)`
+  Valid levels: 1 (fastest) to 11 (best), 6 is default.
+
+### Archive writing
+
+- `mla_archive_new(...)`
+- `mla_archive_start_entry_with_path_as_name(...)`
+- `mla_archive_file_append(...)`
+- `mla_archive_file_close(...)`
+- `mla_archive_close(...)`
+
+### Archive reading
+
+- `mla_archive_open(...)`
+- `mla_archive_list_entries(...)`
+- `mla_archive_open_entry_by_name(...)`
+- `mla_archive_file_read(...)`
+- `mla_archive_file_close(...)`
+- `mla_archive_close(...)`
+
+### Error handling
+
+All functions return `MLAStatus`. Use `MLA_STATUS(MLA_STATUS_SUCCESS)` to check for success.
 
 ### Guidelines
 
-* If one wants an archive without encryption, they must explicitly ask for it (ie. default is encrypted)
-* Statuses and handles are separated, to avoid confusion and the use of a variable for two distinct purposes. As a result, each API always returns a `MLAStatus`, and could take or give handles through arguments
-* Output writing is delegated to the library user, through callbacks. That way, she can manage how and when flushing and  actual writes are made (buffering, writing to an external HTTP server...)
+- Encryption and signing are explicit; choose your config accordingly.
+- Output/input is managed via user-provided callbacks for writing, flushing, and reading.
+- Handles are used for configs, archives, and files.
+- Both writer and reader APIs are available.
+
+---
 
 ## Tests
 
-The bindings are [tested](tests). These tests might also provides some example of use.
+See the [tests](tests) directory for more usage examples.
+Tests are run by CI and can be run locally using the provided `Makefile` and Visual Studio projects.
 
-They are launched by the CI.
-One can locally launch them using the available `Makefile` and Visual Studio projects.
+---
 
 ## Caveat
 
-MLA bindings for C currently does not support the `Send` feature, so its handles and objects are not safe to use across multiple threads. Thread safety cannot be guaranteed at this time.
+MLA bindings for C currently do **not** support the `Send` feature; handles and objects are **not** thread-safe.
