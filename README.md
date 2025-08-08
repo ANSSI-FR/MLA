@@ -33,8 +33,8 @@ This repository contains:
 
 * `mla`: the Rust library implementing MLA reader and writer
 * `mlar`: a Rust cli utility wrapping `mla` for common actions (create, list, extract...)
-* `doc` : advanced documentation related to MLA (e.g. format specification)
-  * [Advanced MLA book](https://anssi-fr.github.io/MLA)
+* `doc` : documentation related to MLA (e.g. format specification, cryptography)
+  * [MLA book](https://anssi-fr.github.io/MLA)
 * `bindings` : bindings for other languages
 * `samples` : test assets
 * `mla-fuzz-afl` : a Rust utility to fuzz `mla`
