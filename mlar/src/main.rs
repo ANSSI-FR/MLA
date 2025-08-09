@@ -251,6 +251,20 @@ fn config_from_matches(
         } else {
             ArchiveWriterConfig::with_encryption_without_signature(&pub_enc_keys)
         }
+    } else if matches.contains_id(output_private_keys_arg_name) {
+        if !layers.contains(&"sign") {
+            eprintln!(
+                "[WARNING] '{output_private_keys_arg_name}' was given, but sign layer was not asked. Enabling it"
+            );
+        }
+
+        let (_private_decryption_keys, private_sig_keys) =
+            open_private_keys(matches, output_private_keys_arg_name).map_err(|error| {
+                eprintln!("[ERROR] Unable to open private keys: {error}");
+                MlarError::Mla(Error::InvalidKeyFormat)
+            })?;
+
+        ArchiveWriterConfig::without_encryption_with_signature(&private_sig_keys)
     } else {
         ArchiveWriterConfig::without_encryption_without_signature()
     }?;
@@ -352,13 +366,13 @@ fn open_mla_file<'a>(matches: &ArgMatches) -> Result<ArchiveReader<'a, File>, Ml
 
     // Instantiate reader
     let (reader, keys_with_valid_signatures) = ArchiveReader::from_config(file, config?)?;
-    if let Some(public_keys) = matches.get_many::<PathBuf>("public_keys") {
-        if public_keys.count() != keys_with_valid_signatures.len()
-            && !matches.get_flag("only_one_key_with_valid_signature_is_ok")
-        {
-            return Err(MlarError::Mla(Error::NoValidSignatureFound));
-        }
+    if let Some(public_keys) = matches.get_many::<PathBuf>("public_keys")
+        && public_keys.count() != keys_with_valid_signatures.len()
+        && !matches.get_flag("only_one_key_with_valid_signature_is_ok")
+    {
+        return Err(MlarError::Mla(Error::NoValidSignatureFound));
     }
+
     Ok(reader)
 }
 
@@ -701,13 +715,13 @@ fn process_chunk(
     fallback_filename: usize,
 ) -> Result<(), MlarError> {
     if let Ok(text) = std::str::from_utf8(chunk) {
-        if let Err(MlarError::IO(err)) = add_string_file(mla, text) {
-            if err.kind() == std::io::ErrorKind::InvalidData {
-                let filename = filename_iterator
-                    .next()
-                    .unwrap_or_else(|| format!("chunk{fallback_filename}.bin"));
-                add_binary(mla, &filename, chunk)?;
-            }
+        if let Err(MlarError::IO(err)) = add_string_file(mla, text)
+            && err.kind() == std::io::ErrorKind::InvalidData
+        {
+            let filename = filename_iterator
+                .next()
+                .unwrap_or_else(|| format!("chunk{fallback_filename}.bin"));
+            add_binary(mla, &filename, chunk)?;
         }
     } else {
         let filename = filename_iterator
