@@ -59,6 +59,15 @@ jobs:
           pip install mla-archive --find-links dist --force-reinstall
           pip install pytest
           cd bindings/python && pytest
+      - name: mypy stubtest
+        if: ${{ startsWith(matrix.platform.target, 'x86_64') }}
+        shell: bash
+        run: |
+          set -e
+          python3 -m venv .venv
+          source .venv/bin/activate
+          pip install mypy
+          stubtest mla
 
   windows:
     runs-on: ${{ matrix.platform.runner }}
@@ -96,6 +105,15 @@ jobs:
           pip install mla-archive --find-links dist --force-reinstall
           pip install pytest
           cd bindings/python && pytest
+      - name: mypy stubtest
+        if: ${{ !startsWith(matrix.platform.target, 'aarch64') }}
+        shell: bash
+        run: |
+          set -e
+          python3 -m venv .venv
+          source .venv/bin/activate
+          pip install mypy
+          stubtest mla
 
   macos:
     runs-on: ${{ matrix.platform.runner }}
@@ -131,6 +149,14 @@ jobs:
           pip install mla-archive --find-links dist --force-reinstall
           pip install pytest
           cd bindings/python && pytest
+      - name: mypy stubtest
+        shell: bash
+        run: |
+          set -e
+          python3 -m venv .venv
+          source .venv/bin/activate
+          pip install mypy
+          stubtest mla
 
   sdist:
     runs-on: ubuntu-latest

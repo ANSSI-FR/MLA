@@ -5,6 +5,7 @@ https://crates.io/crates/mla)
 https://docs.rs/mla)
 [![Cargo MLAR](https://img.shields.io/badge/crates.io-mlar-red)](
 https://crates.io/crates/mlar)
+[![PyPI - Version](https://img.shields.io/pypi/v/mla-archive?label=PyPI%20%7C%20mla-archive)](https://pypi.org/project/mla-archive/)
 
 Multi Layer Archive (MLA)
 =
@@ -72,9 +73,10 @@ mlar extract -k receiver.mlapriv -p sender.mlapub -i my_archive.mla -o extracted
 # Display the content of a file in the archive
 mlar cat -k receiver.mlapriv -p sender.mlapub -i my_archive.mla etc/os-release
 
-# Convert the archive to a long-term one, removing encryption and using the best
-# and slower compression level
-mlar convert -k receiver.mlapriv -i my_archive.mla -o longterm.mla -l compress -q 11 --skip-signature-verification
+# Convert the archive into a long-term format, primarily for archival purposes.
+# Below operation also removes encryption and applies
+# the highest (but slowest) compression level.
+mlar convert -k receiver.mlapriv -p sender.mlapub -i my_archive.mla -o longterm.mla -l compress -q 11
 
 # Create an archive with multiple recipients and without signature nor compression
 mlar create -l encrypt -p archive.mlapub -p client1.mlapub -o my_archive.mla ...
@@ -85,7 +87,7 @@ mlar create -l encrypt -p archive.mlapub -p client1.mlapub -o my_archive.mla ...
 # corresponding to an entry name containing: ASCII chars, c:, /, .., \,
 # NUL, RTLO, newline, terminal escape sequence, carriage return,
 # HTML, surrogate code unit, U+0085 weird newline, fake unicode slash.
-# Please note that some of these characters may appear in valid a path.
+# Please note that some of these characters may appear in a valid path.
 mlar list -k samples/test_mlakey_archive_v2_receiver.mlapriv -p samples/test_mlakey_archive_v2_sender.mlapub -i samples/archive_weird.mla --raw-escaped-names
 
 # Get its content.
