@@ -59,6 +59,19 @@ jobs:
           pip install mla-archive --find-links dist --force-reinstall
           pip install pytest
           cd bindings/python && pytest
+      - name: mypy stubtest
+        if: ${{ startsWith(matrix.platform.target, 'x86_64') }}
+        shell: bash
+        run: |
+          set -e
+          python3 -m venv .venv
+          source .venv/bin/activate
+          pip install mypy
+          # it searchs for mla.mla but we can't have a module with the same name as the package
+          # so we use mla.pyi instead of mla/__init__.pyi
+          # and we need to use the --ignore-missing-stub option
+          # to avoid errors about missing stubs for mla.mla
+          stubtest --ignore-missing-stub mla
 
   windows:
     runs-on: ${{ matrix.platform.runner }}
@@ -96,6 +109,19 @@ jobs:
           pip install mla-archive --find-links dist --force-reinstall
           pip install pytest
           cd bindings/python && pytest
+      - name: mypy stubtest
+        if: ${{ !startsWith(matrix.platform.target, 'aarch64') }}
+        shell: bash
+        run: |
+          set -e
+          python3 -m venv .venv
+          source .venv/bin/activate
+          pip install mypy
+          # it searchs for mla.mla but we can't have a module with the same name as the package
+          # so we use mla.pyi instead of mla/__init__.pyi
+          # and we need to use the --ignore-missing-stub option
+          # to avoid errors about missing stubs for mla.mla
+          stubtest --ignore-missing-stub mla
 
   macos:
     runs-on: ${{ matrix.platform.runner }}
@@ -131,7 +157,18 @@ jobs:
           pip install mla-archive --find-links dist --force-reinstall
           pip install pytest
           cd bindings/python && pytest
-
+      - name: mypy stubtest
+        shell: bash
+        run: |
+          set -e
+          python3 -m venv .venv
+          source .venv/bin/activate
+          pip install mypy
+          # it searchs for mla.mla but we can't have a module with the same name as the package
+          # so we use mla.pyi instead of mla/__init__.pyi
+          # and we need to use the --ignore-missing-stub option
+          # to avoid errors about missing stubs for mla.mla
+          stubtest --ignore-missing-stub mla
   sdist:
     runs-on: ubuntu-latest
     steps:
