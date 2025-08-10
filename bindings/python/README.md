@@ -47,19 +47,24 @@ This builds and installs the package for development.
 ```python
 import mla
 
-# --- Writing ---
-config = mla.WriterConfig.without_encryption_without_signature()
-with mla.MLAWriter("example.mla", config) as archive:
-    archive[mla.EntryName("hello.txt")] = b"Hello, MLA!"
-    archive[mla.EntryName("data.bin")] = b"\x00\x01\x02"
+def main() -> None:
+    # --- Writing ---
+    config: mla.WriterConfig = mla.WriterConfig.without_encryption_without_signature()
+    with mla.MLAWriter("example.mla", config) as archive:
+        archive[mla.EntryName("hello.txt")] = b"Hello, MLA!"
+        archive[mla.EntryName("data.bin")] = b"\x00\x01\x02"
+    print("Archive written: example.mla")
 
-# --- Reading ---
-sig_cfg = mla.SignatureConfig.without_signature_verification()
-config = mla.ReaderConfig.without_encryption(sig_cfg)
-with mla.MLAReader("example.mla", config) as archive:
-    print(archive[mla.EntryName("hello.txt")])  # b'Hello, MLA!'
-    for name in archive.keys():
-        print(name.raw_content_to_escaped_string(), len(archive[name]))
+    # --- Reading ---
+    sig_cfg: mla.SignatureConfig = mla.SignatureConfig.without_signature_verification()
+    config: mla.ReaderConfig = mla.ReaderConfig.without_encryption(sig_cfg)
+    with mla.MLAReader("example.mla", config) as archive:
+        for name in archive.keys():
+            # name is of type EntryName
+            print(f"{name.raw_content_to_escaped_string()}: {archive[name].decode('utf-8')}")
+
+if __name__ == "__main__":
+    main()
 ```
 
 ## Features
