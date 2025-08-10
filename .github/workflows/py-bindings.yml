@@ -59,7 +59,7 @@ jobs:
           pip install mla-archive --find-links dist --force-reinstall
           pip install pytest
           cd bindings/python && pytest
-      - name: mypy stubtest
+      - name: mypy stubtest and type checking
         if: ${{ startsWith(matrix.platform.target, 'x86_64') }}
         shell: bash
         run: |
@@ -72,6 +72,11 @@ jobs:
           # and we need to use the --ignore-missing-stub option
           # to avoid errors about missing stubs for mla.mla
           stubtest --ignore-missing-stub mla
+          # run type checking
+          mypy bindings/python/examples/read.py
+          mypy bindings/python/examples/write.py
+          mypy bindings/python/tests/test_mla.py
+          mypy bindings/python/tests/test_examples.py
 
   windows:
     runs-on: ${{ matrix.platform.runner }}
@@ -109,19 +114,24 @@ jobs:
           pip install mla-archive --find-links dist --force-reinstall
           pip install pytest
           cd bindings/python && pytest
-      - name: mypy stubtest
+      - name: mypy stubtest and type checking
         if: ${{ !startsWith(matrix.platform.target, 'aarch64') }}
         shell: bash
         run: |
           set -e
           python3 -m venv .venv
-          source .venv/bin/activate
+          source .venv/Scripts/activate
           pip install mypy
           # it searchs for mla.mla but we can't have a module with the same name as the package
           # so we use mla.pyi instead of mla/__init__.pyi
           # and we need to use the --ignore-missing-stub option
           # to avoid errors about missing stubs for mla.mla
           stubtest --ignore-missing-stub mla
+          # run type checking
+          mypy bindings/python/examples/read.py
+          mypy bindings/python/examples/write.py
+          mypy bindings/python/tests/test_mla.py
+          mypy bindings/python/tests/test_examples.py
 
   macos:
     runs-on: ${{ matrix.platform.runner }}
@@ -157,7 +167,7 @@ jobs:
           pip install mla-archive --find-links dist --force-reinstall
           pip install pytest
           cd bindings/python && pytest
-      - name: mypy stubtest
+      - name: mypy stubtest and type checking
         shell: bash
         run: |
           set -e
@@ -169,6 +179,11 @@ jobs:
           # and we need to use the --ignore-missing-stub option
           # to avoid errors about missing stubs for mla.mla
           stubtest --ignore-missing-stub mla
+          # run type checking
+          mypy bindings/python/examples/read.py
+          mypy bindings/python/examples/write.py
+          mypy bindings/python/tests/test_mla.py
+          mypy bindings/python/tests/test_examples.py
   sdist:
     runs-on: ubuntu-latest
     steps:
