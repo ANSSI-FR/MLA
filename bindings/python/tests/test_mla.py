@@ -3,7 +3,7 @@ import os
 import io
 import pytest
 import tempfile
-from typing import Dict, Optional, Type
+from typing import Any, Dict, Type
 
 import mla
 from mla import MLAReader, MLAWriter, EntryName
@@ -94,8 +94,11 @@ def test_read_api(basic_archive: str) -> None:
             mla.SignatureConfig.without_signature_verification()
         ),
     )
-    # .keys
-    assert sorted(archive.keys()) == sorted(list(FILES.keys()))
+    # Compare string representations of keys instead of EntryName objects,
+    # because EntryName instances don't support direct comparison
+    assert sorted(
+        name.raw_content_to_escaped_string() for name in archive.keys()
+    ) == sorted(name.raw_content_to_escaped_string() for name in FILES.keys())
     # __contains__
     assert EntryName("file1") in archive
     assert EntryName("file3") not in archive
@@ -117,7 +120,11 @@ def test_list_entries(basic_archive: str) -> None:
         ),
     )
     # Basic
-    assert sorted(archive.list_entries()) == sorted(list(FILES.keys()))
+    # Compare string representations of keys instead of EntryName objects,
+    # because EntryName instances don't support direct comparison
+    assert sorted(
+        name.raw_content_to_escaped_string() for name in archive.list_entries()
+    ) == sorted(name.raw_content_to_escaped_string() for name in FILES.keys())
 
     # With size
     size_entries = archive.list_entries(include_size=True)
@@ -176,7 +183,11 @@ def test_write_api() -> None:
             mla.SignatureConfig.without_signature_verification()
         ),
     )
-    assert sorted(reader_archive.keys()) == sorted(list(FILES.keys()))
+    # Compare string representations of keys instead of EntryName objects,
+    # because EntryName instances don't support direct comparison
+    assert sorted(
+        name.raw_content_to_escaped_string() for name in reader_archive.keys()
+    ) == sorted(name.raw_content_to_escaped_string() for name in FILES.keys())
     assert reader_archive[EntryName("file1")] == FILES[EntryName("file1")]
     assert reader_archive[EntryName("file2")] == FILES[EntryName("file2")]
 
@@ -200,7 +211,11 @@ def test_context_read(basic_archive: str) -> None:
             mla.SignatureConfig.without_signature_verification()
         ),
     ) as m:
-        assert sorted(m.keys()) == sorted(list(FILES.keys()))
+        # Compare string representations of keys instead of EntryName objects,
+        # because EntryName instances don't support direct comparison
+        assert sorted(
+            name.raw_content_to_escaped_string() for name in m.keys()
+        ) == sorted(name.raw_content_to_escaped_string() for name in FILES.keys())
         for name, data in FILES.items():
             assert m[name] == data
 
@@ -220,7 +235,11 @@ def test_context_write() -> None:
             mla.SignatureConfig.without_signature_verification()
         ),
     ) as m:
-        assert sorted(m.keys()) == sorted(list(FILES.keys()))
+        # Compare string representations of keys instead of EntryName objects,
+        # because EntryName instances don't support direct comparison
+        assert sorted(
+            name.raw_content_to_escaped_string() for name in m.keys()
+        ) == sorted(name.raw_content_to_escaped_string() for name in FILES.keys())
         for name, data in FILES.items():
             assert m[name] == data
 
@@ -346,18 +365,18 @@ def test_writer_config_public_keys() -> None:
 def test_mlafile_bad_config() -> None:
     "Try to create a MLAWriter/MLAReader with the wrong config parameter"
     with pytest.raises(TypeError):
-        MLAWriter(tempfile.mkstemp(suffix=".mla")[1], "NOT A CONFIG")
+        MLAWriter(tempfile.mkstemp(suffix=".mla")[1], "NOT A CONFIG")  # type: ignore
     with pytest.raises(TypeError):
         MLAWriter(
             tempfile.mkstemp(suffix=".mla")[1],
-            mla.ReaderConfig.without_encryption(
+            mla.ReaderConfig.without_encryption(  # type: ignore
                 mla.SignatureConfig.without_signature_verification()
             ),
         )
     with pytest.raises(TypeError):
         MLAReader(
             tempfile.mkstemp(suffix=".mla")[1],
-            mla.WriterConfig.without_encryption_without_signature(),
+            mla.WriterConfig.without_encryption_without_signature(),  # type: ignore
         )
 
 
@@ -402,7 +421,11 @@ def test_write_then_read_encrypted() -> None:
             signature_config=mla.SignatureConfig.without_signature_verification(),
         ),
     ) as archive:
-        assert sorted(archive.keys()) == sorted(list(FILES.keys()))
+        # Compare string representations of keys instead of EntryName objects,
+        # because EntryName instances don't support direct comparison
+        assert sorted(
+            name.raw_content_to_escaped_string() for name in archive.keys()
+        ) == sorted(name.raw_content_to_escaped_string() for name in FILES.keys())
         for name, data in FILES.items():
             assert archive[name] == data
 
@@ -497,16 +520,16 @@ class BytesIOCounter(io.BytesIO):
     write_count: int
     read_count: int
 
-    def __init__(self, initial_bytes: Optional[bytes] = None) -> None:
+    def __init__(self, initial_bytes: bytes = b"") -> None:
         super().__init__(initial_bytes)
         self.write_count = 0
         self.read_count = 0
 
-    def write(self, b: bytes) -> int:
+    def write(self, b: Any) -> int:
         self.write_count += 1
         return super().write(b)
 
-    def read(self, size: int = -1) -> bytes:
+    def read(self, size: int | None = None) -> bytes:
         self.read_count += 1
         return super().read(size)
 
@@ -561,7 +584,11 @@ def test_add_entry_from_str() -> None:
             mla.SignatureConfig.without_signature_verification()
         ),
     ) as archive:
-        assert sorted(archive.keys()) == sorted(list(FILES.keys()))
+        # Compare string representations of keys instead of EntryName objects,
+        # because EntryName instances don't support direct comparison
+        assert sorted(
+            name.raw_content_to_escaped_string() for name in archive.keys()
+        ) == sorted(name.raw_content_to_escaped_string() for name in FILES.keys())
         for name, data in FILES.items():
             assert archive[name] == data
 
@@ -587,7 +614,11 @@ def test_add_entry_from_io() -> None:
             mla.SignatureConfig.without_signature_verification()
         ),
     ) as archive:
-        assert sorted(archive.keys()) == sorted(list(FILES.keys()))
+        # Compare string representations of keys instead of EntryName objects,
+        # because EntryName instances don't support direct comparison
+        assert sorted(
+            name.raw_content_to_escaped_string() for name in archive.keys()
+        ) == sorted(name.raw_content_to_escaped_string() for name in FILES.keys())
         for name, data in FILES.items():
             assert archive[name] == data
 
