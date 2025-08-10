@@ -91,12 +91,12 @@ class SignatureConfig:
 @final
 class PublicKeys:
     def __init__(self, *keys: Union[bytes, str]) -> None: ...
-    keys: List[Any]
+    keys: List[str]
 
 @final
 class PrivateKeys:
     def __init__(self, *keys: Union[bytes, str]) -> None: ...
-    keys: List[Any]
+    keys: List[str]
 
 # Constants
 DEFAULT_COMPRESSION_LEVEL: int
