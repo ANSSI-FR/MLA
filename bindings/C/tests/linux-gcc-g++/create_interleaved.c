@@ -11,7 +11,7 @@
 #endif
 
 // from samples/test_mlakey.mlapub
-const char * const szPubkey = "REPLACE WITH PUBLIC KEY FROM SAMPLE";
+const char * szPubkey = "REPLACE WITH PUBLIC KEY FROM SAMPLE";
 
 static int32_t callback_write(const uint8_t* pBuffer, uint32_t length, void *context, uint32_t *pBytesWritten)
 {

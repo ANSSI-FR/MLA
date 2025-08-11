@@ -54,6 +54,7 @@ pub trait LayerReader<'a, R: InnerReaderTrait>: InnerReaderTrait {
     /// Unwraps the original I/O reader
     // Use a Box<Self> to be able to move out the inner value; without it, self
     // is used, which is an unsized 'dyn X' and therefore cannot be moved
+    #[allow(dead_code)]
     fn into_raw(self: Box<Self>) -> R;
 
     /// Initialize the current layer, like reading the footer.

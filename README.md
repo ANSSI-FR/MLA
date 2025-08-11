@@ -5,6 +5,7 @@ https://crates.io/crates/mla)
 https://docs.rs/mla)
 [![Cargo MLAR](https://img.shields.io/badge/crates.io-mlar-red)](
 https://crates.io/crates/mlar)
+[![PyPI - Version](https://img.shields.io/pypi/v/mla-archive?label=PyPI%20%7C%20mla-archive)](https://pypi.org/project/mla-archive/)
 
 Multi Layer Archive (MLA)
 =
@@ -32,8 +33,8 @@ This repository contains:
 
 * `mla`: the Rust library implementing MLA reader and writer
 * `mlar`: a Rust cli utility wrapping `mla` for common actions (create, list, extract...)
-* `doc` : advanced documentation related to MLA (e.g. format specification)
-  * [Advanced MLA book](https://anssi-fr.github.io/MLA)
+* `doc` : documentation related to MLA (e.g. format specification, cryptography)
+  * [MLA book](https://anssi-fr.github.io/MLA)
 * `bindings` : bindings for other languages
 * `samples` : test assets
 * `mla-fuzz-afl` : a Rust utility to fuzz `mla`
@@ -72,9 +73,10 @@ mlar extract -k receiver.mlapriv -p sender.mlapub -i my_archive.mla -o extracted
 # Display the content of a file in the archive
 mlar cat -k receiver.mlapriv -p sender.mlapub -i my_archive.mla etc/os-release
 
-# Convert the archive to a long-term one, removing encryption and using the best
-# and slower compression level
-mlar convert -k receiver.mlapriv -i my_archive.mla -o longterm.mla -l compress -q 11 --skip-signature-verification
+# Convert the archive into a long-term format, primarily for archival purposes.
+# Below operation also removes encryption and applies
+# the highest (but slowest) compression level.
+mlar convert -k receiver.mlapriv -p sender.mlapub -i my_archive.mla -o longterm.mla -l compress -q 11
 
 # Create an archive with multiple recipients and without signature nor compression
 mlar create -l encrypt -p archive.mlapub -p client1.mlapub -o my_archive.mla ...
@@ -85,7 +87,7 @@ mlar create -l encrypt -p archive.mlapub -p client1.mlapub -o my_archive.mla ...
 # corresponding to an entry name containing: ASCII chars, c:, /, .., \,
 # NUL, RTLO, newline, terminal escape sequence, carriage return,
 # HTML, surrogate code unit, U+0085 weird newline, fake unicode slash.
-# Please note that some of these characters may appear in valid a path.
+# Please note that some of these characters may appear in a valid path.
 mlar list -k samples/test_mlakey_archive_v2_receiver.mlapriv -p samples/test_mlakey_archive_v2_sender.mlapub -i samples/archive_weird.mla --raw-escaped-names
 
 # Get its content.
@@ -128,7 +130,7 @@ Security
 -
 
 * Please keep in mind, it is generally not safe to extract in a place where at least one ancestor is writable by others (symbolic link attacks).
-* Even if encrypted with an authenticated cipher, if you receive an unsigned archive , it may have been crafted by anyone having your public key and thus can contain arbitrary data.
+* Even if encrypted with an authenticated cipher, if you receive an unsigned archive, it may have been crafted by anyone having your public key and thus can contain arbitrary data.
 * Read API documentation and mlar help before using their functionalities. They sometimes provide important security warnings. `doc/src/ENTRY_NAME.md` is also of particular interest.
 * mlar escapes entry names on output to avoid security issues.
 * Except for symbolic link attacks, mlar will not extract outside given output directory.
@@ -183,22 +185,21 @@ Several scenarios are already embedded, such as:
 * Random file read, with different size and layer configurations
 * Linear archive extraction, with different size and layer configurations
 
-On an "Intel(R) Core(TM) i5-7200U CPU @ 2.50GHz":
+On an "Intel(R) Core(TM) i7-1255U CPU @ 2.60GHz":
 ```sh
-$ cd mla/
 $ cargo bench
 ...
-multiple_layers_multiple_block_size/Layers ENCRYPT | COMPRESS | DEFAULT/1048576                                                                           
-                        time:   [28.091 ms 28.259 ms 28.434 ms]
-                        thrpt:  [35.170 MiB/s 35.388 MiB/s 35.598 MiB/s]
+multiple_layers_multiple_block_size/compression: true, encryption: true, signature: true/1048576
+                        time:   [7.0850 ms 7.1179 ms 7.1586 ms]
+                        thrpt:  [139.69 MiB/s 140.49 MiB/s 141.14 MiB/s]
 ...
-chunk_size_decompress_mutilfiles_random/Layers ENCRYPT | COMPRESS | DEFAULT/4194304                                                                          
-                        time:   [126.46 ms 129.54 ms 133.42 ms]
-                        thrpt:  [29.980 MiB/s 30.878 MiB/s 31.630 MiB/s]
+chunk_size_decompress_mutilfiles_random/compression: true, encryption: true, signature: true/1048576
+                        time:   [11.285 ms 11.494 ms 11.663 ms]
+                        thrpt:  [85.745 MiB/s 87.005 MiB/s 88.616 MiB/s]
 ...
-linear_vs_normal_extract/LINEAR / Layers DEBUG | EMPTY/2097152                        
-                        time:   [145.19 us 150.13 us 153.69 us]
-                        thrpt:  [12.708 GiB/s 13.010 GiB/s 13.453 GiB/s]
+reader_multiple_layers_multiple_block_size_multifiles_linear/compression: true, encryption: true, signature: true/1048576
+                        time:   [4.6197 ms 4.6383 ms 4.6604 ms]
+                        thrpt:  [214.58 MiB/s 215.60 MiB/s 216.47 MiB/s]
 ...
 ```
 
