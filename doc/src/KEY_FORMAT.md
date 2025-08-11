@@ -1,4 +1,4 @@
-# MLAKEY file format
+# MLA key file format
 
 MLA can use cryptography for signature and/or encryption. Thus it needs to operate with keys. An implementation can get access to these keys from a serialized format described here.
 
