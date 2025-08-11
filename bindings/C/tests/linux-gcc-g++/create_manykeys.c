@@ -4,9 +4,10 @@
 #include <string.h>
 #include "mla.h"
 
-// From samples/test_mlakey.mlapub
-const char * const szPubkey = "REPLACE WITH PUBLIC KEY FROM SAMPLE";
-const char * const szPubkey2 = "REPLACE WITH PUBLIC KEY 2 FROM SAMPLE";
+// Public key from samples/test_mlakey.mlapub (replaced in Makefile via sed)
+const char *szPubkey = "REPLACE WITH PUBLIC KEY FROM SAMPLE";
+// Public key from samples/test_mlakey_2.mlapub (replaced in Makefile via sed)
+const char *szPubkey2 = "REPLACE WITH PUBLIC KEY 2 FROM SAMPLE";
 
 static int32_t callback_write(const uint8_t* pBuffer, uint32_t length, void *context, uint32_t *pBytesWritten)
 {

@@ -1,7 +1,6 @@
-use criterion::{Criterion, criterion_group, criterion_main};
-
 use criterion::BenchmarkId;
 use criterion::Throughput;
+use criterion::{Criterion, criterion_group, criterion_main};
 
 use mla::TruncatedArchiveReader;
 use mla::config::{
@@ -23,7 +22,7 @@ const KB: usize = 1024;
 const MB: usize = 1024 * KB;
 
 const SIZE_LIST: [usize; 4] = [KB, 64 * KB, MB, 16 * MB];
-const SAMPLE_SIZE_SMALL: usize = 20;
+const SAMPLE_SIZE: usize = 20;
 const LAYERS_POSSIBILITIES: [(bool, bool, bool); 8] = [
     (false, false, false), // naked
     (true, false, false),  // compress only
@@ -231,7 +230,7 @@ pub fn writer_multiple_layers_multiple_block_size(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("writer_multiple_layers_multiple_block_size");
     group.measurement_time(Duration::from_secs(10));
-    group.sample_size(SAMPLE_SIZE_SMALL);
+    group.sample_size(SAMPLE_SIZE);
     for size in SIZE_LIST.iter() {
         group.throughput(Throughput::Bytes(*size as u64));
 
@@ -348,7 +347,7 @@ fn read_one_file_by_chunk(
 /// Benchmark the read speed depending on layers enabled and read size
 pub fn reader_multiple_layers_multiple_block_size(c: &mut Criterion) {
     let mut group = c.benchmark_group("reader_multiple_layers_multiple_block_size");
-    group.sample_size(SAMPLE_SIZE_SMALL);
+    group.sample_size(SAMPLE_SIZE);
 
     let (privkey, pubkey) = generate_mla_keypair_from_seed([0; 32]);
 
@@ -418,8 +417,8 @@ fn iter_read_multifiles_random(
 ///
 /// This pattern should represent one of the common use of the library
 pub fn reader_multiple_layers_multiple_block_size_multifiles_random(c: &mut Criterion) {
-    let mut group = c.benchmark_group("chunk_size_decompress_mutilfiles_random");
-    group.sample_size(SAMPLE_SIZE_SMALL);
+    let mut group = c.benchmark_group("chunk_size_decompress_multifiles_random");
+    group.sample_size(SAMPLE_SIZE);
 
     let (privkey, pubkey) = generate_mla_keypair_from_seed([0; 32]);
 
@@ -436,7 +435,15 @@ pub fn reader_multiple_layers_multiple_block_size_multifiles_random(c: &mut Crit
                 ),
                 move |b| {
                     b.iter_custom(|iters| {
-                        iter_read_multifiles_random(iters, *size as u64, *compression, *encryption, *signature, &privkey, &pubkey)
+                        iter_read_multifiles_random(
+                            iters,
+                            *size as u64,
+                            *compression,
+                            *encryption,
+                            *signature,
+                            &privkey,
+                            &pubkey,
+                        )
                     })
                 },
             );
@@ -487,7 +494,7 @@ fn iter_decompress_multifiles_linear(
 pub fn reader_multiple_layers_multiple_block_size_multifiles_linear(c: &mut Criterion) {
     let mut group =
         c.benchmark_group("reader_multiple_layers_multiple_block_size_multifiles_linear");
-    group.sample_size(SAMPLE_SIZE_SMALL);
+    group.sample_size(SAMPLE_SIZE);
 
     let (privkey, pubkey) = generate_mla_keypair_from_seed([0; 32]);
 

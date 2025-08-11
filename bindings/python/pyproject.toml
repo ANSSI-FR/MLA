@@ -1,5 +1,5 @@
 [build-system]
-requires = ["maturin>=1.4,<2.0"]
+requires = ["maturin>=1.9,<2.0"]
 build-backend = "maturin"
 
 [project]
@@ -9,7 +9,7 @@ authors = [
     { name="ANSSI", email="opensource@ssi.gouv.fr" },
 ]
 requires-python = ">=3.11"
-keywords = ["archive", "mla"]
+keywords = ["rust", "compression", "encryption", "signature", "pqc"]
 license = {file = "LICENSE.md"}
 classifiers = [
     "Programming Language :: Rust",
