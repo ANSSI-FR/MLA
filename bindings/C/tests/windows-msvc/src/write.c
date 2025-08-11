@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <inttypes.h>
 #include <errno.h>
-
 #ifdef __cplusplus
 #include "mla.hpp"
 #define MLA_STATUS(x) MLAStatus::x
@@ -11,6 +10,7 @@
 #define MLA_STATUS(x) (x)
 #endif
 
+// Callback for writing data to a file (Windows HANDLE-based)
 static int32_t callback_write(const uint8_t* pBuffer, uint32_t length, void* context, uint32_t* pBytesWritten)
 {
     HANDLE hOutFile = (HANDLE)context;
@@ -24,6 +24,7 @@ static int32_t callback_write(const uint8_t* pBuffer, uint32_t length, void* con
     return 0;
 }
 
+// Callback for flushing file buffers to disk
 static int32_t callback_flush(void* context)
 {
     HANDLE hOutFile = (HANDLE)context;
@@ -36,6 +37,7 @@ static int32_t callback_flush(void* context)
     return 0;
 }
 
+// Test function to create an MLA archive and write a simple file into it
 int test_writer()
 {
     FILE *kf = NULL;
@@ -51,12 +53,14 @@ int test_writer()
     size_t bytesRead = 0;
     const char *message = NULL;
 
+    // Open public key file for encryption
     if (fopen_s(&kf, "../../../../samples/test_mlakey.mlapub", "r") != 0)
     {
         fprintf(stderr, " [!] Could not open public key file\n");
         return errno;
     }
 
+    // Determine the size of the key file
     if (fseek(kf, 0, SEEK_END) != 0)
     {
         fprintf(stderr, " [!] Could not seek in public key file\n");
@@ -72,7 +76,7 @@ int test_writer()
         goto cleanup;
     }
 
-    // Allocate space +1 for null terminator
+    // Allocate buffer to hold the key + null terminator
     keyData = (char *)malloc((size_t)keySize + 1);
     if (!keyData)
     {
@@ -83,6 +87,7 @@ int test_writer()
 
     rewind(kf);
 
+    // Read the public key file into memory
     bytesRead = fread(keyData, 1, keySize, kf);
     if (bytesRead != (size_t)keySize)
     {
@@ -91,10 +96,10 @@ int test_writer()
         goto cleanup;
     }
 
-    keyData[bytesRead] = '\0';  // Null terminate for string safety
-
+    keyData[bytesRead] = '\0';  // Null terminate for safety
     keys[0] = (const char *)keyData;
 
+    // Create or overwrite the output .mla archive file
     hOutFile = CreateFileA("test.mla", GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
     if (hOutFile == INVALID_HANDLE_VALUE)
     {
@@ -103,6 +108,7 @@ int test_writer()
         goto cleanup;
     }
 
+    // Create writer config with encryption (no signature)
     status = create_mla_writer_config_with_encryption_without_signature(&hConfig, keys, 1);
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
     {
@@ -110,6 +116,7 @@ int test_writer()
         goto cleanup;
     }
 
+    // Initialize new archive using the provided config and write/flush callbacks
     status = mla_archive_new(&hConfig, &callback_write, &callback_flush, (void*)hOutFile, &hArchive);
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
     {
@@ -117,6 +124,7 @@ int test_writer()
         goto cleanup;
     }
 
+    // Start a new file entry in the archive named "test.txt"
     status = mla_archive_start_entry_with_path_as_name(hArchive, "test.txt", &hFile);
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
     {
@@ -124,6 +132,7 @@ int test_writer()
         goto cleanup;
     }
 
+    // Write message contents into the archive
     message = "Hello, World!\n";
     status = mla_archive_file_append(hArchive, hFile, (const uint8_t*)message, (uint32_t)strlen(message));
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
@@ -132,6 +141,7 @@ int test_writer()
         goto cleanup;
     }
 
+    // Finalize the file inside the archive
     status = mla_archive_file_close(hArchive, &hFile);
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
     {
@@ -139,6 +149,7 @@ int test_writer()
         goto cleanup;
     }
 
+    // Finalize and close the archive
     status = mla_archive_close(&hArchive);
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
     {
@@ -149,6 +160,7 @@ int test_writer()
     printf("SUCCESS\n");
 
 cleanup:
+    // Cleanup all resources
     if (keyData) free(keyData);
     if (kf) fclose(kf);
     if (hOutFile != INVALID_HANDLE_VALUE) CloseHandle(hOutFile);
