@@ -597,7 +597,23 @@ fn add_file_or_dir(mla: &mut ArchiveWriter<OutputTypes>, path: &Path) -> Result<
         add_dir(mla, path)?;
     } else {
         let name = EntryName::from_path(path).map_err(|_| MlarError::InvalidEntryNameToPath)?;
-        let file = File::open(path)?;
+        // Handle file opening errors explicitly
+        let file = match File::open(path) {
+            Ok(f) => f,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                // Early termination: missing file
+                eprintln!(
+                    " [!] File \"{}\" does not exist, skipping",
+                    name.to_pathbuf_escaped_string()
+                        .map_err(|_| MlarError::InvalidEntryNameToPath)?
+                );
+                return Ok(());
+            }
+            Err(e) => {
+                // Other IO error
+                return Err(MlarError::IO(e));
+            }
+        };
         let length = file.metadata()?.len();
         eprintln!(
             "{}",
