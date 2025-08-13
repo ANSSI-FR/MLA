@@ -1094,6 +1094,7 @@ dependencies = [
 name = "mlar-upgrader"
 version = "2.0.0-alpha"
 dependencies = [
+ "assert_cmd",
  "clap",
  "curve25519-parser",
  "mla 1.4.0",

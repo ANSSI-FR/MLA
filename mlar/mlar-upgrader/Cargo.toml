@@ -8,3 +8,6 @@ clap = { version = "4.5", features = ["wrap_help"] }
 curve25519-parser = { version = "0.4" }
 mla_v1 = { version = "1", registry = "crates-io", package = "mla" }
 mla = { path = "../../mla", version = "2.0.0-alpha" }
+
+[dev-dependencies]
+assert_cmd = "2.0"
