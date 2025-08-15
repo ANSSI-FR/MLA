@@ -114,7 +114,11 @@ fn upgrade(matches: &ArgMatches) -> Result<(), Error> {
             }
             Ok(Some(mla)) => mla,
         };
-        let new_entry_name = match EntryName::from_path(sub_file.filename) {
+        // If upgrading on Linux a MLA v1 archive for further Windows extraction
+        // we need to replace the backslashes with slashes (`/`) before serialization like Windows
+        // does in `EntryName::from_path`.
+        let normalized_filename = sub_file.filename.replace('\\', "/");
+        let new_entry_name = match EntryName::from_path(normalized_filename) {
             Ok(name) => name,
             Err(_) => {
                 eprintln!("Invalid empty name");
@@ -138,48 +142,87 @@ fn main() {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use std::env;
+    use assert_cmd::Command;
+    use std::{env, fs};
 
     #[test]
-    fn test_upgrade() {
-        // temporary directory for output as we don't know if we can write in current one
-        let temp_dir = env::temp_dir();
+    fn test_upgrade_and_no_backslashes_in_output() {
+        let base_temp = env::temp_dir();
 
-        // mlar-upgrade args
-        let input = "archive_v1.mla";
-        let output = temp_dir.join("archive_v2.mla");
-        let private_keys = "test_x25519_archive_v1.pem";
-        let public_keys = "test_mlakey_archive_v2_receiver.mlapub";
+        let files = [
+            ("archive_v1.mla", "test-data"),
+            ("archive_v1_windows.mla", "test-data"),
+            ("test_x25519_archive_v1.pem", "test-data"),
+            ("test_mlakey_archive_v2_receiver.mlapub", "../../samples"),
+            ("test_mlakey_archive_v2_receiver.mlapriv", "../../samples"),
+        ];
 
-        // temporary locations
-        let temp_input = temp_dir.join(input);
-        let temp_private_keys = temp_dir.join(private_keys);
-        let temp_public_keys = temp_dir.join(public_keys);
+        // Copy test files into base_temp
+        for (file, src_dir) in &files {
+            fs::copy(format!("{}/{}", src_dir, file), base_temp.join(file))
+                .unwrap_or_else(|e| panic!("Failed to copy {}: {}", file, e));
+        }
 
-        // copy input, private_keys, public_keys to temp_dir
-        fs::copy(format!("test-data/{input}"), &temp_input).unwrap();
-        fs::copy(format!("test-data/{private_keys}"), &temp_private_keys).unwrap();
-        fs::copy(format!("../../samples/{public_keys}"), &temp_public_keys).unwrap();
+        // Change current dir to the temp test directory
+        env::set_current_dir(&base_temp).expect("Failed to set current directory");
 
-        env::set_current_dir(&temp_dir).unwrap();
+        // Helper function for running upgrade with arguments
+        let run_upgrade = |input: &str, output: &str, private_key: &str, public_key: &str| {
+            let matches = app().get_matches_from([
+                "mlar-upgrader",
+                "-k",
+                private_key,
+                "-i",
+                input,
+                "-o",
+                output,
+                "-p",
+                public_key,
+            ]);
+            upgrade(&matches).expect("Upgrade failed");
+        };
 
-        let matches = app().get_matches_from([
-            "mlar-upgrader",
-            "-k",
-            private_keys,
-            "-i",
-            input,
-            "-o",
-            output.to_str().unwrap(),
-            "-p",
-            public_keys,
-        ]);
+        // 1. Run upgrade on archive_v1.mla (basic test)
+        run_upgrade(
+            "archive_v1.mla",
+            "archive_v2_v1.mla",
+            "test_x25519_archive_v1.pem",
+            "test_mlakey_archive_v2_receiver.mlapub",
+        );
 
-        assert!(upgrade(&matches).is_ok());
+        // 2.1 Run upgrade on archive_v1_windows.mla (check backslash removal)
+        run_upgrade(
+            "archive_v1_windows.mla",
+            "archive_v2_windows.mla",
+            "test_x25519_archive_v1.pem",
+            "test_mlakey_archive_v2_receiver.mlapub",
+        );
 
-        // Clean up
-        fs::remove_file(temp_input).unwrap();
-        fs::remove_file(temp_private_keys).unwrap();
-        fs::remove_file(temp_public_keys).unwrap();
+        // 2.2 Verify no backslashes in output from Windows archive upgrade
+        let mut cmd = Command::cargo_bin("mlar").expect("Failed to find mlar binary");
+        cmd.arg("list")
+            .arg("-k")
+            .arg("test_mlakey_archive_v2_receiver.mlapriv")
+            .arg("-i")
+            .arg("archive_v2_windows.mla")
+            .arg("--skip-signature-verification");
+
+        let output = cmd.assert().success().get_output().stdout.clone();
+        let output_str = String::from_utf8(output).expect("Output not valid UTF-8");
+
+        for line in output_str.lines() {
+            assert!(
+                !line.contains('\\'),
+                "Entry name contains backslash: {}",
+                line
+            );
+        }
+
+        // Cleanup all copied and generated files
+        for (file, _) in &files {
+            fs::remove_file(base_temp.join(file)).unwrap();
+        }
+        fs::remove_file(base_temp.join("archive_v2_v1.mla")).unwrap();
+        fs::remove_file(base_temp.join("archive_v2_windows.mla")).unwrap();
     }
 }
