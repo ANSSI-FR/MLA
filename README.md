@@ -118,7 +118,7 @@ See [https://docs.rs/mla](https://docs.rs/mla)
 
 Bindings are available for:
 
-* [C/CPP](bindings/C/README.md)
+* [C/C++](bindings/C/README.md)
 * [Python](bindings/python/README.md)
 
 ## Security
