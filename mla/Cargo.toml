@@ -40,6 +40,9 @@ curve25519-dalek = { version = "4.1", default-features = false}
 ed25519-dalek = { version = "2.2", default-features = false, features = ["digest", "fast", "rand_core", "zeroize"] }
 ml-dsa = { version = "0.0.4", default-features = false, features = ["rand_core", "zeroize"] }
 
+[lints]
+workspace = true
+
 [dev-dependencies]
 hex-literal = { version = "1.0", default-features = false}
 aes-gcm = { version = "0.10", default-features = false, features = ["aes"]}
