@@ -17,6 +17,24 @@ members = ["."]
 name = "pymla"
 crate-type = ["cdylib"]
 
+[lints.clippy]
+# all lints that are on by default (correctness, suspicious, style, complexity, perf)
+all = {level = "deny", priority = -1}
+# lints which are rather strict or have occasional false positives
+pedantic = {level = "deny", priority = -1}
+# new lints that are still under development
+nursery = {level = "deny", priority = -1}
+# lints which prevent the use of language and library features
+# restriction = {level = "deny", priority = -1}
+# lints for the cargo manifest
+# cargo = {level = "deny", priority = -1}
+# specific lints
+cast_precision_loss = "allow"
+missing-errors-doc = "allow"
+missing-panics-doc = "allow"
+must_use_candidate = "allow"
+too-many-lines = "allow"
+
 [dependencies]
 pyo3 = "0.25"
 mla = { version = "2.0.0-alpha", features = ["send"], path = "../../mla"}

@@ -10,3 +10,6 @@ crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
 mla = { path = "../../mla", version = "2.0.0-alpha" }
+
+[lints]
+workspace = true
