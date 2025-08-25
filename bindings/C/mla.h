@@ -41,16 +41,16 @@ enum MLAStatus {
   MLA_STATUS_DUPLICATE_FILENAME = 1376256,
   MLA_STATUS_AUTHENTICATED_DECRYPTION_WRONG_TAG = 1441792,
   MLA_STATUS_HKDF_INVALID_KEY_LENGTH = 1507328,
-  MLA_STATUS_HPKE_ERROR = 98304,
-  MLA_STATUS_INVALID_LAST_TAG = 102400,
-  MLA_STATUS_ENCRYPTION_ASKED_BUT_NOT_MARKED_PRESENT = 1572864,
-  MLA_STATUS_WRONG_END_MAGIC = 1638400,
-  MLA_STATUS_NO_VALID_SIGNATURE_FOUND = 2097152,
-  MLA_STATUS_SIGNATURE_VERIFICATION_ASKED_BUT_NO_SIGNATURE_LAYER_FOUND = 2162688,
-  MLA_STATUS_MISSING_END_OF_ENCRYPTED_INNER_LAYER_MAGIC = 2228224,
-  MLA_STATUS_TRUNCATED_TAG = 2293760,
-  MLA_STATUS_UNKNOWN_TAG_POSITION = 2359296,
-  MLA_STATUS_OTHER = 2424832,
+  MLA_STATUS_HPKE_ERROR = 1572864,
+  MLA_STATUS_INVALID_LAST_TAG = 1638400,
+  MLA_STATUS_ENCRYPTION_ASKED_BUT_NOT_MARKED_PRESENT = 2097152,
+  MLA_STATUS_WRONG_END_MAGIC = 2162688,
+  MLA_STATUS_NO_VALID_SIGNATURE_FOUND = 2228224,
+  MLA_STATUS_SIGNATURE_VERIFICATION_ASKED_BUT_NO_SIGNATURE_LAYER_FOUND = 2293760,
+  MLA_STATUS_MISSING_END_OF_ENCRYPTED_INNER_LAYER_MAGIC = 2359296,
+  MLA_STATUS_TRUNCATED_TAG = 2424832,
+  MLA_STATUS_UNKNOWN_TAG_POSITION = 2490368,
+  MLA_STATUS_OTHER = 2555904,
   MLA_STATUS_MLA_KEY_PARSER_ERROR = 15859712,
 };
 typedef uint64_t MLAStatus;
@@ -81,7 +81,7 @@ typedef void *MLAArchiveHandle;
 typedef void *MLAArchiveFileHandle;
 
 /**
- * Implemented by the developer. Read between 0 and buffer_len into buffer.
+ * Implemented by the developer. Read between 0 and `buffer_len` into buffer.
  * If successful, returns 0 and sets the number of bytes actually read to its last
  * parameter. Otherwise, returns an error code on failure.
  */
@@ -255,7 +255,7 @@ MLAStatus create_mla_reader_config_with_encryption_accept_unencrypted_without_si
 /**
  * Open a new MLA archive using the given configuration, which is consumed and freed
  * (its handle cannot be reused to create another archive). The archive is streamed
- * through the write_callback, and flushed at least at the end when the last byte is
+ * through the `write_callback`, and flushed at least at the end when the last byte is
  * written. The context pointer can be used to hold any information, and is passed
  * as an argument when any of the two callbacks are called.
  */
@@ -269,10 +269,10 @@ MLAStatus mla_archive_new(MLAWriterConfigHandle *config,
  * You probably want to use `mla_archive_start_entry_with_path_as_name`.
  *
  * Starts a new entry in the archive identified by the handle returned by
- * mla_archive_new(). The given name must be a non empty array of
+ * `mla_archive_new()`. The given name must be a non empty array of
  * bytes of `name_size` length.
  * See documentation of rust function `EntryName::from_arbitrary_bytes`.
- * Returns MLA_STATUS_SUCCESS on success, or an error code.
+ * Returns `MLA_STATUS_SUCCESS` on success, or an error code.
  */
 MLAStatus mla_archive_start_entry_with_arbitrary_bytes_name(MLAArchiveHandle archive,
                                                             const uint8_t *entry_name_arbitrary_bytes,
@@ -281,13 +281,13 @@ MLAStatus mla_archive_start_entry_with_arbitrary_bytes_name(MLAArchiveHandle arc
 
 /**
  * Starts a new entry in the archive identified by the handle returned by
- * mla_archive_new(). The given name must be a unique non-empty
+ * `mla_archive_new()`. The given name must be a unique non-empty
  * NULL-terminated string.
  * The given `entry_name` is meant to represent a path and must
  * respect rules documented in `doc/ENTRY_NAME.md`.
  * Notably, on Windows, given `entry_name` must be valid slash separated UTF-8.
  * See documentation of rust function `EntryName::from_path`.
- * Returns MLA_STATUS_SUCCESS on success, or an error code.
+ * Returns `MLA_STATUS_SUCCESS` on success, or an error code.
  */
 MLAStatus mla_archive_start_entry_with_path_as_name(MLAArchiveHandle archive,
                                                     const char *entry_name,
@@ -295,7 +295,7 @@ MLAStatus mla_archive_start_entry_with_path_as_name(MLAArchiveHandle archive,
 
 /**
  * Append data to the end of an already opened file identified by the
- * handle returned by mla_archive_start_entry_with_path_as_name(). Returns MLA_STATUS_SUCCESS on
+ * handle returned by `mla_archive_start_entry_with_path_as_name()`. Returns `MLA_STATUS_SUCCESS` on
  * success, or an error code.
  */
 MLAStatus mla_archive_file_append(MLAArchiveHandle archive,
@@ -304,9 +304,9 @@ MLAStatus mla_archive_file_append(MLAArchiveHandle archive,
                                   uint64_t length);
 
 /**
- * Flush any data to be written buffered in MLA to the write_callback,
- * then calls the flush_callback given during archive initialization.
- * Returns MLA_STATUS_SUCCESS on success, or an error code.
+ * Flush any data to be written buffered in MLA to the `write_callback`,
+ * then calls the `flush_callback` given during archive initialization.
+ * Returns `MLA_STATUS_SUCCESS` on success, or an error code.
  */
 MLAStatus mla_archive_flush(MLAArchiveHandle archive);
 
@@ -315,7 +315,7 @@ MLAStatus mla_archive_flush(MLAArchiveHandle archive);
  * checks to be written to the callback. Must be called before closing the
  * archive. The file handle must be passed as a mutable reference so it is
  * cleared and cannot be reused after free by accident. Returns
- * MLA_STATUS_SUCCESS on success, or an error code.
+ * `MLA_STATUS_SUCCESS` on success, or an error code.
  */
 MLAStatus mla_archive_file_close(MLAArchiveHandle archive, MLAArchiveFileHandle *file);
 
@@ -323,7 +323,7 @@ MLAStatus mla_archive_file_close(MLAArchiveHandle archive, MLAArchiveFileHandle 
  * Close the given archive (must only be called after all files have been
  * closed), flush the output and free any allocated resource. The archive
  * handle must be passed as a mutable reference so it is cleared and
- * cannot be reused after free by accident. Returns MLA_STATUS_SUCCESS on success,
+ * cannot be reused after free by accident. Returns `MLA_STATUS_SUCCESS` on success,
  * or an error code.
  */
 MLAStatus mla_archive_close(MLAArchiveHandle *archive);

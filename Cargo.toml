@@ -21,11 +21,16 @@ pedantic = {level = "deny", priority = -1}
 # cargo = {level = "deny", priority = -1}
 # specific lints
 cast_precision_loss = "allow"
+fn_params_excessive_bools = "allow"
+# for performance reasons, some functions need to be inlined
+inline_always = "allow"
 missing-errors-doc = "allow"
-# missing-panics-doc = "allow"
+missing-panics-doc = "allow"
 must_use_candidate = "allow"
-# too-many-lines = "allow"
-# zero_sized_map_values = "allow"
+# could be made stricter later for targets with small stacks
+large_stack_arrays = "allow"
+too-many-lines = "allow"
+zero_sized_map_values = "allow"
 
 [workspace.lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }

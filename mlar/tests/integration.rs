@@ -20,9 +20,7 @@ fn normalize(path: &Path) -> PathBuf {
     let mut stack = PathBuf::new();
     for component in path.components() {
         match component {
-            Component::Prefix(_) => (),
-            Component::RootDir => (),
-            Component::CurDir => (),
+            Component::Prefix(_) | Component::RootDir | Component::CurDir => (),
             Component::ParentDir => {
                 stack.pop();
             }
@@ -809,7 +807,7 @@ fn test_convert() {
     let assert = cmd.assert();
     assert
         .success()
-        .stderr(String::from(&file_list).replace("/", "%2f"));
+        .stderr(String::from(&file_list).replace('/', "%2f"));
 
     // Hopefully, compressed must be smaller than without compression
     let size_output = metadata(mlar_file.path()).unwrap().len();
@@ -1321,7 +1319,14 @@ fn test_keyderive() {
     ├──["Child 1"]── key_child1
     │   └──["Child 1"]── key_child1_child1
     └──["Child 2"]── key_child2
-     */
+    */
+    struct Keys {
+        parent: Vec<u8>,
+        child1: Vec<u8>,
+        child2: Vec<u8>,
+        child1child1: Vec<u8>,
+    }
+
     let output_dir = TempDir::new().unwrap();
     let key_parent_pfx = output_dir.path().join("key_parent");
     let key_parent_priv = key_parent_pfx.with_extension("mlapriv");
@@ -1333,12 +1338,6 @@ fn test_keyderive() {
     let key_child1_child1_priv = key_child1_child1_pfx.with_extension("mlapriv");
 
     //---------------- SETUP: Create and fill `keys` --------------
-    struct Keys {
-        parent: Vec<u8>,
-        child1: Vec<u8>,
-        child2: Vec<u8>,
-        child1child1: Vec<u8>,
-    }
     let mut keys = Keys {
         parent: vec![],
         child1: vec![],
@@ -1391,7 +1390,7 @@ fn test_keyderive() {
     // Assert all keys are different
     let v: HashSet<_> = [&keys.parent, &keys.child1, &keys.child2, &keys.child1child1]
         .iter()
-        .cloned()
+        .copied()
         .collect();
     assert_eq!(v.len(), 4);
 
@@ -1412,20 +1411,20 @@ fn test_keyderive() {
 
     // Ensure path is transitive
 
-    let key_tmp2_pfx = output_dir.path().join("key_tmp2");
-    let key_tmp2_priv = key_tmp2_pfx.with_extension("mlapriv");
+    let key_tmp_2_pfx = output_dir.path().join("key_tmp2");
+    let key_tmp_2_priv = key_tmp_2_pfx.with_extension("mlapriv");
     // `mlar keyderive tempdir/key_parent tempdir/key_tmp2 --path "Child 1" --path "Child 1"`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("keyderive")
         .arg(&key_parent_priv)
-        .arg(&key_tmp2_pfx)
+        .arg(&key_tmp_2_pfx)
         .arg("-p")
         .arg("Child 1")
         .arg("-p")
         .arg("Child 1");
     cmd.assert().success();
 
-    assert_eq!(keys.child1child1, fs::read(&key_tmp2_priv).unwrap());
+    assert_eq!(keys.child1child1, fs::read(&key_tmp_2_priv).unwrap());
 }
 
 #[test]
