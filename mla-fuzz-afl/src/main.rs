@@ -56,7 +56,11 @@ impl FuzzMode {
         pub_enc_key: &[MLAEncryptionPublicKey],
         priv_sign_key: &[MLASigningPrivateKey],
     ) -> Result<ArchiveWriterConfig, Error> {
-        use FuzzMode::*;
+        use FuzzMode::{
+            Compress, CompressEncrypt, CompressEncryptSign, CompressSign, Encrypt, EncryptSign,
+            None, Sign,
+        };
+
         match self {
             None => Ok(ArchiveWriterConfig::without_encryption_without_signature()?),
             Compress => {
@@ -96,7 +100,11 @@ impl FuzzMode {
         pub_verif_key: &[MLASignatureVerificationPublicKey],
         priv_dec_key: &[MLADecryptionPrivateKey],
     ) -> ArchiveReaderConfig {
-        use FuzzMode::*;
+        use FuzzMode::{
+            Compress, CompressEncrypt, CompressEncryptSign, CompressSign, Encrypt, EncryptSign,
+            None, Sign,
+        };
+
         match self {
             None | Compress => {
                 ArchiveReaderConfig::without_signature_verification().without_encryption()
@@ -118,7 +126,8 @@ impl FuzzMode {
         &self,
         priv_dec_key: &[MLADecryptionPrivateKey],
     ) -> TruncatedReaderConfig {
-        use FuzzMode::*;
+        use FuzzMode::{CompressEncrypt, CompressEncryptSign, Encrypt, EncryptSign};
+
         match self {
             Encrypt | EncryptSign | CompressEncrypt | CompressEncryptSign => {
                 TruncatedReaderConfig::without_signature_verification_with_encryption(
@@ -187,7 +196,8 @@ impl<W: Write> MLASerialize<W> for TestInput {
         }
 
         // Serialize byteflip
-        let flip_count = self.byteflip.len() as u32;
+        let flip_count = u32::try_from(self.byteflip.len())
+            .expect("Failed to convert byteflip array length to u32");
         dest.write_all(&flip_count.to_le_bytes())?;
         total_written += 4;
 
@@ -210,13 +220,15 @@ impl<R: Read> MLADeserialize<R> for TestInput {
 
         // Read number of filenames
         src.read_exact(&mut buf8)?;
-        let num_files = u64::from_le_bytes(buf8) as usize;
+        let num_files = usize::try_from(u64::from_le_bytes(buf8))
+            .expect("Failed to convert filenames number to usize");
 
         let mut filenames = Vec::with_capacity(num_files);
         for _ in 0..num_files {
             // Read string length
             src.read_exact(&mut buf8)?;
-            let str_len = u64::from_le_bytes(buf8) as usize;
+            let str_len = usize::try_from(u64::from_le_bytes(buf8))
+                .expect("Failed to convert length to usize");
 
             // Read string bytes
             let mut str_buf = vec![0u8; str_len];
@@ -227,13 +239,15 @@ impl<R: Read> MLADeserialize<R> for TestInput {
 
         // Read number of parts
         src.read_exact(&mut buf8)?;
-        let num_parts = u64::from_le_bytes(buf8) as usize;
+        let num_parts = usize::try_from(u64::from_le_bytes(buf8))
+            .expect("Failed to convert parts number to usize");
 
         let mut parts = Vec::with_capacity(num_parts);
         for _ in 0..num_parts {
             // Read part length
             src.read_exact(&mut buf8)?;
-            let part_len = u64::from_le_bytes(buf8) as usize;
+            let part_len = usize::try_from(u64::from_le_bytes(buf8))
+                .expect("Failed to convert parts number length to usize");
 
             // Read part bytes
             let mut part_buf = vec![0u8; part_len];
@@ -306,15 +320,13 @@ fn run(data: &mut [u8]) {
         let num = if part.is_empty() {
             0
         } else {
-            part[0] % (test_case.filenames.len() as u8)
+            part[0]
+                % u8::try_from(test_case.filenames.len()).expect("Failed to convert length to u8")
         };
         let fname = &test_case.filenames[num as usize];
 
-        let entry_name = match EntryName::from_arbitrary_bytes(fname.as_bytes()) {
-            Ok(name) => name,
-            Err(_) => {
-                continue; // Skip parts with invalid filename
-            }
+        let Ok(entry_name) = EntryName::from_arbitrary_bytes(fname.as_bytes()) else {
+            continue; // Skip parts with invalid filename
         };
 
         let id = if let Some(id) = num2id.get(&num) {
@@ -344,7 +356,10 @@ fn run(data: &mut [u8]) {
             && let Ok(entry_name) = EntryName::from_arbitrary_bytes(fname.as_bytes())
             && let Ok(id) = mla.start_entry(entry_name)
         {
-            num2id.insert(i as u8, id);
+            num2id.insert(
+                u8::try_from(i).expect("Failed to convert iterator to u8"),
+                id,
+            );
         }
     }
 
@@ -366,7 +381,7 @@ fn run(data: &mut [u8]) {
     let mut flist: Vec<String> = mla_read
         .list_entries()
         .unwrap()
-        .map(|entry_name| entry_name.raw_content_to_escaped_string())
+        .map(mla::entry::EntryName::raw_content_to_escaped_string)
         .collect();
     flist.sort();
 
@@ -388,14 +403,12 @@ fn run(data: &mut [u8]) {
     // Verify file contents
     let empty = Vec::new();
     for fname in &test_case.filenames {
-        let entry_name = match EntryName::from_arbitrary_bytes(fname.as_bytes()) {
-            Ok(name) => name,
-            Err(_) => continue, // skip invalid entry names
+        let Ok(entry_name) = EntryName::from_arbitrary_bytes(fname.as_bytes()) else {
+            continue;
         };
 
-        let mut mla_file = match mla_read.get_entry(entry_name) {
-            Ok(Some(file)) => file,
-            _ => continue, // skip missing or failed entries
+        let Ok(Some(mut mla_file)) = mla_read.get_entry(entry_name) else {
+            continue;
         };
 
         let expected = filename2content.get(fname).unwrap_or(&empty);
@@ -443,7 +456,7 @@ fn run(data: &mut [u8]) {
                             let mut recovered_list: Vec<String> = recovered_read
                                 .list_entries()
                                 .unwrap()
-                                .map(|entry_name| entry_name.raw_content_to_escaped_string())
+                                .map(mla::entry::EntryName::raw_content_to_escaped_string)
                                 .collect();
                             recovered_list.sort();
 
@@ -453,20 +466,19 @@ fn run(data: &mut [u8]) {
                                     eprintln!(
                                         "Warning: unexpected recovered file: {recovered_file}"
                                     );
-                                    continue;
                                 }
                             }
 
                             for fname in &tflist {
-                                let entry_name =
-                                    match EntryName::from_arbitrary_bytes(fname.as_bytes()) {
-                                        Ok(name) => name,
-                                        Err(_) => continue, // skip invalid entry names
-                                    };
+                                let Ok(entry_name) =
+                                    EntryName::from_arbitrary_bytes(fname.as_bytes())
+                                else {
+                                    continue;
+                                };
 
-                                let mut mla_file = match recovered_read.get_entry(entry_name) {
-                                    Ok(Some(file)) => file,
-                                    _ => continue, // skip missing or failed entries
+                                let Ok(Some(mut mla_file)) = recovered_read.get_entry(entry_name)
+                                else {
+                                    continue;
                                 };
 
                                 let mut recovered_data = Vec::new();
@@ -531,12 +543,13 @@ fn main() {
 fn produce_samples() {
     const BUFFER_SIZE: usize = 1024 * 1024;
 
-    fn write_sample(filename: &str, input: TestInput) {
+    fn write_sample(filename: &str, input: &TestInput) {
         let mut buffer = [0u8; BUFFER_SIZE];
         let mut cursor = Cursor::new(&mut buffer[..]);
         let len = input.serialize(&mut cursor).unwrap();
         let mut file = File::create(filename).unwrap();
-        file.write_all(&buffer[..len as usize]).unwrap();
+        file.write_all(&buffer[..usize::try_from(len).expect("Failed to convert length to usize")])
+            .unwrap();
     }
 
     use crate::FuzzMode;
@@ -564,7 +577,7 @@ fn produce_samples() {
     for (mode, name) in &modes {
         write_sample(
             &format!("in/sample_{name}"),
-            TestInput {
+            &TestInput {
                 config: *mode,
                 filenames: filenames.clone(),
                 parts: parts.clone(),
@@ -577,7 +590,7 @@ fn produce_samples() {
     for (mode, name) in &modes {
         write_sample(
             &format!("in/sample_{name}_byteflip"),
-            TestInput {
+            &TestInput {
                 config: *mode,
                 filenames: filenames.clone(),
                 parts: parts.clone(),

@@ -4,6 +4,9 @@ use crate::errors::Error;
 
 const BASE64_CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
+// Uses compilation cast `as` for safe conversion from u8 to u32 because
+// it is time constant and won't vary like std on different platforms
+#[allow(clippy::cast_lossless)]
 pub(crate) fn base64_encode(data: &[u8]) -> Vec<u8> {
     let mut encoded = Vec::new();
     let mut i = 0;
@@ -35,6 +38,9 @@ pub(crate) fn base64_encode(data: &[u8]) -> Vec<u8> {
     encoded
 }
 
+// Uses compilation cast `as` for safe conversion from u8 to u32 because
+// it is time constant and won't vary like std on different platforms
+#[allow(clippy::cast_lossless)]
 pub(crate) fn base64_decode(encoded: &[u8]) -> Result<Vec<u8>, Error> {
     let encoded = match encoded {
         [rest @ .., b'=', b'='] | [rest @ .., b'='] => rest,

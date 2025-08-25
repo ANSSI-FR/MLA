@@ -19,15 +19,12 @@ pub(crate) struct HybridMultiRecipientSigningKeys {
 }
 
 impl MLASigningPrivateKey {
-    pub(crate) fn sign_ed25519ph(
-        &self,
-        hash_to_sign: Sha512,
-    ) -> Result<MLAEd25519PhSignature, Error> {
+    pub(crate) fn sign_ed25519ph(&self, hash_to_sign: &Sha512) -> MLAEd25519PhSignature {
         let ed25519ph_sig = self
             .private_key_ed25519
             .sign_prehashed(hash_to_sign.clone(), Some(ED25519PH_CONTEXT))
             .unwrap(); // Should not fail as it can fail only if context length is greater than 255
-        Ok(MLAEd25519PhSignature { ed25519ph_sig })
+        MLAEd25519PhSignature { ed25519ph_sig }
     }
     pub(crate) fn sign_mldsa87(
         &self,
@@ -97,8 +94,8 @@ impl<W: Write> MLASerialize<W> for MLAEd25519PhSignature {
 }
 
 impl MLAMLDSA87Signature {
-    fn from_bytes(bytes: [u8; ML_DSA87_SIGNATURE_SIZE]) -> Result<Self, Error> {
-        let encoded_sig = EncodedSignature::<MlDsa87>::from(bytes);
+    fn from_bytes(bytes: &[u8; ML_DSA87_SIGNATURE_SIZE]) -> Result<Self, Error> {
+        let encoded_sig = EncodedSignature::<MlDsa87>::from(*bytes);
         let mldsa87_sig =
             Signature::<MlDsa87>::decode(&encoded_sig).ok_or(Error::DeserializationError)?;
         Ok(Self { mldsa87_sig })
@@ -130,7 +127,7 @@ impl<R: Read> MLADeserialize<R> for MLASignature {
             }
             1 => {
                 let bytes = MLADeserialize::deserialize(src)?;
-                let parsed_signature = MLAMLDSA87Signature::from_bytes(bytes)?;
+                let parsed_signature = MLAMLDSA87Signature::from_bytes(&bytes)?;
                 Ok(MLASignature::MLAMlDsa87(parsed_signature))
             }
             _ => Err(Error::DeserializationError),

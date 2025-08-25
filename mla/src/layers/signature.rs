@@ -84,7 +84,7 @@ impl<'a, W: 'a + InnerWriterTrait> LayerWriter<'a, W> for SignatureLayerWriter<'
         let mut rng = self.signature_config.rng.get_rng()?;
 
         for key in self.signature_config.signature_keys.keys {
-            let ed25519ph_signature = key.sign_ed25519ph(self.hash.clone())?;
+            let ed25519ph_signature = key.sign_ed25519ph(&self.hash.clone());
             ed25519ph_signature.serialize(&mut out)?;
             let mldsa87_signature = key.sign_mldsa87(self.hash.clone(), &mut rng)?;
             mldsa87_signature.serialize(&mut out)?;
@@ -129,7 +129,7 @@ impl SignatureReaderConfig {
 impl Default for SignatureReaderConfig {
     fn default() -> Self {
         Self {
-            signature_verification_keys: Default::default(),
+            signature_verification_keys: Vec::default(),
             signature_check: true,
         }
     }
@@ -140,7 +140,7 @@ pub(crate) struct SignatureLayerReader<'a, R: 'a + InnerReaderTrait>(StripHeadTa
 impl<'a, R: 'a + InnerReaderTrait> SignatureLayerReader<'a, R> {
     pub(crate) fn new_skip_magic(
         mut inner: Box<dyn 'a + LayerReader<'a, R>>,
-        signature_reader_config: SignatureReaderConfig,
+        signature_reader_config: &SignatureReaderConfig,
         archive_header_hash: Sha512,
     ) -> Result<
         (
@@ -197,7 +197,7 @@ impl<'a, R: 'a + InnerReaderTrait> SignatureLayerReader<'a, R> {
             let next_layer_magic = read_layer_magic(&mut hashing_src)?;
             if &next_layer_magic == ENCRYPTION_LAYER_MAGIC {
                 read_persistent_encryption_config =
-                    Some(read_encryption_header_after_magic(&mut hashing_src)?.0)
+                    Some(read_encryption_header_after_magic(&mut hashing_src)?.0);
             }
             // hash the rest of sig_inner_layer
             io::copy(&mut hashing_src, &mut sink())?;
@@ -207,7 +207,7 @@ impl<'a, R: 'a + InnerReaderTrait> SignatureLayerReader<'a, R> {
             // check signatures
             let mut keys_ref_with_valid_signatures = Vec::new();
             let signatures = deserialize_signatures(&signature_data)?;
-            for key in signature_reader_config.signature_verification_keys.iter() {
+            for key in &signature_reader_config.signature_verification_keys {
                 let verified_signatures = signatures
                     .iter()
                     .filter(|sig| key.verify(signed_hash.clone(), sig))
