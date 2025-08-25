@@ -182,14 +182,12 @@ mod entryname {
                 let mut stack = Vec::new();
                 for component in path.as_ref().components() {
                     match component {
-                        Component::Prefix(_) => (),
-                        Component::RootDir => (),
-                        Component::CurDir => (),
+                        Component::Prefix(_) | Component::RootDir | Component::CurDir => (),
                         Component::ParentDir => {
                             stack.pop();
                         }
                         Component::Normal(os_str) => {
-                            stack.push(normal_component_osstr_to_bytes(os_str)?)
+                            stack.push(normal_component_osstr_to_bytes(os_str)?);
                         }
                     }
                 }
@@ -280,6 +278,7 @@ mod entryname {
     }
 
     #[cfg(target_family = "unix")]
+    #[allow(clippy::unnecessary_wraps)]
     fn osstr_to_bytes_os(os_str: &OsStr) -> Result<&[u8], EntryNameError> {
         use std::os::unix::ffi::OsStrExt;
 
@@ -295,6 +294,7 @@ mod entryname {
     }
 
     #[cfg(target_family = "unix")]
+    #[allow(clippy::unnecessary_wraps)]
     fn to_pathbuf_os(bytes: &[u8]) -> Result<PathBuf, EntryNameError> {
         use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 
@@ -339,6 +339,7 @@ mod entryname {
     }
 
     #[cfg(target_family = "unix")]
+    #[allow(clippy::unnecessary_wraps)]
     fn normal_component_osstr_to_bytes(os_str: &OsStr) -> Result<&[u8], EntryNameError> {
         use std::os::unix::ffi::OsStrExt;
 
@@ -488,7 +489,7 @@ pub struct ArchiveEntry<'a, T> {
     pub data: ArchiveEntryDataReader<'a, T>,
 }
 
-impl<'a, T> ArchiveEntry<'a, T> {
+impl<T> ArchiveEntry<'_, T> {
     pub fn get_size(&self) -> u64 {
         self.data.offsets_and_sizes.iter().map(|p| p.1).sum()
     }
@@ -510,7 +511,7 @@ pub struct ArchiveEntryDataReader<'a, R> {
     state: ArchiveEntryDataReaderState,
     /// id of the File being read
     id: ArchiveEntryId,
-    /// index in `offsets_and_sizes` of the block to read at next ArchiveEntryDataReader.read() call
+    /// index in `offsets_and_sizes` of the block to read at next `ArchiveEntryDataReader.read()` call
     current_offsets_and_sizes_index: usize,
     /// List of offsets of continuous blocks corresponding to where the file can be read
     offsets_and_sizes: &'a [(u64, u64)],
@@ -526,13 +527,10 @@ impl<'a, R: Read + Seek> ArchiveEntryDataReader<'a, R> {
         src.seek(SeekFrom::Start(start_offset))?;
 
         // Read file information header
-        let id = match ArchiveEntryBlock::from(src)? {
-            ArchiveEntryBlock::EntryStart { id, .. } => id,
-            _ => {
-                return Err(Error::WrongReaderState(
-                    "[BlocksToFileReader] A file must start with an EntryStart".to_string(),
-                ));
-            }
+        let ArchiveEntryBlock::EntryStart { id, .. } = ArchiveEntryBlock::from(src)? else {
+            return Err(Error::WrongReaderState(
+                "[BlocksToFileReader] A file must start with an EntryStart".to_string(),
+            ));
         };
 
         Ok(ArchiveEntryDataReader {
@@ -571,23 +569,23 @@ impl<T: Read + Seek> Read for ArchiveEntryDataReader<'_, T> {
                 // Start a new block EntryContent
                 match ArchiveEntryBlock::from(&mut self.src)? {
                     ArchiveEntryBlock::EntryContent { length, id, .. } => {
-                        if id != self.id {
-                            self.move_to_block_at_current_offsets_and_sizes_index()?;
-                            return self.read(into);
-                        } else {
+                        if id == self.id {
                             let count = self.src.by_ref().take(length).read(into)?;
                             let count_as_u64 = usize_as_u64(count)?;
                             (length - count_as_u64, count)
+                        } else {
+                            self.move_to_block_at_current_offsets_and_sizes_index()?;
+                            return self.read(into);
                         }
                     }
                     ArchiveEntryBlock::EndOfEntry { id, .. } => {
-                        if id != self.id {
-                            self.move_to_block_at_current_offsets_and_sizes_index()?;
-                            return self.read(into);
-                        } else {
+                        if id == self.id {
                             self.state = ArchiveEntryDataReaderState::Finish;
                             return Ok(0);
                         }
+
+                        self.move_to_block_at_current_offsets_and_sizes_index()?;
+                        return self.read(into);
                     }
                     ArchiveEntryBlock::EntryStart { id, .. } => {
                         if id == self.id {
@@ -703,7 +701,7 @@ impl<T: Read + Seek> Seek for ArchiveEntryDataReader<'_, T> {
             SeekFrom::Current(asked_seek_offset) => match self.state {
                 ArchiveEntryDataReaderState::InEntryContent(remaining) => {
                     let offset_from_start = self.offsets_and_sizes
-                        [..self.current_offsets_and_sizes_index + 1]
+                        [..=self.current_offsets_and_sizes_index]
                         .iter()
                         .map(|p| p.1)
                         .sum::<u64>()
@@ -953,7 +951,7 @@ mod tests {
         match &reader.state {
             ArchiveEntryDataReaderState::InEntryContent(_) => (),
             _ => panic!("Expected InEntryContent after SeekFrom::End(-3)"),
-        };
+        }
 
         // Seek to start again and then finish reading all to reach Finish state
         reader.seek(std::io::SeekFrom::Start(0)).unwrap();

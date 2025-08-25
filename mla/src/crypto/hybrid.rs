@@ -37,7 +37,7 @@ type EncryptedSharedSecret = HybridKemSharedSecretArray;
 pub(crate) struct HybridKemSharedSecret(pub(crate) HybridKemSharedSecretArray);
 
 impl HybridKemSharedSecret {
-    /// Generate a new HybridKemSharedSecret from a CSPRNG
+    /// Generate a new `HybridKemSharedSecret` from a CSPRNG
     pub fn from_rng<R: CryptoRngCore>(csprng: &mut R) -> Self {
         Self(csprng.r#gen::<HybridKemSharedSecretArray>())
     }
@@ -64,15 +64,15 @@ const HYBRIDKEM_ASSOCIATED_DATA: &[u8; 0] = b"";
 ///   used instead of the "Dual-PRF Combiner" (also from [6]). Indeed, this combiner force the "salt" part of HKDF
 ///   to be uniformly random using an additional PRF use, ensuring the following HKDF is indeed a Dual-PRF
 ///
-/// uniformly_random_ss1 = HKDF-SHA512-Extract(
+/// `uniformly_random_ss1 = HKDF-SHA512-Extract(
 ///     salt=0,
 ///     ikm=ss1
-/// )
-/// key = HKDF(
+/// )`
+/// `key = HKDF(
 ///     salt=uniformly_random_ss1,
 ///     ikm=ss2,
 ///     info=ct1 . ct2
-/// )
+/// )`
 ///
 /// with ss1 and ss2 the shared secrets and ct1 and ct2 the ciphertexts
 ///
@@ -212,7 +212,7 @@ impl MLKEMSeed {
         Self { d, z }
     }
 
-    /// Creates an MLKEMSeed from a 64-byte array `[d || z]`.
+    /// Creates an `MLKEMSeed` from a 64-byte array `[d || z]`.
     pub(crate) fn from_d_z_64(mut dz: [u8; 64]) -> Self {
         let d = B32::try_from(&dz[0..32]).unwrap(); // should not fail as length is 64
         let z = B32::try_from(&dz[32..64]).unwrap(); // should not fail as length is 64

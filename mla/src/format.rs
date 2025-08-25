@@ -90,7 +90,7 @@ pub enum ArchiveEntryBlock<T: Read> {
     /// (length, data) is used instead of a Vec to avoid having the whole data
     /// in memory. On parsing, the data can be set to None. It indicates to the
     /// caller that the data is just next to it
-    /// TODO: use the same trick than ArchiveReader to avoid the Option
+    /// TODO: use the same trick than `ArchiveReader` to avoid the Option
     EntryContent {
         length: u64,
         data: Option<T>,
