@@ -65,9 +65,8 @@ fn zeroizeable_read_to_end(mut src: impl Read) -> Result<Vec<u8>, Error> {
                 if n == 0 {
                     buf.resize(read_offset, 0);
                     return Ok(buf);
-                } else {
-                    read_offset += n;
                 }
+                read_offset += n;
             }
             Err(e) if e.kind() == ErrorKind::Interrupted => {}
             Err(_) => {
@@ -114,6 +113,7 @@ fn split_five_lines_without_buffering(content: &[u8]) -> Result<[&[u8]; 5], Erro
 struct KeyOpts;
 
 impl KeyOpts {
+    #[allow(clippy::unused_self)]
     fn serialize_key_opts<W: Write>(&self, mut dst: W) -> Result<(), Error> {
         // nothing for the moment
         dst.write_all(b"AAAAAA==\r\n")?;
@@ -234,7 +234,7 @@ impl MLDSASeed {
         }
     }
 
-    /// Creates an MLDSASeed from a 32-byte array.
+    /// Creates an `MLDSASeed` from a 32-byte array.
     fn from_xi_32(xi: [u8; 32]) -> Self {
         let xi = B32::from(xi);
         Self { xi }
@@ -674,6 +674,8 @@ const DERIVE_PATH_SALT: &[u8; 15] = b"PATH DERIVATION";
 /// Note: the secret is consumed on call
 ///
 /// \[1\] <https://eprint.iacr.org/2023/861>
+// Secret cryptographic material is passed by value to ensure it is not accidentally reused
+#[allow(clippy::needless_pass_by_value)]
 fn apply_derive(path: &[u8], src: MLADecryptionPrivateKey) -> [u8; 32] {
     const SEED_LEN: usize = 32;
 
@@ -700,7 +702,7 @@ fn derive_one_path_component(
     generate_mla_keypair_from_seed(seed)
 }
 
-/// This is for advanced use cases: see KEY_DERIVATION.md.
+/// This is for advanced use cases: see `KEY_DERIVATION.md`.
 ///
 /// Return a key pair based on a succession of derivation path components and
 /// a private key.
@@ -732,6 +734,8 @@ mod tests {
 
     /// Check key coherence
     fn check_key_pair(pub_key: &MLAEncryptionPublicKey, priv_key: &MLADecryptionPrivateKey) {
+        const MLKEM_1024_PUBKEY_SIZE: usize = 1568;
+
         // Check the public ECC key rebuilt from the private ECC key is the expected one
         let computed_ecc_pubkey = PublicKey::from(&priv_key.private_key_ecc);
         assert_eq!(pub_key.public_key_ecc.as_bytes().len(), ECC_PUBKEY_SIZE);
@@ -742,7 +746,6 @@ mod tests {
         );
 
         // Check the public ML-KEM key correspond to the private one
-        const MLKEM_1024_PUBKEY_SIZE: usize = 1568;
         assert_eq!(
             pub_key.public_key_ml.as_bytes().len(),
             MLKEM_1024_PUBKEY_SIZE
@@ -807,7 +810,7 @@ mod tests {
     }
 
     #[test]
-    /// Naive checks for "apply_derive", to avoid naive erros
+    /// Naive checks for `apply_derive`, to avoid naive erros
     fn check_apply_derive() {
         use std::collections::HashSet;
         use x25519_dalek::StaticSecret;
@@ -825,16 +828,16 @@ mod tests {
         // Derive along "test2"
         let (privkey, _pubkey) = generate_keypair_from_seed([0; 32]);
         let path = b"test2";
-        let seed2 = apply_derive(path, privkey);
-        assert_ne!(seed, seed2);
+        let seed_2 = apply_derive(path, privkey);
+        assert_ne!(seed, seed_2);
 
         // Ensure the secret depends on both keys
         let mut priv_keys = vec![];
         for i in 0..1 {
             for j in 0..1 {
                 priv_keys.push(MLADecryptionPrivateKey {
-                    private_key_ecc: StaticSecret::from([i as u8; 32]),
-                    private_key_seed_ml: MLKEMSeed::from_d_z_64([j as u8; 64]),
+                    private_key_ecc: StaticSecret::from([i; 32]),
+                    private_key_seed_ml: MLKEMSeed::from_d_z_64([j; 64]),
                 });
             }
         }
@@ -844,7 +847,7 @@ mod tests {
             .into_iter()
             .map(|pkey| apply_derive(b"test", pkey))
             .collect();
-        assert_eq!(HashSet::<_>::from_iter(seeds.iter()).len(), seeds.len());
+        assert_eq!((seeds.iter().collect::<HashSet<_>>()).len(), seeds.len());
     }
 
     #[test]

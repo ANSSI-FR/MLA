@@ -94,7 +94,7 @@ impl<'a, R: InnerReaderTrait> LayerReader<'a, R> for StripHeadTailReader<'a, R> 
     }
 }
 
-impl<'a, R: InnerReaderTrait> Seek for StripHeadTailReader<'a, R> {
+impl<R: InnerReaderTrait> Seek for StripHeadTailReader<'_, R> {
     /// Offer a position relatively to `self.offset_pos`
     fn seek(&mut self, asked_seek: SeekFrom) -> io::Result<u64> {
         match asked_seek {
@@ -143,7 +143,7 @@ impl<'a, R: InnerReaderTrait> Seek for StripHeadTailReader<'a, R> {
     }
 }
 
-impl<'a, R: InnerReaderTrait> Read for StripHeadTailReader<'a, R> {
+impl<R: InnerReaderTrait> Read for StripHeadTailReader<'_, R> {
     /// Wrapper on inner
     fn read(&mut self, into: &mut [u8]) -> io::Result<usize> {
         let remaining_bytes_in_inner_layer =

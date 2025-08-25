@@ -75,7 +75,7 @@ fn build_archive(
     for i in 0..iters {
         let data: Vec<u8> = Alphanumeric
             .sample_iter(&mut rng)
-            .take(size as usize)
+            .take(usize::try_from(size).expect("Failed to convert size to usize"))
             .collect();
         let id = mla
             .start_entry(EntryName::from_path(format!("file_{i}")).unwrap())
@@ -143,7 +143,7 @@ fn build_truncated_archive(
     for i in 0..iters {
         let data: Vec<u8> = Alphanumeric
             .sample_iter(&mut rng)
-            .take(size as usize)
+            .take(usize::try_from(size).expect("Failed to convert size to usize"))
             .collect();
         let id = mla
             .start_entry(EntryName::from_path(format!("file_{i}")).unwrap())
@@ -190,11 +190,11 @@ fn build_archive_reader<'a>(
 }
 
 fn layers_to_config(
-    (compression, encryption, signature): &(bool, bool, bool),
+    (compression, encryption, signature): (bool, bool, bool),
     privkey: &MLAPrivateKey,
     pubkey: &MLAPublicKey,
 ) -> ArchiveWriterConfig {
-    let config = match (*encryption, *signature) {
+    let config = match (encryption, signature) {
         (true, true) => ArchiveWriterConfig::with_encryption_with_signature(
             &[pubkey.get_encryption_public_key().clone()],
             &[privkey.get_signing_private_key().clone()],
@@ -208,7 +208,7 @@ fn layers_to_config(
         (false, false) => ArchiveWriterConfig::without_encryption_without_signature(),
     }
     .unwrap();
-    if *compression {
+    if compression {
         config
     } else {
         config.without_compression()
@@ -231,10 +231,10 @@ pub fn writer_multiple_layers_multiple_block_size(c: &mut Criterion) {
     let mut group = c.benchmark_group("writer_multiple_layers_multiple_block_size");
     group.measurement_time(Duration::from_secs(10));
     group.sample_size(SAMPLE_SIZE);
-    for size in SIZE_LIST.iter() {
-        group.throughput(Throughput::Bytes(*size as u64));
+    for size in SIZE_LIST {
+        group.throughput(Throughput::Bytes(size as u64));
 
-        let data: Vec<u8> = Alphanumeric.sample_iter(&mut rng).take(*size).collect();
+        let data: Vec<u8> = Alphanumeric.sample_iter(&mut rng).take(size).collect();
 
         for (compression, encryption, signature) in &LAYERS_POSSIBILITIES {
             // Create an archive
@@ -242,7 +242,7 @@ pub fn writer_multiple_layers_multiple_block_size(c: &mut Criterion) {
 
             let mut mla = ArchiveWriter::from_config(
                 file,
-                layers_to_config(&(*compression, *encryption, *signature), &privkey, &pubkey),
+                layers_to_config((*compression, *encryption, *signature), &privkey, &pubkey),
             )
             .expect("Writer init failed");
 
@@ -254,7 +254,7 @@ pub fn writer_multiple_layers_multiple_block_size(c: &mut Criterion) {
                     format!("compression: {compression}, encryption: {encryption}, signature: {signature}"),
                     size,
                 ),
-                size,
+                &size,
                 |b, &_size| {
                     b.iter(|| mla.append_entry_content(id, data.len() as u64, data.as_slice()));
                 },
@@ -351,8 +351,8 @@ pub fn reader_multiple_layers_multiple_block_size(c: &mut Criterion) {
 
     let (privkey, pubkey) = generate_mla_keypair_from_seed([0; 32]);
 
-    for size in SIZE_LIST.iter() {
-        group.throughput(Throughput::Bytes(*size as u64));
+    for size in SIZE_LIST {
+        group.throughput(Throughput::Bytes(size as u64));
 
         for (compression, encryption, signature) in &LAYERS_POSSIBILITIES {
             group.bench_function(
@@ -365,8 +365,8 @@ pub fn reader_multiple_layers_multiple_block_size(c: &mut Criterion) {
                     let pubkey = pubkey.clone();
                     move |b| {
                         b.iter_custom(|iters| {
-                            read_one_file_by_chunk(iters, *size as u64, *compression, *encryption, *signature, &privkey, &pubkey)
-                        })
+                            read_one_file_by_chunk(iters, size as u64, *compression, *encryption, *signature, &privkey, &pubkey)
+                        });
                     }
                 },
             );
@@ -378,7 +378,7 @@ pub fn reader_multiple_layers_multiple_block_size(c: &mut Criterion) {
 /// Create an archive with a `iters` files of `size` bytes using `layers` and
 /// measure the time needed to read them (in a random order)
 ///
-/// This function is used to measure only the get_file + read time without the
+/// This function is used to measure only the `get_file` + read time without the
 /// cost of archive creation
 fn iter_read_multifiles_random(
     iters: u64,
@@ -402,7 +402,13 @@ fn iter_read_multifiles_random(
     let mut rng = ChaChaRng::seed_from_u64(0);
     // Measure the time needed to get and read a file
     let start = Instant::now();
-    for i in sample(&mut rng, iters as usize, iters as usize).iter() {
+    for i in sample(
+        &mut rng,
+        usize::try_from(iters).expect("Failed to convert length to usize"),
+        usize::try_from(iters).expect("Failed to convert amount to usize"),
+    )
+    .iter()
+    {
         let subfile = mla_read
             .get_entry(EntryName::from_path(format!("file_{i}")).unwrap())
             .unwrap()
@@ -422,8 +428,8 @@ pub fn reader_multiple_layers_multiple_block_size_multifiles_random(c: &mut Crit
 
     let (privkey, pubkey) = generate_mla_keypair_from_seed([0; 32]);
 
-    for size in SIZE_LIST.iter() {
-        group.throughput(Throughput::Bytes(*size as u64));
+    for size in SIZE_LIST {
+        group.throughput(Throughput::Bytes(size as u64));
 
         for (compression, encryption, signature) in &LAYERS_POSSIBILITIES {
             let privkey = privkey.clone();
@@ -437,14 +443,14 @@ pub fn reader_multiple_layers_multiple_block_size_multifiles_random(c: &mut Crit
                     b.iter_custom(|iters| {
                         iter_read_multifiles_random(
                             iters,
-                            *size as u64,
+                            size as u64,
                             *compression,
                             *encryption,
                             *signature,
                             &privkey,
                             &pubkey,
                         )
-                    })
+                    });
                 },
             );
         }
@@ -498,8 +504,8 @@ pub fn reader_multiple_layers_multiple_block_size_multifiles_linear(c: &mut Crit
 
     let (privkey, pubkey) = generate_mla_keypair_from_seed([0; 32]);
 
-    for size in SIZE_LIST.iter() {
-        group.throughput(Throughput::Bytes(*size as u64));
+    for size in SIZE_LIST {
+        group.throughput(Throughput::Bytes(size as u64));
 
         for (compression, encryption, signature) in &LAYERS_POSSIBILITIES {
             let privkey = privkey.clone();
@@ -513,14 +519,14 @@ pub fn reader_multiple_layers_multiple_block_size_multifiles_linear(c: &mut Crit
                     b.iter_custom(|iters| {
                         iter_decompress_multifiles_linear(
                             iters,
-                            *size as u64,
+                            size as u64,
                             *compression,
                             *encryption,
                             *signature,
                             &privkey,
                             &pubkey,
                         )
-                    })
+                    });
                 },
             );
         }
@@ -599,7 +605,7 @@ pub fn failsafe_multiple_layers_repair(c: &mut Criterion) {
                         &privkey,
                         &pubkey,
                     )
-                })
+                });
             },
         );
     }
