@@ -592,12 +592,30 @@ impl Write for FileWriter<'_> {
 }
 
 /// Add whatever is specified by `path`
-fn add_file_or_dir(mla: &mut ArchiveWriter<OutputTypes>, path: &Path) -> Result<(), MlarError> {
+fn add_file_or_dir(
+    mla: &mut ArchiveWriter<OutputTypes>,
+    path: &Path,
+    skip_not_found: bool,
+) -> Result<(), MlarError> {
     if path.is_dir() {
-        add_dir(mla, path)?;
+        add_dir(mla, path, skip_not_found)?;
     } else {
         let name = EntryName::from_path(path).map_err(|_| MlarError::InvalidEntryNameToPath)?;
-        let file = File::open(path)?;
+
+        let file = match File::open(path) {
+            Ok(f) => f,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound && skip_not_found => {
+                eprintln!(
+                    " [!] File \"{}\" does not exist, skipping",
+                    name.to_pathbuf_escaped_string()
+                        .map_err(|_| MlarError::InvalidEntryNameToPath)?
+                );
+
+                return Ok(());
+            }
+            Err(e) => return Err(MlarError::IO(e)),
+        };
+
         let length = file.metadata()?.len();
         eprintln!(
             "{}",
@@ -611,10 +629,14 @@ fn add_file_or_dir(mla: &mut ArchiveWriter<OutputTypes>, path: &Path) -> Result<
 
 /// Recursively explore a dir to add all the files
 /// Ignore empty directory
-fn add_dir(mla: &mut ArchiveWriter<OutputTypes>, dir: &Path) -> Result<(), MlarError> {
+fn add_dir(
+    mla: &mut ArchiveWriter<OutputTypes>,
+    dir: &Path,
+    skip_not_found: bool,
+) -> Result<(), MlarError> {
     for file in read_dir(dir)? {
         let new_path = file?.path();
-        add_file_or_dir(mla, &new_path)?;
+        add_file_or_dir(mla, &new_path, skip_not_found)?;
     }
     Ok(())
 }
@@ -682,6 +704,7 @@ fn add_binary(
 fn add_string_file(
     mla: &mut ArchiveWriter<OutputTypes>,
     file_content: &str,
+    skip_not_found: bool,
 ) -> Result<(), MlarError> {
     let mut total_lines = 0;
     let mut invalid_paths_count = 0;
@@ -691,7 +714,7 @@ fn add_string_file(
         let path = Path::new(line.trim());
 
         if path.exists() {
-            if add_file_or_dir(mla, path).is_err() {
+            if add_file_or_dir(mla, path, skip_not_found).is_err() {
                 eprintln!(" [!] Line {} cannot be read as text (UTF-8)", index + 1);
             }
         } else {
@@ -713,9 +736,10 @@ fn process_chunk(
     chunk: &[u8],
     filename_iterator: &mut impl Iterator<Item = String>,
     fallback_filename: usize,
+    skip_not_found: bool,
 ) -> Result<(), MlarError> {
     if let Ok(text) = std::str::from_utf8(chunk) {
-        if let Err(MlarError::IO(err)) = add_string_file(mla, text)
+        if let Err(MlarError::IO(err)) = add_string_file(mla, text, skip_not_found)
             && err.kind() == std::io::ErrorKind::InvalidData
         {
             let filename = filename_iterator
@@ -736,6 +760,7 @@ fn add_from_stdin(
     mla: &mut ArchiveWriter<OutputTypes>,
     filenames: &mut impl Iterator<Item = String>,
     sep: Option<&String>,
+    skip_not_found: bool,
 ) -> Result<(), MlarError> {
     const BUFFER_CAPACITY: usize = 4096;
 
@@ -744,7 +769,7 @@ fn add_from_stdin(
         let mut buffer = Vec::new();
         io::stdin().lock().read_to_end(&mut buffer)?;
 
-        process_chunk(mla, &buffer, filenames, 0)?;
+        process_chunk(mla, &buffer, filenames, 0, skip_not_found)?;
 
         return Ok(());
     }
@@ -765,7 +790,7 @@ fn add_from_stdin(
             // EOF, process remaining chunk if not empty
             if !chunk.is_empty() {
                 processed_file += 1;
-                process_chunk(mla, &chunk, filenames, processed_file)?;
+                process_chunk(mla, &chunk, filenames, processed_file, skip_not_found)?;
             }
             break;
         }
@@ -777,7 +802,7 @@ fn add_from_stdin(
         if chunks.len() > 1 {
             for part in &chunks[..chunks.len() - 1] {
                 processed_file += 1;
-                process_chunk(mla, part, filenames, processed_file)?;
+                process_chunk(mla, part, filenames, processed_file, skip_not_found)?;
             }
 
             chunk = chunks[chunks.len() - 1].to_vec();
@@ -793,6 +818,7 @@ fn create(matches: &ArgMatches) -> Result<(), MlarError> {
     let mut mla = writer_from_matches(matches, true)?;
 
     if let Some(files) = matches.get_many::<PathBuf>("files") {
+        let skip_not_found = matches.get_flag("skip-not-found");
         for filename in files {
             if filename.as_os_str() == "-" {
                 let mut filenames = matches
@@ -802,10 +828,10 @@ fn create(matches: &ArgMatches) -> Result<(), MlarError> {
                     .into_iter();
                 let sep = matches.get_one::<String>("separator");
 
-                add_from_stdin(&mut mla, &mut filenames, sep)?;
+                add_from_stdin(&mut mla, &mut filenames, sep, skip_not_found)?;
             } else {
                 let path = Path::new(&filename);
-                add_file_or_dir(&mut mla, path)?;
+                add_file_or_dir(&mut mla, path, skip_not_found)?;
             }
         }
     }
@@ -1386,6 +1412,12 @@ fn app() -> clap::Command {
                     .help("A string used to delimit files when reading concatenated input from stdin (e.g. via a pipe).")
                     .value_parser(value_parser!(String))
                     .num_args(1)
+                )
+                .arg(
+                    Arg::new("skip-not-found")
+                    .long("skip-not-found")
+                    .action(ArgAction::SetTrue)
+                    .help("Skip files that are not found instead of failing.")
                 ),
         )
         .subcommand(
