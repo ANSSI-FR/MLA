@@ -22,8 +22,8 @@ use std::{
 // -------- Error handling --------
 
 /// Wrapper over MLA custom error, due to the "orphan rule"
-/// - WrappedMLA: MLA specifics errors
-/// - WrappedPy: Python related errors
+/// - `WrappedMLA`: MLA specifics errors
+/// - `WrappedPy`: Python related errors
 #[derive(Debug)]
 enum WrappedError {
     WrappedMLA(mla::errors::Error),
@@ -223,7 +223,7 @@ impl From<mla::entry::EntryNameError> for WrappedError {
     }
 }
 
-/// Converts a `WrappedError` into a Python exception (`PyErr`) for use with PyO3 bindings.
+/// Converts a `WrappedError` into a Python exception (`PyErr`) for use with `PyO3` bindings.
 ///
 /// This implementation maps each variant of `WrappedError` (and its inner error types)
 /// to a corresponding Python exception, providing a descriptive error message for each case.
@@ -542,56 +542,50 @@ struct WriterConfig {
 impl WriterConfig {
     #[new]
     #[pyo3(signature = (private_keys, public_keys))]
-    fn new(private_keys: PrivateKeys, public_keys: PublicKeys) -> Result<Self, WrappedError> {
-        Ok(WriterConfig {
+    fn new(private_keys: PrivateKeys, public_keys: PublicKeys) -> Self {
+        WriterConfig {
             inner: Mutex::new(WriterConfigInner {
                 compression_level: Some(DEFAULT_COMPRESSION_LEVEL),
                 signature_config: Some(private_keys),
                 public_keys: Some(public_keys),
             }),
-        })
+        }
     }
 
     #[classmethod]
     #[pyo3(signature = (public_keys))]
-    fn with_encryption_without_signature(
-        _cls: &Bound<PyType>,
-        public_keys: PublicKeys,
-    ) -> Result<Self, WrappedError> {
-        Ok(WriterConfig {
+    fn with_encryption_without_signature(_cls: &Bound<PyType>, public_keys: PublicKeys) -> Self {
+        WriterConfig {
             inner: Mutex::new(WriterConfigInner {
                 compression_level: Some(DEFAULT_COMPRESSION_LEVEL),
                 signature_config: None,
                 public_keys: Some(public_keys),
             }),
-        })
+        }
     }
 
     #[classmethod]
     #[pyo3(signature = (private_keys))]
-    fn without_encryption_with_signature(
-        _cls: &Bound<PyType>,
-        private_keys: PrivateKeys,
-    ) -> Result<Self, WrappedError> {
-        Ok(WriterConfig {
+    fn without_encryption_with_signature(_cls: &Bound<PyType>, private_keys: PrivateKeys) -> Self {
+        WriterConfig {
             inner: Mutex::new(WriterConfigInner {
                 compression_level: Some(DEFAULT_COMPRESSION_LEVEL),
                 signature_config: Some(private_keys),
                 public_keys: None,
             }),
-        })
+        }
     }
 
     #[classmethod]
     #[pyo3(signature = ())]
-    fn without_encryption_without_signature(_cls: &Bound<PyType>) -> Result<Self, WrappedError> {
-        Ok(WriterConfig {
+    fn without_encryption_without_signature(_cls: &Bound<PyType>) -> Self {
+        WriterConfig {
             inner: Mutex::new(WriterConfigInner {
                 compression_level: Some(DEFAULT_COMPRESSION_LEVEL),
                 signature_config: None,
                 public_keys: None,
             }),
-        })
+        }
     }
 
     /// Set the compression level
@@ -608,9 +602,9 @@ impl WriterConfig {
         Ok(slf)
     }
 
-    fn without_compression(slf: PyRefMut<Self>) -> Result<PyRefMut<Self>, WrappedError> {
+    fn without_compression(slf: PyRefMut<Self>) -> PyRefMut<Self> {
         slf.inner.lock().expect("Mutex poisoned").compression_level = None;
-        Ok(slf)
+        slf
     }
 }
 
@@ -813,12 +807,12 @@ impl ReaderConfig {
 // -------- mla.MLAReader --------
 
 /// `ArchiveReader` is a generic type. To avoid generating several Python implementation
-/// (see https://pyo3.rs/v0.25.1/class#no-generic-parameters), this enum explicitely
+/// (see <https://pyo3.rs/v0.25.1/class#no-generic-parameters>), this enum explicitely
 /// instantiate `ArchiveReader` for common & expected types
 /// Additionally, as the GC in Python might drop objects at any time, we need to use
 /// `'static` lifetime for the reader. This should not be a problem as the reader is not
 /// supposed to be used after the drop of the parent object
-/// (see https://pyo3.rs/v0.25.1/class#no-lifetime-parameters)
+/// (see <https://pyo3.rs/v0.25.1/class#no-lifetime-parameters>)
 enum ExplicitReader {
     FileReader(ArchiveReader<'static, std::fs::File>),
 }
@@ -967,9 +961,9 @@ impl MLAReader {
 
     /// Write an archive entry given by its `EntryName` to @dest, which can be:
     /// - a string, corresponding to the output path
-    /// - a writable BufferedIOBase object (file-object like)
-    /// If a BufferedIOBase object is provided, the size of the chunck passed to `.write` can be adjusted
-    /// through @chunk_size (default to 4MB)
+    /// - a writable `BufferedIOBase` object (file-object like)
+    /// If a `BufferedIOBase` object is provided, the size of the chunck passed to `.write` can be adjusted
+    /// through `chunk_size` (default to 4MB)
     ///
     /// Example:
     /// ```python
@@ -980,7 +974,7 @@ impl MLAReader {
     /// ```python
     /// archive.write_entry_to(EntryName("file1"), "/path/to/extract/file1")
     /// ```
-    #[pyo3(signature = (key, dest, chunk_size=4194304))]
+    #[pyo3(signature = (key, dest, chunk_size=4_194_304))]
     fn write_entry_to(
         &mut self,
         py: Python,
@@ -998,7 +992,7 @@ impl MLAReader {
             io::copy(&mut archive_entry.unwrap().data, &mut output)?;
         } else if dest.is_instance(&py.get_type::<MLAReader>().getattr("_buffered_type")?)? {
             let src = &mut archive_entry.unwrap().data;
-            let mut buf = Vec::from_iter(std::iter::repeat_n(0, chunk_size));
+            let mut buf = std::iter::repeat_n(0, chunk_size).collect::<Vec<_>>();
             while let Ok(n) = src.read(&mut buf) {
                 if n == 0 {
                     break;
@@ -1022,25 +1016,26 @@ impl MLAReader {
 
     // cf. https://pyo3.rs/v0.25.1/function/signature.html
     #[pyo3(signature = (_exc_type=None, _exc_value=None, _traceback=None))]
+    #[allow(clippy::unused_self)]
     fn __exit__(
         &mut self,
         _exc_type: Option<&Bound<'_, PyAny>>,
         _exc_value: Option<&Bound<'_, PyAny>>,
         _traceback: Option<&Bound<'_, PyAny>>,
-    ) -> Result<bool, WrappedError> {
-        Ok(false)
+    ) -> bool {
+        false
     }
 }
 
 // -------- mla.MLAWriter --------
 
 /// `ArchiveWriter` is a generic type. To avoid generating several Python implementation
-/// (see https://pyo3.rs/v0.25.1/class#no-generic-parameters), this enum explicitely
+/// (see <https://pyo3.rs/v0.25.1/class#no-generic-parameters>), this enum explicitely
 /// instantiate `ArchiveWriter` for common & expected types
 /// Additionally, as the GC in Python might drop objects at any time, we need to use
 /// `'static` lifetime for the writer. This should not be a problem as the writer is not
 /// supposed to be used after the drop of the parent object
-/// (see https://pyo3.rs/v0.25.1/class#no-lifetime-parameters)
+/// (see <https://pyo3.rs/v0.25.1/class#no-lifetime-parameters>)
 enum ExplicitWriter {
     FileWriter(ArchiveWriter<'static, std::fs::File>),
 }
@@ -1177,9 +1172,9 @@ impl MLAWriter {
 
     /// Add an entry named by @src `EntryName` to an archive from @src, which can be:
     /// - a string, corresponding to the input path
-    /// - a readable BufferedIOBase object (file-object like)
-    /// If a BufferedIOBase object is provided, the size of the chunck passed to `.read` can be adjusted
-    /// through @chunk_size (default to 4MB)
+    /// - a readable `BufferedIOBase` object (file-object like)
+    /// If a `BufferedIOBase` object is provided, the size of the chunck passed to `.read` can be adjusted
+    /// through `chunk_size` (default to 4MB)
     ///
     /// Example:
     /// ```python
@@ -1190,7 +1185,7 @@ impl MLAWriter {
     /// with open("/path/to/file1", "rb") as f:
     ///    archive.add_entry_from(EntryName("file1"), f)
     /// ```
-    #[pyo3(signature = (key, src, chunk_size=4194304))]
+    #[pyo3(signature = (key, src, chunk_size=4_194_304))]
     fn add_entry_from(
         &mut self,
         py: Python,
@@ -1307,7 +1302,7 @@ impl EntryName {
 impl EntryName {
     #[new]
     #[pyo3(signature = (str_path))]
-    /// Builds an EntryName from a str interpreted like a path
+    /// Builds an `EntryName` from a str interpreted like a path
     ///
     /// See Rust `EntryName::from_path` doc to read what this function does
     fn new(str_path: &str) -> Result<Self, WrappedError> {
@@ -1318,7 +1313,7 @@ impl EntryName {
 
     #[staticmethod]
     #[pyo3(signature = (path))]
-    /// Builds an EntryName from an os.PathLike
+    /// Builds an `EntryName` from an os.PathLike
     ///
     /// See Rust `EntryName::from_path` doc to read what this function does
     fn from_path(path: PathBuf) -> Result<Self, WrappedError> {
@@ -1329,7 +1324,7 @@ impl EntryName {
 
     #[staticmethod]
     #[pyo3(signature = (bytes))]
-    /// Builds an EntryName from an os.PathLike
+    /// Builds an `EntryName` from an os.PathLike
     ///
     /// See Rust `EntryName::from_arbitrary_bytes` doc to read what this function does
     fn from_arbitrary_bytes(bytes: &[u8]) -> Result<Self, WrappedError> {

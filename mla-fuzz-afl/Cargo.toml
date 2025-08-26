@@ -10,5 +10,5 @@ edition = "2024"
 afl = "0.15"
 mla = { path = "../mla" }
 
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
+[lints]
+workspace = true

@@ -1,6 +1,5 @@
 use std::{
     fs::{self, File},
-    io::Error,
     path::PathBuf,
 };
 
@@ -87,7 +86,7 @@ fn reader_from_matches(matches: &ArgMatches) -> mla_v1::ArchiveReader<'static, F
     mla_v1::ArchiveReader::from_config(in_file, config_v1).unwrap()
 }
 
-fn upgrade(matches: &ArgMatches) -> Result<(), Error> {
+fn upgrade(matches: &ArgMatches) {
     let mut mla_in = reader_from_matches(matches);
 
     // Read the file list using metadata
@@ -118,25 +117,21 @@ fn upgrade(matches: &ArgMatches) -> Result<(), Error> {
         // we need to replace the backslashes with slashes (`/`) before serialization like Windows
         // does in `EntryName::from_path`.
         let normalized_filename = sub_file.filename.replace('\\', "/");
-        let new_entry_name = match EntryName::from_path(normalized_filename) {
-            Ok(name) => name,
-            Err(_) => {
-                eprintln!("Invalid empty name");
-                continue;
-            }
+        let Ok(new_entry_name) = EntryName::from_path(normalized_filename) else {
+            eprintln!("Invalid empty name");
+            continue;
         };
+
         mla_out
             .add_entry(new_entry_name, sub_file.size, sub_file.data)
             .unwrap();
     }
     mla_out.finalize().expect("Finalization error");
-
-    Ok(())
 }
 
 fn main() {
     let matches = app().get_matches();
-    upgrade(&matches).expect("Failed to upgrade");
+    upgrade(&matches);
 }
 
 #[cfg(test)]
@@ -159,8 +154,8 @@ pub(crate) mod tests {
 
         // Copy test files into base_temp
         for (file, src_dir) in &files {
-            fs::copy(format!("{}/{}", src_dir, file), base_temp.join(file))
-                .unwrap_or_else(|e| panic!("Failed to copy {}: {}", file, e));
+            fs::copy(format!("{src_dir}/{file}"), base_temp.join(file))
+                .unwrap_or_else(|e| panic!("Failed to copy {file}: {e}"));
         }
 
         // Change current dir to the temp test directory
@@ -179,7 +174,7 @@ pub(crate) mod tests {
                 "-p",
                 public_key,
             ]);
-            upgrade(&matches).expect("Upgrade failed");
+            upgrade(&matches);
         };
 
         // 1. Run upgrade on archive_v1.mla (basic test)
@@ -213,8 +208,7 @@ pub(crate) mod tests {
         for line in output_str.lines() {
             assert!(
                 !line.contains('\\'),
-                "Entry name contains backslash: {}",
-                line
+                "Entry name contains backslash: {line}"
             );
         }
 

@@ -10,9 +10,9 @@ pub use crate::layers::compress::DEFAULT_COMPRESSION_LEVEL;
 
 /// Configuration to write an archive.
 pub struct ArchiveWriterConfig {
-    pub(crate) compression_config: Option<CompressionConfig>,
-    pub(crate) encryption_config: Option<EncryptionConfig>,
-    pub(crate) signature_config: Option<SignatureConfig>,
+    pub(crate) compression: Option<CompressionConfig>,
+    pub(crate) encryption: Option<EncryptionConfig>,
+    pub(crate) signature: Option<SignatureConfig>,
 }
 
 impl ArchiveWriterConfig {
@@ -34,9 +34,9 @@ impl ArchiveWriterConfig {
         signing_private_keys: &[MLASigningPrivateKey],
     ) -> Result<Self, ConfigError> {
         Ok(ArchiveWriterConfig {
-            compression_config: Some(CompressionConfig::default()),
-            encryption_config: Some(EncryptionConfig::new(encryption_public_keys)?),
-            signature_config: Some(SignatureConfig::new(signing_private_keys)?),
+            compression: Some(CompressionConfig::default()),
+            encryption: Some(EncryptionConfig::new(encryption_public_keys)?),
+            signature: Some(SignatureConfig::new(signing_private_keys)?),
         })
     }
 
@@ -56,9 +56,9 @@ impl ArchiveWriterConfig {
         encryption_public_keys: &[MLAEncryptionPublicKey],
     ) -> Result<Self, ConfigError> {
         Ok(ArchiveWriterConfig {
-            compression_config: Some(CompressionConfig::default()),
-            encryption_config: Some(EncryptionConfig::new(encryption_public_keys)?),
-            signature_config: None,
+            compression: Some(CompressionConfig::default()),
+            encryption: Some(EncryptionConfig::new(encryption_public_keys)?),
+            signature: None,
         })
     }
 
@@ -77,9 +77,9 @@ impl ArchiveWriterConfig {
         signing_private_keys: &[MLASigningPrivateKey],
     ) -> Result<Self, ConfigError> {
         Ok(ArchiveWriterConfig {
-            compression_config: Some(CompressionConfig::default()),
-            encryption_config: None,
-            signature_config: Some(SignatureConfig::new(signing_private_keys)?),
+            compression: Some(CompressionConfig::default()),
+            encryption: None,
+            signature: Some(SignatureConfig::new(signing_private_keys)?),
         })
     }
 
@@ -89,31 +89,32 @@ impl ArchiveWriterConfig {
     /// configured with `with_compression_level` and `without_compression`.
     pub fn without_encryption_without_signature() -> Result<Self, ConfigError> {
         Ok(ArchiveWriterConfig {
-            compression_config: Some(CompressionConfig::default()),
-            encryption_config: None,
-            signature_config: None,
+            compression: Some(CompressionConfig::default()),
+            encryption: None,
+            signature: None,
         })
     }
 
     /// Set the compression level (0-11); bigger values cause denser, but slower compression
     pub fn with_compression_level(self, compression_level: u32) -> Result<Self, ConfigError> {
         let ArchiveWriterConfig {
-            compression_config,
-            encryption_config,
-            signature_config,
+            compression,
+            encryption,
+            signature,
         } = self;
-        let mut compression_config = compression_config.unwrap_or_default();
+        let mut compression_config = compression.unwrap_or_default();
         compression_config.set_compression_level(compression_level)?;
         Ok(ArchiveWriterConfig {
-            compression_config: Some(compression_config),
-            encryption_config,
-            signature_config,
+            compression: Some(compression_config),
+            encryption,
+            signature,
         })
     }
 
     /// Disable compression
+    #[must_use]
     pub fn without_compression(mut self) -> ArchiveWriterConfig {
-        self.compression_config = None;
+        self.compression = None;
         self
     }
 }
@@ -216,7 +217,7 @@ impl IncompleteArchiveReaderConfig {
     }
 }
 
-/// TruncatedReader decryption mode
+/// `TruncatedReader` decryption mode
 #[derive(Default, Clone, Copy, Eq, PartialEq, Debug)]
 pub enum TruncatedReaderDecryptionMode {
     /// Returns only the data that have been authenticated (in AEAD meaning, there will be NO signature verification) on decryption
@@ -271,7 +272,7 @@ impl TruncatedReaderConfig {
         TruncatedReaderConfig {
             accept_unencrypted: true,
             encrypt,
-            truncated_decryption_mode: Default::default(),
+            truncated_decryption_mode: TruncatedReaderDecryptionMode::default(),
         }
     }
 }

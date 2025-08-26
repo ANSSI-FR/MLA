@@ -8,6 +8,33 @@ members = [
 ]
 resolver = "3"
 
+[workspace.lints.clippy]
+# all lints that are on by default (correctness, suspicious, style, complexity, perf)
+all = {level = "deny", priority = -1}
+# lints which are rather strict or have occasional false positives
+pedantic = {level = "deny", priority = -1}
+# new lints that are still under development
+# nursery = {level = "deny", priority = -1}
+# lints which prevent the use of language and library features
+# restriction = {level = "deny", priority = -1}
+# lints for the cargo manifest
+# cargo = {level = "deny", priority = -1}
+# specific lints
+cast_precision_loss = "allow"
+fn_params_excessive_bools = "allow"
+# for performance reasons, some functions need to be inlined
+inline_always = "allow"
+missing-errors-doc = "allow"
+missing-panics-doc = "allow"
+must_use_candidate = "allow"
+# could be made stricter later for targets with small stacks
+large_stack_arrays = "allow"
+too-many-lines = "allow"
+zero_sized_map_values = "allow"
+
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
+
 [profile.release]
 codegen-units = 1   # Use minimum codegen units for best size and runtime performances
 opt-level = 3       # Optimize for maximum runtime performance

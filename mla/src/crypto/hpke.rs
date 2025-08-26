@@ -31,7 +31,7 @@ impl DHKEMCiphertext {
     }
 }
 
-/// Provides DHKEM encapsulation over X25519 curve (RFC 9180 §4.1) from a given CryptoRng
+/// Provides DHKEM encapsulation over X25519 curve (RFC 9180 §4.1) from a given `CryptoRng`
 ///
 /// Return a shared secret and the corresponding ciphertext
 pub(crate) fn dhkem_encap_from_rng(
@@ -79,13 +79,13 @@ const HYBRID_KEM_ID: u16 = 0x1020;
 /// Hybrid Recipient : DHKEM(X25519, HKDF-SHA256) + MLKEM, used internally in the Hybrid KEM to wrap the per-recipient shared secret
 const HYBRID_KEM_RECIPIENT_ID: u16 = 0x1120;
 
-/// Return the suite_id for the Hybrid KEM (RFC 9180 §5.1)
-/// suite_id = concat(
+/// Return the `suite_id` for the Hybrid KEM (RFC 9180 §5.1)
+/// `suite_id = concat(
 ///   "HPKE",
 ///   I2OSP(kem_id, 2),
 ///   I2OSP(kdf_id, 2),
 ///   I2OSP(aead_id, 2)
-/// )
+/// )`
 ///
 /// `kem_id` is kept as an argument to allow testing against RFC 9180 test vectors
 fn build_suite_id(kem_id: u16) -> [u8; 10] {
@@ -188,7 +188,7 @@ mod tests {
     use rand::{CryptoRng, RngCore};
     use x25519_dalek::StaticSecret;
 
-    /// Rng used for tests, mocking the RngCore and CryptoRng trait
+    /// Rng used for tests, mocking the `RngCore` and `CryptoRng` trait
     /// This RNG always returns the bytes provided during instanciation
     ///
     /// DO NOT USE OUTSIDE TESTS
@@ -249,7 +249,7 @@ mod tests {
     const RFC_SHARED_SECRET: [u8; 32] =
         hex!("fe0e18c9f024ce43799ae393c7e8fe8fce9d218875e8227b0187c04e7d2ea1fc");
 
-    /// Test Serialization and Deserialization of DHKEMCiphertext
+    /// Test Serialization and Deserialization of `DHKEMCiphertext`
     #[test]
     fn dhkem_ciphertext_serialization() {
         // from_bytes / to_bytes
@@ -268,28 +268,30 @@ mod tests {
     /// there is no regression change, even if we later change our base crate
     #[test]
     fn rfc9180_dhkem_vector_tests() {
-        // Key derivation
-        let (privkey_em, pubkey_em) = X25519HkdfSha256::derive_keypair(&RFC_IKME);
-        assert_eq!(&pubkey_em.to_bytes().as_ref(), &RFC_PKEM);
-        assert_eq!(&privkey_em.to_bytes().as_ref(), &RFC_SKEM);
-        let (privkey_rm, pubkey_rm) = X25519HkdfSha256::derive_keypair(&RFC_IKMR);
-        assert_eq!(&pubkey_rm.to_bytes().as_ref(), &RFC_PKRM);
-        assert_eq!(&privkey_rm.to_bytes().as_ref(), &RFC_SKRM);
+        // Key derivation for sender (ephemeral keypair)
+        let (sender_privkey, sender_pubkey) = X25519HkdfSha256::derive_keypair(&RFC_IKME);
+        assert_eq!(&sender_pubkey.to_bytes().as_ref(), &RFC_PKEM);
+        assert_eq!(&sender_privkey.to_bytes().as_ref(), &RFC_SKEM);
 
-        // DHKEM Encapsulation
+        // Key derivation for receiver (static keypair)
+        let (receiver_privkey, receiver_pubkey) = X25519HkdfSha256::derive_keypair(&RFC_IKMR);
+        assert_eq!(&receiver_pubkey.to_bytes().as_ref(), &RFC_PKRM);
+        assert_eq!(&receiver_privkey.to_bytes().as_ref(), &RFC_SKRM);
+
+        // DHKEM Encapsulation (sender side)
         let mut rng = MockRng::new(&RFC_IKME);
-        let (shared_secret, cipher_text) =
+        let (shared_secret_encap, encapped_key) =
             dhkem_encap_from_rng(&X25519PublicKey::from(RFC_PKRM), &mut rng).unwrap();
-        assert_eq!(&cipher_text.to_bytes().as_ref(), &RFC_ENC);
-        assert_eq!(&shared_secret.0.to_vec(), &RFC_SHARED_SECRET);
+        assert_eq!(&encapped_key.to_bytes().as_ref(), &RFC_ENC);
+        assert_eq!(&shared_secret_encap.0.to_vec(), &RFC_SHARED_SECRET);
 
-        // DHKEM Decapsulation
-        let shared_secret = dhkem_decap(
+        // DHKEM Decapsulation (receiver side)
+        let shared_secret_decap = dhkem_decap(
             &DHKEMCiphertext::from_bytes(&RFC_ENC).unwrap(),
             &StaticSecret::from(RFC_SKRM),
         )
         .unwrap();
-        assert_eq!(&shared_secret.0.to_vec(), &RFC_SHARED_SECRET);
+        assert_eq!(&shared_secret_decap.0.to_vec(), &RFC_SHARED_SECRET);
     }
 
     /// RFC 9180 §A.6.1 - DHKEM(P-521, HKDF-SHA512), HKDF-SHA512, AES-256-GCM

@@ -31,13 +31,13 @@ pub struct AesGcm256 {
     /// Size of the authenticated data, in bits
     associated_data_bits_len: u64,
     /// Encrypted data not yet hashed.
-    /// Corresponds to the bytes unaligned with the BLOCK_SIZE, ie:
+    /// Corresponds to the bytes unaligned with the `BLOCK_SIZE`, ie:
     /// ```ascii-art
     /// [BLOCK_SIZE][BLOCK_SIZE]
     /// [ data encrypted ]
     ///             [    ] -> data remaining, going to `current_block`
     /// ```
-    /// Once `current_block` is full (with a length of BLOCK_SIZE), it is used
+    /// Once `current_block` is full (with a length of `BLOCK_SIZE`), it is used
     /// to update the `ghash`, and is cleared.
     current_block: Vec<u8>,
     /// Number of bytes encrypted - workaround for
@@ -49,6 +49,8 @@ pub struct AesGcm256 {
 pub type Tag = GenericArray<u8, U16>;
 
 impl AesGcm256 {
+    // errors are from mla/src/error.rs
+    #[allow(clippy::unnecessary_wraps)]
     pub fn new(key: &Key, nonce: &Nonce, associated_data: &[u8]) -> Result<AesGcm256, Error> {
         // Convert the nonce (96 bits) to the AES-GCM form
         let mut counter_block = [0u8; BLOCK_SIZE];
@@ -88,20 +90,19 @@ impl AesGcm256 {
                 self.cipher.apply_keystream(buffer);
                 self.current_block.extend_from_slice(buffer);
                 return;
-            } else {
-                let (in_block, out_block) =
-                    buffer.split_at_mut(BLOCK_SIZE - self.current_block.len());
-                self.cipher.apply_keystream(in_block);
-                self.current_block.extend_from_slice(in_block);
-                // `current_block` length is now BLOCK_SIZE -> update GHash and
-                // clear it
-                self.ghash
-                    .update(slice::from_ref(self.current_block.as_slice().into()));
-                self.current_block.clear();
-
-                // Deals with the rest of the data, now aligned on BLOCK_SIZE
-                buffer = out_block;
             }
+
+            let (in_block, out_block) = buffer.split_at_mut(BLOCK_SIZE - self.current_block.len());
+            self.cipher.apply_keystream(in_block);
+            self.current_block.extend_from_slice(in_block);
+            // `current_block` length is now BLOCK_SIZE -> update GHash and
+            // clear it
+            self.ghash
+                .update(slice::from_ref(self.current_block.as_slice().into()));
+            self.current_block.clear();
+
+            // Deals with the rest of the data, now aligned on BLOCK_SIZE
+            buffer = out_block;
         }
 
         let mut chunks = buffer.chunks_exact_mut(BLOCK_SIZE);

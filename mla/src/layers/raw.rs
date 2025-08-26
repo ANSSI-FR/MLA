@@ -19,7 +19,7 @@ impl<W: InnerWriterTrait> RawLayerWriter<W> {
     }
 }
 
-impl<'a, W: InnerWriterTrait> LayerWriter<'a, W> for RawLayerWriter<W> {
+impl<W: InnerWriterTrait> LayerWriter<'_, W> for RawLayerWriter<W> {
     fn finalize(self: Box<Self>) -> Result<W, Error> {
         // No recursive call, this is the last layer
         Ok(self.inner)
@@ -62,7 +62,7 @@ impl<R: InnerReaderTrait> RawLayerReader<R> {
     }
 }
 
-impl<'a, R: InnerReaderTrait> LayerReader<'a, R> for RawLayerReader<R> {
+impl<R: InnerReaderTrait> LayerReader<'_, R> for RawLayerReader<R> {
     fn into_raw(self: Box<Self>) -> R {
         self.inner
     }
@@ -130,7 +130,7 @@ impl<R: Read> Read for RawLayerFailSafeReader<R> {
     }
 }
 
-impl<'a, R: Read> LayerFailSafeReader<'a, R> for RawLayerFailSafeReader<R> {}
+impl<R: Read> LayerFailSafeReader<'_, R> for RawLayerFailSafeReader<R> {}
 
 #[cfg(test)]
 mod tests {
