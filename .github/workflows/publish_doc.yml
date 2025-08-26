@@ -27,6 +27,18 @@ jobs:
           command: install
           args: mdbook mdbook-katex --locked
 
+      # GitHub Flavored Markdown's ```math blocks are not supported by GitHub Pages,
+      # but KaTeX requires $$ math delimiters. This step converts ```math blocks to $$ blocks.
+      - name: Preprocess markdown files - convert ```math blocks to $$ blocks
+        run: |
+          find ./doc/src -name '*.md' -exec sh -c '
+            awk '\''
+              /^```math$/ { in_math=1; print "$$"; next }
+              /^```$/ && in_math { in_math=0; print "$$"; next }
+              { print }
+            '\'' "$1" > tmp && mv tmp "$1"
+          ' sh {} \;
+
       - name: Build the book
         run: mdbook build ./doc
 
@@ -38,7 +50,7 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'  # Ensure only this branch triggers deploy
+    if: github.ref == 'refs/heads/main'
     environment:
       name: github-pages # GitHub automatically uses this environment for Pages
       url: ${{ steps.deployment.outputs.page_url }}
