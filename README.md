@@ -112,7 +112,7 @@ Note: Native builds are optimized for your machine's CPU and **are not portable*
 
 # API usage
 
-See [https://docs.rs/mla](https://docs.rs/mla)
+See [https://docs.rs/mla](https://docs.rs/mla/2.0.0-alpha/mla/index.html)
 
 # Using MLA with others languages
 
