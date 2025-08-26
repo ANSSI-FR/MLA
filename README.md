@@ -7,8 +7,7 @@ https://docs.rs/mla)
 https://crates.io/crates/mlar)
 [![PyPI - Version](https://img.shields.io/pypi/v/mla-archive?label=PyPI%20%7C%20mla-archive)](https://pypi.org/project/mla-archive/)
 
-Multi Layer Archive (MLA)
-=
+# Multi Layer Archive (MLA)
 
 MLA is an archive file format with the following features:
 
@@ -26,8 +25,7 @@ MLA is an archive file format with the following features:
   * Unauthenticated repair: authenticated and unauthenticated encrypted chunks of data are retrieved. Use at your own risk.
 * Arguably less prone to bugs, especially while parsing an untrusted archive (Rust safety)
 
-Repository
-=
+# Repository
 
 This repository contains:
 
@@ -40,8 +38,7 @@ This repository contains:
 * `mla-fuzz-afl` : a Rust utility to fuzz `mla`
 * `.github`: Continuous Integration needs
 
-Quick command-line usage
-=
+# Quick command-line usage
 
 Here are some commands to use ``mlar`` in order to work with archives in MLA format.
 
@@ -113,21 +110,18 @@ RUSTFLAGS="-Ctarget-cpu=native" cargo build --release --target x86_64-unknown-li
 
 Note: Native builds are optimized for your machine's CPU and **are not portable**. Use them only when running on the same machine you build on.
 
-API usage
-=
+# API usage
 
 See [https://docs.rs/mla](https://docs.rs/mla)
 
-Using MLA with others languages
-=
+# Using MLA with others languages
 
 Bindings are available for:
 
-* [C/CPP](bindings/C/README.md)
+* [C/C++](bindings/C/README.md)
 * [Python](bindings/python/README.md)
 
-Security
--
+## Security
 
 * Please keep in mind, it is generally not safe to extract in a place where at least one ancestor is writable by others (symbolic link attacks).
 * Even if encrypted with an authenticated cipher, if you receive an unsigned archive, it may have been crafted by anyone having your public key and thus can contain arbitrary data.
@@ -135,8 +129,7 @@ Security
 * mlar escapes entry names on output to avoid security issues.
 * Except for symbolic link attacks, mlar will not extract outside given output directory.
 
-FAQ
--
+## FAQ
 
 **Is `MLAArchiveWriter` `Send`?**
 
@@ -173,8 +166,7 @@ Tweaking these formats would likely have resulted in similar properties. The
 choice has been made to keep a better control over what the format is capable 
 of, and to (try to) KISS.
 
-Performance
--
+## Performance
 
 One can evaluate the performance through embedded benchmark, based on [Criterion](https://github.com/bheisler/criterion.rs).
 
@@ -205,7 +197,9 @@ reader_multiple_layers_multiple_block_size_multifiles_linear/compression: true, 
 
 Criterion.rs documentation explains how to get back HTML reports, compare results, etc.
 
-The AES-NI extension is enabled in the compilation toolchain for the supported architectures, leading to massive performance gain for the encryption layer, especially in reading operations. Because the crate `aesni` statically enables it, it might lead to errors if the user's architecture does not support it. It could be disabled at the compilation time, or by commenting the associated section in `.cargo/config`.
+### AES-NI support
+
+As described in the [aes crate documentation](https://docs.rs/aes/0.8.4/aes/index.html#x86x86_64-intrinsics-aes-ni), this crate uses **runtime detection** on `i686` and `x86_64` targets to check if AES-NI is available. If AES-NI is not detected, it automatically falls back to a constant-time software implementation.
 
 # Contributing
 

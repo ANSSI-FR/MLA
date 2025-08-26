@@ -1766,3 +1766,97 @@ fn test_consecutive_sep_stdin() {
         assert_eq!(content, bytes[index]);
     }
 }
+
+#[test]
+fn test_archive_with_missing_file_fails_by_default() {
+    // Create a temp output archive file
+    let mlar_file = NamedTempFile::new("output.mla").unwrap();
+
+    // Create a valid temporary input file
+    let file1 = NamedTempFile::new("file1.txt").unwrap();
+    std::fs::write(&file1, "Test1").unwrap();
+    let missing_file_name = "missing_file.bin";
+
+    // === mlar create ===
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("create")
+        .arg("-l")
+        .arg("compress")
+        .arg("-o")
+        .arg(mlar_file.path())
+        .arg(file1.path())
+        .arg(missing_file_name)
+        .assert()
+        .failure();
+}
+
+#[test]
+fn test_archive_with_missing_file_skips_and_succeeds() {
+    // Create a temp output archive file
+    let mlar_file = NamedTempFile::new("output.mla").unwrap();
+
+    // Create a valid temporary input file
+    let file1 = NamedTempFile::new("file1.txt").unwrap();
+    std::fs::write(&file1, "Test1").unwrap();
+    let file1_name = "file1.txt";
+    let missing_file_name = "missing_file.bin";
+
+    // === mlar create ===
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    let output = cmd
+        .arg("create")
+        .arg("-l")
+        .arg("compress")
+        .arg("-o")
+        .arg(mlar_file.path())
+        .arg("--skip-not-found")
+        .arg(file1.path())
+        .arg(missing_file_name)
+        .assert()
+        .success()
+        .get_output()
+        .stderr
+        .clone();
+
+    let stderr_str = String::from_utf8_lossy(&output);
+
+    // Check that missing file is explicitly reported
+    assert!(
+        stderr_str.contains("does not exist"),
+        "Expected warning for missing file not found in stderr"
+    );
+    assert!(
+        stderr_str.contains("skipping"),
+        "Expected 'skipping' message not found in stderr"
+    );
+    assert!(
+        stderr_str.contains(file1_name),
+        "Expected file1 to be reported in stderr"
+    );
+
+    // === mlar list ===
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    let output = cmd
+        .arg("list")
+        .arg("-i")
+        .arg(mlar_file.path())
+        .arg("--skip-signature-verification")
+        .arg("--accept-unencrypted")
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    let stdout_str = String::from_utf8_lossy(&output);
+
+    // Check that only the valid file is listed
+    assert!(
+        stdout_str.contains(file1_name),
+        "Expected file1 in archive list output"
+    );
+    assert!(
+        !stdout_str.contains(missing_file_name),
+        "Missing file should not appear in archive list"
+    );
+}

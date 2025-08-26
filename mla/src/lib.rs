@@ -2815,7 +2815,7 @@ pub(crate) mod tests {
 
     #[test]
     fn empty_blocks() {
-        // Add a file with containning an empty block - it should work
+        // Add a file with containing an empty block - it should work
         let file = Vec::new();
         let config = ArchiveWriterConfig::without_encryption_without_signature()
             .unwrap()
