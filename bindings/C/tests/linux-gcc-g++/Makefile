@@ -34,9 +34,14 @@ test_create_unicode: $(MLAR) create_unicode.elf
 
 test_create_stream: $(MLAR) create_stream.elf
 	yes "All work and no play makes Jack a dull boy" | dd bs=1M count=2 iflag=fullblock | ./create_stream.elf
-	bash -c "$(MLAR) cat test.txt --skip-signature-verification --input ./test.mla -k ../../../../samples/test_mlakey.mlapriv | sha256sum -c <(echo \"132f5f1a403697b63eec77930cb1ab38414c82ca4c7d415d8dc6e3d3eb6a8b98 -\")"
+	@echo "132f5f1a403697b63eec77930cb1ab38414c82ca4c7d415d8dc6e3d3eb6a8b98  -" > expected_sum.txt
+	$(MLAR) cat test.txt --skip-signature-verification --input ./test.mla -k ../../../../samples/test_mlakey.mlapriv | sha256sum -c expected_sum.txt
+
 	yes "All work and no play makes Jack a dull boy" | dd bs=1M count=20 iflag=fullblock | ./create_stream.elf
-	bash -c "$(MLAR) cat test.txt --skip-signature-verification --input ./test.mla -k ../../../../samples/test_mlakey.mlapriv | sha256sum -c <(echo \"e667ca14e52cbea16f6e0413e5fdfb7e789a3f1af80c2a795c36e2523195a20d -\")"
+	@echo "e667ca14e52cbea16f6e0413e5fdfb7e789a3f1af80c2a795c36e2523195a20d  -" > expected_sum.txt
+	$(MLAR) cat test.txt --skip-signature-verification --input ./test.mla -k ../../../../samples/test_mlakey.mlapriv | sha256sum -c expected_sum.txt
+
+	@rm -f expected_sum.txt
 
 test_create_write_byte_by_byte: $(MLAR) create_write_byte_by_byte.elf
 	./create_write_byte_by_byte.elf

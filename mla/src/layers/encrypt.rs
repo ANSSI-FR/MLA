@@ -30,6 +30,8 @@ use super::traits::InnerReaderTrait;
 const CIPHER_BUF_SIZE: u64 = 4096;
 const NORMAL_CHUNK_PT_SIZE: u64 = 128 * 1024;
 const NORMAL_CHUNK_PT_AND_TAG_SIZE: u64 = NORMAL_CHUNK_PT_SIZE + TAG_LENGTH as u64;
+// allowed as NORMAL_CHUNK_PT_SIZE and TAG_LENGTH are small enough and known at compile time
+#[allow(clippy::cast_possible_truncation)]
 const NORMAL_CHUNK_PT_AND_TAG_USIZE: usize = NORMAL_CHUNK_PT_AND_TAG_SIZE as usize;
 
 const ASSOCIATED_DATA: &[u8; 0] = b"";
@@ -128,6 +130,9 @@ impl<R: Read> MLADeserialize<R> for KeyCommitmentAndTag {
 }
 
 /// Return a Cryptographic random number generator
+// Returns a Result to allow error propagation when we will
+// switch to RNG API that will fail without panicking
+#[allow(clippy::unnecessary_wraps)]
 pub(crate) fn get_crypto_rng() -> Result<ChaCha20Rng, Error> {
     // Use OsRng from crate rand, that uses getrandom() from crate getrandom.
     // getrandom provides implementations for many systems, listed on
@@ -158,6 +163,8 @@ pub(crate) struct InternalEncryptionConfig {
 }
 
 impl InternalEncryptionConfig {
+    // Secret cryptographic material is passed by value to ensure it is not accidentally reused
+    #[allow(clippy::needless_pass_by_value)]
     fn from(shared_secret: HybridKemSharedSecret) -> Result<Self, Error> {
         let (key, nonce) = key_schedule_base_hybrid_kem(&shared_secret.0, HPKE_INFO_LAYER)?;
 
@@ -195,7 +202,7 @@ impl<R: Read> MLADeserialize<R> for EncryptionPersistentConfig {
     }
 }
 
-/// ArchiveWriterConfig specific configuration for the Encryption, to let API users specify encryption options
+/// `ArchiveWriterConfig` specific configuration for the Encryption, to let API users specify encryption options
 pub(crate) struct EncryptionConfig {
     /// Public keys of recipients
     public_keys: HybridMultiRecipientsPublicKeys,
@@ -269,7 +276,7 @@ impl EncryptionReaderConfig {
 
     pub fn load_persistent(
         &mut self,
-        config: EncryptionPersistentConfig,
+        config: &EncryptionPersistentConfig,
     ) -> Result<(), ConfigError> {
         // Unwrap the private key
         if self.private_keys.is_empty() {
@@ -283,7 +290,7 @@ impl EncryptionReaderConfig {
                     .or(Err(ConfigError::KeyWrappingComputationError))?;
                 self.encrypt_parameters = Some((key, nonce));
                 break;
-            };
+            }
         }
 
         let (key, nonce) = &self
@@ -436,13 +443,14 @@ impl<W: InnerWriterTrait> Write for InternalEncryptionLayerWriter<'_, W> {
             std::cmp::min(CIPHER_BUF_SIZE, buf.len() as u64),
             NORMAL_CHUNK_PT_SIZE - self.current_chunk_offset,
         );
-        let mut buf_tmp = Vec::with_capacity(size as usize);
+        let mut buf_tmp =
+            Vec::with_capacity(usize::try_from(size).expect("Failed to convert size to usize"));
         let buf_src = BufReader::new(buf);
         io::copy(&mut buf_src.take(size), &mut buf_tmp)?;
         self.cipher.encrypt(&mut buf_tmp);
         self.inner.write_all(&buf_tmp)?;
         self.current_chunk_offset += size;
-        Ok(size as usize)
+        Ok(usize::try_from(size).expect("Failed to convert size to usize"))
     }
 
     fn flush(&mut self) -> io::Result<()> {
@@ -489,7 +497,7 @@ impl<'a, R: 'a + InnerReaderTrait> EncryptionLayerReader<'a, R> {
             .checked_add(8)
             .ok_or(Error::DeserializationError)?;
         inner.seek(SeekFrom::Start(encryption_header_length))?;
-        reader_config.load_persistent(persistent_config)?;
+        reader_config.load_persistent(&persistent_config)?;
 
         // InternalEncryptionLayerReader is feeded with something with encrypted_inner_layer followed by end_of_encrypted_inner_layer_magic
         let inner: Box<dyn 'a + LayerReader<'a, R>> = Box::new(StripHeadTailReader::new(
@@ -499,7 +507,7 @@ impl<'a, R: 'a + InnerReaderTrait> EncryptionLayerReader<'a, R> {
             raw_encryption_layer_length,
             0,
         )?);
-        let inner = InternalEncryptionLayerReader::new(inner, reader_config, None)?;
+        let inner = InternalEncryptionLayerReader::new(inner, &reader_config, None)?;
         Ok(Self(inner))
     }
 }
@@ -551,7 +559,7 @@ struct InternalEncryptionLayerReader<R> {
 impl<R: Read> InternalEncryptionLayerReader<R> {
     fn new(
         mut inner: R,
-        config: EncryptionReaderConfig,
+        config: &EncryptionReaderConfig,
         truncated_decryption_mode: Option<TruncatedReaderDecryptionMode>,
     ) -> Result<Self, Error> {
         // load first chunk in next_chunk_cache
@@ -598,6 +606,7 @@ impl<R: Read> InternalEncryptionLayerReader<R> {
     }
 
     fn _check_final(&mut self) -> Result<(), Error> {
+        #[allow(clippy::used_underscore_binding)]
         if let Some(mut final_block) = self._final_block.take() {
             let mut cipher = AesGcm256::new(
                 &self.key,
@@ -621,10 +630,10 @@ impl<R: Read> InternalEncryptionLayerReader<R> {
                 .ok_or_else(|| {
                     Error::WrongReaderState("Invalid final block data part".to_owned())
                 })?;
-            if computed_tag.ct_eq(tag_part).unwrap_u8() != 1 {
-                Err(Error::InvalidLastTag)
-            } else {
+            if computed_tag.ct_eq(tag_part).unwrap_u8() == 1 {
                 Ok(())
+            } else {
+                Err(Error::InvalidLastTag)
             }
         } else {
             Err(Error::AssertionError(
@@ -681,6 +690,7 @@ impl<R: Read> InternalEncryptionLayerReader<R> {
         }
     }
 
+    #[allow(clippy::unused_self)]
     fn try_tag_pos_at_from_0_to(&self, _max_pos: usize) -> Option<usize> {
         // TODO later. For the moment we do not support repairing last bytes
         // in archives where the final tag is truncated
@@ -739,20 +749,21 @@ impl<R: Read> InternalEncryptionLayerReader<R> {
             .read_to_end(&mut self.next_chunk_cache)?;
         // At this point, chunk_cache points to the start of a (maybe empty) ciphertext block.
         // Our read implementation never calls load_in_cache again if the plaintext/ciphertext content in chunk_cache is smaller than NORMAL_CHUNK_CT_SIZE
-        let end_of_tag_pos = if self.truncated_decryption_mode.is_none()
-            && self.is_at_least_in_last_data_chunk()
-        {
-            let content_len =
-                self.all_plaintext_size
-                    .saturating_sub(self.current_position_in_this_layer) as usize;
-            if content_len == 0 {
-                return Ok(None);
-            } else {
+        let end_of_tag_pos =
+            if self.truncated_decryption_mode.is_none() && self.is_at_least_in_last_data_chunk() {
+                let content_len = usize::try_from(
+                    self.all_plaintext_size
+                        .saturating_sub(self.current_position_in_this_layer),
+                )
+                .expect("Failed to convert content length to usize");
+                if content_len == 0 {
+                    return Ok(None);
+                }
+
                 content_len + TAG_LENGTH + CHUNK_HEAD_USIZE
-            }
-        } else {
-            self.get_end_of_tag_pos()?
-        };
+            } else {
+                self.get_end_of_tag_pos()?
+            };
 
         let end_of_ciphertext_pos = end_of_tag_pos.saturating_sub(TAG_LENGTH);
 
@@ -812,9 +823,13 @@ impl<R: Read> InternalEncryptionLayerReader<R> {
             return self.read_internal(buf);
         }
         // Consume at most the bytes leaving in the cache, to detect the renewal need
-        let size = std::cmp::min(cache_to_consume as usize, buf.len());
+        let size = std::cmp::min(
+            usize::try_from(cache_to_consume).expect("Failed to convert cache to consume to usize"),
+            buf.len(),
+        );
         let chunk_cache_read_size = self.chunk_cache.read(&mut buf[..size])?;
-        self.current_position_in_this_layer += chunk_cache_read_size as u64;
+        self.current_position_in_this_layer += u64::try_from(chunk_cache_read_size)
+            .expect("Failed to convert read chunk cache size to usize");
         if chunk_cache_read_size == 0 {
             // TODO: self.check_final()?;
         }
@@ -824,9 +839,12 @@ impl<R: Read> InternalEncryptionLayerReader<R> {
 
 impl<R: Read + Seek> InternalEncryptionLayerReader<R> {
     fn check_last_block(&mut self) -> Result<(), Error> {
-        self.inner.seek(SeekFrom::End(
-            -((FINAL_INFO_SIZE_WOM + END_OF_ENCRYPTED_INNER_LAYER_MAGIC.len()) as i64),
-        ))?;
+        let offset_usize = FINAL_INFO_SIZE_WOM + END_OF_ENCRYPTED_INNER_LAYER_MAGIC.len();
+
+        let offset_i64 = i64::try_from(offset_usize)
+            .map_err(|_| Error::Other("Offset too large for i64 conversion".into()))?;
+
+        self.inner.seek(SeekFrom::End(-offset_i64))?;
 
         self.cipher = AesGcm256::new(
             &self.key,
@@ -942,9 +960,19 @@ impl<R: Read + Seek> Seek for InternalEncryptionLayerReader<R> {
                     // Optimization
                     Ok(self.current_position_in_this_layer)
                 } else {
-                    self.seek(SeekFrom::Start(
-                        (self.current_position_in_this_layer as i64 + value) as u64,
-                    ))
+                    let pos_i64 =
+                        i64::try_from(self.current_position_in_this_layer).map_err(|_| {
+                            Error::Other("Position overflow converting u64 to i64".into())
+                        })?;
+
+                    let new_pos_i64 = pos_i64
+                        .checked_add(value)
+                        .ok_or(Error::Other("Position overflow when adding offset".into()))?;
+
+                    let new_pos = u64::try_from(new_pos_i64)
+                        .map_err(|_| Error::Other("Negative position not allowed".into()))?;
+
+                    self.seek(SeekFrom::Start(new_pos))
                 }
             }
             SeekFrom::End(pos) => {
@@ -952,9 +980,18 @@ impl<R: Read + Seek> Seek for InternalEncryptionLayerReader<R> {
                     // Seeking past the end is unsupported
                     return Err(Error::EndOfStream.into());
                 }
-                self.seek(SeekFrom::Start(
-                    (pos + self.all_plaintext_size as i64) as u64,
-                ))
+
+                let size_i64 = i64::try_from(self.all_plaintext_size)
+                    .map_err(|_| Error::Other("Overflow converting size to i64".into()))?;
+
+                let new_pos_i64 = size_i64
+                    .checked_add(pos)
+                    .ok_or(Error::Other("Overflow adding offset to size".into()))?;
+
+                let new_pos = u64::try_from(new_pos_i64)
+                    .map_err(|_| Error::Other("Overflow converting new position to u64".into()))?;
+
+                self.seek(SeekFrom::Start(new_pos))
             }
         }
     }
@@ -969,7 +1006,7 @@ pub(crate) struct EncryptionLayerFailSafeReader<'a, R: Read> {
 impl<'a, R: 'a + Read> EncryptionLayerFailSafeReader<'a, R> {
     fn new_skip_header(
         inner: Box<dyn 'a + LayerFailSafeReader<'a, R>>,
-        config: EncryptionReaderConfig,
+        config: &EncryptionReaderConfig,
         truncated_decryption_mode: TruncatedReaderDecryptionMode,
     ) -> Result<Self, Error> {
         let mut inner =
@@ -987,8 +1024,8 @@ impl<'a, R: 'a + Read> EncryptionLayerFailSafeReader<'a, R> {
     ) -> Result<Self, Error> {
         let (read_encryption_metadata, _) = read_encryption_header_after_magic(&mut inner)?;
         let persistent_config = persistent_config.unwrap_or(read_encryption_metadata); // this lets us ensure we use previously verified encryption context if given (e.g. by signature layer)
-        reader_config.load_persistent(persistent_config)?;
-        Self::new_skip_header(inner, reader_config, truncated_decryption_mode)
+        reader_config.load_persistent(&persistent_config)?;
+        Self::new_skip_header(inner, &reader_config, truncated_decryption_mode)
     }
 }
 
@@ -1067,7 +1104,7 @@ mod tests {
             encrypt_parameters: Some((KEY, NONCE)),
         };
         let mut encrypt_r =
-            InternalEncryptionLayerReader::new(Box::new(RawLayerReader::new(buf)), config, None)
+            InternalEncryptionLayerReader::new(Box::new(RawLayerReader::new(buf)), &config, None)
                 .unwrap();
         encrypt_r.initialize().unwrap();
         let mut output = Vec::new();
@@ -1086,7 +1123,7 @@ mod tests {
         };
         let mut encrypt_r = EncryptionLayerFailSafeReader::new_skip_header(
             Box::new(RawLayerFailSafeReader::new(out.as_slice())),
-            config,
+            &config,
             TruncatedReaderDecryptionMode::OnlyAuthenticatedData,
         )
         .unwrap();
@@ -1116,7 +1153,7 @@ mod tests {
         };
         let mut encrypt_r = EncryptionLayerFailSafeReader::new_skip_header(
             Box::new(RawLayerFailSafeReader::new(&out[..stop])),
-            config,
+            &config,
             TruncatedReaderDecryptionMode::DataEvenUnauthenticated,
         )
         .unwrap();
@@ -1141,7 +1178,9 @@ mod tests {
             )
             .unwrap(),
         );
-        let length = (NORMAL_CHUNK_PT_SIZE * 2 + 128) as usize;
+        let length = usize::try_from(NORMAL_CHUNK_PT_SIZE * 2)
+            .expect("Failed to convert length to usize")
+            + 128;
         let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(0);
         let data: Vec<u8> = Alphanumeric.sample_iter(&mut rng).take(length).collect();
         encrypt_w.write_all(&data).unwrap();
@@ -1170,14 +1209,18 @@ mod tests {
         };
         let mut encrypt_r = EncryptionLayerFailSafeReader::new_skip_header(
             Box::new(RawLayerFailSafeReader::new(trunc)),
-            config,
+            &config,
             TruncatedReaderDecryptionMode::OnlyAuthenticatedData,
         )
         .unwrap();
         let mut output = Vec::new();
         assert!(encrypt_r.read_to_end(&mut output).is_err());
         // We should have correctly read 2*CHUNK_SIZE inner data, the last 128 bytes being unauthenticated
-        assert_eq!(output.len(), 2 * NORMAL_CHUNK_PT_SIZE as usize);
+        assert_eq!(
+            output.len(),
+            usize::try_from(2 * NORMAL_CHUNK_PT_SIZE)
+                .expect("Failed to convert output length to usize")
+        );
         assert_eq!(output, data[..output.len()]);
 
         let config = EncryptionReaderConfig {
@@ -1187,7 +1230,7 @@ mod tests {
         // read without tag checking
         let mut encrypt_r = EncryptionLayerFailSafeReader::new_skip_header(
             Box::new(RawLayerFailSafeReader::new(trunc)),
-            config,
+            &config,
             TruncatedReaderDecryptionMode::DataEvenUnauthenticated,
         )
         .unwrap();
@@ -1212,7 +1255,7 @@ mod tests {
             encrypt_parameters: Some((KEY, NONCE)),
         };
         let mut encrypt_r =
-            InternalEncryptionLayerReader::new(Box::new(RawLayerReader::new(buf)), config, None)
+            InternalEncryptionLayerReader::new(Box::new(RawLayerReader::new(buf)), &config, None)
                 .unwrap();
         encrypt_r.initialize().unwrap();
         let mut output = Vec::new();
@@ -1250,7 +1293,8 @@ mod tests {
             )
             .unwrap(),
         );
-        let length = (NORMAL_CHUNK_PT_SIZE * 2) as usize;
+        let length =
+            usize::try_from(NORMAL_CHUNK_PT_SIZE * 2).expect("Failed to convert length to usize");
         let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(0);
         let data: Vec<u8> = Alphanumeric.sample_iter(&mut rng).take(length).collect();
         encrypt_w.write_all(&data).unwrap();
@@ -1274,7 +1318,7 @@ mod tests {
             encrypt_parameters: Some((KEY, NONCE)),
         };
         let mut encrypt_r =
-            InternalEncryptionLayerReader::new(Box::new(RawLayerReader::new(buf)), config, None)
+            InternalEncryptionLayerReader::new(Box::new(RawLayerReader::new(buf)), &config, None)
                 .unwrap();
         encrypt_r.initialize().unwrap();
         let mut output = Vec::new();
@@ -1288,7 +1332,11 @@ mod tests {
         assert_eq!(pos, NORMAL_CHUNK_PT_SIZE);
         let mut output = Vec::new();
         encrypt_r.read_to_end(&mut output).unwrap();
-        assert_eq!(output.as_slice(), &data[NORMAL_CHUNK_PT_SIZE as usize..]);
+        assert_eq!(
+            output.as_slice(),
+            &data[usize::try_from(NORMAL_CHUNK_PT_SIZE)
+                .expect("Failed to convert position to usize")..]
+        );
     }
 
     #[test]

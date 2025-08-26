@@ -79,8 +79,7 @@ impl error::Error for MlarError {
             MlarError::IO(err) => Some(err),
             MlarError::Mla(err) => Some(err),
             MlarError::Config(err) => Some(err),
-            MlarError::InvalidEntryNameToPath => None,
-            MlarError::InvalidGlobPattern => None,
+            MlarError::InvalidEntryNameToPath | MlarError::InvalidGlobPattern => None,
         }
     }
 }
@@ -98,7 +97,7 @@ fn escaped_path_to_string(path: &Path) -> String {
     .unwrap()
 }
 
-/// Allow for different kind of output. As ArchiveWriter is parametrized over
+/// Allow for different kind of output. As `ArchiveWriter` is parametrized over
 /// a Writable type, `ArchiveWriter<File>` and `ArchiveWriter<io::stdout>`
 /// can't coexist in the same code path.
 enum OutputTypes {
@@ -141,7 +140,7 @@ fn open_private_keys(
             private_decryption_keys.push(private_decryption_key);
             private_signing_keys.push(private_signing_key);
         }
-    };
+    }
 
     Ok((private_decryption_keys, private_signing_keys))
 }
@@ -171,12 +170,12 @@ fn open_public_keys(
             public_encryption_keys.push(public_encryption_key);
             public_signature_verification_keys.push(public_signature_verification_key);
         }
-    };
+    }
 
     Ok((public_encryption_keys, public_signature_verification_keys))
 }
 
-/// Return the ArchiveWriterConfig corresponding to provided arguments
+/// Return the `ArchiveWriterConfig` corresponding to provided arguments
 fn config_from_matches(
     matches: &ArgMatches,
     create_command: bool,
@@ -193,7 +192,7 @@ fn config_from_matches(
         layers.push("compress");
         layers.push("encrypt");
         layers.push("sign");
-    };
+    }
 
     let output_public_keys_arg_name = if create_command {
         "public_keys"
@@ -279,9 +278,7 @@ fn config_from_matches(
             let comp_level: u32 = *matches
                 .get_one::<u32>("compression_level")
                 .expect("compression_level must be an int");
-            if comp_level > 11 {
-                panic!("compression_level must be in [0 .. 11]");
-            }
+            assert!((comp_level <= 11), "compression_level must be in [0 .. 11]");
             config.with_compression_level(comp_level).unwrap()
         } else {
             config
@@ -294,18 +291,18 @@ fn config_from_matches(
 }
 
 fn destination_from_output_argument(output_argument: &PathBuf) -> Result<OutputTypes, MlarError> {
-    let destination = if output_argument.as_os_str() != "-" {
+    let destination = if output_argument.as_os_str() == "-" {
+        OutputTypes::Stdout
+    } else {
         let path = Path::new(&output_argument);
         OutputTypes::File {
             file: File::create_new(path)?,
         }
-    } else {
-        OutputTypes::Stdout
     };
     Ok(destination)
 }
 
-/// Return an ArchiveWriter corresponding to provided arguments
+/// Return an `ArchiveWriter` corresponding to provided arguments
 fn writer_from_matches<'a>(
     matches: &ArgMatches,
     create_command: bool,
@@ -321,8 +318,8 @@ fn writer_from_matches<'a>(
     Ok(ArchiveWriter::from_config(destination, config)?)
 }
 
-/// Return the ArchiveReaderConfig corresponding to provided arguments and set
-/// Layers::ENCRYPT if a key is provided
+/// Return the `ArchiveReaderConfig` corresponding to provided arguments and set
+/// `Layers::ENCRYPT` if a key is provided
 fn readerconfig_from_matches(matches: &ArgMatches) -> Result<ArchiveReaderConfig, MlarError> {
     let incomplete_config = if matches.get_flag("skip_signature_verification") {
         ArchiveReaderConfig::without_signature_verification()
@@ -446,9 +443,8 @@ enum ExtractFileNameMatcher {
 }
 impl ExtractFileNameMatcher {
     fn from_matches(matches: &ArgMatches) -> Result<Self, MlarError> {
-        let entries = match matches.get_many::<PathBuf>("entries") {
-            Some(values) => values,
-            None => return Ok(ExtractFileNameMatcher::Anything),
+        let Some(entries) = matches.get_many::<PathBuf>("entries") else {
+            return Ok(ExtractFileNameMatcher::Anything);
         };
         if matches.get_flag("glob") {
             // Use glob patterns
@@ -481,7 +477,7 @@ impl ExtractFileNameMatcher {
 fn create_file<P1: AsRef<Path>>(
     output_dir: P1,
     entry_name: &EntryName,
-    zone_id: &Option<Vec<u8>>,
+    zone_id: Option<&Vec<u8>>,
 ) -> Result<Option<(File, PathBuf)>, MlarError> {
     let output_dir_path = output_dir.as_ref();
     let entry_name_pathbuf = entry_name
@@ -556,7 +552,7 @@ struct FileWriter<'a> {
     cache: &'a Mutex<LruCache<PathBuf, File>>,
     /// Is verbose mode enabled
     verbose: bool,
-    /// entry_name
+    /// `entry_name`
     entry_name: EntryName,
 }
 
@@ -884,6 +880,8 @@ fn get_zone_identifier_path(orig_path: &Path) -> Result<PathBuf, MlarError> {
 }
 
 #[cfg(target_family = "unix")]
+// as function signature must be the same on all platforms
+#[allow(clippy::unnecessary_wraps)]
 fn get_zone_identifier_os(_orig_path: &Path) -> Result<Option<Vec<u8>>, MlarError> {
     Ok(None)
 }
@@ -953,19 +951,16 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
         ));
         let mut export: HashMap<&EntryName, FileWriter> = HashMap::new();
         for entry_name in &entries_names {
-            match create_file(&output_dir, entry_name, &zone_id)? {
-                Some((_file, path)) => {
-                    export.insert(
-                        entry_name,
-                        FileWriter {
-                            path,
-                            cache: &cache,
-                            verbose,
-                            entry_name: entry_name.clone(),
-                        },
-                    );
-                }
-                None => continue,
+            if let Some((_file, path)) = create_file(&output_dir, entry_name, zone_id.as_ref())? {
+                export.insert(
+                    entry_name,
+                    FileWriter {
+                        path,
+                        cache: &cache,
+                        verbose,
+                        entry_name: entry_name.clone(),
+                    },
+                );
             }
         }
         return Ok(linear_extract(&mut mla, &mut export)?);
@@ -1003,9 +998,10 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
             }
             Ok(Some(subfile)) => subfile,
         };
-        let (mut extracted_file, _path) = match create_file(&output_dir, &entry_name, &zone_id)? {
-            Some(file) => file,
-            None => continue,
+        let Some((mut extracted_file, _path)) =
+            create_file(&output_dir, &entry_name, zone_id.as_ref())?
+        else {
+            continue;
         };
 
         if verbose {
@@ -1057,13 +1053,11 @@ fn cat(matches: &ArgMatches) -> Result<(), MlarError> {
                         eprintln!(
                             " [!] Error while looking up file \"{displayable_entry_name}\" ({err:?})"
                         );
-                        continue;
                     }
                     Ok(None) => {
                         eprintln!(
                             " [!] Subfile \"{displayable_entry_name}\" indexed in metadata could not be found"
                         );
-                        continue;
                     }
                     Ok(Some(mut subfile)) => {
                         if let Err(err) = io::copy(&mut subfile.data, &mut destination) {
@@ -1111,7 +1105,6 @@ fn cat(matches: &ArgMatches) -> Result<(), MlarError> {
                             .to_pathbuf_escaped_string()
                             .map_err(|_| MlarError::InvalidEntryNameToPath)?
                     );
-                    continue;
                 }
                 Ok(None) => {
                     eprintln!(
@@ -1120,7 +1113,6 @@ fn cat(matches: &ArgMatches) -> Result<(), MlarError> {
                             .to_pathbuf_escaped_string()
                             .map_err(|_| MlarError::InvalidEntryNameToPath)?
                     );
-                    continue;
                 }
                 Ok(Some(mut subfile)) => {
                     if let Err(err) = io::copy(&mut subfile.data, &mut destination) {
@@ -1196,7 +1188,7 @@ fn repair(matches: &ArgMatches) -> Result<(), MlarError> {
         _ => {
             eprintln!("[WARNING] Conversion ends with {status}");
         }
-    };
+    }
     Ok(())
 }
 

@@ -24,7 +24,7 @@ pub fn mla_percent_escape(bytes: &[u8], bytes_to_preserve: &[u8]) -> Vec<u8> {
             s.push(b'%');
             s.push(high_nibble);
             s.push(low_nibble);
-        };
+        }
     }
     s
 }
@@ -46,9 +46,8 @@ pub fn mla_percent_unescape(input: &[u8], bytes_to_allow: &[u8]) -> Option<Vec<u
                     let decoded_byte = (high_nibble << 4) | low_nibble;
                     if bytes_to_allow.contains(&decoded_byte) {
                         return None;
-                    } else {
-                        result.push(decoded_byte);
                     }
+                    result.push(decoded_byte);
                 }
                 _ => return None,
             }
@@ -137,7 +136,7 @@ pub fn linear_extract<W1: InnerWriterTrait, R: InnerReaderTrait, S: BuildHasher>
                 {
                     io::copy(copy_src, writer)?;
                     extracted = true;
-                };
+                }
                 if !extracted {
                     // Exhaust the block to Sink to forward the reader
                     io::copy(copy_src, &mut io::sink())?;
@@ -152,7 +151,7 @@ pub fn linear_extract<W1: InnerWriterTrait, R: InnerReaderTrait, S: BuildHasher>
     Ok(())
 }
 
-/// Provides a Write interface on an ArchiveWriter file
+/// Provides a Write interface on an `ArchiveWriter` file
 ///
 /// This interface is meant to be used in situations where length of the data
 /// source is unknown, such as a stream. One can then use the `io::copy`
@@ -219,7 +218,7 @@ mod tests {
         linear_extract(&mut mla_read, &mut export).expect("Extract error");
 
         // Check file per file
-        for (fname, content) in files.iter() {
+        for (fname, content) in &files {
             assert_eq!(export.get(fname).unwrap(), content);
         }
     }
