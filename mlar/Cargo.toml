@@ -24,6 +24,7 @@ hex = "0.4"
 sha2 = { version = "0.10", default-features = false}
 hkdf = { version = "0.12", default-features = false}
 zeroize = { version = "1.8", default-features = false}
+rustix = { version = "1.0.8", default-features = false, features = ["fs"] }
 # Could be made optional / feature to enable (for binary size)
 tar = "0.4"
 # Wait that all MLA dependencies upgrade below crate to do it too as there is a trait modification (CryptoRngCore -> CryptoRng + RngCore)
