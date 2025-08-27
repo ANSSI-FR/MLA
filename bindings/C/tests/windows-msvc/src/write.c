@@ -50,17 +50,18 @@ int test_writer()
     MLAArchiveHandle hArchive = NULL;
     MLAArchiveFileHandle hFile = NULL;
     long keySize = 0;
-    size_t bytesRead = 0;
+    size_t readLen = 0;
     const char *message = NULL;
 
     // Open public key file for encryption
-    if (fopen_s(&kf, "../../../../samples/test_mlakey.mlapub", "r") != 0)
+    if (fopen_s(&kf, "../../../../samples/test_mlakey.mlapub", "rb") != 0)
     {
         fprintf(stderr, " [!] Could not open public key file\n");
-        return errno;
+        status = (MLAStatus)errno;
+        goto cleanup;
     }
 
-    // Determine the size of the key file
+    // Determine the size
     if (fseek(kf, 0, SEEK_END) != 0)
     {
         fprintf(stderr, " [!] Could not seek in public key file\n");
@@ -76,7 +77,7 @@ int test_writer()
         goto cleanup;
     }
 
-    // Allocate buffer to hold the key + null terminator
+    // Allocate buffer for key (with null terminator)
     keyData = (char *)malloc((size_t)keySize + 1);
     if (!keyData)
     {
@@ -88,16 +89,13 @@ int test_writer()
     rewind(kf);
 
     // Read the public key file into memory
-    bytesRead = fread(keyData, 1, keySize, kf);
-    if (bytesRead != (size_t)keySize)
+    readLen = fread(keyData, 1, keySize, kf);
+    if (readLen != (size_t)keySize)
     {
         fprintf(stderr, " [!] Could not read public key file\n");
-        status = (MLAStatus)ferror(kf);
+        status = (MLAStatus)errno;
         goto cleanup;
     }
-
-    keyData[bytesRead] = '\0';  // Null terminate for safety
-    keys[0] = (const char *)keyData;
 
     // Create or overwrite the output .mla archive file
     hOutFile = CreateFileA("test.mla", GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
@@ -108,7 +106,10 @@ int test_writer()
         goto cleanup;
     }
 
+    keyData[readLen] = '\0';  // Null terminate
+
     // Create writer config with encryption (no signature)
+    keys[0] = keyData;
     status = create_mla_writer_config_with_encryption_without_signature(&hConfig, keys, 1);
     if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
     {
@@ -157,7 +158,7 @@ int test_writer()
         goto cleanup;
     }
 
-    printf("SUCCESS\n");
+    printf("SUCCESS: test_writer\n");
 
 cleanup:
     // Cleanup all resources
