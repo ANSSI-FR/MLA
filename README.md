@@ -185,7 +185,7 @@ multiple_layers_multiple_block_size/compression: true, encryption: true, signatu
                         time:   [7.0850 ms 7.1179 ms 7.1586 ms]
                         thrpt:  [139.69 MiB/s 140.49 MiB/s 141.14 MiB/s]
 ...
-chunk_size_decompress_mutilfiles_random/compression: true, encryption: true, signature: true/1048576
+chunk_size_decompress_multifiles_random/compression: true, encryption: true, signature: true/1048576
                         time:   [11.285 ms 11.494 ms 11.663 ms]
                         thrpt:  [85.745 MiB/s 87.005 MiB/s 88.616 MiB/s]
 ...
