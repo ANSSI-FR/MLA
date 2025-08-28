@@ -3122,6 +3122,35 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn test_footer_deserialization_none() {
+        let data = vec![0u8]; // 0x00 tag = no index
+        let res = ArchiveFooter::deserialize_from(Cursor::new(&data)).unwrap();
+        assert!(res.is_none());
+    }
+
+    #[test]
+    fn test_footer_deserialization_invalid_index() {
+        let data = vec![0x42]; // Not 0x00 or 0x01
+        let res = ArchiveFooter::deserialize_from(Cursor::new(&data)).unwrap();
+        assert!(res.is_none());
+    }
+
+    #[test]
+    fn test_footer_deserialization_valid_index() {
+        let (_dest, _sender_key, _receiver_key, _files, files_info, ids_info) =
+            build_archive2(false, false, false, false);
+
+        // Manually write the index tag before the actual footer content
+        let mut buf = Cursor::new(Vec::new());
+        buf.write_all(&[1]).unwrap();
+        ArchiveFooter::serialize_into(&mut buf, &files_info, &ids_info).unwrap();
+        buf.rewind().unwrap();
+
+        let result = ArchiveFooter::deserialize_from(buf).unwrap();
+        assert!(result.is_some());
+    }
+
+    #[test]
     #[cfg(feature = "send")]
     fn test_send() {
         static_assertions::assert_cfg!(feature = "send");
