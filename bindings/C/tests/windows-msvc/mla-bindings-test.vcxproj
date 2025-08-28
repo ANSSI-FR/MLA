@@ -177,6 +177,8 @@
       <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
       <AdditionalDependencies>ntdll.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);Ws2_32.lib;Userenv.lib;Bcrypt.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(SolutionDir)\..\..\..\..\target\i686-pc-windows-msvc\debug</AdditionalLibraryDirectories>
+      <!-- Needed as big structs like MLASignatureVerificationPublicKey are very likely to cause stack overflows as stack is small on Windows -->
+      <StackReserveSize>4194304</StackReserveSize>
     </Link>
     <PreBuildEvent>
       <Command>if not exist "$(SolutionDir)\..\..\..\..\target\i686-pc-windows-msvc\debug\mla.lib" cargo build --target=i686-pc-windows-msvc</Command>
@@ -197,6 +199,8 @@
       <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
       <AdditionalDependencies>ntdll.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);Ws2_32.lib;Userenv.lib;Bcrypt.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(SolutionDir)\..\..\..\..\target\i686-pc-windows-msvc\debug</AdditionalLibraryDirectories>
+      <!-- Needed as big structs like MLASignatureVerificationPublicKey are very likely to cause stack overflows as stack is small on Windows -->
+      <StackReserveSize>4194304</StackReserveSize>
     </Link>
     <PreBuildEvent>
       <Command>if not exist "$(SolutionDir)\..\..\..\..\target\i686-pc-windows-msvc\debug\mla.lib" cargo build --target=i686-pc-windows-msvc</Command>
@@ -263,6 +267,8 @@
       <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
       <AdditionalDependencies>ntdll.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);Ws2_32.lib;Userenv.lib;;Bcrypt.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(SolutionDir)\..\..\..\..\target\x86_64-pc-windows-msvc\debug</AdditionalLibraryDirectories>
+      <!-- Needed as big structs like MLASignatureVerificationPublicKey are very likely to cause stack overflows as stack is small on Windows -->
+      <StackReserveSize>4194304</StackReserveSize>
     </Link>
     <PreBuildEvent>
       <Command>if not exist "$(SolutionDir)\..\..\..\..\target\x86_64-pc-windows-msvc\debug\mla.lib" cargo build --target=x86_64-pc-windows-msvc</Command>
@@ -283,6 +289,8 @@
       <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
       <AdditionalDependencies>ntdll.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);Ws2_32.lib;Userenv.lib;Bcrypt.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(SolutionDir)\..\..\..\..\target\x86_64-pc-windows-msvc\debug</AdditionalLibraryDirectories>
+      <!-- Needed as big structs like MLASignatureVerificationPublicKey are very likely to cause stack overflows as stack is small on Windows -->
+      <StackReserveSize>4194304</StackReserveSize>
     </Link>
     <PreBuildEvent>
       <Command>if not exist "$(SolutionDir)\..\..\..\..\target\x86_64-pc-windows-msvc\debug\mla.lib" cargo build --target=x86_64-pc-windows-msvc</Command>
