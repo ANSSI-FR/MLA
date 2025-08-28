@@ -519,25 +519,30 @@ impl ArchiveFooter {
             footer_serialization_length += serialize_entry_name(k, &mut dest)?;
             footer_serialization_length += i.serialize(&mut dest)?;
         }
-        footer_serialization_length.serialize(&mut dest)?;
+        (footer_serialization_length + 1).serialize(&mut dest)?; // +1 for tag indicating index presence
         Ok(())
     }
 
     /// Parses and instantiates a footer from serialized data
-    pub fn deserialize_from<R: Read + Seek>(mut src: R) -> Result<ArchiveFooter, Error> {
-        // Read files_info
-        let n = u64::deserialize(&mut src)?;
-        let files_info = (0..n)
-            .map(|_| {
-                let name = deserialize_entry_name(&mut src)?;
-                let info = EntryInfo::deserialize(&mut src)?;
-                Ok::<_, Error>((name, info))
-            })
-            .collect::<Result<HashMap<_, _>, Error>>()?;
+    pub fn deserialize_from<R: Read + Seek>(mut src: R) -> Result<Option<ArchiveFooter>, Error> {
+        let index_present = u8::deserialize(&mut src)?;
+        if index_present == 1 {
+            // Read files_info
+            let n = u64::deserialize(&mut src)?;
+            let files_info = (0..n)
+                .map(|_| {
+                    let name = deserialize_entry_name(&mut src)?;
+                    let info = EntryInfo::deserialize(&mut src)?;
+                    Ok::<_, Error>((name, info))
+                })
+                .collect::<Result<HashMap<_, _>, Error>>()?;
 
-        Ok(ArchiveFooter {
-            entries_info: files_info,
-        })
+            Ok(Some(ArchiveFooter {
+                entries_info: files_info,
+            }))
+        } else {
+            Ok(None)
+        }
     }
 }
 
@@ -806,6 +811,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         // Use std::io::Empty as a readable placeholder type
         ArchiveEntryBlock::EndOfArchiveData::<std::io::Empty> {}.dump(&mut self.dest)?;
 
+        self.dest.write_all(&[1])?; // We always keep an index for the moment
         ArchiveFooter::serialize_into(&mut self.dest, &self.files_info, &self.ids_info)?;
 
         self.dest.write_all(EMPTY_TAIL_OPTS_SERIALIZATION)?; // No option for the moment
@@ -1240,12 +1246,12 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
         let entries_footer_options_length = u64::deserialize(&mut src)?;
         // skip reading them as there are none for the moment
 
-        // Read the footer
+        // Read the eventual index in footer
         let entries_footer_length_offset_from_end =
-            (-16i64) // -8 for Tail<Opts>'s length, -8 for `Tail<EntriesFooter>`'s length field
+            (-16i64) // -8 for Tail<Opts>'s length, -8 for `Tail<EntriesIndex>`'s length field
                 .checked_sub_unsigned(entries_footer_options_length)
                 .ok_or(Error::DeserializationError)?;
-        // Read the footer length
+        // Read the index length
         src.seek(SeekFrom::End(entries_footer_length_offset_from_end))?;
         let entries_footer_length = u64::deserialize(&mut src)?;
         // Prepare for deserialization
@@ -1253,7 +1259,7 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
             .checked_sub_unsigned(entries_footer_length)
             .ok_or(Error::DeserializationError)?;
         src.seek(SeekFrom::Current(start_of_entries_footer_from_current))?;
-        let metadata = Some(ArchiveFooter::deserialize_from(&mut src)?);
+        let metadata = ArchiveFooter::deserialize_from(&mut src)?;
 
         // Reset the position for further uses
         src.rewind()?;
@@ -2689,8 +2695,8 @@ pub(crate) mod tests {
         assert_eq!(
             Sha256::digest(&raw_mla).as_slice(),
             [
-                87, 9, 173, 162, 10, 132, 118, 9, 37, 74, 240, 138, 228, 47, 60, 94, 111, 224, 92,
-                241, 139, 106, 105, 126, 216, 108, 48, 216, 176, 186, 240, 134
+                182, 115, 46, 228, 180, 243, 4, 207, 227, 45, 198, 157, 239, 15, 50, 208, 94, 215,
+                236, 122, 109, 148, 174, 67, 79, 33, 194, 132, 195, 160, 225, 250
             ]
         );
     }
@@ -2804,8 +2810,8 @@ pub(crate) mod tests {
         assert_eq!(
             Sha256::digest(&file).as_slice(),
             [
-                124, 113, 95, 161, 149, 236, 55, 42, 5, 86, 236, 116, 51, 213, 27, 82, 252, 124,
-                47, 197, 114, 95, 126, 48, 239, 230, 226, 132, 102, 206, 28, 255
+                34, 75, 170, 237, 9, 2, 56, 189, 173, 29, 181, 48, 219, 204, 0, 230, 122, 249, 111,
+                164, 244, 227, 140, 114, 200, 45, 213, 229, 73, 36, 196, 19
             ]
         );
     }
