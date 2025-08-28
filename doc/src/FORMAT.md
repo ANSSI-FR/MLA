@@ -81,7 +81,7 @@ The compression layer footer information can be retrieved by first reading the v
 The layer `entries_layer_magic` ASCII magic is "MLAENAAA".
 `entries_layer_magic` is followed by `entries_header_options` of type `Opts`.
 `entries_header_options` is followed by `entries_data`, a sequence of bytes described below.
-`entries_data` is followed by `entries_footer` of type `Tail<EntriesFooter>`, where `EntriesFooter` is described below.
+`entries_data` is followed by `entries_footer` of type `Tail<EntriesIndex>`, where `EntriesIndex` is described below.
 `entries_footer` is followed by `entries_footer_options` of type `Tail<Opts>`.
 
 `entries_data` is a succession of `ArchiveEntryBlock` of different type. An `ArchiveEntryBlock` begins with an ASCII magic "MAEB" followed by an `ArchiveEntryBlockType` u8 determining the type of `ArchiveEntryBlock`:
@@ -98,7 +98,7 @@ If the `ArchiveEntryBlockType` is `EndOfEntry`, it is followed by an `ArchiveEnt
 
 If the `ArchiveEntryBlockType` is `EndOfArchiveData`, it is followed by nothing.
 
-`EntriesFooter` is a `Vec<EntryNameInfoMapElt>`. An `EntryNameInfoMapElt` is an `EntryName` followed by an `entry_blocks_info` which is a `Vec<EntryBlockInfo>` explained after. For reproducibility, the `EntriesFooter` `Vec` is sorted by entry name (lexicographically by bytes values) before being serialized.
+`EntriesIndex` is 0x00 byte in case of an archive not storing any index. Otherwise, it is a 0x01 byte followed by a `Vec<EntryNameInfoMapElt>`. An `EntryNameInfoMapElt` is an `EntryName` followed by an `entry_blocks_info` which is a `Vec<EntryBlockInfo>` explained after. For reproducibility, the `EntriesIndex` `Vec` is sorted by entry name (lexicographically by bytes values) before being serialized.
 
 `EntryBlockInfo` has two fields: `block_offset` and `block_size`. The `block_offset` field is a u64 indicating at which offset from the beginning of the MLA entries layer an `ArchiveEntryBlock` can be found for the given `EntryName`. The `block_size` field is a u64 indicating the size in bytes of the block content (0 except for `EntryContentChunk`). If it is an EntryContentChunk with `entry_content_data` containing 1 byte, `block_size` is 1. All `EntryBlockInfo`s for each entry are recorded in `entry_blocks_info` and they are so in ascending order of offset.
 
