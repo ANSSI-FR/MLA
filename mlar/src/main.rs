@@ -12,7 +12,7 @@ use mla::crypto::mlakey::{
 };
 use mla::entry::{ENTRY_NAME_RAW_CONTENT_ALLOWED_BYTES, EntryName, EntryNameError};
 use mla::errors::{Error, TruncatedReadError};
-use mla::helpers::{linear_extract, mla_percent_escape, mla_percent_unescape};
+use mla::helpers::{StreamWriter, linear_extract, mla_percent_escape, mla_percent_unescape};
 use mla::{ArchiveReader, ArchiveWriter, TruncatedArchiveReader, entry::ArchiveEntry};
 use sha2::{Digest, Sha512};
 use std::collections::{HashMap, HashSet};
@@ -20,11 +20,13 @@ use std::error;
 use std::ffi::OsStr;
 use std::fmt;
 use std::fs::{self, File, read_dir};
-use std::io::{self, BufReader, Read, Seek, Write};
+use std::io::{self, BufRead as _, Read, Seek, Write};
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tar::{Builder, Header};
+
+const STDIN_BUFFER_SIZE: usize = 8192;
 
 // ----- Error ------
 
@@ -38,6 +40,7 @@ enum MlarError {
     Config(mla::errors::ConfigError),
     InvalidEntryNameToPath,
     InvalidGlobPattern,
+    SeparatorTooBig,
 }
 
 impl fmt::Display for MlarError {
@@ -79,7 +82,9 @@ impl error::Error for MlarError {
             MlarError::IO(err) => Some(err),
             MlarError::Mla(err) => Some(err),
             MlarError::Config(err) => Some(err),
-            MlarError::InvalidEntryNameToPath | MlarError::InvalidGlobPattern => None,
+            MlarError::InvalidEntryNameToPath
+            | MlarError::InvalidGlobPattern
+            | MlarError::SeparatorTooBig => None,
         }
     }
 }
@@ -637,172 +642,111 @@ fn add_dir(
     Ok(())
 }
 
-/// Split a buffer into chunks according to a custom separator, removing
-/// any immediately following newline characters from the start of the next chunk.
-fn split_by_subsequence<'a>(buffer: &'a [u8], boundary: &[u8]) -> Vec<&'a [u8]> {
-    let mut parts = Vec::new();
-    let mut start = 0;
-    let mut i = 0;
-
-    // If boundary is empty, avoid doing search
-    if boundary.is_empty() {
-        parts.push(buffer);
-        return parts;
-    }
-
-    let boundary_len = boundary.len();
-    let buffer_len = buffer.len();
-
-    while i + boundary_len <= buffer_len {
-        if &buffer[i..i + boundary_len] == boundary {
-            parts.push(&buffer[start..i]);
-            i += boundary_len;
-            start = i;
-
-            // Skip any immediate newline characters (LF or CRLF) after the separator
-            while start < buffer_len {
-                if buffer[start] == b'\n' {
-                    start += 1;
-                } else if buffer[start] == b'\r'
-                    && start + 1 < buffer_len
-                    && buffer[start + 1] == b'\n'
-                {
-                    start += 2; // Consume both CR and LF
-                } else {
-                    break;
-                }
-            }
-            i = start;
-        } else {
-            i += 1;
-        }
-    }
-
-    // Add last chunk (no separator)
-    if start <= buffer_len {
-        parts.push(&buffer[start..]);
-    }
-
-    parts.into_iter().filter(|b| !b.is_empty()).collect()
-}
-
-fn add_binary(
+fn add_from_stdin_separated(
     mla: &mut ArchiveWriter<OutputTypes>,
-    filename: &str,
-    buffer: &[u8],
+    mut entry_names: impl Iterator<Item = Result<EntryName, EntryNameError>>,
+    separator: &[u8],
 ) -> Result<(), MlarError> {
-    println!("{filename}");
-    let name = EntryName::from_arbitrary_bytes(filename.as_bytes())
-        .map_err(|_| MlarError::InvalidEntryNameToPath)?;
-    Ok(mla.add_entry(name, buffer.len() as u64, buffer)?)
-}
-
-fn add_string_file(
-    mla: &mut ArchiveWriter<OutputTypes>,
-    file_content: &str,
-    skip_not_found: bool,
-) -> Result<(), MlarError> {
-    let mut total_lines = 0;
-    let mut invalid_paths_count = 0;
-
-    for (index, line) in file_content.lines().enumerate() {
-        total_lines += 1;
-        let path = Path::new(line.trim());
-
-        if path.exists() {
-            if add_file_or_dir(mla, path, skip_not_found).is_err() {
-                eprintln!(" [!] Line {} cannot be read as text (UTF-8)", index + 1);
-            }
-        } else {
-            invalid_paths_count += 1;
-        }
+    if separator.len() > STDIN_BUFFER_SIZE {
+        return Err(MlarError::SeparatorTooBig);
     }
 
-    if total_lines > 0 && invalid_paths_count == total_lines {
-        return Err(MlarError::IO(std::io::ErrorKind::InvalidData.into()));
-    } else if total_lines == 0 {
-        eprintln!(" [!] One given file is empty and haven't been added to MLA");
-    }
-
-    Ok(())
-}
-
-fn process_chunk(
-    mla: &mut ArchiveWriter<OutputTypes>,
-    chunk: &[u8],
-    filename_iterator: &mut impl Iterator<Item = String>,
-    fallback_filename: usize,
-    skip_not_found: bool,
-) -> Result<(), MlarError> {
-    if let Ok(text) = std::str::from_utf8(chunk) {
-        if let Err(MlarError::IO(err)) = add_string_file(mla, text, skip_not_found)
-            && err.kind() == std::io::ErrorKind::InvalidData
-        {
-            let filename = filename_iterator
-                .next()
-                .unwrap_or_else(|| format!("chunk{fallback_filename}.bin"));
-            add_binary(mla, &filename, chunk)?;
-        }
-    } else {
-        let filename = filename_iterator
+    let mut in_buffer = [0; STDIN_BUFFER_SIZE];
+    let mut in_buffer_next_read_offset = 0;
+    let mut in_buffer_end_offset;
+    let mut entry_id = {
+        let name = entry_names
             .next()
-            .unwrap_or_else(|| format!("chunk{fallback_filename}.bin"));
-        add_binary(mla, &filename, chunk)?;
+            .expect("Not enough entry names given")
+            .expect("Invalid entry name");
+        mla.start_entry(name)?
+    };
+    let mut stdin = io::stdin().lock();
+    // loop to read stdin by chunks
+    loop {
+        let bytes_read_len = stdin.read(&mut in_buffer[in_buffer_next_read_offset..])?;
+        if bytes_read_len == 0 {
+            // EOF
+            break;
+        }
+        in_buffer_end_offset = in_buffer_next_read_offset + bytes_read_len; // up to where the buffer has been filled by the read call
+
+        // find each eventual separators and handle preceding content
+        let mut previous_separator_end_idx = 0;
+        let mut eventual_separator_idx = 0;
+        loop {
+            if eventual_separator_idx + separator.len() > in_buffer_end_offset {
+                break;
+            }
+            // test if we found a separator
+            if in_buffer[eventual_separator_idx..].starts_with(separator) {
+                let separator_idx = eventual_separator_idx;
+                let content_size = (separator_idx - previous_separator_end_idx) as u64;
+                mla.append_entry_content(
+                    entry_id,
+                    content_size,
+                    &in_buffer[previous_separator_end_idx..separator_idx],
+                )?;
+                mla.end_entry(entry_id)?;
+                entry_id = {
+                    let name = entry_names
+                        .next()
+                        .expect("Not enough entry names given")
+                        .expect("Invalid entry name");
+                    mla.start_entry(name)?
+                };
+                // next separator will be at least after this one, so we advance by separator.len()
+                eventual_separator_idx = separator_idx + separator.len();
+                previous_separator_end_idx = eventual_separator_idx;
+            } else {
+                eventual_separator_idx += 1;
+            }
+        }
+
+        // handle bytes in buffer after last separator
+        let last_subslice = &in_buffer[previous_separator_end_idx..in_buffer_end_offset];
+        // all possible separator prefixes
+        let mut separator_prefixes = (1..separator.len()).rev().map(|i| &separator[..i]);
+        // we try to find if current stdin chunk ends with a prefix of the separator in case a separator crosses chunk boundaries
+        if let Some(separator_prefix) =
+            separator_prefixes.find(|separator_prefix| last_subslice.ends_with(separator_prefix))
+        {
+            // only write content up to potential new separator. If it is not a real separator, rest will be written in next iteration.
+            let cut_point = in_buffer_end_offset - separator_prefix.len();
+            let content_size = (cut_point - previous_separator_end_idx) as u64;
+            mla.append_entry_content(
+                entry_id,
+                content_size,
+                &in_buffer[previous_separator_end_idx..cut_point],
+            )?;
+            // keep separator prefix at the start of next chunk
+            in_buffer.copy_within(cut_point..in_buffer_end_offset, 0);
+            in_buffer_next_read_offset = separator_prefix.len();
+        } else {
+            // no separator prefix found, write everything in last_subslice
+            let content_size = (in_buffer_end_offset - previous_separator_end_idx) as u64;
+            mla.append_entry_content(entry_id, content_size, last_subslice)?;
+            in_buffer_next_read_offset = 0;
+        }
     }
+    mla.end_entry(entry_id)?;
     Ok(())
 }
 
 fn add_from_stdin(
     mla: &mut ArchiveWriter<OutputTypes>,
-    filenames: &mut impl Iterator<Item = String>,
-    sep: Option<&String>,
-    skip_not_found: bool,
+    mut entry_names: impl Iterator<Item = Result<EntryName, EntryNameError>>,
+    separator: Option<&[u8]>,
 ) -> Result<(), MlarError> {
-    const BUFFER_CAPACITY: usize = 4096;
-
-    // If no separator is provided, it's assumed that the file is a single
-    if sep.is_none() {
-        let mut buffer = Vec::new();
-        io::stdin().lock().read_to_end(&mut buffer)?;
-
-        process_chunk(mla, &buffer, filenames, 0, skip_not_found)?;
-
-        return Ok(());
-    }
-
-    // `.unwrap()` is safe error since we checked it before
-    let sep = sep.unwrap().as_bytes();
-
-    let mut chunk = Vec::with_capacity(BUFFER_CAPACITY);
-    let mut buffer = [0; BUFFER_CAPACITY];
-
-    let mut processed_file = 0;
-
-    let mut reader = BufReader::new(io::stdin());
-    loop {
-        let bytes_read = reader.read(&mut buffer)?;
-
-        if bytes_read == 0 {
-            // EOF, process remaining chunk if not empty
-            if !chunk.is_empty() {
-                processed_file += 1;
-                process_chunk(mla, &chunk, filenames, processed_file, skip_not_found)?;
-            }
-            break;
-        }
-
-        chunk.extend_from_slice(&buffer[..bytes_read]);
-
-        let chunks = split_by_subsequence(&chunk, sep);
-
-        if chunks.len() > 1 {
-            for part in &chunks[..chunks.len() - 1] {
-                processed_file += 1;
-                process_chunk(mla, part, filenames, processed_file, skip_not_found)?;
-            }
-
-            chunk = chunks[chunks.len() - 1].to_vec();
-        }
+    if let Some(separator) = separator {
+        add_from_stdin_separated(mla, entry_names, separator)?;
+    } else {
+        // If no separator is provided, it's assumed that stdin corresponds to a single entry
+        let entry_name = entry_names.next().unwrap().expect("Invalid entry name"); // unwrap should not fail has it has a default_value
+        let entry_id = mla.start_entry(entry_name)?;
+        let mut archive_entry_writer = StreamWriter::new(mla, entry_id);
+        io::copy(&mut io::stdin().lock(), &mut archive_entry_writer)?;
+        mla.end_entry(entry_id)?;
     }
 
     Ok(())
@@ -813,21 +757,25 @@ fn add_from_stdin(
 fn create(matches: &ArgMatches) -> Result<(), MlarError> {
     let mut mla = writer_from_matches(matches, true)?;
 
-    if let Some(files) = matches.get_many::<PathBuf>("files") {
+    if matches.get_flag("stdin_data") {
+        let entry_names = matches
+            .get_one::<String>("stdin_data_entry_names")
+            .unwrap() // Should not fail as stdin_data_entry_names has a default_value
+            .split(',')
+            .map(EntryName::from_path);
+        let separator = matches
+            .get_one::<String>("stdin_data_separator")
+            .map(String::as_bytes);
+        add_from_stdin(&mut mla, entry_names, separator)?;
+    } else {
         let skip_not_found = matches.get_flag("skip-not-found");
-        for filename in files {
-            if filename.as_os_str() == "-" {
-                let mut filenames = matches
-                    .get_many::<String>("filenames")
-                    .map(|values_ref| values_ref.map(ToString::to_string).collect::<Vec<String>>())
-                    .unwrap_or_default()
-                    .into_iter();
-                let sep = matches.get_one::<String>("separator");
-
-                add_from_stdin(&mut mla, &mut filenames, sep, skip_not_found)?;
-            } else {
-                let path = Path::new(&filename);
-                add_file_or_dir(&mut mla, path, skip_not_found)?;
+        if matches.get_flag("stdin_file_list") {
+            for line in io::stdin().lock().lines() {
+                add_file_or_dir(&mut mla, Path::new(&line?), skip_not_found)?;
+            }
+        } else if let Some(filepaths) = matches.get_many::<PathBuf>("files") {
+            for filepath in filepaths {
+                add_file_or_dir(&mut mla, Path::new(&filepath), skip_not_found)?;
             }
         }
     }
@@ -1393,17 +1341,34 @@ fn app() -> clap::Command {
                     .action(ArgAction::Append)
                 )
                 .arg(
-                    Arg::new("filenames")
-                    .long("filenames")
-                    .help("When reading from stdin (pipeline), set names for files in the order they appear")
-                    .action(ArgAction::Append)
+                    Arg::new("stdin_file_list")
+                    .long("stdin-file-list")
+                    .help("Add files specified on stdin (one UTF-8 path per line) rather than from positional arguments.")
+                    .action(ArgAction::SetTrue)
+                    .conflicts_with_all(["stdin_data", "stdin_data_entry_names", "stdin_data_separator"])
                 )
                 .arg(
-                    Arg::new("separator")
-                    .long("separator")
-                    .help("A string used to delimit files when reading concatenated input from stdin (e.g. via a pipe).")
+                    Arg::new("stdin_data")
+                    .long("stdin-data")
+                    .help("Pipe archive entries content from stdin. Can be customized with --stdin-data-entry-names and --stdin-data-separator.")
+                    .action(ArgAction::SetTrue)
+                )
+                .arg(
+                    Arg::new("stdin_data_entry_names")
+                    .long("stdin-data-entry-names")
+                    .help("Comma-separated list of entry names to create with regards to content provided on stdin. Default: \"default-entry\".")
+                    .value_parser(value_parser!(String))
+                    .default_value("default-entry")
+                    .num_args(1)
+                    .requires("stdin_data")
+                )
+                .arg(
+                    Arg::new("stdin_data_separator")
+                    .long("stdin-data-separator")
+                    .help("Delimiter string used to separate multiple archive entries from stdin. Required if --stdin-data includes multiple entries. Default: no separator (stdin will thus be treated as a single entry).")
                     .value_parser(value_parser!(String))
                     .num_args(1)
+                    .requires("stdin_data")
                 )
                 .arg(
                     Arg::new("skip-not-found")
