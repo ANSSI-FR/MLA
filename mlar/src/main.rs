@@ -41,6 +41,7 @@ enum MlarError {
     InvalidEntryNameToPath,
     InvalidGlobPattern,
     SeparatorTooBig,
+    EntryNameCountMismatch,
 }
 
 impl fmt::Display for MlarError {
@@ -84,7 +85,8 @@ impl error::Error for MlarError {
             MlarError::Config(err) => Some(err),
             MlarError::InvalidEntryNameToPath
             | MlarError::InvalidGlobPattern
-            | MlarError::SeparatorTooBig => None,
+            | MlarError::SeparatorTooBig
+            | MlarError::EntryNameCountMismatch => None,
         }
     }
 }
@@ -657,8 +659,8 @@ fn add_from_stdin_separated(
     let mut entry_id = {
         let name = entry_names
             .next()
-            .expect("Not enough entry names given")
-            .expect("Invalid entry name");
+            .ok_or(MlarError::EntryNameCountMismatch)?
+            .map_err(|_| MlarError::InvalidEntryNameToPath)?;
         mla.start_entry(name)?
     };
     let mut stdin = io::stdin().lock();
@@ -742,7 +744,7 @@ fn add_from_stdin(
         add_from_stdin_separated(mla, entry_names, separator)?;
     } else {
         // If no separator is provided, it's assumed that stdin corresponds to a single entry
-        let entry_name = entry_names.next().unwrap().expect("Invalid entry name"); // unwrap should not fail has it has a default_value
+        let entry_name = entry_names.next().unwrap().expect("Invalid entry name"); // unwrap should not fail has it has a default value "default-entry"
         let entry_id = mla.start_entry(entry_name)?;
         let mut archive_entry_writer = StreamWriter::new(mla, entry_id);
         io::copy(&mut io::stdin().lock(), &mut archive_entry_writer)?;
