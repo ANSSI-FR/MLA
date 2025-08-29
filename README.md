@@ -48,16 +48,16 @@ mlar keygen sender
 mlar keygen receiver
 
 # Create an archive with some files.
-mlar create -k sender.mlapriv -p receiver.mlapub -o my_archive.mla /etc/./os-release /etc/security/../issue ../file.txt
+mlar create -k sender.mlapriv -p receiver.mlapub -o my_archive.mla /boot/./grub/locale/en@quot.mo /etc/security/../issue ../file.txt
 
 # List the content of the archive.
 # Note that order may vary, root dir are stripped,
 # paths are normalized and listing is encoded as described in
-# `doc/src/ENTRY_NAME.md`.
+# `doc/src/ENTRY_NAME.md` (hence the percent in output).
 # This outputs:
 # ``
 # etc/issue
-# etc/os-release
+# boot/grub/locale/en%40quot.mo
 # file.txt
 # ``
 mlar list -k receiver.mlapriv -p sender.mlapub -i my_archive.mla
