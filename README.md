@@ -92,8 +92,14 @@ mlar list -k samples/test_mlakey_archive_v2_receiver.mlapriv -p samples/test_mla
 # `' OR 1=1`
 mlar cat -k samples/test_mlakey_archive_v2_receiver.mlapriv -p samples/test_mlakey_archive_v2_sender.mlapub -i samples/archive_weird.mla --raw-escaped-names c%3a%2f%00%3b%e2%80%ae%0ac%0dd%1b%5b1%3b31ma%3cscript%3eevil%5c..%2f%d8%01%c2%85%e2%88%95
 
-# Create an archive of a web file and utf-8 string, without compression, without encryption and without signature
-(curl https://raw.githubusercontent.com/ANSSI-FR/MLA/refs/heads/main/LICENSE.md; echo "SEP"; echo "All Hail MLA!") | mlar create -l -o my_archive.mla --separator "SEP" --filenames great_license.md -
+# Create an archive of a web file, without compression, without encryption and without signature
+curl https://raw.githubusercontent.com/ANSSI-FR/MLA/refs/heads/main/LICENSE.md | mlar create -l -o my_archive.mla --stdin-data
+
+# Create an archive of a web file and arbitrary byte string, without compression, without encryption and without signature (chosen separator should not be present in the two entries)
+(curl https://raw.githubusercontent.com/ANSSI-FR/MLA/refs/heads/main/LICENSE.md; echo "SEPARATOR"; echo "All Hail MLA!") | mlar create -l -o my_archive.mla --stdin-data --stdin-data-separator "SEPARATOR" --stdin-data-entry-names great_license.md,hello.txt
+
+# Create an archive passing the file list on stdin (not data)
+echo -n -e "/etc/issue\n/etc/os-release" | mlar create -l -o my_archive.mla --stdin-file-list
 ```
 
 `mlar` can be obtained:

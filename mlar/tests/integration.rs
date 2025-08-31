@@ -210,7 +210,7 @@ fn test_create_filelist_stdin() {
         .arg("-p")
         .arg(public_key);
 
-    cmd.arg("-");
+    cmd.arg("--stdin-file-list");
     println!("{cmd:?}");
 
     let mut file_list_stdin = String::new();
@@ -1032,7 +1032,7 @@ fn test_extract() {
     // This value should be bigger than FILE_WRITER_POOL_SIZE
     const TEST_MANY_FILES_NB: usize = 5;
     const SIZE_FILE: usize = 10;
-    const SEPARATOR: &str = "SEP";
+    const SEPARATOR: &str = "SEPARATOR";
 
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
     let mut rng: StdRng = SeedableRng::from_seed([0u8; 32]);
@@ -1065,20 +1065,18 @@ fn test_extract() {
         .arg("compress")
         .arg("-o")
         .arg(mlar_file.path())
-        .arg("--separator")
+        .arg("--stdin-data")
+        .arg("--stdin-data-separator")
         .arg(SEPARATOR);
 
-    for filename in &filenames {
-        cmd.arg("--filenames").arg(filename);
-    }
+    cmd.arg("--stdin-data-entry-names").arg(filenames.join(","));
 
-    cmd.arg("-").write_stdin(concatenated_data);
+    cmd.write_stdin(concatenated_data);
 
     println!("{cmd:?}");
     let assert = cmd.assert();
 
-    let expected_output = filenames.join("\n") + "\n";
-    assert.success().stdout(expected_output.clone());
+    assert.success();
 
     // === 1. Linear extraction ===
     let output_dir = TempDir::new().unwrap();
@@ -1528,7 +1526,7 @@ fn test_extract_lot_files() {
     // This value should be bigger than FILE_WRITER_POOL_SIZE
     const TEST_MANY_FILES_NB: usize = 1010;
     const SIZE_FILE: usize = 10;
-    const SEPARATOR: &str = "SEP";
+    const SEPARATOR: &str = "SEPARATOR";
 
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
     let mut rng: StdRng = SeedableRng::from_seed([0u8; 32]);
@@ -1537,12 +1535,12 @@ fn test_extract_lot_files() {
 
     // Create many files with random alphanumeric content
     for i in 0..TEST_MANY_FILES_NB {
-        let tmp_file = NamedTempFile::new(format!("file{i}.bin")).unwrap();
+        let tmp_file = NamedTempFile::new(format!("{i}")).unwrap();
         let data: Vec<u8> = Alphanumeric.sample_iter(&mut rng).take(SIZE_FILE).collect();
         tmp_file.write_binary(data.as_slice()).unwrap();
 
         files.push((tmp_file, data));
-        filenames.push(format!("file{i}.bin"));
+        filenames.push(format!("{i}"));
     }
 
     // Concatenate file data separated by SEPARATOR
@@ -1561,20 +1559,17 @@ fn test_extract_lot_files() {
         .arg("compress")
         .arg("-o")
         .arg(mlar_file.path())
-        .arg("--separator")
+        .arg("--stdin-data")
+        .arg("--stdin-data-separator")
         .arg(SEPARATOR);
-
-    for filename in &filenames {
-        cmd.arg("--filenames").arg(filename);
-    }
+    cmd.arg("--stdin-data-entry-names").arg(filenames.join(","));
 
     cmd.arg("-").write_stdin(concatenated_data);
 
     println!("{cmd:?}");
     let assert = cmd.assert();
 
-    let expected_output = filenames.join("\n") + "\n";
-    assert.success().stdout(expected_output.clone());
+    assert.success();
 
     // === 1. Linear extraction ===
     let output_dir = TempDir::new().unwrap();
@@ -1663,7 +1658,7 @@ fn test_stdin() {
     let msg = "echo... echo... echo...";
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
 
-    let output_files = ["file.txt"];
+    let output_files = ["default-entry"];
 
     // `echo "echo... echo... echo..." | mlar create -l -o output.mla --filenames file.txt -`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
@@ -1672,16 +1667,12 @@ fn test_stdin() {
         .arg("compress")
         .arg("-o")
         .arg(mlar_file.path())
-        .arg("--filenames")
-        .arg(output_files.first().unwrap())
-        .arg("-")
+        .arg("--stdin-data")
         .write_stdin(msg);
 
     println!("{cmd:?}");
     let assert = cmd.assert();
-    assert
-        .success()
-        .stdout((*output_files.first().unwrap()).to_string() + "\n");
+    assert.success();
 
     // `mlar extract -v --accept-unencrypted -i output.mla -o output_dir`
     let output_dir = TempDir::new().unwrap();
@@ -1705,27 +1696,71 @@ fn test_stdin() {
 }
 
 #[test]
+fn test_stdin_empty_input() {
+    let mlar_file = NamedTempFile::new("output.mla").unwrap();
+
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("create")
+        .arg("-l")
+        .arg("compress")
+        .arg("-o")
+        .arg(mlar_file.path())
+        .arg("--stdin-data")
+        .arg("--stdin-data-entry-names")
+        .arg("empty-entry")
+        .write_stdin(""); // empty input
+
+    cmd.assert().success();
+
+    let output_dir = TempDir::new().unwrap();
+    let mut extract_cmd = Command::cargo_bin(UTIL).unwrap();
+    extract_cmd
+        .arg("extract")
+        .arg("--accept-unencrypted")
+        .arg("--skip-signature-verification")
+        .arg("-i")
+        .arg(mlar_file.path())
+        .arg("-o")
+        .arg(output_dir.path());
+
+    extract_cmd.assert().success();
+
+    let content = fs::read(output_dir.path().join("empty-entry")).unwrap();
+    assert!(content.is_empty(), "Expected empty file, got {content:?}");
+}
+
+#[test]
 fn test_consecutive_sep_stdin() {
     let sep = "SEP";
-    let bytes: Vec<Vec<u8>> = [
-        b"\xff\xfe\xad\xde".into(),
-        b"echo... echo... echo...".into(),
-    ]
-    .into();
+    let input: &[&[u8]] = &[
+        b"SEP",
+        b"\xff\xfe\xad\xde",
+        b"SEP",
+        b"SEP",
+        b"SEP",
+        b"echo... echo... echo...",
+        b"SEP",
+    ];
 
-    // Add three times the separator instead of one
-    let mut insert = bytes.clone();
-    insert.insert(1, sep.into());
-    insert.insert(1, sep.into());
-    insert.insert(1, sep.into());
-
-    // Add a separator at the start and end.
-    insert.insert(0, sep.into());
-    insert.push(sep.into());
+    let expected_content: &[&[u8]] = &[
+        b"",
+        b"\xff\xfe\xad\xde",
+        b"",
+        b"",
+        b"echo... echo... echo...",
+        b"",
+    ];
 
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
 
-    let output_files = ["chunk1.bin", "chunk2.bin"];
+    let output_files = [
+        "chunk1.bin",
+        "chunk2.bin",
+        "chunk3.bin",
+        "chunk4.bin",
+        "chunk5.bin",
+        "chunk6.bin",
+    ];
 
     // `echo -n -e "SEP\xff\xfe\xad\xdeSEPSEPSEPecho... echo... echo...SEP" | mlar create -l -o output.mla --separator SEP -`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
@@ -1734,14 +1769,16 @@ fn test_consecutive_sep_stdin() {
         .arg("compress")
         .arg("-o")
         .arg(mlar_file.path())
-        .arg("--separator")
+        .arg("--stdin-data")
+        .arg("--stdin-data-separator")
         .arg(sep)
-        .arg("-")
-        .write_stdin(insert.concat());
+        .arg("--stdin-data-entry-names")
+        .arg(output_files.join(","))
+        .write_stdin(input.concat());
 
     println!("{cmd:?}");
     let assert = cmd.assert();
-    assert.success().stdout(output_files.join("\n") + "\n");
+    assert.success();
 
     // `mlar extract -v --accept-unencrypted -i output.mla -o output_dir`
     let output_dir = TempDir::new().unwrap();
@@ -1762,12 +1799,116 @@ fn test_consecutive_sep_stdin() {
     for (index, file) in output_files.iter().enumerate() {
         let extracted_file_path = output_dir.path().join(file);
         let content = fs::read(&extracted_file_path).unwrap();
-        assert_eq!(content, bytes[index]);
+        assert_eq!(content, expected_content[index]);
     }
 }
 
 #[test]
-fn test_archive_with_missing_file_fails_by_default() {
+fn test_stdin_separator_across_chunks() {
+    const SEPARATOR: &str = "SEPARATOR";
+
+    let mut rng: StdRng = SeedableRng::from_seed([0u8; 32]);
+    // 9000 : separator after chunk1
+    // 8190 : separator across chunks
+    for chunk1_size in [9000, 8190] {
+        let mlar_file = NamedTempFile::new("output.mla").unwrap();
+        let stdin1 = Alphanumeric
+            .sample_iter(&mut rng)
+            .take(chunk1_size)
+            .collect::<Vec<u8>>();
+        let stdin2 = Alphanumeric
+            .sample_iter(&mut rng)
+            .take(9000)
+            .collect::<Vec<u8>>();
+        let stdin = [stdin1.as_slice(), SEPARATOR.as_bytes(), stdin2.as_slice()].concat();
+
+        let mut cmd = Command::cargo_bin(UTIL).unwrap();
+        cmd.arg("create")
+            .arg("-l")
+            .arg("compress")
+            .arg("-o")
+            .arg(mlar_file.path())
+            .arg("--stdin-data")
+            .arg("--stdin-data-separator")
+            .arg(SEPARATOR);
+
+        cmd.arg("--stdin-data-entry-names").arg("e1,e2");
+
+        cmd.write_stdin(stdin);
+
+        println!("{cmd:?}");
+        let assert = cmd.assert();
+
+        assert.success();
+
+        let output_dir = TempDir::new().unwrap();
+        let mut cmd = Command::cargo_bin(UTIL).unwrap();
+        cmd.arg("extract")
+            .arg("-v")
+            .arg("--skip-signature-verification")
+            .arg("--accept-unencrypted")
+            .arg("-i")
+            .arg(mlar_file.path())
+            .arg("-o")
+            .arg(output_dir.path());
+
+        println!("{cmd:?}");
+        let assert = cmd.assert();
+        assert.success();
+
+        for (name, original_data) in ["e1", "e2"].iter().zip([stdin1, stdin2].iter()) {
+            let extracted = fs::read(output_dir.path().join(name)).unwrap();
+            assert_eq!(&extracted, original_data, "Mismatch in extract: {name}");
+        }
+    }
+}
+
+#[test]
+fn test_stdin_separator_not_in_input_should_fallback_to_single_entry() {
+    const SEPARATOR: &str = "SEP";
+    let input = b"This is some data that does not contain the separator.";
+
+    let mlar_file = NamedTempFile::new("output.mla").unwrap();
+
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("create")
+        .arg("-l")
+        .arg("compress")
+        .arg("-o")
+        .arg(mlar_file.path())
+        .arg("--stdin-data")
+        .arg("--stdin-data-separator")
+        .arg(SEPARATOR)
+        .arg("--stdin-data-entry-names")
+        .arg("single_entry_expected") // only one entry will actually be created
+        .write_stdin(input)
+        .assert()
+        .success();
+}
+
+#[test]
+fn test_missing_entry_names_should_fail() {
+    let separator = "SEP";
+    let input = b"fooSEPbar";
+
+    let mlar_file = NamedTempFile::new("output.mla").unwrap();
+
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("create")
+        .arg("compress")
+        .arg("-l")
+        .arg("-o")
+        .arg(mlar_file.path())
+        .arg("--stdin-data")
+        .arg("--stdin-data-separator")
+        .arg(separator)
+        .write_stdin(input)
+        .assert()
+        .failure();
+}
+
+#[test]
+fn test_archive_with_missing_file_should_fail() {
     // Create a temp output archive file
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
 
