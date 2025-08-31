@@ -1696,6 +1696,40 @@ fn test_stdin() {
 }
 
 #[test]
+fn test_stdin_empty_input() {
+    let mlar_file = NamedTempFile::new("output.mla").unwrap();
+
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("create")
+        .arg("-l")
+        .arg("compress")
+        .arg("-o")
+        .arg(mlar_file.path())
+        .arg("--stdin-data")
+        .arg("--stdin-data-entry-names")
+        .arg("empty-entry")
+        .write_stdin(""); // empty input
+
+    cmd.assert().success();
+
+    let output_dir = TempDir::new().unwrap();
+    let mut extract_cmd = Command::cargo_bin(UTIL).unwrap();
+    extract_cmd
+        .arg("extract")
+        .arg("--accept-unencrypted")
+        .arg("--skip-signature-verification")
+        .arg("-i")
+        .arg(mlar_file.path())
+        .arg("-o")
+        .arg(output_dir.path());
+
+    extract_cmd.assert().success();
+
+    let content = fs::read(output_dir.path().join("empty-entry")).unwrap();
+    assert!(content.is_empty(), "Expected empty file, got {content:?}");
+}
+
+#[test]
 fn test_consecutive_sep_stdin() {
     let sep = "SEP";
     let input: &[&[u8]] = &[
@@ -1830,7 +1864,51 @@ fn test_stdin_separator_across_chunks() {
 }
 
 #[test]
-fn test_archive_with_missing_file_fails_by_default() {
+fn test_stdin_separator_not_in_input_should_fallback_to_single_entry() {
+    const SEPARATOR: &str = "SEP";
+    let input = b"This is some data that does not contain the separator.";
+
+    let mlar_file = NamedTempFile::new("output.mla").unwrap();
+
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("create")
+        .arg("-l")
+        .arg("compress")
+        .arg("-o")
+        .arg(mlar_file.path())
+        .arg("--stdin-data")
+        .arg("--stdin-data-separator")
+        .arg(SEPARATOR)
+        .arg("--stdin-data-entry-names")
+        .arg("single_entry_expected") // only one entry will actually be created
+        .write_stdin(input)
+        .assert()
+        .success();
+}
+
+#[test]
+fn test_missing_entry_names_should_fail() {
+    let separator = "SEP";
+    let input = b"fooSEPbar";
+
+    let mlar_file = NamedTempFile::new("output.mla").unwrap();
+
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("create")
+        .arg("compress")
+        .arg("-l")
+        .arg("-o")
+        .arg(mlar_file.path())
+        .arg("--stdin-data")
+        .arg("--stdin-data-separator")
+        .arg(separator)
+        .write_stdin(input)
+        .assert()
+        .failure();
+}
+
+#[test]
+fn test_archive_with_missing_file_should_fail() {
     // Create a temp output archive file
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
 
