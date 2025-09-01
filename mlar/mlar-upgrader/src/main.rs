@@ -51,9 +51,21 @@ fn writer_from_matches(matches: &ArgMatches) -> mla::ArchiveWriter<'static, File
     let config = if let Some(public_key_args) = matches.get_many::<PathBuf>("public_keys") {
         let (pub_encryption_keys, _) = public_key_args
             .map(|pub_key_path| {
-                let mut key_file = File::open(pub_key_path).expect("Failed to open public key");
+                let mut key_file = File::open(pub_key_path).unwrap_or_else(|e| {
+                    eprintln!(
+                        "Failed to open public key \"{}\": {e}",
+                        pub_key_path.display()
+                    );
+                    std::process::exit(1);
+                });
                 MLAPublicKey::deserialize_public_key(&mut key_file)
-                    .expect("Failed to parse public key")
+                    .unwrap_or_else(|e| {
+                        eprintln!(
+                            "Failed to parse public key \"{}\": {e}",
+                            pub_key_path.display()
+                        );
+                        std::process::exit(1);
+                    })
                     .get_public_keys()
             })
             .collect::<(Vec<_>, Vec<_>)>();
@@ -61,29 +73,76 @@ fn writer_from_matches(matches: &ArgMatches) -> mla::ArchiveWriter<'static, File
     } else {
         ArchiveWriterConfig::without_encryption_without_signature()
     }
-    .unwrap();
-    let out_file_path = matches.get_one::<PathBuf>("output").unwrap();
-    let out_file = File::create(out_file_path).unwrap();
-    mla::ArchiveWriter::from_config(out_file, config).unwrap()
+    .unwrap_or_else(|e| {
+        eprintln!("Invalid archive config: {e}");
+        std::process::exit(1);
+    });
+
+    let out_file_path = matches.get_one::<PathBuf>("output").unwrap_or_else(|| {
+        eprintln!("Missing required output file argument");
+        std::process::exit(1);
+    });
+
+    let out_file = File::create(out_file_path).unwrap_or_else(|e| {
+        eprintln!(
+            "Failed to create output file \"{}\": {e}",
+            out_file_path.display()
+        );
+        std::process::exit(1);
+    });
+
+    mla::ArchiveWriter::from_config(out_file, config).unwrap_or_else(|e| {
+        eprintln!("Failed to create archive writer: {e}");
+        std::process::exit(1);
+    })
 }
 
 fn reader_from_matches(matches: &ArgMatches) -> mla_v1::ArchiveReader<'static, File> {
     let mut config_v1 = mla_v1::config::ArchiveReaderConfig::new();
+
     if let Some(private_key_args) = matches.get_many::<PathBuf>("private_keys") {
         let mut private_keys = Vec::new();
         for private_key_arg in private_key_args {
-            let key_bytes = fs::read(private_key_arg).expect("Failed to read private key");
+            let key_bytes = fs::read(private_key_arg).unwrap_or_else(|e| {
+                eprintln!(
+                    "Failed to read private key \"{}\": {e}",
+                    private_key_arg.display()
+                );
+                std::process::exit(1);
+            });
+
             match curve25519_parser::parse_openssl_25519_privkey(&key_bytes) {
                 Ok(key) => private_keys.push(key),
-                Err(err) => panic!("Failed to parse private key: {err}"),
+                Err(err) => {
+                    eprintln!(
+                        "Failed to parse private key \"{}\": {err}",
+                        private_key_arg.display()
+                    );
+                    std::process::exit(1);
+                }
             }
         }
         config_v1.layers_enabled.insert(mla_v1::Layers::ENCRYPT);
         config_v1.add_private_keys(&private_keys);
     }
-    let in_file_path = matches.get_one::<PathBuf>("input").unwrap();
-    let in_file = File::open(in_file_path).unwrap();
-    mla_v1::ArchiveReader::from_config(in_file, config_v1).unwrap()
+
+    let in_file_path = matches.get_one::<PathBuf>("input").unwrap_or_else(|| {
+        eprintln!("Missing required input file argument");
+        std::process::exit(1);
+    });
+
+    let in_file = File::open(in_file_path).unwrap_or_else(|e| {
+        eprintln!(
+            "Failed to open input file \"{}\": {e}",
+            in_file_path.display()
+        );
+        std::process::exit(1);
+    });
+
+    mla_v1::ArchiveReader::from_config(in_file, config_v1).unwrap_or_else(|e| {
+        eprintln!("Failed to create archive reader: {e}");
+        std::process::exit(1);
+    })
 }
 
 fn upgrade(matches: &ArgMatches) {
@@ -93,7 +152,8 @@ fn upgrade(matches: &ArgMatches) {
     // v1 archive still uses files, not entries
     let fnames: Vec<String> = mla_in.list_files().map_or_else(
         |_| {
-            panic!("Files is malformed. Please consider repairing the file");
+            eprintln!("Archive is malformed or unreadable. Consider repairing the file.");
+            std::process::exit(1);
         },
         |iter| iter.cloned().collect(),
     );
@@ -102,6 +162,7 @@ fn upgrade(matches: &ArgMatches) {
 
     for fname in fnames {
         eprintln!("{fname}");
+
         let sub_file = match mla_in.get_file(fname.clone()) {
             Err(err) => {
                 eprintln!("Error while adding {fname} ({err:?})");
@@ -118,18 +179,40 @@ fn upgrade(matches: &ArgMatches) {
         // does in `EntryName::from_path`.
         let normalized_filename = sub_file.filename.replace('\\', "/");
         let Ok(new_entry_name) = EntryName::from_path(normalized_filename) else {
-            eprintln!("Invalid empty name");
+            eprintln!("Invalid or empty entry name");
             continue;
         };
 
-        mla_out
-            .add_entry(new_entry_name, sub_file.size, sub_file.data)
-            .unwrap();
+        if let Err(e) = mla_out.add_entry(new_entry_name, sub_file.size, sub_file.data) {
+            eprintln!("Failed to add entry {fname}: {e}");
+        }
     }
-    mla_out.finalize().expect("Finalization error");
+
+    mla_out.finalize().unwrap_or_else(|e| {
+        eprintln!("Failed to finalize archive: {e}");
+        std::process::exit(1);
+    });
 }
 
 fn main() {
+    // User-friendly panic output
+    std::panic::set_hook(Box::new(|panic_info| {
+        let msg = match panic_info.payload().downcast_ref::<&str>() {
+            Some(s) => *s,
+            None => match panic_info.payload().downcast_ref::<String>() {
+                Some(s) => s.as_str(),
+                None => "Unknown panic",
+            },
+        };
+        eprintln!("Error: {msg}");
+        if let Some(location) = panic_info.location() {
+            let file = location.file();
+            let line = location.line();
+            eprintln!("(at {file}:{line})");
+        }
+        std::process::exit(1);
+    }));
+
     let matches = app().get_matches();
     upgrade(&matches);
 }
