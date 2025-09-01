@@ -53,7 +53,7 @@ fn writer_from_matches(matches: &ArgMatches) -> mla::ArchiveWriter<'static, File
             .map(|pub_key_path| {
                 let mut key_file = File::open(pub_key_path).unwrap_or_else(|e| {
                     eprintln!(
-                        "Failed to open public key \"{}\": {e}",
+                        "[ERROR] Failed to open public key \"{}\": {e}",
                         pub_key_path.display()
                     );
                     std::process::exit(1);
@@ -61,7 +61,7 @@ fn writer_from_matches(matches: &ArgMatches) -> mla::ArchiveWriter<'static, File
                 MLAPublicKey::deserialize_public_key(&mut key_file)
                     .unwrap_or_else(|e| {
                         eprintln!(
-                            "Failed to parse public key \"{}\": {e}",
+                            "[ERROR] Failed to parse public key \"{}\": {e}",
                             pub_key_path.display()
                         );
                         std::process::exit(1);
@@ -74,25 +74,25 @@ fn writer_from_matches(matches: &ArgMatches) -> mla::ArchiveWriter<'static, File
         ArchiveWriterConfig::without_encryption_without_signature()
     }
     .unwrap_or_else(|e| {
-        eprintln!("Invalid archive config: {e}");
+        eprintln!("[ERROR] Invalid archive config: {e}");
         std::process::exit(1);
     });
 
     let out_file_path = matches.get_one::<PathBuf>("output").unwrap_or_else(|| {
-        eprintln!("Missing required output file argument");
+        eprintln!("[ERROR] Missing required output file argument");
         std::process::exit(1);
     });
 
     let out_file = File::create(out_file_path).unwrap_or_else(|e| {
         eprintln!(
-            "Failed to create output file \"{}\": {e}",
+            "[ERROR] Failed to create output file \"{}\": {e}",
             out_file_path.display()
         );
         std::process::exit(1);
     });
 
     mla::ArchiveWriter::from_config(out_file, config).unwrap_or_else(|e| {
-        eprintln!("Failed to create archive writer: {e}");
+        eprintln!("[ERROR] Failed to create archive writer: {e}");
         std::process::exit(1);
     })
 }
@@ -105,7 +105,7 @@ fn reader_from_matches(matches: &ArgMatches) -> mla_v1::ArchiveReader<'static, F
         for private_key_arg in private_key_args {
             let key_bytes = fs::read(private_key_arg).unwrap_or_else(|e| {
                 eprintln!(
-                    "Failed to read private key \"{}\": {e}",
+                    "[ERROR] Failed to read private key \"{}\": {e}",
                     private_key_arg.display()
                 );
                 std::process::exit(1);
@@ -115,7 +115,7 @@ fn reader_from_matches(matches: &ArgMatches) -> mla_v1::ArchiveReader<'static, F
                 Ok(key) => private_keys.push(key),
                 Err(err) => {
                     eprintln!(
-                        "Failed to parse private key \"{}\": {err}",
+                        "[ERROR] Failed to parse private key \"{}\": {err}",
                         private_key_arg.display()
                     );
                     std::process::exit(1);
@@ -127,20 +127,20 @@ fn reader_from_matches(matches: &ArgMatches) -> mla_v1::ArchiveReader<'static, F
     }
 
     let in_file_path = matches.get_one::<PathBuf>("input").unwrap_or_else(|| {
-        eprintln!("Missing required input file argument");
+        eprintln!("[ERROR] Missing required input file argument");
         std::process::exit(1);
     });
 
     let in_file = File::open(in_file_path).unwrap_or_else(|e| {
         eprintln!(
-            "Failed to open input file \"{}\": {e}",
+            "[ERROR] Failed to open input file \"{}\": {e}",
             in_file_path.display()
         );
         std::process::exit(1);
     });
 
     mla_v1::ArchiveReader::from_config(in_file, config_v1).unwrap_or_else(|e| {
-        eprintln!("Failed to create archive reader: {e}");
+        eprintln!("[ERROR] Failed to create archive reader: {e}");
         std::process::exit(1);
     })
 }
@@ -152,7 +152,7 @@ fn upgrade(matches: &ArgMatches) {
     // v1 archive still uses files, not entries
     let fnames: Vec<String> = mla_in.list_files().map_or_else(
         |_| {
-            eprintln!("Archive is malformed or unreadable. Consider repairing the file.");
+            eprintln!("[ERROR] Archive is malformed or unreadable. Consider repairing the file.");
             std::process::exit(1);
         },
         |iter| iter.cloned().collect(),
@@ -161,15 +161,15 @@ fn upgrade(matches: &ArgMatches) {
     let mut mla_out = writer_from_matches(matches);
 
     for fname in fnames {
-        eprintln!("{fname}");
+        eprintln!(" adding: {fname}");
 
         let sub_file = match mla_in.get_file(fname.clone()) {
             Err(err) => {
-                eprintln!("Error while adding {fname} ({err:?})");
+                eprintln!("[WARNING] Failed to add {fname} ({err:?})");
                 continue;
             }
             Ok(None) => {
-                eprintln!("Unable to find {fname}");
+                eprintln!("[WARNING] Unable to find {fname}");
                 continue;
             }
             Ok(Some(mla)) => mla,
@@ -179,17 +179,17 @@ fn upgrade(matches: &ArgMatches) {
         // does in `EntryName::from_path`.
         let normalized_filename = sub_file.filename.replace('\\', "/");
         let Ok(new_entry_name) = EntryName::from_path(normalized_filename) else {
-            eprintln!("Invalid or empty entry name");
+            eprintln!("[WARNING] Invalid or empty entry name");
             continue;
         };
 
         if let Err(e) = mla_out.add_entry(new_entry_name, sub_file.size, sub_file.data) {
-            eprintln!("Failed to add entry {fname}: {e}");
+            eprintln!("[WARNING] Failed to add entry {fname}: {e}");
         }
     }
 
     mla_out.finalize().unwrap_or_else(|e| {
-        eprintln!("Failed to finalize archive: {e}");
+        eprintln!("[ERROR] Failed to finalize archive: {e}");
         std::process::exit(1);
     });
 }
@@ -204,7 +204,7 @@ fn main() {
                 None => "Unknown panic",
             },
         };
-        eprintln!("Error: {msg}");
+        eprintln!("[ERROR] {msg}");
         if let Some(location) = panic_info.location() {
             let file = location.file();
             let line = location.line();
@@ -242,7 +242,7 @@ pub(crate) mod tests {
         }
 
         // Change current dir to the temp test directory
-        env::set_current_dir(&base_temp).expect("Failed to set current directory");
+        env::set_current_dir(&base_temp).expect("[ERROR] Failed to set current directory");
 
         // Helper function for running upgrade with arguments
         let run_upgrade = |input: &str, output: &str, private_key: &str, public_key: &str| {
@@ -277,7 +277,7 @@ pub(crate) mod tests {
         );
 
         // 2.2 Verify no backslashes in output from Windows archive upgrade
-        let mut cmd = Command::cargo_bin("mlar").expect("Failed to find mlar binary");
+        let mut cmd = Command::cargo_bin("mlar").expect("[ERROR] Failed to find mlar binary");
         cmd.arg("list")
             .arg("-k")
             .arg("test_mlakey_archive_v2_receiver.mlapriv")
@@ -286,7 +286,7 @@ pub(crate) mod tests {
             .arg("--skip-signature-verification");
 
         let output = cmd.assert().success().get_output().stdout.clone();
-        let output_str = String::from_utf8(output).expect("Output not valid UTF-8");
+        let output_str = String::from_utf8(output).expect("[ERROR] Output not valid UTF-8");
 
         for line in output_str.lines() {
             assert!(
