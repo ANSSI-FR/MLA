@@ -141,15 +141,25 @@ fn test_create_from_dir() {
     let public_key = Path::new("../samples/test_mlakey.mlapub");
     let private_key = Path::new("../samples/test_mlakey.mlapriv");
 
-    // Temporary directory to test recursive file addition
+    // Temporary directory with nested structure
     let tmp_dir = TempDir::new().unwrap();
     let subfile1_path = tmp_dir.path().join("subfile1");
     let subdir_path = tmp_dir.path().join("subdir");
     let subfile2_path = subdir_path.join("subfile2");
 
-    std::fs::write(subfile1_path, "Test1").unwrap();
-    std::fs::create_dir(subdir_path).unwrap();
-    std::fs::write(subfile2_path, "Test2").unwrap();
+    std::fs::write(&subfile1_path, "Test1").unwrap();
+    std::fs::create_dir(&subdir_path).unwrap();
+    std::fs::write(&subfile2_path, "Test2").unwrap();
+
+    // Collect paths from directory into file_list
+    let mut file_list: Vec<String> = Vec::new();
+    file_list_append_from_dir(tmp_dir.path(), &mut file_list);
+
+    // Prepare expected stderr with " adding: {path}\n"
+    let mut expected_stderr = String::new();
+    for path in &file_list {
+        expected_stderr.push_str(format!(" adding: {path}\n").as_str());
+    }
 
     // `mlar create -o output.mla -p samples/test_mlakey.mlapub <tmp_dir>`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
@@ -161,18 +171,17 @@ fn test_create_from_dir() {
         .arg("-o")
         .arg(mlar_file.path())
         .arg("-p")
-        .arg(public_key);
-
-    cmd.arg(tmp_dir.path());
-
-    let mut file_list: Vec<String> = Vec::new();
-    // The exact order of the files in the archive depends on the order of the
-    // result of `read_dir` which is plateform and filesystem dependent.
-    file_list_append_from_dir(tmp_dir.path(), &mut file_list);
+        .arg(public_key)
+        .arg(tmp_dir.path());
 
     println!("{cmd:?}");
-    let assert = cmd.assert();
-    assert.success().stderr(file_list.join("\n") + "\n");
+    cmd.assert().success().stderr(expected_stderr);
+
+    // Sort file list for consistent output
+    // The exact order of the files in the archive depends on the order of the
+    // result of `read_dir` which is plateform and filesystem dependent.
+    file_list.sort();
+    let expected_stdout = file_list.join("\n") + "\n";
 
     // `mlar list -i output.mla -k samples/test_mlakey.mlapriv`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
@@ -184,9 +193,7 @@ fn test_create_from_dir() {
         .arg(private_key);
 
     println!("{cmd:?}");
-    let assert = cmd.assert();
-    file_list.sort();
-    assert.success().stdout(file_list.join("\n") + "\n");
+    cmd.assert().success().stdout(expected_stdout);
 }
 
 #[test]
@@ -198,6 +205,26 @@ fn test_create_filelist_stdin() {
     // Create files
     let testfs = setup();
 
+    // Build the stdin file list
+    let mut file_list_stdin = String::new();
+    for file in &testfs.files {
+        file_list_stdin.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
+    }
+
+    // Expected stderr:  adding: <escaped> (<size> bytes)
+    let mut expected_stderr = String::new();
+
+    // Expected stdout: plain paths (escaped)
+    let mut expected_stdout = String::new();
+
+    for file in &testfs.files {
+        let entry_name = EntryName::from_path(file.path()).unwrap();
+        let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
+
+        expected_stderr.push_str(format!(" adding: {escaped}\n").as_str());
+        expected_stdout.push_str(format!("{escaped}\n").as_str());
+    }
+
     // `mlar create -o output.mla -p samples/test_mlakey.mlapub -`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
@@ -208,25 +235,15 @@ fn test_create_filelist_stdin() {
         .arg("-o")
         .arg(mlar_file.path())
         .arg("-p")
-        .arg(public_key);
+        .arg(public_key)
+        .arg("--stdin-file-list");
 
-    cmd.arg("--stdin-file-list");
     println!("{cmd:?}");
+    cmd.write_stdin(file_list_stdin);
+    println!("{expected_stderr:?}");
 
-    let mut file_list_stdin = String::new();
-    for file in &testfs.files {
-        file_list_stdin.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
-    }
-    let mut file_list = String::new();
-    for file in &testfs.files {
-        let entry_name = EntryName::from_path(file.path()).unwrap();
-        let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
-        file_list.push_str(format!("{escaped}\n").as_str());
-    }
-    cmd.write_stdin(String::from(&file_list_stdin));
-    println!("{file_list:?}");
     let assert = cmd.assert();
-    assert.success().stderr(String::from(&file_list));
+    assert.success().stderr(expected_stderr);
 
     // `mlar list -i output.mla -k samples/test_mlakey.mlapriv`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
@@ -239,7 +256,7 @@ fn test_create_filelist_stdin() {
 
     println!("{cmd:?}");
     let assert = cmd.assert();
-    assert.success().stdout(file_list);
+    assert.success().stdout(expected_stdout);
 }
 
 #[test]
@@ -264,17 +281,21 @@ fn test_create_list_tar() {
         .arg("-k")
         .arg(sender_private_key);
 
-    let mut file_list = String::new();
+    let mut file_list = String::new(); // For stdout (list)
+    let mut expected_stderr = String::new(); // For stderr (create)
+
     for file in &testfs.files {
         cmd.arg(file.path());
+
         let entry_name = EntryName::from_path(file.path()).unwrap();
         let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
         file_list.push_str(format!("{escaped}\n").as_str());
+        expected_stderr.push_str(format!(" adding: {escaped}\n").as_str());
     }
 
     println!("{cmd:?}");
     let assert = cmd.assert();
-    assert.success().stderr(String::from(&file_list));
+    assert.success().stderr(expected_stderr);
 
     // `mlar list -i output.mla -k samples/test_mlakey.mlapriv`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
@@ -321,6 +342,26 @@ fn test_truncated_repair_list_tar() {
     // Create files
     let testfs = setup();
 
+    // Prepare expected outputs:
+    // 1. For create command stderr (with prefix)
+    let mut file_list = String::new(); // Sorted by position in archive
+    // 2. For list command stdout (plain file list, no prefix)
+    let mut file_list_no_last_plain = String::new();
+
+    for file in &testfs.files {
+        if file.path() != testfs.files_archive_order.last().unwrap() {
+            let entry_name = EntryName::from_path(file.path()).unwrap();
+            let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
+            file_list_no_last_plain.push_str(format!("{escaped}\n").as_str());
+        }
+    }
+
+    for path in &testfs.files_archive_order {
+        let entry_name = EntryName::from_path(path).unwrap();
+        let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
+        file_list.push_str(format!(" adding: {escaped}\n").as_str());
+    }
+
     // `mlar create -o output.mla -p samples/test_mlakey.mlapub file1.bin file2.bin file3.bin`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
@@ -333,27 +374,15 @@ fn test_truncated_repair_list_tar() {
         .arg("-p")
         .arg(public_key);
 
-    let mut file_list = String::new(); // Sorted by position in archive
-    let mut file_list_no_last = String::new(); // Sorted by name
-    for file in &testfs.files {
-        if file.path() != testfs.files_archive_order.last().unwrap() {
-            let entry_name = EntryName::from_path(file.path()).unwrap();
-            let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
-            file_list_no_last.push_str(format!("{escaped}\n").as_str());
-        }
-    }
     for path in &testfs.files_archive_order {
         cmd.arg(path);
-        let entry_name = EntryName::from_path(path).unwrap();
-        let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
-        file_list.push_str(format!("{escaped}\n").as_str());
     }
 
     println!("{cmd:?}");
     let assert = cmd.assert();
-    assert.success().stderr(String::from(&file_list));
+    assert.success().stderr(file_list);
 
-    // Truncate output.mla
+    // Truncate output.mla to simulate corruption
     let mut data = Vec::new();
     File::open(mlar_file.path())
         .unwrap()
@@ -394,9 +423,9 @@ fn test_truncated_repair_list_tar() {
 
     println!("{cmd:?}");
     let assert = cmd.assert();
-    // Do not consider the last file for test after trunc, as we truncate at
-    // 6 / 7 (last file being really small)
-    assert.success().stdout(file_list_no_last);
+    // Expect plain file list for the repaired list, without last truncated file
+    // as truncated at 6 / 7, last file being really small
+    assert.success().stdout(file_list_no_last_plain);
 
     // `mlar to-tar -i output.mla -k samples/test_mlakey.mlapriv -o output.tar`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
@@ -416,14 +445,14 @@ fn test_truncated_repair_list_tar() {
     // Inspect the created TAR file
     let mut arch = Archive::new(File::open(tar_file.path()).unwrap());
 
-    // basename -> expected content
+    // basename -> expected content map
     let mut fname2content = HashMap::new();
 
-    // Do not consider the last file for test after trunc
+    // Do not consider the last file for test after truncation
     for file in &testfs.files_archive_order[..testfs.files_archive_order.len() - 1] {
         let mut content = Vec::new();
         File::open(file).unwrap().read_to_end(&mut content).unwrap();
-        fname2content.insert(file.file_name().unwrap(), content);
+        fname2content.insert(file.file_name().unwrap().to_owned(), content);
     }
 
     for file in arch.entries().unwrap() {
@@ -433,8 +462,7 @@ fn test_truncated_repair_list_tar() {
         let pbuf = file.header().path().unwrap().to_path_buf();
         let fname = pbuf.file_name().unwrap();
 
-        // Ensure the extracted content is the same as the expected one, even if
-        // truncated (ie, all the bytes must be correct, but the end can be missing)
+        // Ensure the extracted content is correct (partial allowed due to truncation)
         let mut content = Vec::new();
         file.read_to_end(&mut content).unwrap();
         assert_eq!(
@@ -444,10 +472,10 @@ fn test_truncated_repair_list_tar() {
         // Ensure we have at least one byte
         assert_ne!(content.len(), 0);
 
-        // Prepare for last check: correctness and completeness
+        // Remove used files to check completeness
         fname2content.remove(fname);
     }
-    // Ensure all files have been used
+    // Ensure all expected files have been matched
     assert_eq!(fname2content.len(), 0);
 }
 
@@ -462,6 +490,14 @@ fn test_repair_auth_unauth() {
     let testfs = setup();
 
     for i in 0..3 {
+        // Prepare expected outputs for create and list commands
+        let entry_name = EntryName::from_path(testfs.files[i].path()).unwrap();
+        let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
+
+        let create_stderr = format!(" adding: {escaped}\n");
+        let list_stdout = format!("{escaped}\n");
+
+        // Create archive with encrypt layer
         let mut cmd = Command::cargo_bin(UTIL).unwrap();
         cmd.arg("create")
             .arg("-o")
@@ -472,14 +508,11 @@ fn test_repair_auth_unauth() {
             .arg(public_key)
             .arg(testfs.files[i].path());
 
-        let entry_name = EntryName::from_path(testfs.files[i].path()).unwrap();
-        let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
-        let file_list = format!("{escaped}\n");
-
         println!("{cmd:?}");
         let assert = cmd.assert();
-        assert.success().stderr(String::from(&file_list));
+        assert.success().stderr(create_stderr.clone());
 
+        // List archive content
         let mut cmd = Command::cargo_bin(UTIL).unwrap();
         cmd.arg("list")
             .arg("--skip-signature-verification")
@@ -490,9 +523,9 @@ fn test_repair_auth_unauth() {
 
         println!("{cmd:?}");
         let assert = cmd.assert();
-        assert.success().stdout(file_list.clone());
+        assert.success().stdout(list_stdout.clone());
 
-        // Truncate output.mla
+        // Truncate the archive file (~6/7 size)
         let mut data = Vec::new();
         File::open(mlar_file.path())
             .unwrap()
@@ -503,6 +536,7 @@ fn test_repair_auth_unauth() {
             .write_all(&data[..data.len() * 6 / 7])
             .unwrap();
 
+        // Attempt repair (authenticated)
         let mut cmd = Command::cargo_bin(UTIL).unwrap();
         cmd.arg("repair")
             .arg("--skip-signature-verification")
@@ -519,10 +553,10 @@ fn test_repair_auth_unauth() {
 
         println!("{cmd:?}");
         let assert = cmd.assert();
+        // For file3.bin, repair is expected to fail as the file is really small
         if testfs.files[i]
             .path()
             .to_string_lossy()
-            .into_owned()
             .contains("file3.bin")
         {
             assert.failure();
@@ -530,6 +564,7 @@ fn test_repair_auth_unauth() {
             assert.success();
         }
 
+        // Try to read content from repaired archive (authenticated)
         let mut cmd = Command::cargo_bin(UTIL).unwrap();
         cmd.arg("cat")
             .arg("--skip-signature-verification")
@@ -543,7 +578,10 @@ fn test_repair_auth_unauth() {
         let assert = cmd.assert();
         let output_auth = assert.get_output();
 
+        // Remove repaired file to test unauthenticated repair
         let _ = std::fs::remove_file(mlar_repaired_file.path());
+
+        // Repair allowing unauthenticated data
         let mut cmd = Command::cargo_bin(UTIL).unwrap();
         cmd.arg("repair")
             .arg("--allow-unauthenticated-data")
@@ -563,7 +601,7 @@ fn test_repair_auth_unauth() {
         let assert = cmd.assert();
         assert.success();
 
-        // `mlar cat -i repaired.mla -k samples/test_x25519.pem file1.bin`
+        // Read content from repaired archive (unauthenticated)
         let mut cmd = Command::cargo_bin(UTIL).unwrap();
         cmd.arg("cat")
             .arg("--skip-signature-verification")
@@ -581,21 +619,23 @@ fn test_repair_auth_unauth() {
         if testfs.files[i]
             .path()
             .to_string_lossy()
-            .into_owned()
             .contains("file3.bin")
         {
             // for file3, the truncation falls in MLA entries layer magic, thus we cannot recover anything
             assert_eq!(output_unauth.stdout.len(), 0);
             assert_eq!(output_auth.stdout.len(), 0);
         } else {
+            // For others, unauthenticated output must be at least as large as authenticated
             assert!(output_unauth.stdout.len() >= output_auth.stdout.len());
         }
 
-        // Data must be the same
+        // Authenticated output must match start of unauthenticated output
         assert_eq!(
             output_auth.stdout,
             output_unauth.stdout[..output_auth.stdout.len()]
         );
+
+        // Clean up
         let _ = std::fs::remove_file(mlar_file.path());
         let _ = std::fs::remove_file(mlar_repaired_file.path());
     }
@@ -603,7 +643,6 @@ fn test_repair_auth_unauth() {
 
 #[test]
 fn test_multiple_keys() {
-    // Key parsing is common for each subcommands, so test only one: `list`
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
     let public_keys = [
         Path::new("../samples/test_mlakey.mlapub"),
@@ -617,7 +656,23 @@ fn test_multiple_keys() {
     // Create files
     let testfs = setup();
 
-    // `mlar create -o output.mla -p samples/test_mlakey_pub.mlapriv -p samples/test_mlakey_3.mlapub file1.bin file2.bin file3.bin`
+    // Prepare expected stderr (for `create`) with full info lines
+    let mut expected_stderr = String::new();
+    for file in &testfs.files {
+        let entry_name = EntryName::from_path(file.path()).unwrap();
+        let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
+        expected_stderr.push_str(format!(" adding: {escaped}\n").as_str());
+    }
+
+    // Prepare expected stdout (for `list`) with just file paths, no extra info
+    let mut expected_stdout = String::new();
+    for file in &testfs.files {
+        let entry_name = EntryName::from_path(file.path()).unwrap();
+        let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
+        expected_stdout.push_str(format!("{escaped}\n").as_str());
+    }
+
+    // Run `mlar create` with compress + encrypt and public keys
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-l")
@@ -631,24 +686,14 @@ fn test_multiple_keys() {
         .arg("-p")
         .arg(public_keys[1]);
 
-    let mut file_list = String::new();
     for file in &testfs.files {
         cmd.arg(file.path());
-        let entry_name = EntryName::from_path(file.path()).unwrap();
-        let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
-        file_list.push_str(format!("{escaped}\n").as_str());
     }
 
     println!("{cmd:?}");
-    let assert = cmd.assert();
-    assert.success().stderr(String::from(&file_list));
+    cmd.assert().success().stderr(expected_stderr.clone());
 
-    // Ensure:
-    // - we can read with one correct, one bad private key
-    // - we can read with only the second correct private key
-    // - we cannot read with only a bad private key
-
-    // `mlar list -i output.mla -k samples/test_mlakey.mlapriv -k samples/test_mlakey_2.mlapriv`
+    // Run `mlar list` with both private keys
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
         .arg("--skip-signature-verification")
@@ -660,23 +705,21 @@ fn test_multiple_keys() {
         .arg(private_keys[1]);
 
     println!("{cmd:?}");
-    let assert = cmd.assert();
-    assert.success().stdout(String::from(&file_list));
+    cmd.assert().success().stdout(expected_stdout.clone());
 
-    // `mlar list -i output.mla -k samples/test_mlakey_3.mlapriv`
+    // Run `mlar list` with second private key only
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
         .arg("--skip-signature-verification")
         .arg("-i")
         .arg(mlar_file.path())
         .arg("-k")
-        .arg(Path::new("../samples/test_mlakey_3.mlapriv"));
+        .arg(public_keys[1].with_extension("mlapriv"));
 
     println!("{cmd:?}");
-    let assert = cmd.assert();
-    assert.success().stdout(String::from(&file_list));
+    cmd.assert().success().stdout(expected_stdout.clone());
 
-    // `mlar list -i output.mla -k samples/test_mlakey_2.mlapriv`
+    // Run `mlar list` with wrong private key (should fail)
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
         .arg("--skip-signature-verification")
@@ -686,8 +729,7 @@ fn test_multiple_keys() {
         .arg(private_keys[1]);
 
     println!("{cmd:?}");
-    let assert = cmd.assert();
-    assert.failure();
+    cmd.assert().failure();
 }
 
 #[test]
@@ -711,20 +753,22 @@ fn test_multiple_compression_level() {
             .arg("-q")
             .arg(compression_level);
 
-        let mut file_list = String::new();
+        let mut expected_stderr = String::new();
         for file in &testfs.files {
             cmd.arg(file.path());
+
             let entry_name = EntryName::from_path(file.path()).unwrap();
             let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
-            file_list.push_str(format!("{escaped}\n").as_str());
+
+            expected_stderr.push_str(format!(" adding: {escaped}\n").as_str());
         }
 
         println!("{cmd:?}");
         let assert = cmd.assert();
-        assert.success().stderr(String::from(&file_list));
+        assert.success().stderr(expected_stderr);
     }
 
-    // Hopefully, if compression works, q0 must be smaller than q5
+    // Hopefully, if compression works, q5 must be smaller than q0
     let q0_size = metadata(mlar_file_q0.path()).unwrap().len();
     let q5_size = metadata(mlar_file_q5.path()).unwrap().len();
     assert!(q5_size < q0_size);
@@ -745,6 +789,7 @@ fn test_multiple_compression_level() {
         let assert = cmd.assert();
         assert.success();
     }
+
     ensure_tar_content(tar_file_q0.path(), &testfs.files);
     ensure_tar_content(tar_file_q5.path(), &testfs.files);
 }
@@ -753,9 +798,11 @@ fn test_multiple_compression_level() {
 fn test_convert() {
     // Create an archive with one public key, convert it to use only another key
     // without compression, then verify the size and the content of the archive
+
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
     let mlar_file_converted = NamedTempFile::new("convert.mla").unwrap();
     let tar_file = NamedTempFile::new("output.tar").unwrap();
+
     let public_key1 = Path::new("../samples/test_mlakey.mlapub");
     let private_key1 = Path::new("../samples/test_mlakey.mlapriv");
     let public_key2 = Path::new("../samples/test_mlakey_2.mlapub");
@@ -764,7 +811,7 @@ fn test_convert() {
     // Create files
     let testfs = setup();
 
-    // `mlar create -o output.mla -p samples/public_1024.mlapub file1.bin file2.bin file3.bin`
+    // === Step 1: Create the original archive
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-l")
@@ -776,19 +823,19 @@ fn test_convert() {
         .arg("-p")
         .arg(public_key1);
 
-    let mut file_list = String::new();
+    let mut create_stderr = String::new();
     for file in &testfs.files {
         cmd.arg(file.path());
         let entry_name = EntryName::from_path(file.path()).unwrap();
         let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
-        file_list.push_str(format!("{escaped}\n").as_str());
+        create_stderr.push_str(format!(" adding: {escaped}\n").as_str());
     }
 
     println!("{cmd:?}");
     let assert = cmd.assert();
-    assert.success().stderr(String::from(&file_list));
+    assert.success().stderr(create_stderr.clone());
 
-    // `mlar convert -i output.mla -k samples/private_1024.mlapriv -l encrypt -o convert.mla -p samples/public_2048.mlapub`
+    // === Step 2: Convert the archive to a new key
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("convert")
         .arg("--skip-signature-verification")
@@ -805,16 +852,23 @@ fn test_convert() {
 
     println!("{cmd:?}");
     let assert = cmd.assert();
-    assert
-        .success()
-        .stderr(String::from(&file_list).replace('/', "%2f"));
 
-    // Hopefully, compressed must be smaller than without compression
+    // Correct expected stderr for `convert`
+    let mut convert_stderr = String::new();
+    for file in &testfs.files {
+        let entry_name = EntryName::from_path(file.path()).unwrap();
+        let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
+        convert_stderr.push_str(format!(" converting: {}\n", escaped.replace('/', "%2f")).as_str());
+    }
+
+    assert.success().stderr(convert_stderr);
+
+    // === Step 3: Verify that conversion did not compress (size should be bigger)
     let size_output = metadata(mlar_file.path()).unwrap().len();
     let size_convert = metadata(mlar_file_converted.path()).unwrap().len();
     assert!(size_output < size_convert);
 
-    // `mlar to-tar -i convert.mla -k samples/private_2048.mlapriv -o output.tar`
+    // === Step 4: Extract converted archive to TAR
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("to-tar")
         .arg("--skip-signature-verification")
@@ -829,7 +883,7 @@ fn test_convert() {
     let assert = cmd.assert();
     assert.success();
 
-    // Inspect the created TAR file
+    // === Step 5: Inspect the created TAR file content
     ensure_tar_content(tar_file.path(), &testfs.files);
 }
 
@@ -844,6 +898,14 @@ fn test_stdio() {
     // Create files
     let testfs = setup();
 
+    // Prepare expected stderr output for create command with  lines
+    let mut file_list = String::new();
+    for file in &testfs.files {
+        let entry_name = EntryName::from_path(file.path()).unwrap();
+        let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
+        file_list.push_str(format!(" adding: {escaped}\n").as_str());
+    }
+
     // `mlar create -o - -p samples/test_mlakey.mlapub file1.bin file2.bin file3.bin`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
@@ -852,27 +914,25 @@ fn test_stdio() {
         .arg("-l")
         .arg("encrypt")
         .arg("-o")
-        .arg("-")
+        .arg("-") // output to stdout
         .arg("-p")
         .arg(public_key);
 
-    let mut file_list = String::new();
     for file in &testfs.files {
         cmd.arg(file.path());
-        let entry_name = EntryName::from_path(file.path()).unwrap();
-        let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
-        file_list.push_str(format!("{escaped}\n").as_str());
     }
 
     println!("{cmd:?}");
     let assert = cmd.assert();
     let archive_data = assert.get_output().stdout.clone();
-    assert.success().stderr(String::from(&file_list));
+    assert.success().stderr(file_list);
 
+    // Write archive data to temporary file for further testing
     File::create(mlar_file.path())
         .unwrap()
         .write_all(&archive_data)
         .unwrap();
+
     // `mlar to-tar -i output.mla -k samples/test_mlakey.mlapriv -o output.tar`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("to-tar")
@@ -888,13 +948,13 @@ fn test_stdio() {
     let assert = cmd.assert();
     assert.success();
 
-    // Inspect the created TAR file
+    // Inspect the created TAR file content matches original test files
     ensure_tar_content(tar_file.path(), &testfs.files);
 }
 
 #[test]
 fn test_multi_fileorders() {
-    // Create several archive with all possible file order. Result should be the same
+    // Create several archives with all possible file orders. Result should be the same
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
     let tar_file = NamedTempFile::new("output.tar").unwrap();
     let public_key = Path::new("../samples/test_mlakey.mlapub");
@@ -929,17 +989,19 @@ fn test_multi_fileorders() {
             .arg("-p")
             .arg(public_key);
 
-        let mut file_list = String::new();
+        let mut expected_stderr = String::new();
+
         for file in list {
             cmd.arg(file);
+
             let entry_name = EntryName::from_path(file).unwrap();
             let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
-            file_list.push_str(format!("{escaped}\n").as_str());
+            expected_stderr.push_str(format!(" adding: {escaped}\n").as_str());
         }
 
         println!("{cmd:?}");
         let assert = cmd.assert();
-        assert.success().stderr(String::from(&file_list));
+        assert.success().stderr(expected_stderr);
 
         // `mlar to-tar -i convert.mla -k samples/test_mlakey.mlapriv -o output.tar`
         let mut cmd = Command::cargo_bin(UTIL).unwrap();
@@ -976,17 +1038,18 @@ fn test_verbose_listing() {
         .arg("-o")
         .arg(mlar_file.path());
 
-    let mut file_list = String::new();
+    // Build expected stderr with full " adding: ... (N bytes)" lines
+    let mut expected_stderr = String::new();
     for file in &testfs.files {
         cmd.arg(file.path());
         let entry_name = EntryName::from_path(file.path()).unwrap();
         let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
-        file_list.push_str(format!("{escaped}\n").as_str());
+        expected_stderr.push_str(format!(" adding: {escaped}\n").as_str());
     }
 
     println!("{cmd:?}");
     let assert = cmd.assert();
-    assert.success().stderr(String::from(&file_list));
+    assert.success().stderr(expected_stderr);
 
     // `mlar list -i output.mla`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
@@ -998,7 +1061,16 @@ fn test_verbose_listing() {
 
     println!("{cmd:?}");
     let assert = cmd.assert();
-    assert.success().stdout(file_list);
+
+    // The list command prints just the filenames (no INFO prefix), so:
+    let mut expected_stdout = String::new();
+    for file in &testfs.files {
+        let entry_name = EntryName::from_path(file.path()).unwrap();
+        let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
+        expected_stdout.push_str(format!("{escaped}\n").as_str());
+    }
+
+    assert.success().stdout(expected_stdout);
 
     // `mlar list -v -i output.mla`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
@@ -1165,7 +1237,7 @@ fn test_cat() {
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
     let testfs = setup();
 
-    // `mlar create -l -o output.mla
+    // `mlar create -l compress -o output.mla ...`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-l")
@@ -1173,19 +1245,20 @@ fn test_cat() {
         .arg("-o")
         .arg(mlar_file.path());
 
-    let mut file_list = String::new();
+    let mut expected_stderr = String::new();
     for file in &testfs.files {
         cmd.arg(file.path());
+
         let entry_name = EntryName::from_path(file.path()).unwrap();
         let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
-        file_list.push_str(format!("{escaped}\n").as_str());
+        expected_stderr.push_str(format!(" adding: {escaped}\n").as_str());
     }
 
     println!("{cmd:?}");
     let assert = cmd.assert();
-    assert.success().stderr(String::from(&file_list));
+    assert.success().stderr(expected_stderr);
 
-    // `mlar cat -i output.mla file1`
+    // `mlar cat -i output.mla fileX`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("cat")
         .arg("-i")
@@ -1202,12 +1275,12 @@ fn test_cat() {
         .unwrap()
         .read_to_end(&mut expected_content)
         .unwrap();
+
     assert_eq!(assert.success().get_output().stdout, expected_content);
 }
 
 #[test]
 fn test_keygen() {
-    // Gen a keypair, create and list an archive using them
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
     let output_dir = TempDir::new().unwrap();
     let base_path = output_dir.path().join("key");
@@ -1215,12 +1288,28 @@ fn test_keygen() {
     let pub_path = base_path.with_extension("mlapub");
     let testfs = setup();
 
-    // `mlar keygen tempdir/key`
+    // Generate keypair
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("keygen").arg(&base_path);
     cmd.assert().success();
 
-    // `mlar create -p tempdir/key.pub -o output.mla file1 file2 file3`
+    // Prepare expected stderr for create command
+    let mut expected_stderr = String::new();
+    for file in &testfs.files {
+        let entry_name = EntryName::from_path(file.path()).unwrap();
+        let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
+        expected_stderr.push_str(format!(" adding: {escaped}\n").as_str());
+    }
+
+    // Prepare expected stdout for list command (just file names)
+    let mut expected_stdout = String::new();
+    for file in &testfs.files {
+        let entry_name = EntryName::from_path(file.path()).unwrap();
+        let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
+        expected_stdout.push_str(format!("{escaped}\n").as_str());
+    }
+
+    // Create archive using public key
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-l")
@@ -1232,19 +1321,14 @@ fn test_keygen() {
         .arg("-o")
         .arg(mlar_file.path());
 
-    let mut file_list = String::new();
     for file in &testfs.files {
         cmd.arg(file.path());
-        let entry_name = EntryName::from_path(file.path()).unwrap();
-        let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
-        file_list.push_str(format!("{escaped}\n").as_str());
     }
 
     println!("{cmd:?}");
-    let assert = cmd.assert();
-    assert.success().stderr(String::from(&file_list));
+    cmd.assert().success().stderr(expected_stderr.clone());
 
-    // `mlar list -k tempdir/key -i output.mla`
+    // List archive contents with private key
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
         .arg("--skip-signature-verification")
@@ -1254,8 +1338,7 @@ fn test_keygen() {
         .arg(mlar_file.path());
 
     println!("{cmd:?}");
-    let assert = cmd.assert();
-    assert.success().stdout(file_list);
+    cmd.assert().success().stdout(expected_stdout.clone());
 }
 
 const PRIVATE_KEY_TESTSEED_SHA256: [u8; 32] = [
@@ -1433,7 +1516,7 @@ fn test_verbose_info() {
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
     let testfs = setup();
 
-    // `mlar create -l -o output.mla
+    // `mlar create -l -o output.mla`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create").arg("-o").arg(mlar_file.path());
     cmd.arg("-l").arg("compress");
@@ -1441,19 +1524,20 @@ fn test_verbose_info() {
     cmd.arg("-p").arg(public_key);
     cmd.arg("-p").arg(public_key_2);
 
-    let mut file_list = String::new();
+    // Build expected stderr with full " adding: ... (size bytes)" lines
+    let mut expected_stderr = String::new();
     for file in &testfs.files {
         cmd.arg(file.path());
         let entry_name = EntryName::from_path(file.path()).unwrap();
         let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
-        file_list.push_str(format!("{escaped}\n").as_str());
+        expected_stderr.push_str(format!(" adding: {escaped}\n").as_str());
     }
 
     println!("{cmd:?}");
     let assert = cmd.assert();
-    assert.success().stderr(String::from(&file_list));
+    assert.success().stderr(expected_stderr);
 
-    // `mlar info -k <key> -i output.mla`
+    // `mlar info -i output.mla`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("info").arg("-i").arg(mlar_file.path());
 
@@ -1466,7 +1550,7 @@ Signature: false
 ",
     );
 
-    // `mlar info -k <key> -v -i output.mla`
+    // `mlar info -v -i output.mla`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("info").arg("-v").arg("-i").arg(mlar_file.path());
 
@@ -1484,6 +1568,14 @@ fn test_no_open_on_encrypt() {
     // Create files
     let testfs = setup();
 
+    // Prepare expected stderr for create
+    let mut expected_stderr = String::new();
+    for file in &testfs.files {
+        let entry_name = EntryName::from_path(file.path()).unwrap();
+        let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
+        expected_stderr.push_str(format!(" adding: {escaped}\n").as_str());
+    }
+
     // `mlar create -o output.mla -l compress file1.bin file2.bin file3.bin`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
@@ -1492,20 +1584,16 @@ fn test_no_open_on_encrypt() {
         .arg("-o")
         .arg(mlar_file.path());
 
-    let mut file_list = String::new();
     for file in &testfs.files {
         cmd.arg(file.path());
-        let entry_name = EntryName::from_path(file.path()).unwrap();
-        let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
-        file_list.push_str(format!("{escaped}\n").as_str());
     }
 
     println!("{cmd:?}");
     let assert = cmd.assert();
-    assert.success().stderr(String::from(&file_list));
+    assert.success().stderr(expected_stderr);
 
     // Ensure:
-    // - mlar refuse to open the MLA file if a private key is provided
+    // - mlar refuses to open the MLA file if a private key is provided
 
     // `mlar list -i output.mla -k samples/test_mlakey.mlapriv`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();

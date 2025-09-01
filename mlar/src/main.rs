@@ -102,7 +102,7 @@ fn escaped_path_to_string(path: &Path) -> String {
     let raw_path = path.display().to_string(); // Path display is guaranteed to be valid UTF-8
     let escaped = mla_percent_escape(raw_path.as_bytes(), PATH_ESCAPED_STRING_ALLOWED_BYTES);
     // Now safe to convert back to UTF-8 string, because we escaped non-allowed bytes
-    String::from_utf8(escaped).expect("mla_percent_escape should produce valid UTF-8")
+    String::from_utf8(escaped).expect("[ERROR] mla_percent_escape should produce valid UTF-8")
 }
 
 /// Allow for different kind of output. As `ArchiveWriter` is parametrized over
@@ -289,7 +289,7 @@ fn config_from_matches(
         if matches.contains_id("compression_level") {
             let comp_level: u32 = *matches
                 .get_one::<u32>("compression_level")
-                .expect("compression_level must be an int");
+                .expect("[ERROR] compression_level must be an int");
             assert!((comp_level <= 11), "compression_level must be in [0 .. 11]");
             config.with_compression_level(comp_level).unwrap()
         } else {
@@ -505,25 +505,26 @@ fn create_file<P1: AsRef<Path>>(
         if !containing_directory.exists() {
             fs::create_dir_all(containing_directory).map_err(|err| {
                 eprintln!(
-                    " [!] Error while creating output directory path for \"{}\" ({:?})",
-                    escaped_path_to_string(output_dir_path),
-                    err
+                    "[ERROR] Failed to create output directory: \"{}\" ({err:?})",
+                    escaped_path_to_string(output_dir_path)
                 );
                 err
             })?;
         }
-        // Try to verify that the containing directory is in the output dir, but output dir may have been hijacked since the beginning
+
+        // Try to verify that the containing directory is in the output dir,
+        // in case the output dir has been hijacked or changed since the start
         let containing_directory = fs::canonicalize(containing_directory).map_err(|err| {
             eprintln!(
-                " [!] Error while canonicalizing extracted file output directory path \"{}\" ({:?})",
-                escaped_path_to_string(containing_directory),
-                err
+                "[ERROR] Failed to canonicalize output directory path: \"{}\" ({err:?})",
+                escaped_path_to_string(containing_directory)
             );
             err
         })?;
+
         if !containing_directory.starts_with(output_dir) {
             eprintln!(
-                " [!] Skipping file \"{}\" because it would be extracted outside of the output directory, in {}",
+                "[WARNING] Skipping file \"{}\" because it would be extracted outside of the output directory, in {}",
                 escaped_path_to_string(&entry_name_pathbuf),
                 escaped_path_to_string(&containing_directory)
             );
@@ -533,7 +534,7 @@ fn create_file<P1: AsRef<Path>>(
 
     let created_file = File::create_new(&extracted_path).map_err(|err| {
         eprintln!(
-            " [!] Unable to create \"{}\" ({err:?})",
+            "[ERROR] Unable to create \"{}\" ({err:?})",
             escaped_path_to_string(&entry_name_pathbuf)
         );
         err
@@ -544,7 +545,7 @@ fn create_file<P1: AsRef<Path>>(
         let zone_id_path = get_zone_identifier_path(&extracted_path)?;
         fs::write(zone_id_path, zone_id).map_err(|err| {
             eprintln!(
-                " [!] Unable to propagate zone identifier \"{}\" ({err:?})",
+                "[ERROR] Unable to propagate zone identifier \"{}\" ({err:?})",
                 escaped_path_to_string(&entry_name_pathbuf)
             );
             err
@@ -618,7 +619,7 @@ fn add_file_or_dir(
             Ok(f) => f,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound && skip_not_found => {
                 eprintln!(
-                    " [!] File \"{}\" does not exist, skipping",
+                    "[WARNING] File \"{}\" does not exist, skipping",
                     name.to_pathbuf_escaped_string()
                         .map_err(|_| MlarError::InvalidEntryNameToPath)?
                 );
@@ -629,7 +630,7 @@ fn add_file_or_dir(
 
         let length = file.metadata().map_err(MlarError::IO)?.len();
         eprintln!(
-            "{}",
+            " adding: {}",
             name.to_pathbuf_escaped_string()
                 .map_err(|_| MlarError::InvalidEntryNameToPath)?
         );
@@ -653,7 +654,7 @@ fn add_dir(
                     Ok(e) => e,
                     Err(err) => {
                         eprintln!(
-                            " [!] Failed to read entry in directory \"{}\" ({:?})",
+                            "[WARNING] Failed to read entry in directory \"{}\" ({:?})",
                             escaped_path_to_string(dir),
                             err
                         );
@@ -664,7 +665,7 @@ fn add_dir(
                 let new_path = entry.path();
                 if let Err(err) = add_file_or_dir(mla, &new_path, skip_not_found) {
                     eprintln!(
-                        " [!] Failed to add \"{}\" ({:?})",
+                        "[ERROR] Failed to add \"{}\" ({:?})",
                         escaped_path_to_string(&new_path),
                         err
                     );
@@ -676,7 +677,7 @@ fn add_dir(
         }
         Err(err) => {
             eprintln!(
-                " [!] Failed to read directory \"{}\" ({:?})",
+                "[ERROR] Failed to read directory \"{}\" ({:?})",
                 escaped_path_to_string(dir),
                 err
             );
@@ -818,7 +819,7 @@ fn create(matches: &ArgMatches) -> Result<(), MlarError> {
     if matches.get_flag("stdin_data") {
         let entry_names = matches
             .get_one::<String>("stdin_data_entry_names")
-            .expect("stdin_data_entry_names has a default_value")
+            .expect("[ERROR] stdin_data_entry_names has a default_value")
             .split(',')
             .map(EntryName::from_path);
 
@@ -948,7 +949,7 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
     if !output_dir.exists() {
         fs::create_dir(output_dir).map_err(|err| {
             eprintln!(
-                " [!] Error while creating output directory \"{}\" ({:?})",
+                "[ERROR] Failed to create output directory \"{}\" ({:?})",
                 escaped_path_to_string(output_dir),
                 err
             );
@@ -957,7 +958,7 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
     }
     let output_dir = fs::canonicalize(output_dir).map_err(|err| {
         eprintln!(
-            " [!] Error while canonicalizing output directory path \"{}\" ({:?})",
+            "[ERROR] Failed to canonicalize output directory path \"{}\" ({:?})",
             escaped_path_to_string(output_dir),
             err
         );
@@ -1006,7 +1007,7 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
         let mut sub_file = match mla.get_entry(entry_name.clone()) {
             Err(err) => {
                 eprintln!(
-                    " [!] Error while looking up subfile \"{}\" ({err:?})",
+                    "[WARNING] Error while looking up subfile \"{}\" ({err:?})",
                     entry_name
                         .to_pathbuf_escaped_string()
                         .map_err(|_| MlarError::InvalidEntryNameToPath)?
@@ -1015,7 +1016,7 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
             }
             Ok(None) => {
                 eprintln!(
-                    " [!] Subfile \"{}\" indexed in metadata could not be found",
+                    "[WARNING] Subfile \"{}\" indexed in metadata could not be found",
                     entry_name
                         .to_pathbuf_escaped_string()
                         .map_err(|_| MlarError::InvalidEntryNameToPath)?
@@ -1040,7 +1041,7 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
         }
         if let Err(err) = io::copy(&mut sub_file.data, &mut extracted_file) {
             eprintln!(
-                " [!] Unable to extract \"{}\" ({err:?})",
+                "[WARNING] Unable to extract \"{}\" ({err:?})",
                 entry_name
                     .to_pathbuf_escaped_string()
                     .map_err(|_| MlarError::InvalidEntryNameToPath)?
@@ -1086,18 +1087,18 @@ fn cat(matches: &ArgMatches) -> Result<(), MlarError> {
                 match mla.get_entry(archive_entry_name.clone()) {
                     Err(err) => {
                         eprintln!(
-                            " [!] Error while looking up file \"{displayable_entry_name}\" ({err:?})"
+                            "[WARNING] Error while looking up file \"{displayable_entry_name}\" ({err:?})"
                         );
                     }
                     Ok(None) => {
                         eprintln!(
-                            " [!] Subfile \"{displayable_entry_name}\" indexed in metadata could not be found"
+                            "[WARNING] Subfile \"{displayable_entry_name}\" indexed in metadata could not be found"
                         );
                     }
                     Ok(Some(mut subfile)) => {
                         if let Err(err) = io::copy(&mut subfile.data, &mut destination) {
                             eprintln!(
-                                " [!] Unable to extract \"{displayable_entry_name}\" ({err:?})"
+                                "[WARNING] Unable to extract \"{displayable_entry_name}\" ({err:?})"
                             );
                         }
                     }
@@ -1136,14 +1137,14 @@ fn cat(matches: &ArgMatches) -> Result<(), MlarError> {
                 .unwrap_or_else(|_| String::from("<invalid path>"));
             match mla.get_entry(fname.clone()) {
                 Err(err) => {
-                    eprintln!(" [!] Error while looking up file \"{display_name}\" ({err:?})");
+                    eprintln!("[WARNING] Error while looking up file \"{display_name}\" ({err:?})");
                 }
                 Ok(None) => {
-                    eprintln!(" [!] File not found: \"{display_name}\"");
+                    eprintln!("[WARNING] File not found: \"{display_name}\"");
                 }
                 Ok(Some(mut subfile)) => {
                     if let Err(err) = io::copy(&mut subfile.data, &mut destination) {
-                        eprintln!(" [!] Unable to extract \"{display_name}\" ({err:?})");
+                        eprintln!("[WARNING] Unable to extract \"{display_name}\" ({err:?})");
                     }
                 }
             }
@@ -1167,7 +1168,7 @@ fn to_tar(matches: &ArgMatches) -> Result<(), MlarError> {
         let sub_file = match mla.get_entry(fname.clone()) {
             Err(err) => {
                 eprintln!(
-                    " [!] Error while looking up subfile \"{}\" ({err:?})",
+                    "[WARNING] Error while looking up subfile \"{}\" ({err:?})",
                     &fname
                         .to_pathbuf_escaped_string()
                         .map_err(|_| MlarError::InvalidEntryNameToPath)?
@@ -1176,7 +1177,7 @@ fn to_tar(matches: &ArgMatches) -> Result<(), MlarError> {
             }
             Ok(None) => {
                 eprintln!(
-                    " [!] Subfile \"{}\" indexed in metadata could not be found",
+                    "[WARNING] Subfile \"{}\" indexed in metadata could not be found",
                     &fname
                         .to_pathbuf_escaped_string()
                         .map_err(|_| MlarError::InvalidEntryNameToPath)?
@@ -1187,7 +1188,7 @@ fn to_tar(matches: &ArgMatches) -> Result<(), MlarError> {
         };
         if let Err(err) = add_file_to_tar(&mut tar_file, sub_file) {
             eprintln!(
-                " [!] Unable to add subfile \"{}\" to tarball ({err:?})",
+                "[WARNING] Unable to add subfile \"{}\" to tarball ({err:?})",
                 &fname
                     .to_pathbuf_escaped_string()
                     .map_err(|_| MlarError::InvalidEntryNameToPath)?
@@ -1217,37 +1218,48 @@ fn repair(matches: &ArgMatches) -> Result<(), MlarError> {
 
 fn convert(matches: &ArgMatches) -> Result<(), MlarError> {
     let mut mla = open_mla_file(matches)?;
-    let mut fnames: Vec<EntryName> = if let Ok(iter) = mla.list_entries() {
-        // Read the file list using metadata
-        iter.cloned().collect()
-    } else {
-        panic!("Files is malformed. Please consider repairing the file");
+    let mut fnames: Vec<EntryName> = match mla.list_entries() {
+        Ok(iter) => iter.cloned().collect(),
+        Err(err) => {
+            eprintln!(
+                "[ERROR] Failed to read entries from archive: {err}. The file may be malformed. \
+                Consider repairing it using repair sub-command or re-create it."
+            );
+            std::process::exit(1);
+        }
     };
+
     fnames.sort();
 
     let mut mla_out = writer_from_matches(matches, false)?;
 
     // Convert
     for fname in fnames {
-        eprintln!("{}", fname.raw_content_to_escaped_string());
+        eprintln!(" converting: {}", fname.raw_content_to_escaped_string());
+
         let sub_file = match mla.get_entry(fname.clone()) {
             Err(err) => {
                 eprintln!(
-                    "Error while adding {} ({err:?})",
+                    "[ERROR] Failed to retrieve entry \"{}\": {err:?}",
                     fname.raw_content_to_escaped_string()
                 );
                 continue;
             }
             Ok(None) => {
-                eprintln!("Unable to find {}", fname.raw_content_to_escaped_string());
+                eprintln!(
+                    "[WARNING] Entry not found: {}",
+                    fname.raw_content_to_escaped_string()
+                );
                 continue;
             }
-            Ok(Some(mla)) => mla,
+            Ok(Some(mla_entry)) => mla_entry,
         };
+
         let size = sub_file.get_size();
         mla_out.add_entry(sub_file.name, size, sub_file.data)?;
     }
-    mla_out.finalize().expect("Finalization error");
+
+    mla_out.finalize().expect("[ERROR] Finalization error");
 
     Ok(())
 }
@@ -1258,9 +1270,9 @@ fn keygen(matches: &ArgMatches) -> Result<(), MlarError> {
     let output_base = matches.get_one::<PathBuf>("output-prefix").unwrap();
 
     let mut output_pub = File::create_new(output_base.with_extension("mlapub"))
-        .expect("Unable to create the public file");
+        .expect("[ERROR] Unable to create the public file");
     let mut output_priv = File::create_new(output_base.with_extension("mlapriv"))
-        .expect("Unable to create the private file");
+        .expect("[ERROR] Unable to create the private file");
 
     // handle seed
     //
@@ -1280,10 +1292,10 @@ fn keygen(matches: &ArgMatches) -> Result<(), MlarError> {
 
     pubkey
         .serialize_public_key(&mut output_pub)
-        .expect("Error writing the public key");
+        .expect("[ERROR] Failed to write the public key");
     privkey
         .serialize_private_key(&mut output_priv)
-        .expect("Error writing the private key");
+        .expect("[ERROR] Failed to write the private key");
     Ok(())
 }
 
@@ -1293,9 +1305,9 @@ fn keyderive(matches: &ArgMatches) -> Result<(), MlarError> {
     let output_base = matches.get_one::<PathBuf>("output-prefix").unwrap();
 
     let mut output_pub = File::create_new(output_base.with_extension("mlapub"))
-        .expect("Unable to create the public file");
+        .expect("[ERROR] Unable to create the public file");
     let mut output_priv = File::create_new(output_base.with_extension("mlapriv"))
-        .expect("Unable to create the private file");
+        .expect("[ERROR] Unable to create the private file");
 
     // Safe to use unwrap() because of the requirement
     let private_key_arg = matches.get_one::<PathBuf>("input").unwrap();
@@ -1316,10 +1328,10 @@ fn keyderive(matches: &ArgMatches) -> Result<(), MlarError> {
 
     pub_key
         .serialize_public_key(&mut output_pub)
-        .expect("Error writing the public key");
+        .expect("[ERROR] Failed to write the public key to the output");
     priv_key
         .serialize_private_key(&mut output_priv)
-        .expect("Error writing the private key");
+        .expect("[ERROR] Failed to write the private key to the output");
 
     Ok(())
 }
@@ -1673,6 +1685,24 @@ fn app() -> clap::Command {
 }
 
 fn main() {
+    // User-friendly panic output
+    std::panic::set_hook(Box::new(|panic_info| {
+        let msg = match panic_info.payload().downcast_ref::<&str>() {
+            Some(s) => *s,
+            None => match panic_info.payload().downcast_ref::<String>() {
+                Some(s) => s.as_str(),
+                None => "Unknown panic",
+            },
+        };
+        eprintln!("[ERROR] {msg}");
+        if let Some(location) = panic_info.location() {
+            let file = location.file();
+            let line = location.line();
+            eprintln!("(at {file}:{line})");
+        }
+        std::process::exit(1);
+    }));
+
     let mut app = app();
 
     // Launch sub-command
@@ -1699,13 +1729,13 @@ fn main() {
     } else if let Some(matches) = matches.subcommand_matches("info") {
         info(matches)
     } else {
-        eprintln!("Error: at least one command required.");
+        eprintln!("[ERROR] At least one command is required.");
         eprintln!("{}", &help);
         std::process::exit(1);
     };
 
     if let Err(err) = res {
-        eprintln!("[!] Command ended with error: {err:?}");
+        eprintln!("[ERROR] Command ended with error: {err:?}");
         std::process::exit(1);
     }
 }
