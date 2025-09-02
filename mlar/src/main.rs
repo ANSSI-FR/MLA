@@ -1800,7 +1800,7 @@ pub(crate) mod tests {
         let ads_path_str = format!("{}:Zone.Identifier", path.display());
 
         // Create dummy file
-        File::create(&path).unwrap();
+        File::create(path).unwrap();
 
         // Open ADS stream with necessary flags and write data
         let mut ads = OpenOptions::new()
@@ -1840,7 +1840,7 @@ pub(crate) mod tests {
         let ads_path_str = format!("{}:Zone.Identifier", path.display());
 
         // Create dummy file
-        File::create(&path).unwrap();
+        File::create(path).unwrap();
 
         // Open ADS stream with necessary flags and write data
         let mut ads = OpenOptions::new()

@@ -210,6 +210,7 @@ impl MLDSASeed {
             use std::thread;
 
             // Clone `xi` because the closure must own its data
+            #[allow(clippy::clone_on_copy)]
             let mut xi = xi.clone();
 
             let builder = thread::Builder::new().stack_size(8 * 1024 * 1024); // 8 MB stack
