@@ -45,6 +45,13 @@ fn app() -> Command {
                 .action(ArgAction::Append)
                 .value_parser(value_parser!(PathBuf)),
         )
+        .arg(
+            Arg::new("verbose")
+                .long("verbose")
+                .short('v')
+                .action(ArgAction::SetTrue)
+                .help("Increase verbosity with additional information"),
+        )
 }
 
 fn writer_from_matches(matches: &ArgMatches) -> mla::ArchiveWriter<'static, File> {
@@ -195,25 +202,30 @@ fn upgrade(matches: &ArgMatches) {
 }
 
 fn main() {
+    let matches = app().get_matches();
+
     // User-friendly panic output
-    std::panic::set_hook(Box::new(|panic_info| {
+    let verbose = matches.get_flag("verbose");
+
+    // Since Rust 2021, panic's payload is &'static str or String
+    std::panic::set_hook(Box::new(move |panic_info| {
         let msg = match panic_info.payload().downcast_ref::<&str>() {
             Some(s) => *s,
             None => match panic_info.payload().downcast_ref::<String>() {
+                // if not &'static str
                 Some(s) => s.as_str(),
                 None => "Unknown panic",
             },
         };
         eprintln!("[ERROR] {msg}");
-        if let Some(location) = panic_info.location() {
+
+        if verbose && let Some(location) = panic_info.location() {
             let file = location.file();
             let line = location.line();
             eprintln!("(at {file}:{line})");
         }
         std::process::exit(1);
     }));
-
-    let matches = app().get_matches();
     upgrade(&matches);
 }
 
