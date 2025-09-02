@@ -1685,29 +1685,49 @@ fn app() -> clap::Command {
 }
 
 fn main() {
+    let mut app = app();
+    let help = app.render_long_help();
+    let matches = app.get_matches();
+
+    // Determine verbose flag in subcommands that supports it
+    let (_subcommand_name, _subcommand_matches, verbose) = match matches.subcommand() {
+        Some(("list", m)) => {
+            let lvl = *m.get_one::<u8>("verbose").unwrap_or(&0);
+            ("list", m, lvl > 0)
+        }
+        Some(("extract", m)) => ("extract", m, m.get_flag("verbose")),
+        Some(("info", m)) => ("info", m, m.get_flag("verbose")),
+        Some((name, m)) => (name, m, false),
+        None => {
+            eprintln!("[ERROR] At least one command is required.");
+            eprintln!("{}", &help);
+            std::process::exit(1);
+        }
+    };
+
     // User-friendly panic output
-    std::panic::set_hook(Box::new(|panic_info| {
+    // Uses the previously retrieved verbose flag (from subcommand args)
+    // Since Rust 2021, panic payloads are always `&'static str` or `String`
+    std::panic::set_hook(Box::new(move |panic_info| {
         let msg = match panic_info.payload().downcast_ref::<&str>() {
             Some(s) => *s,
             None => match panic_info.payload().downcast_ref::<String>() {
+                // if not `&'static str`
                 Some(s) => s.as_str(),
                 None => "Unknown panic",
             },
         };
         eprintln!("[ERROR] {msg}");
-        if let Some(location) = panic_info.location() {
-            let file = location.file();
-            let line = location.line();
-            eprintln!("(at {file}:{line})");
+
+        if verbose && let Some(location) = panic_info.location() {
+            eprintln!("(at {}:{})", location.file(), location.line());
         }
         std::process::exit(1);
     }));
 
-    let mut app = app();
-
     // Launch sub-command
-    let help = app.render_long_help();
-    let matches = app.get_matches();
+    // Use if-let chain instead of match to ensure only one branch is evaluated,
+    // avoiding deep stack frames that can cause overflows (especially on Windows).
     let res = if let Some(matches) = matches.subcommand_matches("create") {
         create(matches)
     } else if let Some(matches) = matches.subcommand_matches("list") {
