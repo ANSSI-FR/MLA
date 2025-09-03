@@ -444,10 +444,11 @@ extern crate hex_literal;
 const MLA_MAGIC: &[u8; 8] = b"MLAFAAAA";
 const MLA_FORMAT_VERSION: u32 = 2;
 const END_MLA_MAGIC: &[u8; 8] = b"EMLAAAAA";
-/// Maximum number of UTF-8 characters supported in each file's "name" (which is free
-/// to be used as an entry name, an absolute path, or... ?). 32KiB was chosen because it
-/// supports any path a Windows NT, Linux, FreeBSD, OpenBSD, or NetBSD kernel supports.
-const ENTRYNAME_MAX_SIZE: u64 = 65536;
+/// Maximum number of UTF-8 bytes allowed in an entry name (not characters).
+/// Set to 1024 bytes to stay safely within common `PATH_MAX` limits on Linux,
+/// FreeBSD, OpenBSD, and NetBSD. Windows supports longer paths via special prefixes,
+/// but for maximum portability, we adopt this conservative limit.
+const ENTRY_NAME_MAX_SIZE: u64 = 1024;
 
 const ENTRIES_LAYER_MAGIC: &[u8; 8] = b"MLAENAAA";
 

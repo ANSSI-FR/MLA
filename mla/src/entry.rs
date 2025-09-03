@@ -27,7 +27,7 @@ mod entryname {
         path::{Component, Path, PathBuf},
     };
 
-    use crate::{ENTRYNAME_MAX_SIZE, helpers::mla_percent_escape};
+    use crate::{ENTRY_NAME_MAX_SIZE, helpers::mla_percent_escape};
 
     /// Allowed bytes in `EntryName::to_pathbuf_escaped_string` output. Documented there.
     pub static ENTRY_NAME_PATHBUF_ESCAPED_STRING_ALLOWED_BYTES: [u8; 66] =
@@ -127,7 +127,7 @@ mod entryname {
         /// Prefer using [`EntryName::from_path`] if you're working with real filesystem paths.
         ///
         /// Returns an `EntryNameError::InvalidPathComponentContent` if the slice is empty,
-        /// or `EntryNameError::EntryNameTooLong` if it exceeds `ENTRYNAME_MAX_SIZE`.
+        /// or `EntryNameError::EntryNameTooLong` if it exceeds `ENTRY_NAME_MAX_SIZE`.
         pub fn from_arbitrary_bytes(bytes: &[u8]) -> Result<Self, EntryNameError> {
             Self::from_arbitrary_bytes_vec(bytes.to_vec())
         }
@@ -141,7 +141,7 @@ mod entryname {
                 u64::try_from(bytes.len()).map_err(|_| EntryNameError::EntryNameTooLong)?;
             if bytes.is_empty() {
                 Err(EntryNameError::InvalidPathComponentContent)
-            } else if u64len > ENTRYNAME_MAX_SIZE {
+            } else if u64len > ENTRY_NAME_MAX_SIZE {
                 Err(EntryNameError::EntryNameTooLong)
             } else {
                 Ok(Self { name: bytes })
@@ -176,7 +176,7 @@ mod entryname {
         /// Errors:
         /// - Returns `EntryNameError::InvalidPathComponentContent` if the resulting path is empty
         ///   or contains invalid characters (on Windows).
-        /// - Returns `EntryNameError::EntryNameTooLong` if the resulting name exceeds `ENTRYNAME_MAX_SIZE`.
+        /// - Returns `EntryNameError::EntryNameTooLong` if the resulting name exceeds `ENTRY_NAME_MAX_SIZE`.
         pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Self, EntryNameError> {
             let components = {
                 let mut stack = Vec::new();
