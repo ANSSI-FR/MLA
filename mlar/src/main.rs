@@ -494,6 +494,7 @@ fn create_file<P1: AsRef<Path>>(
     output_dir: P1,
     entry_name: &EntryName,
     zone_id: Option<&Vec<u8>>,
+    quarantine: Option<&Vec<u8>>,
 ) -> Result<Option<(File, PathBuf)>, MlarError> {
     let output_dir_path = output_dir.as_ref();
     let entry_name_pathbuf = entry_name
@@ -550,6 +551,17 @@ fn create_file<P1: AsRef<Path>>(
             );
             err
         })?;
+    }
+
+    // Propagate macOS quarantine if needed
+    if let Some(quarantine_data) = quarantine
+        && let Err(err) = apply_quarantine(&extracted_path, quarantine_data)
+    {
+        eprintln!(
+            " [!] Unable to propagate com.apple.quarantine to \"{}\" ({:?})",
+            escaped_path_to_string(&entry_name_pathbuf),
+            err
+        );
     }
 
     Ok(Some((created_file, extracted_path)))
@@ -933,6 +945,74 @@ fn get_zone_identifier(path: &Path) -> Result<Option<Vec<u8>>, MlarError> {
     get_zone_identifier_os(path)
 }
 
+#[cfg(not(target_os = "macos"))]
+#[allow(clippy::unnecessary_wraps)]
+fn get_quarantine_data_os(_path: &Path) -> Result<Option<Vec<u8>>, MlarError> {
+    Ok(None)
+}
+
+#[cfg(target_os = "macos")]
+fn get_quarantine_data_os(path: &Path) -> Result<Option<Vec<u8>>, MlarError> {
+    use rustix::fs::{Mode, OFlags, fgetxattr, open};
+    use rustix::io::Errno;
+    use std::ffi::CString;
+
+    let fd = open(path, OFlags::RDONLY, Mode::empty()).map_err(|e| MlarError::IO(e.into()))?;
+    let attr_name = CString::new("com.apple.quarantine").unwrap();
+
+    // Buffer to hold xattr data
+    let mut buf = vec![0u8; 512];
+
+    match fgetxattr(&fd, &attr_name, &mut buf) {
+        Ok(size) => {
+            if size > 0 {
+                buf.truncate(size);
+                Ok(Some(buf))
+            } else {
+                // Empty attribute
+                Ok(Some(Vec::new()))
+            }
+        }
+        Err(err) => match err {
+            // NOATTR is alias for NODATA with rustix
+            Errno::NOATTR => Ok(None), // attribute not found, return None
+            _ => Err(MlarError::IO(err.into())),
+        },
+    }
+}
+
+fn get_quarantine_data(path: &Path) -> Result<Option<Vec<u8>>, MlarError> {
+    get_quarantine_data_os(path)
+}
+
+#[cfg(not(target_os = "macos"))]
+#[allow(clippy::unnecessary_wraps)]
+fn apply_quarantine_os(_path: &Path, _quarantine_data: &[u8]) -> Result<(), MlarError> {
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn apply_quarantine_os(path: &Path, quarantine_data: &[u8]) -> Result<(), MlarError> {
+    use rustix::fs::{Mode, OFlags, fsetxattr, open};
+    use std::ffi::CString;
+
+    let quarantine_attr = CString::new("com.apple.quarantine").unwrap();
+
+    let fd = open(path, OFlags::WRONLY | OFlags::NONBLOCK, Mode::empty())
+        .map_err(|e| MlarError::IO(e.into()))?;
+    fsetxattr(
+        &fd,
+        &quarantine_attr,
+        quarantine_data,
+        rustix::fs::XattrFlags::empty(),
+    )
+    .map_err(|e| MlarError::IO(e.into()))
+}
+
+fn apply_quarantine(path: &Path, quarantine_data: &[u8]) -> Result<(), MlarError> {
+    apply_quarantine_os(path, quarantine_data)
+}
+
 fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
     let file_name_matcher = ExtractFileNameMatcher::from_matches(matches)?;
     // Safe to use unwrap() because the option is required()
@@ -944,6 +1024,7 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
     // Safe to use unwrap() because the option is required()
     let input_path = matches.get_one::<PathBuf>("input").unwrap();
     let zone_id = get_zone_identifier(input_path)?;
+    let quarantine_data = get_quarantine_data(input_path)?;
 
     // Create the output directory, if it does not exist
     if !output_dir.exists() {
@@ -978,7 +1059,12 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
         ));
         let mut export: HashMap<&EntryName, FileWriter> = HashMap::new();
         for entry_name in &entries_names {
-            if let Some((_file, path)) = create_file(&output_dir, entry_name, zone_id.as_ref())? {
+            if let Some((_file, path)) = create_file(
+                &output_dir,
+                entry_name,
+                zone_id.as_ref(),
+                quarantine_data.as_ref(),
+            )? {
                 export.insert(
                     entry_name,
                     FileWriter {
@@ -1025,8 +1111,12 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
             }
             Ok(Some(subfile)) => subfile,
         };
-        let Some((mut extracted_file, _path)) =
-            create_file(&output_dir, &entry_name, zone_id.as_ref())?
+        let Some((mut extracted_file, _path)) = create_file(
+            &output_dir,
+            &entry_name,
+            zone_id.as_ref(),
+            quarantine_data.as_ref(),
+        )?
         else {
             continue;
         };
@@ -1858,5 +1948,89 @@ pub(crate) mod tests {
 
         // Cleanup
         fs::remove_file(path).unwrap();
+    }
+
+    /// Helper to create a temp file with an optional quarantine attribute set.
+    #[cfg(target_os = "macos")]
+    fn setup_file_with_quarantine_attr(
+        data: Option<&[u8]>,
+        filename: &str,
+    ) -> std::io::Result<std::path::PathBuf> {
+        use rustix::fs::{Mode, OFlags, fsetxattr, open};
+        use std::ffi::CString;
+
+        let path = std::env::temp_dir().join(filename);
+        File::create(&path)?;
+
+        if let Some(quarantine_data) = data {
+            let fd = open(&path, OFlags::WRONLY | OFlags::NONBLOCK, Mode::empty()).unwrap();
+            let attr_name = CString::new("com.apple.quarantine").unwrap();
+            fsetxattr(
+                &fd,
+                &attr_name,
+                quarantine_data,
+                rustix::fs::XattrFlags::empty(),
+            )
+            .unwrap();
+        }
+
+        Ok(path)
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn test_get_quarantine_data_present() {
+        let quarantine_bytes = b"0001;5f2b8f34;Safari;";
+        let path = setup_file_with_quarantine_attr(Some(quarantine_bytes), "data_present").unwrap();
+
+        let result = get_quarantine_data_os(&path).unwrap();
+        assert!(result.is_some());
+        assert_eq!(result.unwrap(), quarantine_bytes);
+
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn test_get_quarantine_data_absent() {
+        let path = setup_file_with_quarantine_attr(None, "data_absent").unwrap();
+
+        // Simulate absence of quarantine xattr
+        // fgetxattr will return ENODATA which is ENOATTR in rustix
+        let result = get_quarantine_data_os(&path).unwrap();
+        assert!(result.is_none());
+
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn test_apply_quarantine_sets_data() {
+        let path = setup_file_with_quarantine_attr(None, "sets_data").unwrap();
+
+        let quarantine_bytes = b"0002;5f2b8f34;Safari;";
+        apply_quarantine_os(&path, quarantine_bytes).unwrap();
+
+        let read_back = get_quarantine_data_os(&path).unwrap();
+        assert_eq!(read_back.unwrap(), quarantine_bytes);
+
+        fs::remove_file(path).unwrap();
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn test_get_quarantine_data_returns_none() {
+        let dummy_path = Path::new("/tmp/nonexistentfile");
+        let result = get_quarantine_data_os(dummy_path).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn test_apply_quarantine_noop() {
+        let dummy_path = Path::new("/tmp/nonexistentfile");
+        let data = b"irrelevant";
+        // if it doesn't panic, it's fine
+        apply_quarantine_os(dummy_path, data).unwrap();
     }
 }
