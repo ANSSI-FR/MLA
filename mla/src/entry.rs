@@ -529,7 +529,7 @@ impl<'a, R: Read + Seek> ArchiveEntryDataReader<'a, R> {
         // Read file information header
         let ArchiveEntryBlock::EntryStart { id, .. } = ArchiveEntryBlock::from(src)? else {
             return Err(Error::WrongReaderState(
-                "[BlocksToFileReader] A file must start with an EntryStart".to_string(),
+                "[ArchiveEntryDataReader] A file must start with an EntryStart".to_string(),
             ));
         };
 
@@ -546,7 +546,7 @@ impl<'a, R: Read + Seek> ArchiveEntryDataReader<'a, R> {
         self.current_offsets_and_sizes_index += 1;
         if self.current_offsets_and_sizes_index >= self.offsets_and_sizes.len() {
             Err(Error::WrongReaderState(
-                "[BlocksToFileReader] No more continuous blocks".to_string(),
+                "[ArchiveEntryDataReader] No more continuous blocks".to_string(),
             ))
         } else {
             Ok(())
@@ -596,7 +596,7 @@ impl<T: Read + Seek> Read for ArchiveEntryDataReader<'_, T> {
                     }
                     ArchiveEntryBlock::EndOfArchiveData => {
                         return Err(Error::WrongReaderState(
-                            "[BlocksToFileReader] Try to read the end of the archive".to_string(),
+                            "[ArchiveEntryDataReader] Try to read the end of the archive".to_string(),
                         )
                         .into());
                     }
