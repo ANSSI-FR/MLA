@@ -258,7 +258,7 @@ mod base64;
 ///
 /// * a `Writer`, implementing the `Write` trait. It is responsible for emitting bytes while creating a new archive
 /// * a `Reader`, implementing both `Read` and `Seek` traits. It is responsible for reading bytes while reading an archive
-/// * a `FailSafeReader`, implementing only the `Read` trait. It is responsible for reading bytes while repairing an archive
+/// * a `TruncatedReader`, implementing only the `Read` trait. It is responsible for reading bytes while repairing an archive
 ///
 /// Layers are made with the *repairable* property in mind. Reading them must never need information from the footer, but a footer can be used to optimize the reading. For example, accessing a file inside the archive can be optimized using the footer to seek to the file beginning, but it is still possible to get information by reading the whole archive until the file is found.
 ///
@@ -305,7 +305,7 @@ mod base64;
 ///
 /// ### Raw Layer
 ///
-/// Implemented in `RawLayer*` (i.e. `RawLayerWriter`, `RawLayerReader` and `RawLayerFailSafeReader`).
+/// Implemented in `RawLayer*` (i.e. `RawLayerWriter`, `RawLayerReader` and `RawLayerTruncatedReader`).
 ///
 /// This is the simplest layer. It is required to provide an API between layers and
 /// final output worlds. It is also used to keep the position of data's start.
@@ -407,18 +407,18 @@ mod base64;
 pub(crate) mod layers;
 use crate::crypto::mlakey::{MLASignatureVerificationPublicKey, MLASigningPrivateKey};
 use crate::layers::compress::{
-    CompressionLayerFailSafeReader, CompressionLayerReader, CompressionLayerWriter,
+    CompressionLayerTruncatedReader, CompressionLayerReader, CompressionLayerWriter,
 };
 use crate::layers::encrypt::{
-    EncryptionLayerFailSafeReader, EncryptionLayerReader, EncryptionLayerWriter,
+    EncryptionLayerTruncatedReader, EncryptionLayerReader, EncryptionLayerWriter,
 };
 use crate::layers::position::PositionLayerWriter;
-use crate::layers::raw::{RawLayerFailSafeReader, RawLayerReader, RawLayerWriter};
+use crate::layers::raw::{RawLayerTruncatedReader, RawLayerReader, RawLayerWriter};
 use crate::layers::signature::{
-    SIGNATURE_LAYER_MAGIC, SignatureLayerFailSafeReader, SignatureLayerReader, SignatureLayerWriter,
+    SIGNATURE_LAYER_MAGIC, SignatureLayerTruncatedReader, SignatureLayerReader, SignatureLayerWriter,
 };
 use crate::layers::traits::{
-    InnerWriterTrait, InnerWriterType, LayerFailSafeReader, LayerReader, LayerWriter,
+    InnerWriterTrait, InnerWriterType, LayerTruncatedReader, LayerReader, LayerWriter,
 };
 pub mod errors;
 use crate::errors::{Error, TruncatedReadError};
@@ -1354,7 +1354,7 @@ pub struct TruncatedArchiveReader<'a, R: 'a + Read> {
     /// MLA Archive format Reader (fail-safe)
     //
     /// Source
-    src: Box<dyn 'a + LayerFailSafeReader<'a, R>>,
+    src: Box<dyn 'a + LayerTruncatedReader<'a, R>>,
 }
 
 // Size of the repaired file blocks
@@ -1382,17 +1382,17 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
         ArchiveHeader::deserialize(&mut src)?;
 
         // Enable layers depending on user option. Order is relevant
-        let mut src: Box<dyn 'b + LayerFailSafeReader<'b, R>> =
-            Box::new(RawLayerFailSafeReader::new(src));
+        let mut src: Box<dyn 'b + LayerTruncatedReader<'b, R>> =
+            Box::new(RawLayerTruncatedReader::new(src));
         let accept_unencrypted = config.accept_unencrypted;
         let truncated_decryption_mode = config.truncated_decryption_mode;
         let mut magic = read_layer_magic(&mut src)?;
         if magic == SIGNATURE_LAYER_MAGIC {
-            src = Box::new(SignatureLayerFailSafeReader::new_skip_magic(src)?);
+            src = Box::new(SignatureLayerTruncatedReader::new_skip_magic(src)?);
             magic = read_layer_magic(&mut src)?;
         }
         if &magic == ENCRYPTION_LAYER_MAGIC {
-            src = Box::new(EncryptionLayerFailSafeReader::new_skip_magic(
+            src = Box::new(EncryptionLayerTruncatedReader::new_skip_magic(
                 src,
                 config.encrypt,
                 None,
@@ -1403,7 +1403,7 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
             return Err(Error::EncryptionAskedButNotMarkedPresent);
         }
         if &magic == COMPRESSION_LAYER_MAGIC {
-            src = Box::new(CompressionLayerFailSafeReader::new_skip_magic(src)?);
+            src = Box::new(CompressionLayerTruncatedReader::new_skip_magic(src)?);
             magic = read_layer_magic(&mut src)?;
         }
 
@@ -1429,13 +1429,13 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
 
         // Associate an id retrieved from the archive to repair, to the
         // corresponding output file id
-        let mut id_failsafe2id_output: HashMap<ArchiveEntryId, ArchiveEntryId> = HashMap::new();
+        let mut id_truncated2id_output: HashMap<ArchiveEntryId, ArchiveEntryId> = HashMap::new();
         // Associate an id retrieved from the archive to corresponding filename
-        let mut id_failsafe2filename: HashMap<ArchiveEntryId, EntryName> = HashMap::new();
+        let mut id_truncated2filename: HashMap<ArchiveEntryId, EntryName> = HashMap::new();
         // List of IDs from the archive already fully added
-        let mut id_failsafe_done = Vec::new();
+        let mut id_truncated_done = Vec::new();
         // Associate an id retrieved from the archive with its ongoing Hash
-        let mut id_failsafe2hash: HashMap<ArchiveEntryId, Sha256> = HashMap::new();
+        let mut id_truncated2hash: HashMap<ArchiveEntryId, Sha256> = HashMap::new();
 
         'read_block: loop {
             match ArchiveEntryBlock::from(&mut self.src) {
@@ -1458,18 +1458,18 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
                             id,
                             opts: _,
                         } => {
-                            if let Some(_id_output) = id_failsafe2id_output.get(&id) {
+                            if let Some(_id_output) = id_truncated2id_output.get(&id) {
                                 update_error!(error = TruncatedReadError::ArchiveFileIDReuse(id));
                                 break 'read_block;
                             }
-                            if id_failsafe_done.contains(&id) {
+                            if id_truncated_done.contains(&id) {
                                 update_error!(
                                     error = TruncatedReadError::ArchiveFileIDAlreadyClose(id)
                                 );
                                 break 'read_block;
                             }
 
-                            id_failsafe2filename.insert(id, filename.clone());
+                            id_truncated2filename.insert(id, filename.clone());
                             let id_output = match output.start_entry(filename.clone()) {
                                 Err(Error::DuplicateFilename) => {
                                     update_error!(
@@ -1484,11 +1484,11 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
                                 }
                                 Ok(id) => id,
                             };
-                            id_failsafe2id_output.insert(id, id_output);
-                            id_failsafe2hash.insert(id, Sha256::default());
+                            id_truncated2id_output.insert(id, id_output);
+                            id_truncated2hash.insert(id, Sha256::default());
                         }
                         ArchiveEntryBlock::EntryContent { length, id, .. } => {
-                            let id_output = if let Some(id_output) = id_failsafe2id_output.get(&id)
+                            let id_output = if let Some(id_output) = id_truncated2id_output.get(&id)
                             {
                                 *id_output
                             } else {
@@ -1498,17 +1498,17 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
                                 break 'read_block;
                             };
 
-                            if id_failsafe_done.contains(&id) {
+                            if id_truncated_done.contains(&id) {
                                 update_error!(
                                     error = TruncatedReadError::ArchiveFileIDAlreadyClose(id)
                                 );
                                 break 'read_block;
                             }
-                            let fname = id_failsafe2filename.get(&id).expect(
-                                "`id_failsafe2filename` not more sync with `id_failsafe2id_output`",
+                            let fname = id_truncated2filename.get(&id).expect(
+                                "`id_truncated2filename` not more sync with `id_truncated2id_output`",
                             );
-                            let hash = id_failsafe2hash.get_mut(&id).expect(
-                                "`id_failsafe2hash` not more sync with `id_failsafe2id_output`",
+                            let hash = id_truncated2hash.get_mut(&id).expect(
+                                "`id_truncated2hash` not more sync with `id_truncated2id_output`",
                             );
 
                             // Limit the reader to at most the file's content
@@ -1579,7 +1579,7 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
                             hash,
                             opts: Opts,
                         } => {
-                            let id_output = if let Some(id_output) = id_failsafe2id_output.get(&id)
+                            let id_output = if let Some(id_output) = id_truncated2id_output.get(&id)
                             {
                                 *id_output
                             } else {
@@ -1587,13 +1587,13 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
                                 break 'read_block;
                             };
 
-                            if id_failsafe_done.contains(&id) {
+                            if id_truncated_done.contains(&id) {
                                 update_error!(
                                     error = TruncatedReadError::ArchiveFileIDAlreadyClose(id)
                                 );
                                 break 'read_block;
                             }
-                            if let Some(hash_archive) = id_failsafe2hash.remove(&id) {
+                            if let Some(hash_archive) = id_truncated2hash.remove(&id) {
                                 let computed_hash = hash_archive.finalize();
                                 if computed_hash.as_slice() != hash {
                                     update_error!(
@@ -1607,13 +1607,13 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
                             } else {
                                 // Synchronisation error
                                 update_error!(
-                                    error = TruncatedReadError::FailSafeReadInternalError
+                                    error = TruncatedReadError::TruncatedReadInternalError
                                 );
                                 break 'read_block;
                             }
 
                             output.end_entry(id_output)?;
-                            id_failsafe_done.push(id);
+                            id_truncated_done.push(id);
                         }
                         ArchiveEntryBlock::EndOfArchiveData => {
                             // Expected end
@@ -1628,15 +1628,15 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
         let mut unfinished_files = Vec::new();
 
         // Clean-up files still opened
-        for (id_failsafe, id_output) in id_failsafe2id_output {
-            if id_failsafe_done.contains(&id_failsafe) {
+        for (id_truncated, id_output) in id_truncated2id_output {
+            if id_truncated_done.contains(&id_truncated) {
                 // File is OK
                 continue;
             }
 
-            let fname = id_failsafe2filename
-                .get(&id_failsafe)
-                .expect("`id_failsafe2filename` not more sync with `id_failsafe2id_output`");
+            let fname = id_truncated2filename
+                .get(&id_truncated)
+                .expect("`id_truncated2filename` not more sync with `id_truncated2id_output`");
             output.end_entry(id_output)?;
 
             unfinished_files.push(fname.clone());
@@ -2261,11 +2261,11 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn convert_failsafe() {
+    fn convert_truncated() {
         // Build an archive with 3 files
         let (dest, _sender_key, receiver_key, files) = build_archive(true, true, false, false);
 
-        // Prepare the failsafe reader
+        // Prepare the truncated reader
         let config = TruncatedReaderConfig::without_signature_verification_with_encryption(
             &[receiver_key.0.get_decryption_private_key().clone()],
             TruncatedReaderDecryptionMode::OnlyAuthenticatedData,
@@ -2317,12 +2317,12 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn convert_trunc_failsafe() {
+    fn convert_trunc_truncated() {
         for interleaved in &[false, true] {
             // Build an archive with 3 files, without compressing to truncate at the correct place
             let (dest, _sender_key, receiver_key, files, files_info, ids_info) =
                 build_archive2(false, true, false, *interleaved);
-            // Truncate the resulting file (before the footer, hopefully after the header), and prepare the failsafe reader
+            // Truncate the resulting file (before the footer, hopefully after the header), and prepare the truncated reader
             let footer_size = {
                 let mut cursor = Cursor::new(Vec::new());
                 ArchiveFooter::serialize_into(&mut cursor, &files_info, &ids_info).unwrap();
@@ -2462,7 +2462,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn failsafe_detect_integrity() {
+    fn truncated_detect_integrity() {
         // Build an archive with 3 files
         let (mut dest, _sender_key, _receiver_key, files) =
             build_archive(false, false, false, false);
@@ -2482,7 +2482,7 @@ pub(crate) mod tests {
             .collect();
         dest.swap(pos[0], pos[0] + 1);
 
-        // Prepare the failsafe reader
+        // Prepare the truncated reader
         let mut mla_fsread = TruncatedArchiveReader::from_config(
             dest.as_slice(),
             TruncatedReaderConfig::without_signature_verification_without_encryption(),
@@ -2723,7 +2723,7 @@ pub(crate) mod tests {
             .with_encryption(std::slice::from_ref(&privkey));
         let mut mla_read = ArchiveReader::from_config(buf, config).unwrap().0;
 
-        // Build FailSafeReader
+        // Build TruncatedReader
         let config = TruncatedReaderConfig::without_signature_verification_with_encryption(
             &[privkey],
             TruncatedReaderDecryptionMode::OnlyAuthenticatedData,

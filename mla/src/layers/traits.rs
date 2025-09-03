@@ -65,4 +65,4 @@ pub trait LayerReader<'a, R: InnerReaderTrait>: InnerReaderTrait {
 }
 
 /// Trait to be implemented by layer for their fail-safe mode reading
-pub trait LayerFailSafeReader<'a, R: Read>: Read {}
+pub trait LayerTruncatedReader<'a, R: Read>: Read {}

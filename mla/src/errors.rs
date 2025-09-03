@@ -155,8 +155,8 @@ pub enum TruncatedReadError {
     },
     /// End of original archive reached - this is the best case
     EndOfOriginalArchiveData,
-    /// Error in the `FailSafeReader` internal state
-    FailSafeReadInternalError,
+    /// Error in the `TruncatedReader` internal state
+    TruncatedReadInternalError,
     /// The file's hash does not correspond to the expected one
     HashDiffers {
         expected: Vec<u8>,
