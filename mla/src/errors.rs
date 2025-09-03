@@ -21,7 +21,7 @@ pub enum Error {
     /// An error has occurred while converting into UTF8. This error could
     /// happens while parsing the entry data name
     UTF8ConversionError(std::string::FromUtf8Error),
-    /// `EntryNames` have a limited size `ENTRYNAME_MAX_SIZE`
+    /// `EntryNames` have a limited size `ENTRY_NAME_MAX_SIZE`
     EntryNameTooLong,
     /// The writer state is not in the expected state for the current operation
     WrongArchiveWriterState {

@@ -68,7 +68,7 @@ create_exception!(
     mla,
     EntryNameTooLong,
     MLAError,
-    "EntryNames have a limited size `ENTRYNAME_MAX_SIZE`"
+    "EntryNames have a limited size `ENTRY_NAME_MAX_SIZE`"
 );
 create_exception!(
     mla,
@@ -268,7 +268,7 @@ impl From<WrappedError> for PyErr {
                     PyErr::new::<UTF8ConversionError, _>(err)
                 }
                 mla::errors::Error::EntryNameTooLong => PyErr::new::<EntryNameTooLong, _>(
-                    "EntryNames have a limited size `ENTRYNAME_MAX_SIZE`",
+                    "EntryNames have a limited size `ENTRY_NAME_MAX_SIZE`",
                 ),
                 mla::errors::Error::WrongArchiveWriterState {
                     current_state,
