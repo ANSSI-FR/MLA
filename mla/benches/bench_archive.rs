@@ -378,7 +378,7 @@ pub fn reader_multiple_layers_multiple_block_size(c: &mut Criterion) {
 /// Create an archive with a `iters` files of `size` bytes using `layers` and
 /// measure the time needed to read them (in a random order)
 ///
-/// This function is used to measure only the `get_file` + read time without the
+/// This function is used to measure only the `get_entry` + read time without the
 /// cost of archive creation
 fn iter_read_multifiles_random(
     iters: u64,
