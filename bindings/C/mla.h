@@ -78,7 +78,7 @@ typedef int32_t (*MLAFlushCallback)(void *context);
 
 typedef void *MLAArchiveHandle;
 
-typedef void *MLAArchiveFileHandle;
+typedef void *MLAArchiveEntryHandle;
 
 /**
  * Implemented by the developer. Read between 0 and `buffer_len` into buffer.
@@ -277,7 +277,7 @@ MLAStatus mla_archive_new(MLAWriterConfigHandle *config,
 MLAStatus mla_archive_start_entry_with_arbitrary_bytes_name(MLAArchiveHandle archive,
                                                             const uint8_t *entry_name_arbitrary_bytes,
                                                             uintptr_t name_size,
-                                                            MLAArchiveFileHandle *handle_out);
+                                                            MLAArchiveEntryHandle *handle_out);
 
 /**
  * Starts a new entry in the archive identified by the handle returned by
@@ -291,7 +291,7 @@ MLAStatus mla_archive_start_entry_with_arbitrary_bytes_name(MLAArchiveHandle arc
  */
 MLAStatus mla_archive_start_entry_with_path_as_name(MLAArchiveHandle archive,
                                                     const char *entry_name,
-                                                    MLAArchiveFileHandle *handle_out);
+                                                    MLAArchiveEntryHandle *handle_out);
 
 /**
  * Append data to the end of an already opened file identified by the
@@ -299,7 +299,7 @@ MLAStatus mla_archive_start_entry_with_path_as_name(MLAArchiveHandle archive,
  * success, or an error code.
  */
 MLAStatus mla_archive_file_append(MLAArchiveHandle archive,
-                                  MLAArchiveFileHandle file,
+                                  MLAArchiveEntryHandle file,
                                   const uint8_t *buffer,
                                   uint64_t length);
 
@@ -317,7 +317,7 @@ MLAStatus mla_archive_flush(MLAArchiveHandle archive);
  * cleared and cannot be reused after free by accident. Returns
  * `MLA_STATUS_SUCCESS` on success, or an error code.
  */
-MLAStatus mla_archive_file_close(MLAArchiveHandle archive, MLAArchiveFileHandle *file);
+MLAStatus mla_archive_file_close(MLAArchiveHandle archive, MLAArchiveEntryHandle *file);
 
 /**
  * Close the given archive (must only be called after all files have been

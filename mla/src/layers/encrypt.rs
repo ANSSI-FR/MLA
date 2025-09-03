@@ -10,7 +10,7 @@ use crate::crypto::hybrid::{
     MLADecryptionPrivateKey, MLAEncryptionPublicKey,
 };
 use crate::layers::traits::{
-    InnerWriterTrait, InnerWriterType, LayerTruncatedReader, LayerReader, LayerWriter,
+    InnerWriterTrait, InnerWriterType, LayerReader, LayerTruncatedReader, LayerWriter,
 };
 use crate::{EMPTY_TAIL_OPTS_SERIALIZATION, Error, MLADeserialize, MLASerialize, Opts};
 use std::io;
@@ -1055,7 +1055,7 @@ mod tests {
 
     use crate::crypto::aesgcm::{KEY_SIZE, NONCE_AES_SIZE};
     use crate::layers::encrypt::{InternalEncryptionLayerReader, InternalEncryptionLayerWriter};
-    use crate::layers::raw::{RawLayerTruncatedReader, RawLayerReader, RawLayerWriter};
+    use crate::layers::raw::{RawLayerReader, RawLayerTruncatedReader, RawLayerWriter};
 
     static FAKE_FILE: [u8; 26] = *b"abcdefghijklmnopqrstuvwxyz";
     static KEY: Key = [2u8; KEY_SIZE];

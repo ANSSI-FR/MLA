@@ -407,18 +407,19 @@ mod base64;
 pub(crate) mod layers;
 use crate::crypto::mlakey::{MLASignatureVerificationPublicKey, MLASigningPrivateKey};
 use crate::layers::compress::{
-    CompressionLayerTruncatedReader, CompressionLayerReader, CompressionLayerWriter,
+    CompressionLayerReader, CompressionLayerTruncatedReader, CompressionLayerWriter,
 };
 use crate::layers::encrypt::{
-    EncryptionLayerTruncatedReader, EncryptionLayerReader, EncryptionLayerWriter,
+    EncryptionLayerReader, EncryptionLayerTruncatedReader, EncryptionLayerWriter,
 };
 use crate::layers::position::PositionLayerWriter;
-use crate::layers::raw::{RawLayerTruncatedReader, RawLayerReader, RawLayerWriter};
+use crate::layers::raw::{RawLayerReader, RawLayerTruncatedReader, RawLayerWriter};
 use crate::layers::signature::{
-    SIGNATURE_LAYER_MAGIC, SignatureLayerTruncatedReader, SignatureLayerReader, SignatureLayerWriter,
+    SIGNATURE_LAYER_MAGIC, SignatureLayerReader, SignatureLayerTruncatedReader,
+    SignatureLayerWriter,
 };
 use crate::layers::traits::{
-    InnerWriterTrait, InnerWriterType, LayerTruncatedReader, LayerReader, LayerWriter,
+    InnerWriterTrait, InnerWriterType, LayerReader, LayerTruncatedReader, LayerWriter,
 };
 pub mod errors;
 use crate::errors::{Error, TruncatedReadError};

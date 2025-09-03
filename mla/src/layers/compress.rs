@@ -5,7 +5,7 @@ use brotli::BrotliState;
 use brotli::writer::StandardAlloc;
 
 use crate::layers::traits::{
-    InnerWriterTrait, InnerWriterType, LayerTruncatedReader, LayerReader, LayerWriter,
+    InnerWriterTrait, InnerWriterType, LayerReader, LayerTruncatedReader, LayerWriter,
 };
 use crate::{EMPTY_TAIL_OPTS_SERIALIZATION, Error, MLADeserialize, MLASerialize, Opts};
 
@@ -939,7 +939,7 @@ mod tests {
     use super::*;
     use crate::config::ArchiveWriterConfig;
 
-    use crate::layers::raw::{RawLayerTruncatedReader, RawLayerReader, RawLayerWriter};
+    use crate::layers::raw::{RawLayerReader, RawLayerTruncatedReader, RawLayerWriter};
     use brotli::writer::StandardAlloc;
     use rand::SeedableRng;
     use rand::distributions::{Alphanumeric, Distribution, Standard};

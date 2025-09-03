@@ -2,7 +2,7 @@ use std::io;
 use std::io::{Read, Seek, SeekFrom, Write};
 
 use crate::Error;
-use crate::layers::traits::{InnerWriterTrait, LayerTruncatedReader, LayerReader, LayerWriter};
+use crate::layers::traits::{InnerWriterTrait, LayerReader, LayerTruncatedReader, LayerWriter};
 
 use super::traits::InnerReaderTrait;
 

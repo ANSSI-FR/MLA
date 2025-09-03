@@ -62,7 +62,7 @@ int main()
       return (int)status;
    }
 
-   MLAArchiveFileHandle hFile = NULL;
+   MLAArchiveEntryHandle hFile = NULL;
    status = mla_archive_start_entry_with_path_as_name(hArchive, "test.txt", &hFile);
    if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
    {
