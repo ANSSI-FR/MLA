@@ -576,9 +576,9 @@ fn repair_archive(
 /// enabled layers.
 ///
 /// Only one-size is used, as the archive must be big enough to be representative
-pub fn failsafe_multiple_layers_repair(c: &mut Criterion) {
+pub fn truncated_multiple_layers_repair(c: &mut Criterion) {
     let size = 4 * MB as u64;
-    let mut group = c.benchmark_group("failsafe_multiple_layers_repair");
+    let mut group = c.benchmark_group("truncated_multiple_layers_repair");
     group.sample_size(10);
     group.throughput(Throughput::Bytes(size));
 
@@ -617,7 +617,7 @@ criterion_group!(
     reader_multiple_layers_multiple_block_size,
     reader_multiple_layers_multiple_block_size_multifiles_random,
     reader_multiple_layers_multiple_block_size_multifiles_linear,
-    failsafe_multiple_layers_repair,
+    truncated_multiple_layers_repair,
     // Was used to determine the best default compression quality ratio
     //
     // multiple_compression_quality,

@@ -402,7 +402,7 @@ fn open_mla_file<'a>(matches: &ArgMatches) -> Result<ArchiveReader<'a, File>, Ml
 }
 
 // Utils: common code to load a mla_file from arguments, fail-safe mode
-fn open_failsafe_mla_file<'a>(
+fn open_truncated_mla_file<'a>(
     matches: &ArgMatches,
 ) -> Result<TruncatedArchiveReader<'a, File>, MlarError> {
     let truncated_decryption_mode = if matches.get_flag("allow_unauthenticated_data") {
@@ -1339,7 +1339,7 @@ fn to_tar(matches: &ArgMatches) -> Result<(), MlarError> {
 }
 
 fn repair(matches: &ArgMatches) -> Result<(), MlarError> {
-    let mut mla = open_failsafe_mla_file(matches)?;
+    let mut mla = open_truncated_mla_file(matches)?;
     let mla_out = writer_from_matches(matches, false)?;
 
     // Convert
