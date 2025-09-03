@@ -104,26 +104,22 @@ pub fn linear_extract<W1: InnerWriterTrait, R: InnerReaderTrait, S: BuildHasher>
     // read calls (like the ones on ArchiveEntryBlock reading)
     let mut src = io::BufReader::new(&mut archive.src);
 
-    // Associate an ID in the archive to the corresponding filename
+    // Associate an ID in the archive to the corresponding name
     // Do not directly associate to the writer to keep an easier fn API
-    let mut id2filename: HashMap<ArchiveEntryId, EntryName> = HashMap::new();
+    let mut id2name: HashMap<ArchiveEntryId, EntryName> = HashMap::new();
 
     'read_block: loop {
         match ArchiveEntryBlock::from(&mut src)? {
-            ArchiveEntryBlock::EntryStart {
-                name: filename,
-                id,
-                opts: _,
-            } => {
+            ArchiveEntryBlock::EntryStart { name, id, opts: _ } => {
                 // If the starting file is meant to be extracted, get the
                 // corresponding writer
-                if export.contains_key(&filename) {
-                    id2filename.insert(id, filename.clone());
+                if export.contains_key(&name) {
+                    id2name.insert(id, name.clone());
                 }
             }
             ArchiveEntryBlock::EndOfEntry { id, .. } => {
                 // Drop the corresponding writer
-                id2filename.remove(&id);
+                id2name.remove(&id);
             }
             ArchiveEntryBlock::EntryContent { length, id, .. } => {
                 // Write a block to the corresponding output, if any
@@ -131,7 +127,7 @@ pub fn linear_extract<W1: InnerWriterTrait, R: InnerReaderTrait, S: BuildHasher>
                 let copy_src = &mut (&mut src).take(length);
                 // Is the file considered?
                 let mut extracted: bool = false;
-                if let Some(fname) = id2filename.get(&id)
+                if let Some(fname) = id2name.get(&id)
                     && let Some(writer) = export.get_mut(fname)
                 {
                     io::copy(copy_src, writer)?;

@@ -36,7 +36,7 @@ pub enum MLAStatus {
     InvalidKeyFormat = 0x0004_0000,
     WrongBlockSubFileType = 0x0005_0000,
     UTF8ConversionError = 0x0006_0000,
-    FilenameTooLong = 0x0007_0000,
+    EntryNameTooLong = 0x0007_0000,
     WrongArchiveWriterState = 0x0008_0000,
     AssertionError = 0x0009_0000,
     WrongReaderState = 0x000A_0000,
@@ -63,7 +63,7 @@ pub enum MLAStatus {
     ConfigErrorMLKEMComputationError = 0x0014_000A,
     ConfigErrorKeyWrappingComputationError = 0x0014_000B,
 
-    DuplicateFilename = 0x0015_0000,
+    DuplicateEntryName = 0x0015_0000,
     AuthenticatedDecryptionWrongTag = 0x0016_0000,
     HKDFInvalidKeyLength = 0x0017_0000,
     HPKEError = 0x0018_0000,
@@ -168,7 +168,7 @@ impl From<MLAError> for MLAStatus {
             MLAError::InvalidKeyFormat => MLAStatus::InvalidKeyFormat,
             MLAError::WrongBlockSubFileType => MLAStatus::WrongBlockSubFileType,
             MLAError::UTF8ConversionError(_) => MLAStatus::UTF8ConversionError,
-            MLAError::FilenameTooLong => MLAStatus::FilenameTooLong,
+            MLAError::EntryNameTooLong => MLAStatus::EntryNameTooLong,
             MLAError::WrongArchiveWriterState {
                 current_state: _,
                 expected_state: _,
@@ -214,7 +214,7 @@ impl From<MLAError> for MLAStatus {
             MLAError::ConfigError(ConfigError::KeyWrappingComputationError) => {
                 MLAStatus::ConfigErrorKeyWrappingComputationError
             }
-            MLAError::DuplicateFilename => MLAStatus::DuplicateFilename,
+            MLAError::DuplicateEntryName => MLAStatus::DuplicateEntryName,
             MLAError::AuthenticatedDecryptionWrongTag => MLAStatus::AuthenticatedDecryptionWrongTag,
             MLAError::HKDFInvalidKeyLength => MLAStatus::HKDFInvalidKeyLength,
             MLAError::HPKEError => MLAStatus::HPKEError,
