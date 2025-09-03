@@ -2860,7 +2860,7 @@ pub(crate) mod tests {
 
     #[test]
     #[ignore = "As it is costly, only enabled by default in the CI."]
-    fn more_than_u32_file() {
+    fn more_than_u32_entry() {
         const MORE_THAN_U32: u64 = 0x0001_0001_0000; // U32_max + 0x10000
         const MAX_SIZE: u64 = 5 * 1024 * 1024 * 1024; // 5 GB
         const CHUNK_SIZE: usize = 10 * 1024 * 1024; // 10 MB
