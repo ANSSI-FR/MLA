@@ -19,10 +19,10 @@ pub enum Error {
     /// starting at the beginning of a block?
     WrongBlockSubFileType,
     /// An error has occurred while converting into UTF8. This error could
-    /// happens while parsing the block filename
+    /// happens while parsing the entry data name
     UTF8ConversionError(std::string::FromUtf8Error),
-    /// Filenames have a limited size `FILENAME_MAX_SIZE`
-    FilenameTooLong,
+    /// `EntryNames` have a limited size `ENTRYNAME_MAX_SIZE`
+    EntryNameTooLong,
     /// The writer state is not in the expected state for the current operation
     WrongArchiveWriterState {
         current_state: String,
@@ -52,8 +52,8 @@ pub enum Error {
     EndOfStream,
     /// An error happens in the configuration
     ConfigError(ConfigError),
-    /// Filename already used
-    DuplicateFilename,
+    /// `EntryName` already used
+    DuplicateEntryName,
     /// Wrong tag while decrypting authenticated data
     AuthenticatedDecryptionWrongTag,
     /// Unable to expand while using the HKDF
@@ -139,8 +139,8 @@ pub enum TruncatedReadError {
     ErrorInFile(io::Error, String),
     /// A file ID is being reused
     ArchiveEntryIDReuse(ArchiveEntryId),
-    /// A filename is being reused
-    FilenameReuse(String),
+    /// An entry name is being reused
+    EntryNameReuse(String),
     /// Data for a file already closed
     ArchiveEntryIDAlreadyClose(ArchiveEntryId),
     /// Content for an unknown file
@@ -150,7 +150,7 @@ pub enum TruncatedReadError {
     /// Wraps an already existing error and indicates which files are not
     /// finished (a file can be finished but uncompleted)
     UnfinishedFiles {
-        filenames: Vec<EntryName>,
+        names: Vec<EntryName>,
         stopping_error: Box<TruncatedReadError>,
     },
     /// End of original archive reached - this is the best case

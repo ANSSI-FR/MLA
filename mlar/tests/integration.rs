@@ -1062,7 +1062,7 @@ fn test_verbose_listing() {
     println!("{cmd:?}");
     let assert = cmd.assert();
 
-    // The list command prints just the filenames (no INFO prefix), so:
+    // The list command prints just the names (no INFO prefix), so:
     let mut expected_stdout = String::new();
     for file in &testfs.files {
         let entry_name = EntryName::from_path(file.path()).unwrap();

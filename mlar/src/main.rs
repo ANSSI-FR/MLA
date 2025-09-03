@@ -914,13 +914,13 @@ fn list(matches: &ArgMatches) -> Result<(), MlarError> {
         };
 
         let size = mla_file.get_size().format_size(DECIMAL);
-        let filename = mla_file.name;
+        let name = mla_file.name;
 
         if verbose == 1 {
             println!("{name_to_display} - {size}");
         } else {
             // verbose >= 2: include hash
-            let hash = mla.get_hash(&filename)?.ok_or(MlarError::MissingHash)?;
+            let hash = mla.get_hash(&name)?.ok_or(MlarError::MissingHash)?;
 
             println!("{} - {} ({})", name_to_display, size, hex::encode(hash));
         }

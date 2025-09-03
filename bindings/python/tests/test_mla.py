@@ -129,20 +129,20 @@ def test_list_entries(basic_archive: str) -> None:
     # With size
     size_entries = archive.list_entries(include_size=True)
     if isinstance(size_entries, dict):
-        size_items = [(filename, info.size) for filename, info in size_entries.items()]
+        size_items = [(name, info.size) for name, info in size_entries.items()]
     else:
-        size_items = [(filename, 0) for filename in size_entries]
-    expected_size_items = [(filename, len(data)) for filename, data in FILES.items()]
+        size_items = [(name, 0) for name in size_entries]
+    expected_size_items = [(name, len(data)) for name, data in FILES.items()]
     assert sorted(size_items) == sorted(expected_size_items)
 
     # With hash
     hash_entries = archive.list_entries(include_hash=True)
     if isinstance(hash_entries, dict):
-        hash_items = [(filename, info.hash) for filename, info in hash_entries.items()]
+        hash_items = [(name, info.hash) for name, info in hash_entries.items()]
     else:
-        hash_items = [(filename, b"") for filename in hash_entries]
+        hash_items = [(name, b"") for name in hash_entries]
     expected_hash_items = [
-        (filename, hashlib.sha256(data).digest()) for filename, data in FILES.items()
+        (name, hashlib.sha256(data).digest()) for name, data in FILES.items()
     ]
     assert sorted(hash_items) == sorted(expected_hash_items)
 
@@ -150,14 +150,14 @@ def test_list_entries(basic_archive: str) -> None:
     size_hash_entries = archive.list_entries(include_size=True, include_hash=True)
     if isinstance(size_hash_entries, dict):
         size_hash_items = [
-            (filename, info.size, info.hash)
-            for filename, info in size_hash_entries.items()
+            (name, info.size, info.hash)
+            for name, info in size_hash_entries.items()
         ]
     else:
-        size_hash_items = [(filename, 0, b"") for filename in size_hash_entries]
+        size_hash_items = [(name, 0, b"") for name in size_hash_entries]
     expected_size_hash_items = [
-        (filename, len(data), hashlib.sha256(data).digest())
-        for filename, data in FILES.items()
+        (name, len(data), hashlib.sha256(data).digest())
+        for name, data in FILES.items()
     ]
     assert sorted(size_hash_items) == sorted(expected_size_hash_items)
 
@@ -199,7 +199,7 @@ def test_double_write() -> None:
         mla.WriterConfig.without_encryption_without_signature(),
     )
     archive[EntryName("file1")] = FILES[EntryName("file1")]
-    with pytest.raises(mla.DuplicateFilename):
+    with pytest.raises(mla.DuplicateEntryName):
         archive[EntryName("file1")] = FILES[EntryName("file1")]
 
 

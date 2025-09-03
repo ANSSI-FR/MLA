@@ -383,7 +383,7 @@ mod base64;
 /// -
 ///
 /// Files are saved as series of archive-file blocks. A first special type of block
-/// indicates the start of a file, along with its filename and a file ID. A second special type of
+/// indicates the start of a file, along with its entry name and an entry ID. A second special type of
 /// block indicates the end of the current file.
 ///
 /// Blocks contain file data, prepended with the current block size and the corresponding file ID. Even if the
@@ -445,9 +445,9 @@ const MLA_MAGIC: &[u8; 8] = b"MLAFAAAA";
 const MLA_FORMAT_VERSION: u32 = 2;
 const END_MLA_MAGIC: &[u8; 8] = b"EMLAAAAA";
 /// Maximum number of UTF-8 characters supported in each file's "name" (which is free
-/// to be used as a filename, an absolute path, or... ?). 32KiB was chosen because it
+/// to be used as an entry name, an absolute path, or... ?). 32KiB was chosen because it
 /// supports any path a Windows NT, Linux, FreeBSD, OpenBSD, or NetBSD kernel supports.
-const FILENAME_MAX_SIZE: u64 = 65536;
+const ENTRYNAME_MAX_SIZE: u64 = 65536;
 
 const ENTRIES_LAYER_MAGIC: &[u8; 8] = b"MLAENAAA";
 
@@ -493,18 +493,18 @@ struct ArchiveFooter {
 impl ArchiveFooter {
     /// Footer:
     /// ```ascii-art
-    /// [files_info][files_info length]
+    /// [entries_info][entries_info length]
     /// ```
     /// Performs zero-copy serialization of a footer
     fn serialize_into<W: Write>(
         mut dest: W,
-        files_info: &HashMap<EntryName, ArchiveEntryId>,
+        entries_info: &HashMap<EntryName, ArchiveEntryId>,
         ids_info: &HashMap<ArchiveEntryId, EntryInfo>,
     ) -> Result<(), Error> {
-        // Combine `files_info` and `ids_info` to ArchiveFooter.files_info,
+        // Combine `entries_info` and `ids_info` to ArchiveFooter.entries_info,
         // avoiding copies (only references)
         let mut tmp = Vec::new();
-        for (k, i) in files_info {
+        for (k, i) in entries_info {
             let v = ids_info.get(i).ok_or_else(|| {
                 Error::WrongWriterState(
                     "[ArchiveFooter seriliaze] Unable to find the ID".to_string(),
@@ -528,9 +528,9 @@ impl ArchiveFooter {
     pub fn deserialize_from<R: Read + Seek>(mut src: R) -> Result<Option<ArchiveFooter>, Error> {
         let index_present = u8::deserialize(&mut src)?;
         if index_present == 1 {
-            // Read files_info
+            // Read entries_info
             let n = u64::deserialize(&mut src)?;
-            let files_info = (0..n)
+            let entries_info = (0..n)
                 .map(|_| {
                     let name = deserialize_entry_name(&mut src)?;
                     let info = EntryInfo::deserialize(&mut src)?;
@@ -538,9 +538,7 @@ impl ArchiveFooter {
                 })
                 .collect::<Result<HashMap<_, _>, Error>>()?;
 
-            Ok(Some(ArchiveFooter {
-                entries_info: files_info,
-            }))
+            Ok(Some(ArchiveFooter { entries_info }))
         } else {
             Ok(None)
         }
@@ -682,14 +680,14 @@ pub struct ArchiveWriter<'a, W: 'a + InnerWriterTrait> {
     dest: Box<PositionLayerWriter<'a, W>>,
     /// Internal state
     state: ArchiveWriterState,
-    /// Filename -> Corresponding `ArchiveEntryID`
+    /// Entry name -> Corresponding `ArchiveEntryID`
     ///
-    /// This is done to keep a quick check for filename existence
-    files_info: HashMap<EntryName, ArchiveEntryId>,
+    /// This is done to keep a quick check for entry name existence
+    entries_info: HashMap<EntryName, ArchiveEntryId>,
     /// ID -> Corresponding `EntryInfo`
     ///
     /// File chunks identify their relative file using the `ArchiveEntryID`.
-    /// `files_info` and `ids_info` could have been merged into a single `HashMap`
+    /// `entries_info` and `ids_info` could have been merged into a single `HashMap`
     /// String -> `EntryInfo`, at the cost of an additional `HashMap` `ArchiveEntryID` ->
     /// String, thus increasing memory footprint.
     /// These hashmaps are actually merged at the last moment, on footer
@@ -756,7 +754,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
                 ids: Vec::new(),
                 hashes: HashMap::new(),
             },
-            files_info: HashMap::new(),
+            entries_info: HashMap::new(),
             ids_info: HashMap::new(),
             next_id: ArchiveEntryId(0),
             current_id: ArchiveEntryId(0),
@@ -813,7 +811,7 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
         ArchiveEntryBlock::EndOfArchiveData::<std::io::Empty> {}.dump(&mut self.dest)?;
 
         self.dest.write_all(&[1])?; // We always keep an index for the moment
-        ArchiveFooter::serialize_into(&mut self.dest, &self.files_info, &self.ids_info)?;
+        ArchiveFooter::serialize_into(&mut self.dest, &self.entries_info, &self.ids_info)?;
 
         self.dest.write_all(EMPTY_TAIL_OPTS_SERIALIZATION)?; // No option for the moment
 
@@ -852,15 +850,15 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
     pub fn start_entry(&mut self, name: EntryName) -> Result<ArchiveEntryId, Error> {
         check_state!(self.state, OpenedFiles);
 
-        if self.files_info.contains_key(&name) {
-            return Err(Error::DuplicateFilename);
+        if self.entries_info.contains_key(&name) {
+            return Err(Error::DuplicateEntryName);
         }
 
         // Create ID for this file
         let id = self.next_id;
         self.next_id = ArchiveEntryId(self.next_id.0 + 1);
         self.current_id = id;
-        self.files_info.insert(name.clone(), id);
+        self.entries_info.insert(name.clone(), id);
 
         // Save the current position
         self.ids_info.insert(
@@ -1274,12 +1272,8 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
     ///
     /// Order is not relevant, and may change.
     pub fn list_entries(&self) -> Result<impl Iterator<Item = &EntryName>, Error> {
-        if let Some(ArchiveFooter {
-            entries_info: files_info,
-            ..
-        }) = &self.metadata
-        {
-            Ok(files_info.keys())
+        if let Some(ArchiveFooter { entries_info, .. }) = &self.metadata {
+            Ok(entries_info.keys())
         } else {
             Err(Error::MissingMetadata)
         }
@@ -1287,12 +1281,9 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
 
     /// Get the hash recorded in the archive footer for an entry content.
     pub fn get_hash(&mut self, name: &EntryName) -> Result<Option<Sha256Hash>, Error> {
-        if let Some(ArchiveFooter {
-            entries_info: files_info,
-        }) = &self.metadata
-        {
+        if let Some(ArchiveFooter { entries_info }) = &self.metadata {
             // Get file relative information
-            let Some(file_info) = files_info.get(name) else {
+            let Some(file_info) = entries_info.get(name) else {
                 return Ok(None);
             };
 
@@ -1325,12 +1316,9 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
         &mut self,
         name: EntryName,
     ) -> Result<Option<ArchiveEntry<'_, impl InnerReaderTrait>>, Error> {
-        if let Some(ArchiveFooter {
-            entries_info: files_info,
-        }) = &self.metadata
-        {
+        if let Some(ArchiveFooter { entries_info }) = &self.metadata {
             // Get file relative information
-            let Some(file_info) = files_info.get(&name) else {
+            let Some(file_info) = entries_info.get(&name) else {
                 return Ok(None);
             };
             if file_info.offsets_and_sizes.is_empty() {
@@ -1431,8 +1419,8 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
         // Associate an id retrieved from the archive to repair, to the
         // corresponding output file id
         let mut id_truncated2id_output: HashMap<ArchiveEntryId, ArchiveEntryId> = HashMap::new();
-        // Associate an id retrieved from the archive to corresponding filename
-        let mut id_truncated2filename: HashMap<ArchiveEntryId, EntryName> = HashMap::new();
+        // Associate an id retrieved from the archive to corresponding entry name
+        let mut id_truncated2entryname: HashMap<ArchiveEntryId, EntryName> = HashMap::new();
         // List of IDs from the archive already fully added
         let mut id_truncated_done = Vec::new();
         // Associate an id retrieved from the archive with its ongoing Hash
@@ -1454,11 +1442,7 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
                 }
                 Ok(block) => {
                     match block {
-                        ArchiveEntryBlock::EntryStart {
-                            name: filename,
-                            id,
-                            opts: _,
-                        } => {
+                        ArchiveEntryBlock::EntryStart { name, id, opts: _ } => {
                             if let Some(_id_output) = id_truncated2id_output.get(&id) {
                                 update_error!(error = TruncatedReadError::ArchiveEntryIDReuse(id));
                                 break 'read_block;
@@ -1470,12 +1454,12 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
                                 break 'read_block;
                             }
 
-                            id_truncated2filename.insert(id, filename.clone());
-                            let id_output = match output.start_entry(filename.clone()) {
-                                Err(Error::DuplicateFilename) => {
+                            id_truncated2entryname.insert(id, name.clone());
+                            let id_output = match output.start_entry(name.clone()) {
+                                Err(Error::DuplicateEntryName) => {
                                     update_error!(
-                                        error = TruncatedReadError::FilenameReuse(
-                                            filename.raw_content_to_escaped_string()
+                                        error = TruncatedReadError::EntryNameReuse(
+                                            name.raw_content_to_escaped_string()
                                         )
                                     );
                                     break 'read_block;
@@ -1505,8 +1489,8 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
                                 );
                                 break 'read_block;
                             }
-                            let fname = id_truncated2filename.get(&id).expect(
-                                "`id_truncated2filename` not more sync with `id_truncated2id_output`",
+                            let fname = id_truncated2entryname.get(&id).expect(
+                                "`id_truncated2entryname` not more sync with `id_truncated2id_output`",
                             );
                             let hash = id_truncated2hash.get_mut(&id).expect(
                                 "`id_truncated2hash` not more sync with `id_truncated2id_output`",
@@ -1635,9 +1619,9 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
                 continue;
             }
 
-            let fname = id_truncated2filename
+            let fname = id_truncated2entryname
                 .get(&id_truncated)
-                .expect("`id_truncated2filename` not more sync with `id_truncated2id_output`");
+                .expect("`id_truncated2entryname` not more sync with `id_truncated2id_output`");
             output.end_entry(id_output)?;
 
             unfinished_files.push(fname.clone());
@@ -1646,7 +1630,7 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
         // Report which files are not completed, if any
         if !unfinished_files.is_empty() {
             error = TruncatedReadError::UnfinishedFiles {
-                filenames: unfinished_files,
+                names: unfinished_files,
                 stopping_error: Box::new(error),
             };
         }
@@ -1996,9 +1980,9 @@ pub(crate) mod tests {
         (MLAPrivateKey, MLAPublicKey),
         Vec<(EntryName, Vec<u8>)>,
     ) {
-        let (written_archive, sender_keys, receiver_keys, files_content, _, _) =
+        let (written_archive, sender_keys, receiver_keys, entries_content, _, _) =
             build_archive2(compression, encryption, signature, interleaved);
-        (written_archive, sender_keys, receiver_keys, files_content)
+        (written_archive, sender_keys, receiver_keys, entries_content)
     }
 
     #[allow(clippy::type_complexity)]
@@ -2113,7 +2097,7 @@ pub(crate) mod tests {
             )
             .unwrap();
         }
-        let files_info = mla.files_info.clone();
+        let entries_info = mla.entries_info.clone();
         let ids_info = mla.ids_info.clone();
         let written_archive = mla.finalize().unwrap();
 
@@ -2126,7 +2110,7 @@ pub(crate) mod tests {
                 (fname2, fake_file2),
                 (fname3, fake_file3),
             ],
-            files_info,
+            entries_info,
             ids_info,
         )
     }
@@ -2321,12 +2305,12 @@ pub(crate) mod tests {
     fn convert_trunc_truncated() {
         for interleaved in &[false, true] {
             // Build an archive with 3 files, without compressing to truncate at the correct place
-            let (dest, _sender_key, receiver_key, files, files_info, ids_info) =
+            let (dest, _sender_key, receiver_key, files, entries_info, ids_info) =
                 build_archive2(false, true, false, *interleaved);
             // Truncate the resulting file (before the footer, hopefully after the header), and prepare the truncated reader
             let footer_size = {
                 let mut cursor = Cursor::new(Vec::new());
-                ArchiveFooter::serialize_into(&mut cursor, &files_info, &ids_info).unwrap();
+                ArchiveFooter::serialize_into(&mut cursor, &entries_info, &ids_info).unwrap();
                 usize::try_from(cursor.position())
                     .expect("Failed to convert cursor position to usize")
             };
@@ -2404,7 +2388,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn avoid_duplicate_filename() {
+    fn avoid_duplicate_entryname() {
         let buf = Vec::new();
         let config = ArchiveWriterConfig::without_encryption_without_signature()
             .unwrap()
@@ -2435,11 +2419,11 @@ pub(crate) mod tests {
         // Build an archive with 3 non-interleaved files and another with
         // interleaved files
         for interleaved in &[false, true] {
-            let (dest, _sender_key, receiver_key, files, files_info, ids_info) =
+            let (dest, _sender_key, receiver_key, files, entries_info, ids_info) =
                 build_archive2(true, true, false, *interleaved);
 
             for (fname, data) in &files {
-                let id = files_info.get(fname).unwrap();
+                let id = entries_info.get(fname).unwrap();
                 let size: u64 = ids_info
                     .get(id)
                     .unwrap()
@@ -2500,11 +2484,11 @@ pub(crate) mod tests {
         // Conversion
         match mla_fsread.convert_to_archive(mla_w).unwrap() {
             TruncatedReadError::UnfinishedFiles {
-                filenames,
+                names,
                 stopping_error,
             } => {
                 // We expect to ends with a HashDiffers on first file
-                assert_eq!(filenames, vec![files[0].0.clone()]);
+                assert_eq!(names, vec![files[0].0.clone()]);
                 match *stopping_error {
                     TruncatedReadError::HashDiffers { .. } => {}
                     _ => {
@@ -2530,8 +2514,8 @@ pub(crate) mod tests {
         let mut mla_read = ArchiveReader::from_config(buf, config).unwrap().0;
 
         // Get hashes and compare
-        for (filename, content) in files {
-            let hash = mla_read.get_hash(&filename).unwrap().unwrap();
+        for (name, content) in files {
+            let hash = mla_read.get_hash(&name).unwrap().unwrap();
 
             let mut hasher = Sha256::new();
             hasher.update(content);
@@ -3138,13 +3122,13 @@ pub(crate) mod tests {
 
     #[test]
     fn test_footer_deserialization_valid_index() {
-        let (_dest, _sender_key, _receiver_key, _files, files_info, ids_info) =
+        let (_dest, _sender_key, _receiver_key, _files, entries_info, ids_info) =
             build_archive2(false, false, false, false);
 
         // Manually write the index tag before the actual footer content
         let mut buf = Cursor::new(Vec::new());
         buf.write_all(&[1]).unwrap();
-        ArchiveFooter::serialize_into(&mut buf, &files_info, &ids_info).unwrap();
+        ArchiveFooter::serialize_into(&mut buf, &entries_info, &ids_info).unwrap();
         buf.rewind().unwrap();
 
         let result = ArchiveFooter::deserialize_from(buf).unwrap();

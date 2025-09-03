@@ -66,9 +66,9 @@ create_exception!(
 );
 create_exception!(
     mla,
-    FilenameTooLong,
+    EntryNameTooLong,
     MLAError,
-    "Filenames have a limited size `FILENAME_MAX_SIZE`"
+    "EntryNames have a limited size `ENTRYNAME_MAX_SIZE`"
 );
 create_exception!(
     mla,
@@ -136,7 +136,7 @@ create_exception!(
     MLAError,
     "An error happens in the configuration"
 );
-create_exception!(mla, DuplicateFilename, MLAError, "Filename already used");
+create_exception!(mla, DuplicateEntryName, MLAError, "EntryName already used");
 create_exception!(
     mla,
     AuthenticatedDecryptionWrongTag,
@@ -267,8 +267,8 @@ impl From<WrappedError> for PyErr {
                 mla::errors::Error::UTF8ConversionError(err) => {
                     PyErr::new::<UTF8ConversionError, _>(err)
                 }
-                mla::errors::Error::FilenameTooLong => PyErr::new::<FilenameTooLong, _>(
-                    "Filenames have a limited size `FILENAME_MAX_SIZE`",
+                mla::errors::Error::EntryNameTooLong => PyErr::new::<EntryNameTooLong, _>(
+                    "EntryNames have a limited size `ENTRYNAME_MAX_SIZE`",
                 ),
                 mla::errors::Error::WrongArchiveWriterState {
                     current_state,
@@ -298,8 +298,8 @@ impl From<WrappedError> for PyErr {
                 mla::errors::Error::ConfigError(err) => {
                     PyErr::new::<ConfigError, _>(format!("{err:}"))
                 }
-                mla::errors::Error::DuplicateFilename => {
-                    PyErr::new::<DuplicateFilename, _>("Filename already used")
+                mla::errors::Error::DuplicateEntryName => {
+                    PyErr::new::<DuplicateEntryName, _>("EntryName already used")
                 }
                 mla::errors::Error::AuthenticatedDecryptionWrongTag => {
                     PyErr::new::<AuthenticatedDecryptionWrongTag, _>(
@@ -1412,7 +1412,7 @@ fn pymla(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
         py.get_type::<WrongBlockSubFileType>(),
     )?;
     m.add("UTF8ConversionError", py.get_type::<UTF8ConversionError>())?;
-    m.add("FilenameTooLong", py.get_type::<FilenameTooLong>())?;
+    m.add("EntryNameTooLong", py.get_type::<EntryNameTooLong>())?;
     m.add(
         "WrongArchiveWriterState",
         py.get_type::<WrongArchiveWriterState>(),
@@ -1430,7 +1430,7 @@ fn pymla(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("BadAPIArgument", py.get_type::<BadAPIArgument>())?;
     m.add("EndOfStream", py.get_type::<EndOfStream>())?;
     m.add("ConfigError", py.get_type::<ConfigError>())?;
-    m.add("DuplicateFilename", py.get_type::<DuplicateFilename>())?;
+    m.add("DuplicateEntryName", py.get_type::<DuplicateEntryName>())?;
     m.add(
         "AuthenticatedDecryptionWrongTag",
         py.get_type::<AuthenticatedDecryptionWrongTag>(),
