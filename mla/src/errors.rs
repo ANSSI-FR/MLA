@@ -138,11 +138,11 @@ pub enum TruncatedReadError {
     /// An error occurs in the middle of a file
     ErrorInFile(io::Error, String),
     /// A file ID is being reused
-    ArchiveFileIDReuse(ArchiveEntryId),
+    ArchiveEntryIDReuse(ArchiveEntryId),
     /// A filename is being reused
     FilenameReuse(String),
     /// Data for a file already closed
-    ArchiveFileIDAlreadyClose(ArchiveEntryId),
+    ArchiveEntryIDAlreadyClose(ArchiveEntryId),
     /// Content for an unknown file
     ContentForUnknownFile(ArchiveEntryId),
     /// Termination of an unknwown file
