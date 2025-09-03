@@ -21,7 +21,7 @@ use crate::{
             ENCRYPTION_LAYER_MAGIC, EncryptionPersistentConfig, read_encryption_header_after_magic,
         },
         strip_head_tail::StripHeadTailReader,
-        traits::{InnerWriterType, LayerTruncatedReader, LayerReader, LayerWriter},
+        traits::{InnerWriterType, LayerReader, LayerTruncatedReader, LayerWriter},
     },
     read_layer_magic,
 };

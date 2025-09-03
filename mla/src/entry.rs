@@ -596,7 +596,8 @@ impl<T: Read + Seek> Read for ArchiveEntryDataReader<'_, T> {
                     }
                     ArchiveEntryBlock::EndOfArchiveData => {
                         return Err(Error::WrongReaderState(
-                            "[ArchiveEntryDataReader] Try to read the end of the archive".to_string(),
+                            "[ArchiveEntryDataReader] Try to read the end of the archive"
+                                .to_string(),
                         )
                         .into());
                     }

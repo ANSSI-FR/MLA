@@ -243,7 +243,7 @@ impl From<MLAError> for MLAStatus {
 pub type MLAWriterConfigHandle = *mut c_void;
 pub type MLAReaderConfigHandle = *mut c_void;
 pub type MLAArchiveHandle = *mut c_void;
-pub type MLAArchiveFileHandle = *mut c_void;
+pub type MLAArchiveEntryHandle = *mut c_void;
 
 // Internal struct definition to create a Write-able from function pointers
 
@@ -814,7 +814,7 @@ pub extern "C" fn mla_archive_start_entry_with_arbitrary_bytes_name(
     archive: MLAArchiveHandle,
     entry_name_arbitrary_bytes: *const u8,
     name_size: usize,
-    handle_out: *mut MLAArchiveFileHandle,
+    handle_out: *mut MLAArchiveEntryHandle,
 ) -> MLAStatus {
     if archive.is_null()
         || entry_name_arbitrary_bytes.is_null()
@@ -834,14 +834,14 @@ pub extern "C" fn mla_archive_start_entry_with_arbitrary_bytes_name(
 fn start_entry(
     archive: MLAArchiveHandle,
     entry_name: EntryName,
-    handle_out: *mut MLAArchiveFileHandle,
+    handle_out: *mut MLAArchiveEntryHandle,
 ) -> MLAStatus {
     let mut archive = unsafe { Box::from_raw(archive.cast::<ArchiveWriter<CallbackOutput>>()) };
     let res = match archive.start_entry(entry_name) {
         Ok(fileid) => {
             let ptr = Box::into_raw(Box::new(fileid));
             unsafe {
-                *handle_out = ptr as MLAArchiveFileHandle;
+                *handle_out = ptr as MLAArchiveEntryHandle;
             }
             MLAStatus::Success
         }
@@ -863,7 +863,7 @@ fn start_entry(
 pub extern "C" fn mla_archive_start_entry_with_path_as_name(
     archive: MLAArchiveHandle,
     entry_name: *const c_char,
-    handle_out: *mut MLAArchiveFileHandle,
+    handle_out: *mut MLAArchiveEntryHandle,
 ) -> MLAStatus {
     if archive.is_null() || entry_name.is_null() || handle_out.is_null() {
         return MLAStatus::BadAPIArgument;
@@ -910,7 +910,7 @@ fn path_to_bytes_os(p: &Path) -> Option<&[u8]> {
 #[unsafe(no_mangle)]
 pub extern "C" fn mla_archive_file_append(
     archive: MLAArchiveHandle,
-    file: MLAArchiveFileHandle,
+    file: MLAArchiveEntryHandle,
     buffer: *const u8,
     length: u64,
 ) -> MLAStatus {
@@ -959,7 +959,7 @@ pub extern "C" fn mla_archive_flush(archive: MLAArchiveHandle) -> MLAStatus {
 #[unsafe(no_mangle)]
 pub extern "C" fn mla_archive_file_close(
     archive: MLAArchiveHandle,
-    file: *mut MLAArchiveFileHandle,
+    file: *mut MLAArchiveEntryHandle,
 ) -> MLAStatus {
     if archive.is_null() || file.is_null() {
         return MLAStatus::BadAPIArgument;
