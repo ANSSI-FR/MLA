@@ -681,15 +681,15 @@ pub struct ArchiveWriter<'a, W: 'a + InnerWriterTrait> {
     dest: Box<PositionLayerWriter<'a, W>>,
     /// Internal state
     state: ArchiveWriterState,
-    /// Filename -> Corresponding `ArchiveFileID`
+    /// Filename -> Corresponding `ArchiveEntryID`
     ///
     /// This is done to keep a quick check for filename existence
     files_info: HashMap<EntryName, ArchiveEntryId>,
     /// ID -> Corresponding `EntryInfo`
     ///
-    /// File chunks identify their relative file using the `ArchiveFileID`.
+    /// File chunks identify their relative file using the `ArchiveEntryID`.
     /// `files_info` and `ids_info` could have been merged into a single `HashMap`
-    /// String -> `EntryInfo`, at the cost of an additional `HashMap` `ArchiveFileID` ->
+    /// String -> `EntryInfo`, at the cost of an additional `HashMap` `ArchiveEntryID` ->
     /// String, thus increasing memory footprint.
     /// These hashmaps are actually merged at the last moment, on footer
     /// serialization
@@ -1459,12 +1459,12 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
                             opts: _,
                         } => {
                             if let Some(_id_output) = id_truncated2id_output.get(&id) {
-                                update_error!(error = TruncatedReadError::ArchiveFileIDReuse(id));
+                                update_error!(error = TruncatedReadError::ArchiveEntryIDReuse(id));
                                 break 'read_block;
                             }
                             if id_truncated_done.contains(&id) {
                                 update_error!(
-                                    error = TruncatedReadError::ArchiveFileIDAlreadyClose(id)
+                                    error = TruncatedReadError::ArchiveEntryIDAlreadyClose(id)
                                 );
                                 break 'read_block;
                             }
@@ -1500,7 +1500,7 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
 
                             if id_truncated_done.contains(&id) {
                                 update_error!(
-                                    error = TruncatedReadError::ArchiveFileIDAlreadyClose(id)
+                                    error = TruncatedReadError::ArchiveEntryIDAlreadyClose(id)
                                 );
                                 break 'read_block;
                             }
@@ -1589,7 +1589,7 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
 
                             if id_truncated_done.contains(&id) {
                                 update_error!(
-                                    error = TruncatedReadError::ArchiveFileIDAlreadyClose(id)
+                                    error = TruncatedReadError::ArchiveEntryIDAlreadyClose(id)
                                 );
                                 break 'read_block;
                             }
