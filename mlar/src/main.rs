@@ -441,7 +441,7 @@ fn open_truncated_mla_file<'a>(
     Ok(TruncatedArchiveReader::from_config(file, config)?)
 }
 
-fn add_file_to_tar<R: Read + Seek, W: Write>(
+fn add_entry_to_tar<R: Read + Seek, W: Write>(
     tar_file: &mut Builder<W>,
     entry: ArchiveEntry<R>,
 ) -> Result<(), MlarError> {
@@ -631,7 +631,7 @@ impl Write for FileWriter<'_> {
 }
 
 /// Add whatever is specified by `path`
-fn add_file_or_dir(
+fn add_entry_or_dir(
     mla: &mut ArchiveWriter<OutputTypes>,
     path: &Path,
     skip_not_found: bool,
@@ -690,7 +690,7 @@ fn add_dir(
                 };
 
                 let new_path = entry.path();
-                if let Err(err) = add_file_or_dir(mla, &new_path, skip_not_found) {
+                if let Err(err) = add_entry_or_dir(mla, &new_path, skip_not_found) {
                     eprintln!(
                         "[ERROR] Failed to add \"{}\" ({:?})",
                         escaped_path_to_string(&new_path),
@@ -861,11 +861,11 @@ fn create(matches: &ArgMatches) -> Result<(), MlarError> {
         if matches.get_flag("stdin_file_list") {
             for line in io::stdin().lock().lines() {
                 let line = line?;
-                add_file_or_dir(&mut mla, Path::new(&line), skip_not_found)?;
+                add_entry_or_dir(&mut mla, Path::new(&line), skip_not_found)?;
             }
         } else if let Some(filepaths) = matches.get_many::<PathBuf>("files") {
             for filepath in filepaths {
-                add_file_or_dir(&mut mla, Path::new(filepath), skip_not_found)?;
+                add_entry_or_dir(&mut mla, Path::new(filepath), skip_not_found)?;
             }
         }
     }
@@ -1327,7 +1327,7 @@ fn to_tar(matches: &ArgMatches) -> Result<(), MlarError> {
             }
             Ok(Some(subfile)) => subfile,
         };
-        if let Err(err) = add_file_to_tar(&mut tar_file, sub_file) {
+        if let Err(err) = add_entry_to_tar(&mut tar_file, sub_file) {
             let escaped = fname
                 .to_pathbuf_escaped_string()
                 .map_err(|_| MlarError::EntryNameEscapeFailed)?;
