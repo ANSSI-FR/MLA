@@ -63,7 +63,7 @@ fn app() -> Command {
         .about(env!("CARGO_PKG_DESCRIPTION"))
         .arg(
             Arg::new("input")
-                .help("Archive path")
+                .help("Input archive path. Any backslashes in entry names will be normalized to forward slashes during upgrade.")
                 .long("input")
                 .short('i')
                 .num_args(1)
@@ -219,10 +219,10 @@ fn upgrade(matches: &ArgMatches) -> Result<(), MlarError> {
     // v1 archive still uses files, not entries
     let fnames: Vec<String> = mla_in
         .list_files()
-        .map_err(|_| {
-            eprintln!("[ERROR] Archive is malformed or unreadable. Consider repairing the file.");
-            MlarError::InvalidEntryNameToPath
-        })?
+        .inspect_err(|err| {
+            eprintln!("[ERROR] Archive is malformed or unreadable. Consider repairing the file. Details: {err}");
+        })
+        .map_err(Into::<MlarError>::into)?
         .cloned()
         .collect();
 
@@ -240,8 +240,10 @@ fn upgrade(matches: &ArgMatches) -> Result<(), MlarError> {
                 return Err(err.into());
             }
             Ok(None) => {
-                eprintln!("[ERROR] Unable to find {escaped_fname}");
-                return Err(MlarError::InvalidEntryNameToPath);
+                let msg = format!("Unable to find {escaped_fname}");
+                return Err(MlarError::MlaV1(mla_v1::errors::Error::IOError(
+                    io::Error::new(io::ErrorKind::NotFound, format!("[ERROR] {msg}")),
+                )));
             }
             Ok(Some(mla)) => mla,
         };
@@ -254,8 +256,8 @@ fn upgrade(matches: &ArgMatches) -> Result<(), MlarError> {
         };
 
         if let Err(e) = mla_out.add_entry(new_entry_name, sub_file.size, sub_file.data) {
-            eprintln!("[ERROR] Failed to add entry {escaped_fname}: {e}");
-            return Err(MlarError::InvalidEntryNameToPath);
+            let msg = format!("Failed to add entry {escaped_fname}: {e}");
+            return Err(MlarError::Mla(Error::Other(format!("[ERROR] {msg}"))));
         }
     }
 
