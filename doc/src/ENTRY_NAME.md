@@ -8,8 +8,8 @@ OS file system path.
 An entry name is a nonempty sequence of bytes (maximum length of 65536).
 
 Please keep in mind that names, interpreted as paths or not, may contain
-arbitrary bytes like slash, backslash, `..`, `C:\\{}...]`, newline, spaces,
-carriage return, terminal escape sequences, Unicode chars like U+0085 or RTLO,
+arbitrary bytes such as slashes, backslashes, `..`, `C:\\{}...]`, newlines, spaces,
+carriage returns, terminal escape sequences, Unicode chars such as U+0085 or RTLO,
 HTML, SQL, semicolons, homoglyphs, etc.
 
 ## Interpretation of an entry name as an OS filesystem file path
