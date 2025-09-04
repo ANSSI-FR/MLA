@@ -588,7 +588,7 @@ struct FileWriter<'a> {
     // A `Mutex` is used instead of a `RefCell` as `FileWriter` can be `Send`
     cache: &'a Mutex<LruCache<PathBuf, File>>,
     /// Is verbose mode enabled
-    verbose: bool,
+    verbose: u8,
     /// `entry_name`
     entry_name: EntryName,
 }
@@ -603,7 +603,7 @@ impl Write for FileWriter<'_> {
         if !cache.contains(&self.path) {
             let file = fs::OpenOptions::new().append(true).open(&self.path)?;
             cache.put(self.path.clone(), file);
-            if self.verbose {
+            if self.verbose > 0 {
                 println!(
                     "{}",
                     self.entry_name
@@ -1025,7 +1025,7 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
     let file_name_matcher = ExtractFileNameMatcher::from_matches(matches)?;
     // Safe to use unwrap() because the option is required()
     let output_dir = Path::new(matches.get_one::<PathBuf>("outputdir").unwrap());
-    let verbose = matches.get_flag("verbose");
+    let verbose = matches.get_count("verbose");
 
     let mut mla = open_mla_file(matches)?;
 
@@ -1059,7 +1059,7 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
 
     if let ExtractFileNameMatcher::Anything = file_name_matcher {
         // Optimisation: use linear extraction
-        if verbose {
+        if verbose > 0 {
             println!("Extracting the whole archive using a linear extraction");
         }
         let cache = Mutex::new(LruCache::new(
@@ -1125,7 +1125,7 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
             quarantine_data.as_ref(),
         )?;
 
-        if verbose {
+        if verbose > 0 {
             println!(
                 "{}",
                 entry_name
@@ -1458,6 +1458,13 @@ fn info(matches: &ArgMatches) -> Result<(), MlarError> {
 
 fn app() -> clap::Command {
     // Common arguments list, for homogeneity
+    let verbose = Arg::new("verbose")
+        .long("verbose")
+        .short('v')
+        .action(ArgAction::Count) // count occurrences: -v, -vv, -vvv
+        .global(true) // enabled for all subcommands
+        .help("Increase verbosity level");
+
     let input_args = vec![
         Arg::new("input")
             .help("Archive path")
@@ -1478,7 +1485,7 @@ fn app() -> clap::Command {
             .long("skip-signature-verification")
             .help("Skip signature verification whether the archive is signed or not. This enables reading unsigned archives and reading signed archives without the cost of verification.")
             .action(ArgAction::SetTrue),
-    ];
+            ];
     let output_args = vec![
         Arg::new("output")
             .help("Output file path. Use - for stdout")
@@ -1515,12 +1522,13 @@ fn app() -> clap::Command {
             .num_args(1)
             .action(ArgAction::Append)
             .value_parser(value_parser!(PathBuf)),
-    ];
+            ];
 
     // Main parsing
     Command::new(env!("CARGO_PKG_NAME"))
-        .version(env!("CARGO_PKG_VERSION"))
-        .about(env!("CARGO_PKG_DESCRIPTION"))
+            .version(env!("CARGO_PKG_VERSION"))
+            .about(env!("CARGO_PKG_DESCRIPTION"))
+            .arg(verbose)
         .subcommand(
             Command::new("create")
                 .about("Create a new MLA Archive")
@@ -1581,12 +1589,6 @@ fn app() -> clap::Command {
                         .action(ArgAction::SetTrue)
                         .help("Do not try to interpret entry names as paths and encode everything not alphanumeric or dot"),
                 )
-                .arg(
-                    Arg::new("verbose")
-                        .short('v')
-                        .action(ArgAction::Count)
-                        .help("Verbose listing, with additional information"),
-                ),
         )
         .subcommand(
             Command::new("extract")
@@ -1610,13 +1612,6 @@ fn app() -> clap::Command {
                         .help("Treat specified files as glob patterns"),
                 )
                 .arg(Arg::new("entries").value_parser(value_parser!(PathBuf)).help("List of entries to extract (all if none given)"))
-                .arg(
-                    Arg::new("verbose")
-                        .long("verbose")
-                        .short('v')
-                        .action(ArgAction::SetTrue)
-                        .help("List entries as they are extracted"),
-                ),
         )
         .subcommand(
             Command::new("cat")
@@ -1776,13 +1771,6 @@ fn app() -> clap::Command {
             Command::new("info")
                 .about("Get info on a MLA Archive")
                 .args(&input_args)
-                .arg(
-                    Arg::new("verbose")
-                        .long("verbose")
-                        .short('v')
-                        .action(ArgAction::SetTrue)
-                        .help("Get extra info for encryption and compression layers"),
-                ),
         )
 }
 
@@ -1791,24 +1779,9 @@ fn main() -> Result<(), MlarError> {
     let help = app.render_long_help();
     let matches = app.get_matches();
 
-    // Determine verbose flag in subcommands that supports it
-    let (_subcommand_name, _subcommand_matches, verbose) = match matches.subcommand() {
-        Some(("list", m)) => {
-            let lvl = *m.get_one::<u8>("verbose").unwrap_or(&0);
-            ("list", m, lvl > 0)
-        }
-        Some(("extract", m)) => ("extract", m, m.get_flag("verbose")),
-        Some(("info", m)) => ("info", m, m.get_flag("verbose")),
-        Some((name, m)) => (name, m, false),
-        None => {
-            let msg = "[ERROR] At least one command is required.";
-            eprintln!("{}", &help);
-            return Err(MlarError::IO(io::Error::other(format!("[ERROR] {msg}"))));
-        }
-    };
+    let verbose = *matches.get_one::<u8>("verbose").unwrap_or(&0);
 
     // User-friendly panic output
-    // Uses the previously retrieved verbose flag (from subcommand args)
     // Since Rust 2021, panic payloads are always `&'static str` or `String`
     std::panic::set_hook(Box::new(move |panic_info| {
         let msg = match panic_info.payload().downcast_ref::<&str>() {
@@ -1821,7 +1794,9 @@ fn main() -> Result<(), MlarError> {
         };
         eprintln!("[ERROR] {msg}");
 
-        if verbose && let Some(location) = panic_info.location() {
+        if verbose > 0
+            && let Some(location) = panic_info.location()
+        {
             eprintln!("(at {}:{})", location.file(), location.line());
         }
     }));
