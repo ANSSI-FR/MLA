@@ -532,7 +532,7 @@ fn create_file<P1: AsRef<Path>>(
 
         if !containing_directory.starts_with(output_dir) {
             let msg = format!(
-                "Refusing to extract \"{}\": it would be extracted outside the output directory (in \"{}\")",
+                "Aborting rest of extraction. Refusing to extract \"{}\": it would be extracted outside the output directory (in \"{}\")",
                 escaped_path_to_string(&entry_name_pathbuf),
                 escaped_path_to_string(&containing_directory)
             );
