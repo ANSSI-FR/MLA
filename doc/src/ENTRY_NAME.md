@@ -24,7 +24,7 @@ The rules for each component are:
 
 If it is to be interpreted as a Windows file path, in addition to previous rules:
 * No byte should be an ASCII backslash (separators are represented by an ASCII slash).
-* Byte values below 32 (32 is the ASCII space and is accepted), and byte values 34 (ASCII double quote), 42 (ASCII star), 58 (ASCII colon), 60 (ASCII below), 62 (ASCII greater), 63 (ASCII question mark), 124 (ASCII pipe) are forbidden.
+* Byte values strictly below 32 (non-printable control characters) are forbidden. Additionally, the following ASCII values are forbidden: 34 (`"`), 42 (`*`), 58 (`:`), 60 (`<`), 62 (`>`), 63 (`?`), and 124 (`|`).
 * Every component must be encoded as UTF-8.
 
 These rules are checked by the accompanying Rust implementation (`EntryName::to_pathbuf`).
