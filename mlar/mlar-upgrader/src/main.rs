@@ -7,6 +7,7 @@ use std::{
 use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use mla::{
     config::ArchiveWriterConfig, crypto::mlakey::MLAPublicKey, entry::EntryName, errors::Error,
+    helpers::mla_percent_escape,
 };
 use std::io;
 
@@ -52,6 +53,9 @@ impl error::Error for MlarError {
         }
     }
 }
+
+const PATH_ESCAPED_STRING_ALLOWED_BYTES: &[u8; 65] =
+    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789./\\";
 
 fn app() -> Command {
     Command::new(env!("CARGO_PKG_NAME"))
@@ -223,15 +227,20 @@ fn upgrade(matches: &ArgMatches) -> Result<(), MlarError> {
         .collect();
 
     for fname in fnames {
-        eprintln!(" adding: {fname}");
+        let escaped = mla_percent_escape(fname.as_bytes(), PATH_ESCAPED_STRING_ALLOWED_BYTES);
+        // Safe to convert to UTF-8 string because all disallowed bytes are escaped
+        let escaped_fname = String::from_utf8(escaped)
+            .expect("[ERROR] mla_percent_escape should produce valid UTF-8");
+
+        eprintln!(" adding: {escaped_fname}");
 
         let sub_file = match mla_in.get_file(fname.clone()) {
             Err(err) => {
-                eprintln!("[ERROR] Failed to add {fname} ({err:?})");
+                eprintln!("[ERROR] Failed to add {escaped_fname} ({err:?})");
                 return Err(err.into());
             }
             Ok(None) => {
-                eprintln!("[ERROR] Unable to find {fname}");
+                eprintln!("[ERROR] Unable to find {escaped_fname}");
                 return Err(MlarError::InvalidEntryNameToPath);
             }
             Ok(Some(mla)) => mla,
@@ -245,7 +254,7 @@ fn upgrade(matches: &ArgMatches) -> Result<(), MlarError> {
         };
 
         if let Err(e) = mla_out.add_entry(new_entry_name, sub_file.size, sub_file.data) {
-            eprintln!("[ERROR] Failed to add entry {fname}: {e}");
+            eprintln!("[ERROR] Failed to add entry {escaped_fname}: {e}");
             return Err(MlarError::InvalidEntryNameToPath);
         }
     }
@@ -307,7 +316,7 @@ pub(crate) mod tests {
         // Copy test files into base_temp
         for (file, src_dir) in &files {
             fs::copy(format!("{src_dir}/{file}"), base_temp.join(file))
-                .expect("[ERROR] Failed to copy test file");
+                .expect("[ERROR] Failed to copy test file");
         }
 
         // Change current dir to the temp test directory
