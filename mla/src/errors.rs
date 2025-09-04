@@ -142,7 +142,7 @@ pub enum TruncatedReadError {
     /// An entry name is being reused
     EntryNameReuse(String),
     /// Data for a file already closed
-    ArchiveEntryIDAlreadyClose(ArchiveEntryId),
+    ArchiveEntryIDAlreadyClosed(ArchiveEntryId),
     /// Content for an unknown file
     ContentForUnknownFile(ArchiveEntryId),
     /// Termination of an unknwown file
