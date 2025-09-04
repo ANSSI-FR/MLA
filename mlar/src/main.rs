@@ -237,7 +237,7 @@ fn config_from_matches(
             );
         }
 
-        let (pub_enc_keys, _pub_sig_keys) = open_public_keys(matches, output_public_keys_arg_name)
+        let (public_encryption_keys, _pub_sig_keys) = open_public_keys(matches, output_public_keys_arg_name)
             .map_err(|error| {
                 eprintln!("[ERROR] Unable to open '{output_public_keys_arg_name}': {error}");
                 MlarError::Mla(Error::InvalidKeyFormat)
@@ -250,15 +250,15 @@ fn config_from_matches(
                 );
             }
 
-            let (_private_decryption_keys, private_sig_keys) =
+            let (_private_decryption_keys, private_signing_keys) =
                 open_private_keys(matches, output_private_keys_arg_name).map_err(|error| {
                     eprintln!("[ERROR] Unable to open '{output_private_keys_arg_name}': {error}");
                     MlarError::Mla(Error::InvalidKeyFormat)
                 })?;
 
-            ArchiveWriterConfig::with_encryption_with_signature(&pub_enc_keys, &private_sig_keys)
+            ArchiveWriterConfig::with_encryption_with_signature(&public_encryption_keys, &private_signing_keys)
         } else {
-            ArchiveWriterConfig::with_encryption_without_signature(&pub_enc_keys)
+            ArchiveWriterConfig::with_encryption_without_signature(&public_encryption_keys)
         }
     } else if matches.contains_id(output_private_keys_arg_name) {
         if !layers.contains(&"sign") {
@@ -267,13 +267,13 @@ fn config_from_matches(
             );
         }
 
-        let (_private_decryption_keys, private_sig_keys) =
+        let (_private_decryption_keys, private_signing_keys) =
             open_private_keys(matches, output_private_keys_arg_name).map_err(|error| {
                 eprintln!("[ERROR] Unable to open '{output_private_keys_arg_name}': {error}");
                 MlarError::Mla(Error::InvalidKeyFormat)
             })?;
 
-        ArchiveWriterConfig::without_encryption_with_signature(&private_sig_keys)
+        ArchiveWriterConfig::without_encryption_with_signature(&private_signing_keys)
     } else {
         ArchiveWriterConfig::without_encryption_without_signature()
     }?;
@@ -336,12 +336,12 @@ fn readerconfig_from_matches(matches: &ArgMatches) -> Result<ArchiveReaderConfig
     let incomplete_config = if matches.get_flag("skip_signature_verification") {
         ArchiveReaderConfig::without_signature_verification()
     } else if matches.contains_id("public_keys") {
-        let (_public_enc_keys, public_sig_keys) = open_public_keys(matches, "public_keys")
+        let (_public_encryption_keys, public_signature_verification_keys) = open_public_keys(matches, "public_keys")
             .map_err(|error| {
                 eprintln!("[ERROR] Unable to open public keys: {error}");
                 MlarError::Mla(Error::InvalidKeyFormat)
             })?;
-        ArchiveReaderConfig::with_signature_verification(&public_sig_keys)
+        ArchiveReaderConfig::with_signature_verification(&public_signature_verification_keys)
     } else {
         eprintln!("[ERROR] No public keys given and --skip-signature-verification not set");
         std::process::exit(1);
