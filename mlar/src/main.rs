@@ -1560,14 +1560,14 @@ fn app() -> clap::Command {
         .subcommand(
             Command::new("list")
                 .about("List entries inside a MLA Archive")
-                .before_help("Outputs a list of MLA entries. By default, names are interpreted as paths and escaped like described in `doc/ENTRY_NAME.md`")
+                .before_help("Outputs a list of MLA entries. By default, names are interpreted as paths and escaped like described in `doc/src/ENTRY_NAME.md`")
                 .args(&input_args)
                 .args(&both_args)
                 .arg(
                     Arg::new("raw-escaped-names")
                         .long("raw-escaped-names")
                         .action(ArgAction::SetTrue)
-                        .help("Do not try to interpret entry names as paths and encode everything not alphanumeric or dot"),
+                        .help("Do not try to interpret entry names as paths and encode everything not alphanumeric, dash, underscore or dot"),
                 )
                 .arg(
                     Arg::new("verbose")

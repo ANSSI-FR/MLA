@@ -24,7 +24,7 @@ The rules for each component are:
 
 If it is to be interpreted as a Windows file path, in addition to previous rules:
 * No byte should be an ASCII backslash (separators are represented by an ASCII slash).
-* The eventual second byte of the whole path should not be an ASCII colon (`:`).
+* Byte values strictly below 32 (non-printable control characters) are forbidden. Additionally, the following ASCII values are forbidden: 34 (`"`), 42 (`*`), 58 (`:`), 60 (`<`), 62 (`>`), 63 (`?`), and 124 (`|`).
 * Every component must be encoded as UTF-8.
 
 These rules are checked by the accompanying Rust implementation (`EntryName::to_pathbuf`).
@@ -34,10 +34,10 @@ Even if respecting these rules, the OS may see the resulting path as invalid.
 Please keep in mind that two different names, may map to same path on OS
 (e.g. Windows case insensitivity).
 
-When given a path as input, before being converted to an entry name by
-`EntryName::from_path` and `mlar` the path is normalized by keeping only
-`Normal` `std::path::Component`s and popping an eventual previous component when
-a `..` is encountered.
+In provided rust implementation, when given a path as input, before being
+converted to an entry name by `EntryName::from_path` and `mlar` the path is
+normalized by keeping only `Normal` `std::path::Component`s and popping an
+eventual previous component when a `..` is encountered.
 
 ## String representation of entry names
 
@@ -55,7 +55,7 @@ with ASCII alphanumeric, dot, dash and underscore as preserved bytes. This is us
 `mlar list --raw-escaped-names`.
 
 For an entry name interpreted as a path, below generic escaping is applied
-with ASCII alphanumeric chars, ASCII dot and ASCII slash as preserved bytes.
+with ASCII alphanumeric chars, dot, dash, underscore and slash as preserved bytes.
 This is used by default by `mlar list`.
 
 ### Generic escaping, implemented by `helpers::mla_percent_escape`
