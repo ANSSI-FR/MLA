@@ -1450,7 +1450,7 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
                             }
                             if id_truncated_done.contains(&id) {
                                 update_error!(
-                                    error = TruncatedReadError::ArchiveEntryIDAlreadyClose(id)
+                                    error = TruncatedReadError::ArchiveEntryIDAlreadyClosed(id)
                                 );
                                 break 'read_block;
                             }
@@ -1486,7 +1486,7 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
 
                             if id_truncated_done.contains(&id) {
                                 update_error!(
-                                    error = TruncatedReadError::ArchiveEntryIDAlreadyClose(id)
+                                    error = TruncatedReadError::ArchiveEntryIDAlreadyClosed(id)
                                 );
                                 break 'read_block;
                             }
@@ -1575,7 +1575,7 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
 
                             if id_truncated_done.contains(&id) {
                                 update_error!(
-                                    error = TruncatedReadError::ArchiveEntryIDAlreadyClose(id)
+                                    error = TruncatedReadError::ArchiveEntryIDAlreadyClosed(id)
                                 );
                                 break 'read_block;
                             }
