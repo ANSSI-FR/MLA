@@ -1630,7 +1630,7 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
 
         // Report which files are not completed, if any
         if !unfinished_files.is_empty() {
-            error = TruncatedReadError::UnfinishedFiles {
+            error = TruncatedReadError::UnfinishedEntries {
                 names: unfinished_files,
                 stopping_error: Box::new(error),
             };
@@ -2484,7 +2484,7 @@ pub(crate) mod tests {
 
         // Conversion
         match mla_fsread.convert_to_archive(mla_w).unwrap() {
-            TruncatedReadError::UnfinishedFiles {
+            TruncatedReadError::UnfinishedEntries {
                 names,
                 stopping_error,
             } => {

@@ -149,7 +149,7 @@ pub enum TruncatedReadError {
     EOFForUnknownFile(ArchiveEntryId),
     /// Wraps an already existing error and indicates which files are not
     /// finished (a file can be finished but uncompleted)
-    UnfinishedFiles {
+    UnfinishedEntries {
         names: Vec<EntryName>,
         stopping_error: Box<TruncatedReadError>,
     },
