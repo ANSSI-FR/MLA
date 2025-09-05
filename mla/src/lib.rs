@@ -11,9 +11,9 @@
 //!   * Entry chunks can be interleaved (one can add the beginning of an entry, start a second one, and then continue adding the first entry's parts)
 //! * Architecture agnostic and portable to some extent (written entirely in Rust)
 //! * Archive reading is seekable, even if compressed or encrypted. An entry can be accessed in the middle of the archive without reading from the beginning
-//! * If truncated, archives can be repaired to some extent. Two modes are available:
-//!   * Authenticated repair (default): only authenticated (as in AEAD, there is no signature verification) encrypted chunks of data are retrieved
-//!   * Unauthenticated repair: authenticated and unauthenticated encrypted chunks of data are retrieved. Use at your own risk.
+//! * If truncated, archives can be `clean-truncated` in order to recover its content to some extent. Two modes are available:
+//!   * Authenticated recover (default): only authenticated (as in AEAD, there is no signature verification) encrypted chunks of data are retrieved
+//!   * Unauthenticated recover: authenticated and unauthenticated encrypted chunks of data are retrieved. Use at your own risk.
 //! * Arguably less prone to bugs, especially while parsing an untrusted archive (Rust safety)
 //!
 //! Repository
@@ -258,9 +258,9 @@ mod base64;
 ///
 /// * a `Writer`, implementing the `Write` trait. It is responsible for emitting bytes while creating a new archive
 /// * a `Reader`, implementing both `Read` and `Seek` traits. It is responsible for reading bytes while reading an archive
-/// * a `TruncatedReader`, implementing only the `Read` trait. It is responsible for reading bytes while repairing an archive
+/// * a `TruncatedReader`, implementing only the `Read` trait. It is responsible for reading bytes when cleaning a truncated archive (`clean-truncated` operation)
 ///
-/// Layers are made with the *repairable* property in mind. Reading them must never need information from the footer, but a footer can be used to optimize the reading. For example, accessing a file inside the archive can be optimized using the footer to seek to the file beginning, but it is still possible to get information by reading the whole archive until the file is found.
+/// Layers are made with the *recoverable* property in mind. Reading them must never need information from the footer, but a footer can be used to optimize the reading. For example, accessing a file inside the archive can be optimized using the footer to seek to the file beginning, but it is still possible to get information by reading the whole archive until the file is found.
 ///
 /// Layers are optional, but their order is enforced. Users can choose to enable or disable them.
 /// Current order is the following:
@@ -393,7 +393,7 @@ mod base64;
 ///
 ///
 /// The file-ending block marks the end of data for a given file, and includes its
-/// full content SHA256. Thus, the integrity of files can be checked, even on repair
+/// full content SHA256. Thus, the integrity of files can be checked, even on recover
 /// operations.
 ///
 /// The layer footer contains for each file its size, its ending block offset and an index of its block locations. Block location index enables direct access. The ending block offset enables fast hash retrieval and the file size eases the conversion to formats needing the size of the file before the data, such as Tar.
@@ -1347,7 +1347,7 @@ pub struct TruncatedArchiveReader<'a, R: 'a + Read> {
     src: Box<dyn 'a + LayerTruncatedReader<'a, R>>,
 }
 
-// Size of the repaired file blocks
+// Size of the `clean-truncated` file blocks
 const CACHE_SIZE: usize = 8 * 1024 * 1024; // 8MB
 
 /// Used to update the error state only if it was `NoError`
@@ -1417,7 +1417,7 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
     ) -> Result<TruncatedReadError, Error> {
         let mut error = TruncatedReadError::NoError;
 
-        // Associate an id retrieved from the archive to repair, to the
+        // Associate an id retrieved from the archive to recover, to the
         // corresponding output file id
         let mut id_truncated2id_output: HashMap<ArchiveEntryId, ArchiveEntryId> = HashMap::new();
         // Associate an id retrieved from the archive to corresponding entry name
@@ -1507,7 +1507,7 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
                             // - call `n` times the API for 1 byte looking for the first fail
                             // - call the API for `n` bytes, possibly returning a first bunch of bytes then a failure
                             //
-                            // The second method is used to reduced the calls' count while repairing large files.
+                            // The second method is used to reduced the calls' count when recovering large files.
                             // Being equivalent to the first method, it should extracts as many bytes as possible
                             // from the potentially broken stream.
                             //
@@ -2729,7 +2729,7 @@ pub(crate) mod tests {
         } else {
             panic!();
         }
-        // Get a reader on the repaired archive
+        // Get a reader on the `clean-truncated` archive
         let buf2 = Cursor::new(dest_w);
         let repread_config =
             ArchiveReaderConfig::without_signature_verification().without_encryption();

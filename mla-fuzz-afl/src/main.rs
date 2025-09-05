@@ -418,7 +418,7 @@ fn run(data: &mut [u8]) {
         }
     }
 
-    // === TruncatedArchiveReader repair test (simulate corruption) ===
+    // === TruncatedArchiveReader `clean-truncated` test (simulate corruption) ===
     if !test_case.byteflip.is_empty() {
         let mut corrupted = dest.clone();
 
@@ -438,33 +438,37 @@ fn run(data: &mut [u8]) {
         ) {
             Ok(mut tr) => {
                 // We'll try to salvage it into a new buffer
-                let mut repaired = Vec::new();
+                let mut clean_truncated = Vec::new();
                 let out_cfg = ArchiveWriterConfig::without_encryption_without_signature().unwrap();
-                let mla_out = ArchiveWriter::from_config(&mut repaired, out_cfg).unwrap();
+                let mla_out = ArchiveWriter::from_config(&mut clean_truncated, out_cfg).unwrap();
 
                 match tr.convert_to_archive(mla_out) {
                     Ok(result) => {
                         eprintln!("Repair finished with: {result:?}");
 
-                        // Re-parse the repaired archive to ensure it's valid
+                        // Re-parse the `clean-truncated` archive to ensure it's valid
                         let reader_cfg = ArchiveReaderConfig::without_signature_verification()
                             .without_encryption();
-                        if let Ok((mut recovered_read, _)) =
-                            ArchiveReader::from_config(Cursor::new(repaired.as_slice()), reader_cfg)
-                        {
-                            // Verify recovered file list and contents
-                            let mut recovered_list: Vec<String> = recovered_read
+                        if let Ok((mut clean_truncated_read, _)) = ArchiveReader::from_config(
+                            Cursor::new(clean_truncated.as_slice()),
+                            reader_cfg,
+                        ) {
+                            // Verify `clean-truncated` entries list and contents
+                            let mut clean_truncated_list: Vec<String> = clean_truncated_read
                                 .list_entries()
                                 .unwrap()
                                 .map(mla::entry::EntryName::raw_content_to_escaped_string)
                                 .collect();
-                            recovered_list.sort();
+                            clean_truncated_list.sort();
 
-                            for recovered_file in &recovered_list {
-                                if expected_entry_names.binary_search(recovered_file).is_err() {
-                                    // Log and skip unexpected recovered files (possibly corrupted/mangled)
+                            for clean_truncated_file in &clean_truncated_list {
+                                if expected_entry_names
+                                    .binary_search(clean_truncated_file)
+                                    .is_err()
+                                {
+                                    // Log and skip unexpected `clean-truncated` files (possibly corrupted/mangled)
                                     eprintln!(
-                                        "Warning: unexpected recovered file: {recovered_file}"
+                                        "Warning: unexpected `clean-truncated` archive file: {clean_truncated_file}"
                                     );
                                 }
                             }
@@ -476,20 +480,21 @@ fn run(data: &mut [u8]) {
                                     continue;
                                 };
 
-                                let Ok(Some(mut mla_file)) = recovered_read.get_entry(entry_name)
+                                let Ok(Some(mut mla_file)) =
+                                    clean_truncated_read.get_entry(entry_name)
                                 else {
                                     continue;
                                 };
 
-                                let mut recovered_data = Vec::new();
-                                if mla_file.data.read_to_end(&mut recovered_data).is_ok() {
+                                let mut clean_truncated_data = Vec::new();
+                                if mla_file.data.read_to_end(&mut clean_truncated_data).is_ok() {
                                     let expected = entry_name2content.get(name).unwrap_or(&empty);
 
-                                    if recovered_data != *expected {
+                                    if clean_truncated_data != *expected {
                                         eprintln!(
-                                            "Recovered content mismatch for file `{name}`.\nExpected: {expected:02x?}\nRecovered: {recovered_data:02x?}"
+                                            "Data mismatch after clean truncation for file `{name}`.\nExpected: {expected:02x?}\nRecovered: {clean_truncated_data:02x?}"
                                         );
-                                        // Don't panic during recovery verification as it is expected to be imperfect
+                                        // Don't panic during clean truncation verification as it is expected to be imperfect
                                     }
                                 }
                             }
