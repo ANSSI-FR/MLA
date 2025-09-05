@@ -1134,7 +1134,7 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
         }
 
         // Look for the file in the archive
-        let mut sub_file = match mla.get_entry(entry_name.clone()) {
+        let mut entry = match mla.get_entry(entry_name.clone()) {
             Err(err) => {
                 let escaped = entry_name
                     .to_pathbuf_escaped_string()
@@ -1179,7 +1179,7 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
                 .map_err(|_| MlarError::EntryNameEscapeFailed)?;
             println!("{escaped}");
         }
-        if let Err(err) = io::copy(&mut sub_file.data, &mut extracted_file) {
+        if let Err(err) = io::copy(&mut entry.data, &mut extracted_file) {
             let escaped = entry_name
                 .to_pathbuf_escaped_string()
                 .map_err(|_| MlarError::EntryNameEscapeFailed)?;
@@ -1310,7 +1310,7 @@ fn to_tar(matches: &ArgMatches) -> Result<(), MlarError> {
     let mut archive_files: Vec<EntryName> = mla.list_entries()?.cloned().collect();
     archive_files.sort();
     for fname in archive_files {
-        let sub_file = match mla.get_entry(fname.clone()) {
+        let entry = match mla.get_entry(fname.clone()) {
             Err(err) => {
                 let escaped = fname
                     .to_pathbuf_escaped_string()
@@ -1327,7 +1327,7 @@ fn to_tar(matches: &ArgMatches) -> Result<(), MlarError> {
             }
             Ok(Some(subfile)) => subfile,
         };
-        if let Err(err) = add_entry_to_tar(&mut tar_file, sub_file) {
+        if let Err(err) = add_entry_to_tar(&mut tar_file, entry) {
             let escaped = fname
                 .to_pathbuf_escaped_string()
                 .map_err(|_| MlarError::EntryNameEscapeFailed)?;
@@ -1377,7 +1377,7 @@ fn convert(matches: &ArgMatches) -> Result<(), MlarError> {
     for fname in fnames {
         eprintln!(" converting: {}", fname.raw_content_to_escaped_string());
 
-        let sub_file = match mla.get_entry(fname.clone()) {
+        let entry = match mla.get_entry(fname.clone()) {
             Err(err) => {
                 eprintln!(
                     "[ERROR] Failed to retrieve entry \"{}\": {err:?}",
@@ -1395,8 +1395,8 @@ fn convert(matches: &ArgMatches) -> Result<(), MlarError> {
             Ok(Some(mla_entry)) => mla_entry,
         };
 
-        let size = sub_file.get_size();
-        mla_out.add_entry(sub_file.name, size, sub_file.data)?;
+        let size = entry.get_size();
+        mla_out.add_entry(entry.name, size, entry.data)?;
     }
 
     mla_out.finalize().expect("[ERROR] Finalization error");
