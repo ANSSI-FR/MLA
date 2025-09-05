@@ -127,8 +127,8 @@ pub fn linear_extract<W1: InnerWriterTrait, R: InnerReaderTrait, S: BuildHasher>
                 let copy_src = &mut (&mut src).take(length);
                 // Is the file considered?
                 let mut extracted: bool = false;
-                if let Some(fname) = id2name.get(&id)
-                    && let Some(writer) = export.get_mut(fname)
+                if let Some(entry) = id2name.get(&id)
+                    && let Some(writer) = export.get_mut(entry)
                 {
                     io::copy(copy_src, writer)?;
                     extracted = true;
@@ -214,8 +214,8 @@ mod tests {
         linear_extract(&mut mla_read, &mut export).expect("Extract error");
 
         // Check file per file
-        for (fname, content) in &files {
-            assert_eq!(export.get(fname).unwrap(), content);
+        for (entry, content) in &files {
+            assert_eq!(export.get(entry).unwrap(), content);
         }
     }
 
@@ -258,10 +258,10 @@ mod tests {
         let config = ArchiveWriterConfig::with_encryption_without_signature(&[public_key]).unwrap();
         let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
 
-        let fname = EntryName::from_arbitrary_bytes(b"my_file").unwrap();
+        let entry = EntryName::from_arbitrary_bytes(b"my_file").unwrap();
         let data: Vec<u8> = Standard.sample_iter(&mut rng).take(file_length).collect();
         assert_eq!(data.len(), file_length);
-        mla.add_entry(fname.clone(), data.len() as u64, data.as_slice())
+        mla.add_entry(entry.clone(), data.len() as u64, data.as_slice())
             .unwrap();
 
         let dest = mla.finalize().unwrap();
@@ -276,11 +276,11 @@ mod tests {
 
         // Prepare writers
         let mut export: HashMap<&EntryName, Vec<u8>> = HashMap::new();
-        export.insert(&fname, Vec::new());
+        export.insert(&entry, Vec::new());
         linear_extract(&mut mla_read, &mut export).expect("Extract error");
 
         // Check file
-        assert_eq!(export.get(&fname).unwrap(), &data);
+        assert_eq!(export.get(&entry).unwrap(), &data);
     }
 
     #[test]

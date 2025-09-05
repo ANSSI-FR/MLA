@@ -226,21 +226,21 @@ fn upgrade(matches: &ArgMatches) -> Result<(), MlarError> {
         .cloned()
         .collect();
 
-    for fname in entries {
-        let escaped = mla_percent_escape(fname.as_bytes(), PATH_ESCAPED_STRING_ALLOWED_BYTES);
+    for entry in entries {
+        let escaped = mla_percent_escape(entry.as_bytes(), PATH_ESCAPED_STRING_ALLOWED_BYTES);
         // Safe to convert to UTF-8 string because all disallowed bytes are escaped
-        let escaped_fname = String::from_utf8(escaped)
+        let escaped_entry = String::from_utf8(escaped)
             .expect("[ERROR] mla_percent_escape should produce valid UTF-8");
 
-        eprintln!(" adding: {escaped_fname}");
+        eprintln!(" adding: {escaped_entry}");
 
-        let entry = match mla_in.get_file(fname.clone()) {
+        let entry = match mla_in.get_file(entry.clone()) {
             Err(err) => {
-                eprintln!("[ERROR] Failed to add {escaped_fname} ({err:?})");
+                eprintln!("[ERROR] Failed to add {escaped_entry} ({err:?})");
                 return Err(err.into());
             }
             Ok(None) => {
-                let msg = format!("Unable to find {escaped_fname}");
+                let msg = format!("Unable to find {escaped_entry}");
                 return Err(MlarError::MlaV1(mla_v1::errors::Error::IOError(
                     io::Error::new(io::ErrorKind::NotFound, format!("[ERROR] {msg}")),
                 )));
@@ -256,7 +256,7 @@ fn upgrade(matches: &ArgMatches) -> Result<(), MlarError> {
         };
 
         if let Err(e) = mla_out.add_entry(new_entry_name, entry.size, entry.data) {
-            let msg = format!("Failed to add entry {escaped_fname}: {e}");
+            let msg = format!("Failed to add entry {escaped_entry}: {e}");
             return Err(MlarError::Mla(Error::Other(format!("[ERROR] {msg}"))));
         }
     }
