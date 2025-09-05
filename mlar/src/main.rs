@@ -20,7 +20,7 @@ use std::error;
 use std::ffi::OsStr;
 use std::fmt;
 use std::fs::{self, File, read_dir};
-use std::io::{self, BufRead as _, Read, Seek, Write};
+use std::io::{self, BufRead as _, BufReader, BufWriter, Read, Seek, Write};
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -116,7 +116,7 @@ fn escaped_path_to_string(path: &Path) -> String {
 /// can't coexist in the same code path.
 enum OutputTypes {
     Stdout,
-    File { file: File },
+    File { file: BufWriter<File> },
 }
 
 impl Write for OutputTypes {
@@ -320,8 +320,9 @@ fn destination_from_output_argument(output_argument: &PathBuf) -> Result<OutputT
         OutputTypes::Stdout
     } else {
         let path = Path::new(&output_argument);
+        let file = File::create_new(path)?;
         OutputTypes::File {
-            file: File::create_new(path)?,
+            file: BufWriter::new(file),
         }
     };
     Ok(destination)
@@ -380,15 +381,18 @@ fn readerconfig_from_matches(matches: &ArgMatches) -> Result<ArchiveReaderConfig
     }
 }
 
-fn open_mla_file<'a>(matches: &ArgMatches) -> Result<ArchiveReader<'a, File>, MlarError> {
+fn open_mla_file<'a>(
+    matches: &ArgMatches,
+) -> Result<ArchiveReader<'a, BufReader<File>>, MlarError> {
     let config = readerconfig_from_matches(matches)?;
 
     // Safe to use unwrap() because the option is required()
     let mla_file = matches.get_one::<PathBuf>("input").unwrap();
     let file = File::open(mla_file)?;
+    let buf_reader = BufReader::new(file);
 
     // Instantiate reader
-    let (reader, keys_with_valid_signatures) = ArchiveReader::from_config(file, config)?;
+    let (reader, keys_with_valid_signatures) = ArchiveReader::from_config(buf_reader, config)?;
 
     // Signature verification
     if let Some(public_keys) = matches.get_many::<PathBuf>("public_keys")
@@ -402,9 +406,9 @@ fn open_mla_file<'a>(matches: &ArgMatches) -> Result<ArchiveReader<'a, File>, Ml
 }
 
 // Utils: common code to load a mla_file from arguments, fail-safe mode
-fn open_failsafe_mla_file<'a>(
+fn open_truncated_mla_file<'a>(
     matches: &ArgMatches,
-) -> Result<TruncatedArchiveReader<'a, File>, MlarError> {
+) -> Result<TruncatedArchiveReader<'a, BufReader<File>>, MlarError> {
     let truncated_decryption_mode = if matches.get_flag("allow_unauthenticated_data") {
         TruncatedReaderDecryptionMode::DataEvenUnauthenticated
     } else {
@@ -436,12 +440,13 @@ fn open_failsafe_mla_file<'a>(
     // Safe to use unwrap() because the option is required()
     let mla_file = matches.get_one::<PathBuf>("input").unwrap();
     let file = File::open(mla_file)?;
+    let buf_reader = BufReader::new(file);
 
     // Instantiate reader
-    Ok(TruncatedArchiveReader::from_config(file, config)?)
+    Ok(TruncatedArchiveReader::from_config(buf_reader, config)?)
 }
 
-fn add_file_to_tar<R: Read + Seek, W: Write>(
+fn add_entry_to_tar<R: Read + Seek, W: Write>(
     tar_file: &mut Builder<W>,
     entry: ArchiveEntry<R>,
 ) -> Result<(), MlarError> {
@@ -631,7 +636,7 @@ impl Write for FileWriter<'_> {
 }
 
 /// Add whatever is specified by `path`
-fn add_file_or_dir(
+fn add_entry_or_dir(
     mla: &mut ArchiveWriter<OutputTypes>,
     path: &Path,
     skip_not_found: bool,
@@ -690,7 +695,7 @@ fn add_dir(
                 };
 
                 let new_path = entry.path();
-                if let Err(err) = add_file_or_dir(mla, &new_path, skip_not_found) {
+                if let Err(err) = add_entry_or_dir(mla, &new_path, skip_not_found) {
                     eprintln!(
                         "[ERROR] Failed to add \"{}\" ({:?})",
                         escaped_path_to_string(&new_path),
@@ -858,14 +863,14 @@ fn create(matches: &ArgMatches) -> Result<(), MlarError> {
     } else {
         let skip_not_found = matches.get_flag("skip-not-found");
 
-        if matches.get_flag("stdin_file_list") {
+        if matches.get_flag("stdin_entries_list") {
             for line in io::stdin().lock().lines() {
                 let line = line?;
-                add_file_or_dir(&mut mla, Path::new(&line), skip_not_found)?;
+                add_entry_or_dir(&mut mla, Path::new(&line), skip_not_found)?;
             }
         } else if let Some(filepaths) = matches.get_many::<PathBuf>("files") {
             for filepath in filepaths {
-                add_file_or_dir(&mut mla, Path::new(filepath), skip_not_found)?;
+                add_entry_or_dir(&mut mla, Path::new(filepath), skip_not_found)?;
             }
         }
     }
@@ -880,13 +885,13 @@ fn list(matches: &ArgMatches) -> Result<(), MlarError> {
     let mut iter: Vec<EntryName> = mla.list_entries()?.cloned().collect();
     iter.sort();
 
-    for fname in iter {
+    for entry in iter {
         let name_to_display = if matches.get_flag("raw-escaped-names") {
-            fname.raw_content_to_escaped_string()
-        } else if let Ok(s) = fname.to_pathbuf_escaped_string() {
+            entry.raw_content_to_escaped_string()
+        } else if let Ok(s) = entry.to_pathbuf_escaped_string() {
             s
         } else {
-            fname
+            entry
                 .to_pathbuf_escaped_string()
                 .map_err(|_| MlarError::EntryNameEscapeFailed)?
         };
@@ -898,13 +903,13 @@ fn list(matches: &ArgMatches) -> Result<(), MlarError> {
             continue;
         }
 
-        let mla_file = match mla.get_entry(fname.clone()) {
+        let mla_file = match mla.get_entry(entry.clone()) {
             Err(err) => {
-                eprintln!("[ERROR] Failed to add {fname:?} ({err:?})");
+                eprintln!("[ERROR] Failed to add {entry:?} ({err:?})");
                 return Err(err.into());
             }
             Ok(None) => {
-                let msg = format!("Unable to find {fname:?}");
+                let msg = format!("Unable to find {entry:?}");
                 return Err(MlarError::Mla(Error::IOError(io::Error::new(
                     io::ErrorKind::NotFound,
                     format!("[ERROR] {msg}"),
@@ -914,13 +919,13 @@ fn list(matches: &ArgMatches) -> Result<(), MlarError> {
         };
 
         let size = mla_file.get_size().format_size(DECIMAL);
-        let filename = mla_file.name;
+        let name = mla_file.name;
 
         if verbose == 1 {
             println!("{name_to_display} - {size}");
         } else {
             // verbose >= 2: include hash
-            let hash = mla.get_hash(&filename)?.ok_or(MlarError::MissingHash)?;
+            let hash = mla.get_hash(&name)?.ok_or(MlarError::MissingHash)?;
 
             println!("{} - {} ({})", name_to_display, size, hex::encode(hash));
         }
@@ -1134,13 +1139,13 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
         }
 
         // Look for the file in the archive
-        let mut sub_file = match mla.get_entry(entry_name.clone()) {
+        let mut entry = match mla.get_entry(entry_name.clone()) {
             Err(err) => {
                 let escaped = entry_name
                     .to_pathbuf_escaped_string()
                     .map_err(|_| MlarError::EntryNameEscapeFailed)?;
 
-                eprintln!("[ERROR] Failed to look up subfile {escaped} ({err:?})");
+                eprintln!("[ERROR] Failed to look up entry {escaped} ({err:?})");
                 return Err(err.into());
             }
             Ok(None) => {
@@ -1148,10 +1153,10 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
                     .to_pathbuf_escaped_string()
                     .map_err(|_| MlarError::EntryNameEscapeFailed)?;
 
-                eprintln!("[ERROR] Failed to find subfile {escaped} indexed in metadata");
+                eprintln!("[ERROR] Failed to find entry {escaped} indexed in metadata");
                 return Err(MlarError::EntryNotFound);
             }
-            Ok(Some(subfile)) => subfile,
+            Ok(Some(entry)) => entry,
         };
         let (mut extracted_file, _path) = match create_file(
             &output_dir,
@@ -1179,7 +1184,7 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
                 .map_err(|_| MlarError::EntryNameEscapeFailed)?;
             println!("{escaped}");
         }
-        if let Err(err) = io::copy(&mut sub_file.data, &mut extracted_file) {
+        if let Err(err) = io::copy(&mut entry.data, &mut extracted_file) {
             let escaped = entry_name
                 .to_pathbuf_escaped_string()
                 .map_err(|_| MlarError::EntryNameEscapeFailed)?;
@@ -1232,12 +1237,12 @@ fn cat(matches: &ArgMatches) -> Result<(), MlarError> {
                     }
                     Ok(None) => {
                         eprintln!(
-                            "[ERROR] Failed to find subfile \"{displayable_entry_name}\" indexed in metadata"
+                            "[ERROR] Failed to find entry \"{displayable_entry_name}\" indexed in metadata"
                         );
                         return Err(MlarError::EntryNotFound);
                     }
-                    Ok(Some(mut subfile)) => {
-                        if let Err(err) = io::copy(&mut subfile.data, &mut destination) {
+                    Ok(Some(mut entry)) => {
+                        if let Err(err) = io::copy(&mut entry.data, &mut destination) {
                             eprintln!(
                                 "[ERROR] Unable to extract \"{displayable_entry_name}\" ({err:?})"
                             );
@@ -1273,11 +1278,11 @@ fn cat(matches: &ArgMatches) -> Result<(), MlarError> {
                 .map_err(|_| MlarError::EntriesNotFound)?
         };
         // Retrieve all the files that are specified
-        for fname in files_values {
-            let display_name = fname
+        for entry in files_values {
+            let display_name = entry
                 .to_pathbuf_escaped_string()
                 .unwrap_or_else(|_| String::from("<invalid path>"));
-            match mla.get_entry(fname.clone()) {
+            match mla.get_entry(entry.clone()) {
                 Err(err) => {
                     eprintln!("[ERROR] Error while looking up file \"{display_name}\" ({err:?})");
                     return Err(err.into());
@@ -1286,8 +1291,8 @@ fn cat(matches: &ArgMatches) -> Result<(), MlarError> {
                     eprintln!("[ERROR] File not found: \"{display_name}\"");
                     return Err(MlarError::EntryNotFound);
                 }
-                Ok(Some(mut subfile)) => {
-                    if let Err(err) = io::copy(&mut subfile.data, &mut destination) {
+                Ok(Some(mut entry)) => {
+                    if let Err(err) = io::copy(&mut entry.data, &mut destination) {
                         eprintln!("[ERROR] Unable to extract \"{display_name}\" ({err:?})");
                         return Err(err.into());
                     }
@@ -1307,39 +1312,39 @@ fn to_tar(matches: &ArgMatches) -> Result<(), MlarError> {
     let destination = destination_from_output_argument(output)?;
     let mut tar_file = Builder::new(destination);
 
-    let mut archive_files: Vec<EntryName> = mla.list_entries()?.cloned().collect();
-    archive_files.sort();
-    for fname in archive_files {
-        let sub_file = match mla.get_entry(fname.clone()) {
+    let mut archive_entries: Vec<EntryName> = mla.list_entries()?.cloned().collect();
+    archive_entries.sort();
+    for entry_name in archive_entries {
+        let entry = match mla.get_entry(entry_name.clone()) {
             Err(err) => {
-                let escaped = fname
+                let escaped = entry_name
                     .to_pathbuf_escaped_string()
                     .map_err(|_| MlarError::EntryNameEscapeFailed)?;
-                eprintln!("[ERROR] Error while looking up subfile \"{escaped}\" ({err:?})");
+                eprintln!("[ERROR] Error while looking up entry \"{escaped}\" ({err:?})");
                 return Err(err.into());
             }
             Ok(None) => {
-                let escaped = fname
+                let escaped = entry_name
                     .to_pathbuf_escaped_string()
                     .map_err(|_| MlarError::EntryNameEscapeFailed)?;
-                eprintln!("[ERROR] Failed to find subfile \"{escaped}\" indexed in metadata",);
+                eprintln!("[ERROR] Failed to find entry \"{escaped}\" indexed in metadata",);
                 return Err(MlarError::EntryNotFound);
             }
-            Ok(Some(subfile)) => subfile,
+            Ok(Some(entry)) => entry,
         };
-        if let Err(err) = add_file_to_tar(&mut tar_file, sub_file) {
-            let escaped = fname
+        if let Err(err) = add_entry_to_tar(&mut tar_file, entry) {
+            let escaped = entry_name
                 .to_pathbuf_escaped_string()
                 .map_err(|_| MlarError::EntryNameEscapeFailed)?;
-            eprintln!("[ERROR] Unable to add subfile \"{escaped}\" to tarball ({err:?})",);
+            eprintln!("[ERROR] Unable to add entry \"{escaped}\" to tarball ({err:?})",);
             return Err(err);
         }
     }
     Ok(())
 }
 
-fn repair(matches: &ArgMatches) -> Result<(), MlarError> {
-    let mut mla = open_failsafe_mla_file(matches)?;
+fn recover(matches: &ArgMatches) -> Result<(), MlarError> {
+    let mut mla = open_truncated_mla_file(matches)?;
     let mla_out = writer_from_matches(matches, false)?;
 
     // Convert
@@ -1358,45 +1363,45 @@ fn repair(matches: &ArgMatches) -> Result<(), MlarError> {
 
 fn convert(matches: &ArgMatches) -> Result<(), MlarError> {
     let mut mla = open_mla_file(matches)?;
-    let mut fnames: Vec<EntryName> = match mla.list_entries() {
+    let mut entries: Vec<EntryName> = match mla.list_entries() {
         Ok(iter) => iter.cloned().collect(),
         Err(err) => {
             eprintln!(
                 "[ERROR] Failed to read entries from archive: {err}. The file may be malformed. \
-                Consider repairing it using repair sub-command or re-create it."
+                Consider recovering it using the recover subcommand, or re-creating it from the original files."
             );
             return Err(MlarError::EntriesNotFound);
         }
     };
 
-    fnames.sort();
+    entries.sort();
 
     let mut mla_out = writer_from_matches(matches, false)?;
 
     // Convert
-    for fname in fnames {
-        eprintln!(" converting: {}", fname.raw_content_to_escaped_string());
+    for entry in entries {
+        eprintln!(" converting: {}", entry.raw_content_to_escaped_string());
 
-        let sub_file = match mla.get_entry(fname.clone()) {
+        let entry = match mla.get_entry(entry.clone()) {
             Err(err) => {
                 eprintln!(
                     "[ERROR] Failed to retrieve entry \"{}\": {err:?}",
-                    fname.raw_content_to_escaped_string()
+                    entry.raw_content_to_escaped_string()
                 );
                 return Err(err.into());
             }
             Ok(None) => {
                 eprintln!(
                     "[ERROR] Entry not found: {}",
-                    fname.raw_content_to_escaped_string()
+                    entry.raw_content_to_escaped_string()
                 );
                 return Err(MlarError::EntryNotFound);
             }
             Ok(Some(mla_entry)) => mla_entry,
         };
 
-        let size = sub_file.get_size();
-        mla_out.add_entry(sub_file.name, size, sub_file.data)?;
+        let size = entry.get_size();
+        mla_out.add_entry(entry.name, size, entry.data)?;
     }
 
     mla_out.finalize().expect("[ERROR] Finalization error");
@@ -1579,7 +1584,7 @@ fn app() -> clap::Command {
                     .action(ArgAction::Append)
                 )
                 .arg(
-                    Arg::new("stdin_file_list")
+                    Arg::new("stdin_entries_list")
                     .long("stdin-file-list")
                     .help("Add files specified on stdin (one UTF-8 path per line) rather than from positional arguments.")
                     .action(ArgAction::SetTrue)
@@ -1701,8 +1706,8 @@ fn app() -> clap::Command {
                 ),
         )
         .subcommand(
-            Command::new("repair")
-                .about("Create a fresh MLA from what can be read from a truncated one but loosing some security (e.g. no signature verification)")
+            Command::new("recover")
+                .about("Create a new MLA from a truncated one, recovering readable data but losing some security guarantees (e.g. no signature verification)")
                 .args(&input_args)
                 .args(&output_args)
                 .args(&both_args)
@@ -1852,8 +1857,8 @@ fn main() -> Result<(), MlarError> {
         cat(matches)
     } else if let Some(matches) = matches.subcommand_matches("to-tar") {
         to_tar(matches)
-    } else if let Some(matches) = matches.subcommand_matches("repair") {
-        repair(matches)
+    } else if let Some(matches) = matches.subcommand_matches("recover") {
+        recover(matches)
     } else if let Some(matches) = matches.subcommand_matches("convert") {
         convert(matches)
     } else if let Some(matches) = matches.subcommand_matches("keygen") {
