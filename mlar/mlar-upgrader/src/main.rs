@@ -234,7 +234,7 @@ fn upgrade(matches: &ArgMatches) -> Result<(), MlarError> {
 
         eprintln!(" adding: {escaped_fname}");
 
-        let sub_file = match mla_in.get_file(fname.clone()) {
+        let entry = match mla_in.get_file(fname.clone()) {
             Err(err) => {
                 eprintln!("[ERROR] Failed to add {escaped_fname} ({err:?})");
                 return Err(err.into());
@@ -249,13 +249,13 @@ fn upgrade(matches: &ArgMatches) -> Result<(), MlarError> {
         };
 
         // Normalize Windows paths by replacing backslashes with slashes
-        let normalized_filename = sub_file.filename.replace('\\', "/");
+        let normalized_filename = entry.filename.replace('\\', "/");
         let Ok(new_entry_name) = EntryName::from_path(normalized_filename) else {
             eprintln!("[ERROR] Invalid or empty entry name");
             return Err(MlarError::InvalidEntryNameToPath);
         };
 
-        if let Err(e) = mla_out.add_entry(new_entry_name, sub_file.size, sub_file.data) {
+        if let Err(e) = mla_out.add_entry(new_entry_name, entry.size, entry.data) {
             let msg = format!("Failed to add entry {escaped_fname}: {e}");
             return Err(MlarError::Mla(Error::Other(format!("[ERROR] {msg}"))));
         }
