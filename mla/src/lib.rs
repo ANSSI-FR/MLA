@@ -2376,7 +2376,7 @@ pub(crate) mod tests {
                     assert_ne!(
                         buf.len(),
                         0,
-                        "Read 0 bytes from subfile {} {} interleaving and {} bytes removed",
+                        "Read 0 bytes from entry {} {} interleaving and {} bytes removed",
                         mla_file.name.raw_content_to_escaped_string(),
                         if *interleaved { "with" } else { "without" },
                         remove

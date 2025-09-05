@@ -330,14 +330,14 @@ fn read_one_file_by_chunk(
     );
 
     // Get the file (costly as `seek` are implied)
-    let subfile = mla_read
+    let entry = mla_read
         .get_entry(EntryName::from_path("file_0").unwrap())
         .unwrap()
         .unwrap();
 
     // Read iters * size bytes
     let start = Instant::now();
-    let mut src = subfile.data;
+    let mut src = entry.data;
     for _i in 0..iters {
         io::copy(&mut (&mut src).take(size), &mut io::sink()).unwrap();
     }
@@ -409,11 +409,11 @@ fn iter_read_multifiles_random(
     )
     .iter()
     {
-        let subfile = mla_read
+        let entry = mla_read
             .get_entry(EntryName::from_path(format!("file_{i}")).unwrap())
             .unwrap()
             .unwrap();
-        let mut src = subfile.data;
+        let mut src = entry.data;
         io::copy(&mut (&mut src).take(size), &mut io::sink()).unwrap();
     }
     start.elapsed()
