@@ -1307,9 +1307,9 @@ fn to_tar(matches: &ArgMatches) -> Result<(), MlarError> {
     let destination = destination_from_output_argument(output)?;
     let mut tar_file = Builder::new(destination);
 
-    let mut archive_files: Vec<EntryName> = mla.list_entries()?.cloned().collect();
-    archive_files.sort();
-    for entry_name in archive_files {
+    let mut archive_entries: Vec<EntryName> = mla.list_entries()?.cloned().collect();
+    archive_entries.sort();
+    for entry_name in archive_entries {
         let entry = match mla.get_entry(entry_name.clone()) {
             Err(err) => {
                 let escaped = entry_name
