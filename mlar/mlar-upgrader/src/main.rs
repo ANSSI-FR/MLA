@@ -220,7 +220,7 @@ fn upgrade(matches: &ArgMatches) -> Result<(), MlarError> {
     let entries: Vec<String> = mla_in
         .list_files()
         .inspect_err(|err| {
-            eprintln!("[ERROR] Archive is malformed or unreadable. Consider repairing the file. Details: {err}");
+            eprintln!("[ERROR] Archive is malformed or unreadable. Try to recover the file. Details: {err}");
         })
         .map_err(Into::<MlarError>::into)?
         .cloned()

@@ -44,7 +44,7 @@ pub enum Error {
     /// Serialization error. May happens on I/O errors
     SerializationError,
     /// Missing metadata (usually means the footer has not been correctly read,
-    /// a repair might be needed)
+    /// a `clean-truncated` operation might be needed)
     MissingMetadata,
     /// Error returned on API call with incorrect argument
     BadAPIArgument(String),

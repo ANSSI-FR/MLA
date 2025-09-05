@@ -692,7 +692,7 @@ impl<R: Read> InternalEncryptionLayerReader<R> {
 
     #[allow(clippy::unused_self)]
     fn try_tag_pos_at_from_0_to(&self, _max_pos: usize) -> Option<usize> {
-        // TODO later. For the moment we do not support repairing last bytes
+        // TODO later. For the moment we do not support recovering last bytes
         // in archives where the final tag is truncated
         None
     }
@@ -1129,7 +1129,7 @@ mod tests {
         .unwrap();
         let mut output = Vec::new();
         encrypt_r.read_to_end(&mut output).unwrap();
-        // Same length expected as no truncation is done and we repair in authenticated mode
+        // Same length expected as no truncation is done and we applied the `clean-truncated` operation in authenticated mode
         assert!(output.len() == FAKE_FILE.len());
         assert_eq!(output[..FAKE_FILE.len()], FAKE_FILE);
     }

@@ -1338,7 +1338,7 @@ fn to_tar(matches: &ArgMatches) -> Result<(), MlarError> {
     Ok(())
 }
 
-fn repair(matches: &ArgMatches) -> Result<(), MlarError> {
+fn clean_truncated(matches: &ArgMatches) -> Result<(), MlarError> {
     let mut mla = open_truncated_mla_file(matches)?;
     let mla_out = writer_from_matches(matches, false)?;
 
@@ -1347,7 +1347,7 @@ fn repair(matches: &ArgMatches) -> Result<(), MlarError> {
     match status {
         TruncatedReadError::NoError => {}
         TruncatedReadError::EndOfOriginalArchiveData => {
-            eprintln!("[WARNING] The whole archive has been recovered");
+            eprintln!("[WARNING] Entire archive was clean-truncated; no original data remains.");
         }
         _ => {
             eprintln!("[WARNING] Conversion ends with {status}");
@@ -1362,8 +1362,9 @@ fn convert(matches: &ArgMatches) -> Result<(), MlarError> {
         Ok(iter) => iter.cloned().collect(),
         Err(err) => {
             eprintln!(
-                "[ERROR] Failed to read entries from archive: {err}. The file may be malformed. \
-                Consider repairing it using repair sub-command or re-create it."
+                "[ERROR] Failed to read archive entries: {err}. \
+                The file may be corrupted or incomplete. \
+                Try using the `clean-truncated` subcommand to recover, or recreate the archive from the original files."
             );
             return Err(MlarError::EntriesNotFound);
         }
@@ -1701,8 +1702,8 @@ fn app() -> clap::Command {
                 ),
         )
         .subcommand(
-            Command::new("repair")
-                .about("Create a fresh MLA from what can be read from a truncated one but loosing some security (e.g. no signature verification)")
+            Command::new("clean-truncated")
+                .about("Recover readable data from a truncated archive by creating a new archive. This process discards damaged metadata and skips signature verification.")
                 .args(&input_args)
                 .args(&output_args)
                 .args(&both_args)
@@ -1852,8 +1853,8 @@ fn main() -> Result<(), MlarError> {
         cat(matches)
     } else if let Some(matches) = matches.subcommand_matches("to-tar") {
         to_tar(matches)
-    } else if let Some(matches) = matches.subcommand_matches("repair") {
-        repair(matches)
+    } else if let Some(matches) = matches.subcommand_matches("clean-truncated") {
+        clean_truncated(matches)
     } else if let Some(matches) = matches.subcommand_matches("convert") {
         convert(matches)
     } else if let Some(matches) = matches.subcommand_matches("keygen") {
