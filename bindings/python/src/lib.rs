@@ -885,7 +885,7 @@ impl MLAReader {
         #[allow(clippy::mutable_key_type)]
         let mut output = HashMap::new();
         let iter: Vec<RustEntryName> = inner.0.list_entries()?.cloned().collect();
-        for fname in iter {
+        for entry in iter {
             let mut metadata = FileMetadata {
                 size: None,
                 hash: None,
@@ -895,25 +895,25 @@ impl MLAReader {
                     if include_size {
                         metadata.size = Some(
                             reader
-                                .get_entry(fname.clone())?
+                                .get_entry(entry.clone())?
                                 .ok_or(PyRuntimeError::new_err(format!(
                                     "EntryNot found (escaped name): {}",
-                                    fname.raw_content_to_escaped_string()
+                                    entry.raw_content_to_escaped_string()
                                 )))?
                                 .get_size(),
                         );
                     }
                     if include_hash {
-                        metadata.hash = Some(reader.get_hash(&fname)?.ok_or(
+                        metadata.hash = Some(reader.get_hash(&entry)?.ok_or(
                             PyRuntimeError::new_err(format!(
                                 "EntryNot found (escaped name): {}",
-                                fname.raw_content_to_escaped_string()
+                                entry.raw_content_to_escaped_string()
                             )),
                         )?);
                     }
                 }
             }
-            output.insert(EntryName::from_rust_entry_name(fname), metadata);
+            output.insert(EntryName::from_rust_entry_name(entry), metadata);
         }
         Ok(output)
     }

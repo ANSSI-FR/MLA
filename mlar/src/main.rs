@@ -880,13 +880,13 @@ fn list(matches: &ArgMatches) -> Result<(), MlarError> {
     let mut iter: Vec<EntryName> = mla.list_entries()?.cloned().collect();
     iter.sort();
 
-    for fname in iter {
+    for entry in iter {
         let name_to_display = if matches.get_flag("raw-escaped-names") {
-            fname.raw_content_to_escaped_string()
-        } else if let Ok(s) = fname.to_pathbuf_escaped_string() {
+            entry.raw_content_to_escaped_string()
+        } else if let Ok(s) = entry.to_pathbuf_escaped_string() {
             s
         } else {
-            fname
+            entry
                 .to_pathbuf_escaped_string()
                 .map_err(|_| MlarError::EntryNameEscapeFailed)?
         };
@@ -898,13 +898,13 @@ fn list(matches: &ArgMatches) -> Result<(), MlarError> {
             continue;
         }
 
-        let mla_file = match mla.get_entry(fname.clone()) {
+        let mla_file = match mla.get_entry(entry.clone()) {
             Err(err) => {
-                eprintln!("[ERROR] Failed to add {fname:?} ({err:?})");
+                eprintln!("[ERROR] Failed to add {entry:?} ({err:?})");
                 return Err(err.into());
             }
             Ok(None) => {
-                let msg = format!("Unable to find {fname:?}");
+                let msg = format!("Unable to find {entry:?}");
                 return Err(MlarError::Mla(Error::IOError(io::Error::new(
                     io::ErrorKind::NotFound,
                     format!("[ERROR] {msg}"),
@@ -1273,11 +1273,11 @@ fn cat(matches: &ArgMatches) -> Result<(), MlarError> {
                 .map_err(|_| MlarError::EntriesNotFound)?
         };
         // Retrieve all the files that are specified
-        for fname in files_values {
-            let display_name = fname
+        for entry in files_values {
+            let display_name = entry
                 .to_pathbuf_escaped_string()
                 .unwrap_or_else(|_| String::from("<invalid path>"));
-            match mla.get_entry(fname.clone()) {
+            match mla.get_entry(entry.clone()) {
                 Err(err) => {
                     eprintln!("[ERROR] Error while looking up file \"{display_name}\" ({err:?})");
                     return Err(err.into());
@@ -1309,17 +1309,17 @@ fn to_tar(matches: &ArgMatches) -> Result<(), MlarError> {
 
     let mut archive_files: Vec<EntryName> = mla.list_entries()?.cloned().collect();
     archive_files.sort();
-    for fname in archive_files {
-        let entry = match mla.get_entry(fname.clone()) {
+    for entry_name in archive_files {
+        let entry = match mla.get_entry(entry_name.clone()) {
             Err(err) => {
-                let escaped = fname
+                let escaped = entry_name
                     .to_pathbuf_escaped_string()
                     .map_err(|_| MlarError::EntryNameEscapeFailed)?;
                 eprintln!("[ERROR] Error while looking up entry \"{escaped}\" ({err:?})");
                 return Err(err.into());
             }
             Ok(None) => {
-                let escaped = fname
+                let escaped = entry_name
                     .to_pathbuf_escaped_string()
                     .map_err(|_| MlarError::EntryNameEscapeFailed)?;
                 eprintln!("[ERROR] Failed to find entry \"{escaped}\" indexed in metadata",);
@@ -1328,7 +1328,7 @@ fn to_tar(matches: &ArgMatches) -> Result<(), MlarError> {
             Ok(Some(entry)) => entry,
         };
         if let Err(err) = add_entry_to_tar(&mut tar_file, entry) {
-            let escaped = fname
+            let escaped = entry_name
                 .to_pathbuf_escaped_string()
                 .map_err(|_| MlarError::EntryNameEscapeFailed)?;
             eprintln!("[ERROR] Unable to add entry \"{escaped}\" to tarball ({err:?})",);
@@ -1374,21 +1374,21 @@ fn convert(matches: &ArgMatches) -> Result<(), MlarError> {
     let mut mla_out = writer_from_matches(matches, false)?;
 
     // Convert
-    for fname in entries {
-        eprintln!(" converting: {}", fname.raw_content_to_escaped_string());
+    for entry in entries {
+        eprintln!(" converting: {}", entry.raw_content_to_escaped_string());
 
-        let entry = match mla.get_entry(fname.clone()) {
+        let entry = match mla.get_entry(entry.clone()) {
             Err(err) => {
                 eprintln!(
                     "[ERROR] Failed to retrieve entry \"{}\": {err:?}",
-                    fname.raw_content_to_escaped_string()
+                    entry.raw_content_to_escaped_string()
                 );
                 return Err(err.into());
             }
             Ok(None) => {
                 eprintln!(
                     "[ERROR] Entry not found: {}",
-                    fname.raw_content_to_escaped_string()
+                    entry.raw_content_to_escaped_string()
                 );
                 return Err(MlarError::EntryNotFound);
             }
