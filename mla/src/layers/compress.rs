@@ -1330,21 +1330,21 @@ mod tests {
         ));
         comp.write_all(bytes).unwrap();
 
-        let file2 = Vec::new();
+        let entry2 = Vec::new();
         let config2 = ArchiveWriterConfig::without_encryption_without_signature()
             .unwrap()
             .with_compression_level(5)
             .unwrap();
         let mut comp2 = Box::new(CompressionLayerWriter::new_skip_header(
-            Box::new(RawLayerWriter::new(file2)),
+            Box::new(RawLayerWriter::new(entry2)),
             &config2.compression.unwrap(),
         ));
         comp2.write_all(bytes).unwrap();
 
-        // file2 must be better compressed than file
+        // entry2 must be better compressed than file
         let file = comp.finalize().unwrap();
-        let file2 = comp2.finalize().unwrap();
-        assert!(file.len() > file2.len());
+        let entry2 = comp2.finalize().unwrap();
+        assert!(file.len() > entry2.len());
 
         // Check content
         let buf = Cursor::new(file.as_slice());
@@ -1354,7 +1354,7 @@ mod tests {
         );
         decomp.initialize().unwrap();
         decomp.read_to_end(&mut buf_out).unwrap();
-        let buf2 = Cursor::new(file2.as_slice());
+        let buf2 = Cursor::new(entry2.as_slice());
         let mut buf_2_out = Vec::new();
         let mut decomp = Box::new(
             CompressionLayerReader::new_skip_header(Box::new(RawLayerReader::new(buf2))).unwrap(),

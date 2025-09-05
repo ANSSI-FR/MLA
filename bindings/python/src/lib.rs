@@ -967,12 +967,12 @@ impl MLAReader {
     ///
     /// Example:
     /// ```python
-    /// with open("/path/to/extract/file1", "wb") as f:
-    ///     archive.write_entry_to(EntryName("file1"), f)
+    /// with open("/path/to/extract/entry1", "wb") as f:
+    ///     archive.write_entry_to(EntryName("entry1"), f)
     /// ```
     /// Or
     /// ```python
-    /// archive.write_entry_to(EntryName("file1"), "/path/to/extract/file1")
+    /// archive.write_entry_to(EntryName("entry1"), "/path/to/extract/entry1")
     /// ```
     #[pyo3(signature = (key, dest, chunk_size=4_194_304))]
     fn write_entry_to(
@@ -1178,12 +1178,12 @@ impl MLAWriter {
     ///
     /// Example:
     /// ```python
-    /// archive.add_entry_from(EntryName("file1"), "/path/to/file1")
+    /// archive.add_entry_from(EntryName("entry1"), "/path/to/entry1")
     /// ```
     /// Or
     /// ```python
-    /// with open("/path/to/file1", "rb") as f:
-    ///    archive.add_entry_from(EntryName("file1"), f)
+    /// with open("/path/to/entry1", "rb") as f:
+    ///    archive.add_entry_from(EntryName("entry1"), f)
     /// ```
     #[pyo3(signature = (key, src, chunk_size=4_194_304))]
     fn add_entry_from(
