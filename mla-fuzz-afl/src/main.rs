@@ -418,7 +418,7 @@ fn run(data: &mut [u8]) {
         }
     }
 
-    // === TruncatedArchiveReader repair test (simulate corruption) ===
+    // === TruncatedArchiveReader recover test (simulate corruption) ===
     if !test_case.byteflip.is_empty() {
         let mut corrupted = dest.clone();
 
@@ -438,20 +438,21 @@ fn run(data: &mut [u8]) {
         ) {
             Ok(mut tr) => {
                 // We'll try to salvage it into a new buffer
-                let mut repaired = Vec::new();
+                let mut recovered = Vec::new();
                 let out_cfg = ArchiveWriterConfig::without_encryption_without_signature().unwrap();
-                let mla_out = ArchiveWriter::from_config(&mut repaired, out_cfg).unwrap();
+                let mla_out = ArchiveWriter::from_config(&mut recovered, out_cfg).unwrap();
 
                 match tr.convert_to_archive(mla_out) {
                     Ok(result) => {
                         eprintln!("Repair finished with: {result:?}");
 
-                        // Re-parse the repaired archive to ensure it's valid
+                        // Re-parse the recovered archive to ensure it's valid
                         let reader_cfg = ArchiveReaderConfig::without_signature_verification()
                             .without_encryption();
-                        if let Ok((mut recovered_read, _)) =
-                            ArchiveReader::from_config(Cursor::new(repaired.as_slice()), reader_cfg)
-                        {
+                        if let Ok((mut recovered_read, _)) = ArchiveReader::from_config(
+                            Cursor::new(recovered.as_slice()),
+                            reader_cfg,
+                        ) {
                             // Verify recovered entries list and contents
                             let mut recovered_list: Vec<String> = recovered_read
                                 .list_entries()

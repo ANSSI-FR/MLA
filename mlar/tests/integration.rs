@@ -332,9 +332,9 @@ fn test_create_list_tar() {
 }
 
 #[test]
-fn test_truncated_repair_list_tar() {
+fn test_truncated_recover_list_tar() {
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
-    let mlar_repaired_file = NamedTempFile::new("repaired.mla").unwrap();
+    let mlar_recovered_file = NamedTempFile::new("recovered.mla").unwrap();
     let tar_file = NamedTempFile::new("output.tar").unwrap();
     let public_key = Path::new("../samples/test_mlakey.mlapub");
     let private_key = Path::new("../samples/test_mlakey.mlapriv");
@@ -393,9 +393,9 @@ fn test_truncated_repair_list_tar() {
         .write_all(&data[..data.len() * 6 / 7])
         .unwrap();
 
-    // `mlar repair -i output.mla -k samples/test_mlakey.mlapriv -p samples/test_mlakey.mlapub -o repaired.mla`
+    // `mlar recover -i output.mla -k samples/test_mlakey.mlapriv -p samples/test_mlakey.mlapub -o recovered.mla`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
-    cmd.arg("repair")
+    cmd.arg("recover")
         .arg("--skip-signature-verification")
         .arg("-i")
         .arg(mlar_file.path())
@@ -406,24 +406,24 @@ fn test_truncated_repair_list_tar() {
         .arg("-l")
         .arg("encrypt")
         .arg("-o")
-        .arg(mlar_repaired_file.path());
+        .arg(mlar_recovered_file.path());
 
     println!("{cmd:?}");
     let assert = cmd.assert();
     assert.success();
 
-    // `mlar list -i repaired.mla -k samples/test_mlakey.mlapriv`
+    // `mlar list -i recovered.mla -k samples/test_mlakey.mlapriv`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
         .arg("--skip-signature-verification")
         .arg("-i")
-        .arg(mlar_repaired_file.path())
+        .arg(mlar_recovered_file.path())
         .arg("-k")
         .arg(private_key);
 
     println!("{cmd:?}");
     let assert = cmd.assert();
-    // Expect plain entries list for the repaired list, without last truncated file
+    // Expect plain entries list for the recovered list, without last truncated file
     // as truncated at 6 / 7, last file being really small
     assert.success().stdout(entries_list_no_last_plain);
 
@@ -432,7 +432,7 @@ fn test_truncated_repair_list_tar() {
     cmd.arg("to-tar")
         .arg("--skip-signature-verification")
         .arg("-i")
-        .arg(mlar_repaired_file.path())
+        .arg(mlar_recovered_file.path())
         .arg("-k")
         .arg(private_key)
         .arg("-o")
@@ -480,9 +480,9 @@ fn test_truncated_repair_list_tar() {
 }
 
 #[test]
-fn test_repair_auth_unauth() {
+fn test_recover_auth_unauth() {
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
-    let mlar_repaired_file = NamedTempFile::new("repaired.mla").unwrap();
+    let mlar_recovered_file = NamedTempFile::new("recovered.mla").unwrap();
     let public_key = Path::new("../samples/test_mlakey.mlapub");
     let private_key = Path::new("../samples/test_mlakey.mlapriv");
 
@@ -536,9 +536,9 @@ fn test_repair_auth_unauth() {
             .write_all(&data[..data.len() * 6 / 7])
             .unwrap();
 
-        // Attempt repair (authenticated)
+        // Attempt recover (authenticated)
         let mut cmd = Command::cargo_bin(UTIL).unwrap();
-        cmd.arg("repair")
+        cmd.arg("recover")
             .arg("--skip-signature-verification")
             .arg("-i")
             .arg(mlar_file.path())
@@ -547,13 +547,13 @@ fn test_repair_auth_unauth() {
             .arg("--out-pub")
             .arg(public_key)
             .arg("-o")
-            .arg(mlar_repaired_file.path())
+            .arg(mlar_recovered_file.path())
             .arg("-l")
             .arg("encrypt");
 
         println!("{cmd:?}");
         let assert = cmd.assert();
-        // For file3.bin, repair is expected to fail as the file is really small
+        // For file3.bin, recover is expected to fail as the file is really small
         if testfs.files[i]
             .path()
             .to_string_lossy()
@@ -564,12 +564,12 @@ fn test_repair_auth_unauth() {
             assert.success();
         }
 
-        // Try to read content from repaired archive (authenticated)
+        // Try to read content from recovered archive (authenticated)
         let mut cmd = Command::cargo_bin(UTIL).unwrap();
         cmd.arg("cat")
             .arg("--skip-signature-verification")
             .arg("-i")
-            .arg(mlar_repaired_file.path())
+            .arg(mlar_recovered_file.path())
             .arg("-k")
             .arg(private_key)
             .arg(testfs.files[i].path());
@@ -578,12 +578,12 @@ fn test_repair_auth_unauth() {
         let assert = cmd.assert();
         let output_auth = assert.get_output();
 
-        // Remove repaired file to test unauthenticated repair
-        let _ = std::fs::remove_file(mlar_repaired_file.path());
+        // Remove recovered file to test unauthenticated recover
+        let _ = std::fs::remove_file(mlar_recovered_file.path());
 
         // Repair allowing unauthenticated data
         let mut cmd = Command::cargo_bin(UTIL).unwrap();
-        cmd.arg("repair")
+        cmd.arg("recover")
             .arg("--allow-unauthenticated-data")
             .arg("--skip-signature-verification")
             .arg("-i")
@@ -593,7 +593,7 @@ fn test_repair_auth_unauth() {
             .arg("--out-pub")
             .arg(public_key)
             .arg("-o")
-            .arg(mlar_repaired_file.path())
+            .arg(mlar_recovered_file.path())
             .arg("-l")
             .arg("encrypt");
 
@@ -601,12 +601,12 @@ fn test_repair_auth_unauth() {
         let assert = cmd.assert();
         assert.success();
 
-        // Read content from repaired archive (unauthenticated)
+        // Read content from recovered archive (unauthenticated)
         let mut cmd = Command::cargo_bin(UTIL).unwrap();
         cmd.arg("cat")
             .arg("--skip-signature-verification")
             .arg("-i")
-            .arg(mlar_repaired_file.path())
+            .arg(mlar_recovered_file.path())
             .arg("-k")
             .arg(private_key)
             .arg(testfs.files[i].path());
@@ -637,7 +637,7 @@ fn test_repair_auth_unauth() {
 
         // Clean up
         let _ = std::fs::remove_file(mlar_file.path());
-        let _ = std::fs::remove_file(mlar_repaired_file.path());
+        let _ = std::fs::remove_file(mlar_recovered_file.path());
     }
 }
 

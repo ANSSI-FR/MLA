@@ -1338,7 +1338,7 @@ fn to_tar(matches: &ArgMatches) -> Result<(), MlarError> {
     Ok(())
 }
 
-fn repair(matches: &ArgMatches) -> Result<(), MlarError> {
+fn recover(matches: &ArgMatches) -> Result<(), MlarError> {
     let mut mla = open_truncated_mla_file(matches)?;
     let mla_out = writer_from_matches(matches, false)?;
 
@@ -1363,7 +1363,7 @@ fn convert(matches: &ArgMatches) -> Result<(), MlarError> {
         Err(err) => {
             eprintln!(
                 "[ERROR] Failed to read entries from archive: {err}. The file may be malformed. \
-                Consider repairing it using repair sub-command or re-create it."
+                Consider recovering it using the recover subcommand, or re-creating it from the original files."
             );
             return Err(MlarError::EntriesNotFound);
         }
@@ -1701,8 +1701,8 @@ fn app() -> clap::Command {
                 ),
         )
         .subcommand(
-            Command::new("repair")
-                .about("Create a fresh MLA from what can be read from a truncated one but loosing some security (e.g. no signature verification)")
+            Command::new("recover")
+                .about("Create a new MLA from a truncated one, recovering readable data but losing some security guarantees (e.g. no signature verification)")
                 .args(&input_args)
                 .args(&output_args)
                 .args(&both_args)
@@ -1852,8 +1852,8 @@ fn main() -> Result<(), MlarError> {
         cat(matches)
     } else if let Some(matches) = matches.subcommand_matches("to-tar") {
         to_tar(matches)
-    } else if let Some(matches) = matches.subcommand_matches("repair") {
-        repair(matches)
+    } else if let Some(matches) = matches.subcommand_matches("recover") {
+        recover(matches)
     } else if let Some(matches) = matches.subcommand_matches("convert") {
         convert(matches)
     } else if let Some(matches) = matches.subcommand_matches("keygen") {

@@ -534,10 +534,10 @@ pub fn reader_multiple_layers_multiple_block_size_multifiles_linear(c: &mut Crit
     group.finish();
 }
 
-/// Create an archive then repair it.
+/// Create an archive then recover it.
 ///
-/// Return the time taken by the repair operation
-fn repair_archive(
+/// Return the time taken by the recover operation
+fn recover_archive(
     iters: u64,
     size: u64,
     compression: bool,
@@ -558,8 +558,8 @@ fn repair_archive(
     let buf = Cursor::new(data);
     let dest = Vec::new();
 
-    // No need to truncate the data, repair the whole file
-    let mut mla_repair = TruncatedArchiveReader::from_config(buf, config).unwrap();
+    // No need to truncate the data, recover the whole file
+    let mut mla_recover = TruncatedArchiveReader::from_config(buf, config).unwrap();
     // Avoid any layers to speed up writing, as this is not the measurement target
     let writer_config = ArchiveWriterConfig::without_encryption_without_signature()
         .unwrap()
@@ -568,17 +568,17 @@ fn repair_archive(
 
     let start = Instant::now();
     // Measure the convert_to_archive time
-    mla_repair.convert_to_archive(mla_output).unwrap();
+    mla_recover.convert_to_archive(mla_output).unwrap();
     start.elapsed()
 }
 
-/// This benchmark measures the time needed to repair an archive depending on the
+/// This benchmark measures the time needed to recover an archive depending on the
 /// enabled layers.
 ///
 /// Only one-size is used, as the archive must be big enough to be representative
-pub fn truncated_multiple_layers_repair(c: &mut Criterion) {
+pub fn truncated_multiple_layers_recover(c: &mut Criterion) {
     let size = 4 * MB as u64;
-    let mut group = c.benchmark_group("truncated_multiple_layers_repair");
+    let mut group = c.benchmark_group("truncated_multiple_layers_recover");
     group.sample_size(10);
     group.throughput(Throughput::Bytes(size));
 
@@ -596,7 +596,7 @@ pub fn truncated_multiple_layers_repair(c: &mut Criterion) {
             ),
             move |b| {
                 b.iter_custom(|iters| {
-                    repair_archive(
+                    recover_archive(
                         iters,
                         size,
                         *compression,
@@ -617,7 +617,7 @@ criterion_group!(
     reader_multiple_layers_multiple_block_size,
     reader_multiple_layers_multiple_block_size_multifiles_random,
     reader_multiple_layers_multiple_block_size_multifiles_linear,
-    truncated_multiple_layers_repair,
+    truncated_multiple_layers_recover,
     // Was used to determine the best default compression quality ratio
     //
     // multiple_compression_quality,
