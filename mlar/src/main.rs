@@ -11,7 +11,7 @@ use mla::crypto::mlakey::{
     generate_mla_keypair, generate_mla_keypair_from_seed,
 };
 use mla::entry::{ENTRY_NAME_RAW_CONTENT_ALLOWED_BYTES, EntryName, EntryNameError};
-use mla::errors::{Error, TruncatedReadError};
+use mla::errors::{ConfigError::IncoherentPersistentConfig, Error, TruncatedReadError};
 use mla::helpers::{StreamWriter, linear_extract, mla_percent_escape, mla_percent_unescape};
 use mla::{ArchiveReader, ArchiveWriter, TruncatedArchiveReader, entry::ArchiveEntry};
 use sha2::{Digest, Sha512};
@@ -43,6 +43,9 @@ enum MlarError {
     SeparatorTooBig,
     EntryNameCountMismatch,
     MissingHash,
+    EntryNameEscapeFailed,
+    EntryNotFound,
+    EntriesNotFound,
 }
 
 impl fmt::Display for MlarError {
@@ -88,6 +91,9 @@ impl error::Error for MlarError {
             | MlarError::InvalidGlobPattern
             | MlarError::SeparatorTooBig
             | MlarError::EntryNameCountMismatch
+            | MlarError::EntryNameEscapeFailed
+            | MlarError::EntryNotFound
+            | MlarError::EntriesNotFound
             | MlarError::MissingHash => None,
         }
     }
@@ -218,7 +224,7 @@ fn config_from_matches(
         eprintln!(
             "[ERROR] Encryption layer was requested, but no '{output_public_keys_arg_name}' was provided."
         );
-        std::process::exit(1);
+        return Err(MlarError::Config(IncoherentPersistentConfig));
     }
 
     // Sign layer requested but no private signing keys
@@ -226,19 +232,20 @@ fn config_from_matches(
         eprintln!(
             "[ERROR] Signature layer was requested, but no '{output_private_keys_arg_name}' was provided."
         );
-        std::process::exit(1);
+        return Err(MlarError::Config(IncoherentPersistentConfig));
     }
 
     // Construct base config
     let config = if matches.contains_id(output_public_keys_arg_name) {
         if !layers.contains(&"encrypt") {
             eprintln!(
-                "[WARNING] '{output_public_keys_arg_name}' was provided, but 'encrypt' layer was not requested. Enabling encryption."
+                "[ERROR] '{output_public_keys_arg_name}' was provided, but 'encrypt' layer was not requested. Enabling encryption."
             );
+            return Err(MlarError::Config(IncoherentPersistentConfig));
         }
 
-        let (pub_enc_keys, _pub_sig_keys) = open_public_keys(matches, output_public_keys_arg_name)
-            .map_err(|error| {
+        let (public_encryption_keys, _pub_sig_keys) =
+            open_public_keys(matches, output_public_keys_arg_name).map_err(|error| {
                 eprintln!("[ERROR] Unable to open '{output_public_keys_arg_name}': {error}");
                 MlarError::Mla(Error::InvalidKeyFormat)
             })?;
@@ -246,34 +253,39 @@ fn config_from_matches(
         if matches.contains_id(output_private_keys_arg_name) {
             if !layers.contains(&"sign") {
                 eprintln!(
-                    "[WARNING] '{output_private_keys_arg_name}' was provided, but 'sign' layer was not requested. Enabling signing."
+                    "[ERROR] '{output_private_keys_arg_name}' was provided, but 'sign' layer was not requested. Enabling signing."
                 );
+                return Err(MlarError::Config(IncoherentPersistentConfig));
             }
 
-            let (_private_decryption_keys, private_sig_keys) =
+            let (_private_decryption_keys, private_signing_keys) =
                 open_private_keys(matches, output_private_keys_arg_name).map_err(|error| {
                     eprintln!("[ERROR] Unable to open '{output_private_keys_arg_name}': {error}");
                     MlarError::Mla(Error::InvalidKeyFormat)
                 })?;
 
-            ArchiveWriterConfig::with_encryption_with_signature(&pub_enc_keys, &private_sig_keys)
+            ArchiveWriterConfig::with_encryption_with_signature(
+                &public_encryption_keys,
+                &private_signing_keys,
+            )
         } else {
-            ArchiveWriterConfig::with_encryption_without_signature(&pub_enc_keys)
+            ArchiveWriterConfig::with_encryption_without_signature(&public_encryption_keys)
         }
     } else if matches.contains_id(output_private_keys_arg_name) {
         if !layers.contains(&"sign") {
             eprintln!(
-                "[WARNING] '{output_private_keys_arg_name}' was provided, but 'sign' layer was not requested. Enabling signing."
+                "[ERROR] '{output_private_keys_arg_name}' was provided, but 'sign' layer was not requested. Enabling signing."
             );
+            return Err(MlarError::Config(IncoherentPersistentConfig));
         }
 
-        let (_private_decryption_keys, private_sig_keys) =
+        let (_private_decryption_keys, private_signing_keys) =
             open_private_keys(matches, output_private_keys_arg_name).map_err(|error| {
                 eprintln!("[ERROR] Unable to open '{output_private_keys_arg_name}': {error}");
                 MlarError::Mla(Error::InvalidKeyFormat)
             })?;
 
-        ArchiveWriterConfig::without_encryption_with_signature(&private_sig_keys)
+        ArchiveWriterConfig::without_encryption_with_signature(&private_signing_keys)
     } else {
         ArchiveWriterConfig::without_encryption_without_signature()
     }?;
@@ -282,8 +294,9 @@ fn config_from_matches(
     let config = if layers.contains(&"compress") || matches.contains_id("compression_level") {
         if !layers.contains(&"compress") && matches.contains_id("compression_level") {
             eprintln!(
-                "[WARNING] 'compression_level' was specified without requesting 'compress' layer. Enabling compression."
+                "[ERROR] 'compression_level' was specified without requesting 'compress' layer. Enabling compression."
             );
+            return Err(MlarError::Config(IncoherentPersistentConfig));
         }
 
         if matches.contains_id("compression_level") {
@@ -336,15 +349,15 @@ fn readerconfig_from_matches(matches: &ArgMatches) -> Result<ArchiveReaderConfig
     let incomplete_config = if matches.get_flag("skip_signature_verification") {
         ArchiveReaderConfig::without_signature_verification()
     } else if matches.contains_id("public_keys") {
-        let (_public_enc_keys, public_sig_keys) = open_public_keys(matches, "public_keys")
-            .map_err(|error| {
+        let (_public_encryption_keys, public_signature_verification_keys) =
+            open_public_keys(matches, "public_keys").map_err(|error| {
                 eprintln!("[ERROR] Unable to open public keys: {error}");
                 MlarError::Mla(Error::InvalidKeyFormat)
             })?;
-        ArchiveReaderConfig::with_signature_verification(&public_sig_keys)
+        ArchiveReaderConfig::with_signature_verification(&public_signature_verification_keys)
     } else {
         eprintln!("[ERROR] No public keys given and --skip-signature-verification not set");
-        std::process::exit(1);
+        return Err(MlarError::Config(IncoherentPersistentConfig));
     };
 
     if matches.contains_id("private_keys") {
@@ -363,7 +376,7 @@ fn readerconfig_from_matches(matches: &ArgMatches) -> Result<ArchiveReaderConfig
         Ok(incomplete_config.without_encryption())
     } else {
         eprintln!("[ERROR] No private keys given and --accept-unencrypted not set");
-        std::process::exit(1);
+        Err(MlarError::Config(IncoherentPersistentConfig))
     }
 }
 
@@ -495,7 +508,7 @@ fn create_file<P1: AsRef<Path>>(
     entry_name: &EntryName,
     zone_id: Option<&Vec<u8>>,
     quarantine: Option<&Vec<u8>>,
-) -> Result<Option<(File, PathBuf)>, MlarError> {
+) -> Result<(File, PathBuf), MlarError> {
     let output_dir_path = output_dir.as_ref();
     let entry_name_pathbuf = entry_name
         .to_pathbuf()
@@ -524,12 +537,12 @@ fn create_file<P1: AsRef<Path>>(
         })?;
 
         if !containing_directory.starts_with(output_dir) {
-            eprintln!(
-                "[WARNING] Skipping file \"{}\" because it would be extracted outside of the output directory, in {}",
+            let msg = format!(
+                "Aborting rest of extraction. Refusing to extract \"{}\": it would be extracted outside the output directory (in \"{}\")",
                 escaped_path_to_string(&entry_name_pathbuf),
                 escaped_path_to_string(&containing_directory)
             );
-            return Ok(None);
+            return Err(MlarError::IO(io::Error::other(format!("[ERROR] {msg}"))));
         }
     }
 
@@ -554,17 +567,18 @@ fn create_file<P1: AsRef<Path>>(
     }
 
     // Propagate macOS quarantine if needed
-    if let Some(quarantine_data) = quarantine
-        && let Err(err) = apply_quarantine(&extracted_path, quarantine_data)
-    {
-        eprintln!(
-            " [!] Unable to propagate com.apple.quarantine to \"{}\" ({:?})",
-            escaped_path_to_string(&entry_name_pathbuf),
+    if let Some(quarantine_data) = quarantine {
+        apply_quarantine(&extracted_path, quarantine_data).map_err(|err| {
+            eprintln!(
+                "[ERROR] Unable to propagate com.apple.quarantine to \"{}\" ({:?})",
+                escaped_path_to_string(&entry_name_pathbuf),
+                err
+            );
             err
-        );
+        })?;
     }
 
-    Ok(Some((created_file, extracted_path)))
+    Ok((created_file, extracted_path))
 }
 
 /// Wrapper with Write, to append data to a file
@@ -580,7 +594,7 @@ struct FileWriter<'a> {
     // A `Mutex` is used instead of a `RefCell` as `FileWriter` can be `Send`
     cache: &'a Mutex<LruCache<PathBuf, File>>,
     /// Is verbose mode enabled
-    verbose: bool,
+    verbose: u8,
     /// `entry_name`
     entry_name: EntryName,
 }
@@ -595,12 +609,12 @@ impl Write for FileWriter<'_> {
         if !cache.contains(&self.path) {
             let file = fs::OpenOptions::new().append(true).open(&self.path)?;
             cache.put(self.path.clone(), file);
-            if self.verbose {
+            if self.verbose > 0 {
                 println!(
                     "{}",
                     self.entry_name
                         .to_pathbuf_escaped_string()
-                        .map_err(|_| io::Error::other(MlarError::InvalidEntryNameToPath))?
+                        .map_err(|_| io::Error::other(MlarError::EntryNameEscapeFailed))?
                 );
             }
         }
@@ -630,22 +644,23 @@ fn add_file_or_dir(
         let file = match File::open(path) {
             Ok(f) => f,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound && skip_not_found => {
-                eprintln!(
-                    "[WARNING] File \"{}\" does not exist, skipping",
-                    name.to_pathbuf_escaped_string()
-                        .map_err(|_| MlarError::InvalidEntryNameToPath)?
-                );
+                let escaped = name
+                    .to_pathbuf_escaped_string()
+                    .map_err(|_| MlarError::EntryNameEscapeFailed)?;
+
+                eprintln!("[WARNING] File \"{escaped}\" does not exist, skipping");
                 return Ok(());
             }
             Err(e) => return Err(MlarError::IO(e)),
         };
 
         let length = file.metadata().map_err(MlarError::IO)?.len();
-        eprintln!(
-            " adding: {}",
-            name.to_pathbuf_escaped_string()
-                .map_err(|_| MlarError::InvalidEntryNameToPath)?
-        );
+
+        let escaped = name
+            .to_pathbuf_escaped_string()
+            .map_err(|_| MlarError::EntryNameEscapeFailed)?;
+
+        eprintln!(" adding: {escaped}");
 
         mla.add_entry(name, length, file)?;
     }
@@ -666,11 +681,11 @@ fn add_dir(
                     Ok(e) => e,
                     Err(err) => {
                         eprintln!(
-                            "[WARNING] Failed to read entry in directory \"{}\" ({:?})",
+                            "[ERROR] Failed to read entry in directory \"{}\" ({:?})",
                             escaped_path_to_string(dir),
                             err
                         );
-                        continue;
+                        return Err(err.into());
                     }
                 };
 
@@ -873,7 +888,7 @@ fn list(matches: &ArgMatches) -> Result<(), MlarError> {
         } else {
             fname
                 .to_pathbuf_escaped_string()
-                .map_err(|_| MlarError::InvalidEntryNameToPath)?
+                .map_err(|_| MlarError::EntryNameEscapeFailed)?
         };
 
         let verbose = matches.get_count("verbose");
@@ -883,9 +898,20 @@ fn list(matches: &ArgMatches) -> Result<(), MlarError> {
             continue;
         }
 
-        let mla_file = mla
-            .get_entry(fname.clone())?
-            .ok_or(MlarError::InvalidEntryNameToPath)?;
+        let mla_file = match mla.get_entry(fname.clone()) {
+            Err(err) => {
+                eprintln!("[ERROR] Failed to add {fname:?} ({err:?})");
+                return Err(err.into());
+            }
+            Ok(None) => {
+                let msg = format!("Unable to find {fname:?}");
+                return Err(MlarError::Mla(Error::IOError(io::Error::new(
+                    io::ErrorKind::NotFound,
+                    format!("[ERROR] {msg}"),
+                ))));
+            }
+            Ok(Some(mla)) => mla,
+        };
 
         let size = mla_file.get_size().format_size(DECIMAL);
         let filename = mla_file.name;
@@ -1017,7 +1043,7 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
     let file_name_matcher = ExtractFileNameMatcher::from_matches(matches)?;
     // Safe to use unwrap() because the option is required()
     let output_dir = Path::new(matches.get_one::<PathBuf>("outputdir").unwrap());
-    let verbose = matches.get_flag("verbose");
+    let verbose = matches.get_count("verbose");
 
     let mut mla = open_mla_file(matches)?;
 
@@ -1051,7 +1077,7 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
 
     if let ExtractFileNameMatcher::Anything = file_name_matcher {
         // Optimisation: use linear extraction
-        if verbose {
+        if verbose > 0 {
             println!("Extracting the whole archive using a linear extraction");
         }
         let cache = Mutex::new(LruCache::new(
@@ -1059,23 +1085,41 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
         ));
         let mut export: HashMap<&EntryName, FileWriter> = HashMap::new();
         for entry_name in &entries_names {
-            if let Some((_file, path)) = create_file(
+            let create_result = create_file(
                 &output_dir,
                 entry_name,
                 zone_id.as_ref(),
                 quarantine_data.as_ref(),
-            )? {
-                export.insert(
-                    entry_name,
-                    FileWriter {
-                        path,
-                        cache: &cache,
-                        verbose,
-                        entry_name: entry_name.clone(),
-                    },
-                );
+            );
+
+            match create_result {
+                Ok((_file, path)) => {
+                    export.insert(
+                        entry_name,
+                        FileWriter {
+                            path,
+                            cache: &cache,
+                            verbose,
+                            entry_name: entry_name.clone(),
+                        },
+                    );
+                }
+                Err(MlarError::InvalidEntryNameToPath) => {
+                    let raw_escaped_name = entry_name.raw_content_to_escaped_string();
+                    eprintln!(
+                        "[ERROR] Failed to interpret entry name as a path.
+                        Aborting extraction.
+                        You can still use mlar list or mlar cat with --raw-escaped-names to get content.
+                        Concerned entry: {raw_escaped_name}"
+                    );
+                    return Err(MlarError::InvalidEntryNameToPath);
+                }
+                Err(err) => {
+                    return Err(err);
+                }
             }
         }
+
         return Ok(linear_extract(&mut mla, &mut export)?);
     }
 
@@ -1092,50 +1136,55 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
         // Look for the file in the archive
         let mut sub_file = match mla.get_entry(entry_name.clone()) {
             Err(err) => {
-                eprintln!(
-                    "[WARNING] Error while looking up subfile \"{}\" ({err:?})",
-                    entry_name
-                        .to_pathbuf_escaped_string()
-                        .map_err(|_| MlarError::InvalidEntryNameToPath)?
-                );
-                continue;
+                let escaped = entry_name
+                    .to_pathbuf_escaped_string()
+                    .map_err(|_| MlarError::EntryNameEscapeFailed)?;
+
+                eprintln!("[ERROR] Failed to look up subfile {escaped} ({err:?})");
+                return Err(err.into());
             }
             Ok(None) => {
-                eprintln!(
-                    "[WARNING] Subfile \"{}\" indexed in metadata could not be found",
-                    entry_name
-                        .to_pathbuf_escaped_string()
-                        .map_err(|_| MlarError::InvalidEntryNameToPath)?
-                );
-                continue;
+                let escaped = entry_name
+                    .to_pathbuf_escaped_string()
+                    .map_err(|_| MlarError::EntryNameEscapeFailed)?;
+
+                eprintln!("[ERROR] Failed to find subfile {escaped} indexed in metadata");
+                return Err(MlarError::EntryNotFound);
             }
             Ok(Some(subfile)) => subfile,
         };
-        let Some((mut extracted_file, _path)) = create_file(
+        let (mut extracted_file, _path) = match create_file(
             &output_dir,
             &entry_name,
             zone_id.as_ref(),
             quarantine_data.as_ref(),
-        )?
-        else {
-            continue;
+        ) {
+            Ok(result) => result,
+            Err(MlarError::InvalidEntryNameToPath) => {
+                let raw_escaped_name = entry_name.raw_content_to_escaped_string();
+                eprintln!(
+                    "[ERROR] Failed to interpret entry name as a path.
+                    Aborting extraction.
+                    You can still use mlar list or mlar cat with --raw-escaped-names to get content.
+                    Concerned entry: {raw_escaped_name}"
+                );
+                return Err(MlarError::InvalidEntryNameToPath);
+            }
+            Err(err) => return Err(err),
         };
 
-        if verbose {
-            println!(
-                "{}",
-                entry_name
-                    .to_pathbuf_escaped_string()
-                    .map_err(|_| MlarError::InvalidEntryNameToPath)?
-            );
+        if verbose > 0 {
+            let escaped = entry_name
+                .to_pathbuf_escaped_string()
+                .map_err(|_| MlarError::EntryNameEscapeFailed)?;
+            println!("{escaped}");
         }
         if let Err(err) = io::copy(&mut sub_file.data, &mut extracted_file) {
-            eprintln!(
-                "[WARNING] Unable to extract \"{}\" ({err:?})",
-                entry_name
-                    .to_pathbuf_escaped_string()
-                    .map_err(|_| MlarError::InvalidEntryNameToPath)?
-            );
+            let escaped = entry_name
+                .to_pathbuf_escaped_string()
+                .map_err(|_| MlarError::EntryNameEscapeFailed)?;
+            eprintln!("[ERROR] Unable to extract \"{escaped}\" ({err:?})");
+            return Err(err.into());
         }
     }
     Ok(())
@@ -1172,24 +1221,27 @@ fn cat(matches: &ArgMatches) -> Result<(), MlarError> {
 
                 let displayable_entry_name = archive_entry_name
                     .to_pathbuf_escaped_string()
-                    .map_err(|_| MlarError::InvalidEntryNameToPath)?;
+                    .map_err(|_| MlarError::EntryNameEscapeFailed)?;
 
                 match mla.get_entry(archive_entry_name.clone()) {
                     Err(err) => {
                         eprintln!(
-                            "[WARNING] Error while looking up file \"{displayable_entry_name}\" ({err:?})"
+                            "[ERROR] Error while looking up file \"{displayable_entry_name}\" ({err:?})"
                         );
+                        return Err(err.into());
                     }
                     Ok(None) => {
                         eprintln!(
-                            "[WARNING] Subfile \"{displayable_entry_name}\" indexed in metadata could not be found"
+                            "[ERROR] Failed to find subfile \"{displayable_entry_name}\" indexed in metadata"
                         );
+                        return Err(MlarError::EntryNotFound);
                     }
                     Ok(Some(mut subfile)) => {
                         if let Err(err) = io::copy(&mut subfile.data, &mut destination) {
                             eprintln!(
-                                "[WARNING] Unable to extract \"{displayable_entry_name}\" ({err:?})"
+                                "[ERROR] Unable to extract \"{displayable_entry_name}\" ({err:?})"
                             );
+                            return Err(err.into());
                         }
                     }
                 }
@@ -1212,13 +1264,13 @@ fn cat(matches: &ArgMatches) -> Result<(), MlarError> {
                     EntryName::from_arbitrary_bytes(&bytes)
                 })
                 .collect::<Result<Vec<EntryName>, EntryNameError>>()
-                .map_err(|_| MlarError::InvalidEntryNameToPath)?
+                .map_err(|_| MlarError::EntriesNotFound)?
         } else {
             let entries_iter = entries_opt.ok_or(MlarError::InvalidEntryNameToPath)?;
             entries_iter
                 .map(EntryName::from_path)
                 .collect::<Result<Vec<EntryName>, EntryNameError>>()
-                .map_err(|_| MlarError::InvalidEntryNameToPath)?
+                .map_err(|_| MlarError::EntriesNotFound)?
         };
         // Retrieve all the files that are specified
         for fname in files_values {
@@ -1227,14 +1279,17 @@ fn cat(matches: &ArgMatches) -> Result<(), MlarError> {
                 .unwrap_or_else(|_| String::from("<invalid path>"));
             match mla.get_entry(fname.clone()) {
                 Err(err) => {
-                    eprintln!("[WARNING] Error while looking up file \"{display_name}\" ({err:?})");
+                    eprintln!("[ERROR] Error while looking up file \"{display_name}\" ({err:?})");
+                    return Err(err.into());
                 }
                 Ok(None) => {
-                    eprintln!("[WARNING] File not found: \"{display_name}\"");
+                    eprintln!("[ERROR] File not found: \"{display_name}\"");
+                    return Err(MlarError::EntryNotFound);
                 }
                 Ok(Some(mut subfile)) => {
                     if let Err(err) = io::copy(&mut subfile.data, &mut destination) {
-                        eprintln!("[WARNING] Unable to extract \"{display_name}\" ({err:?})");
+                        eprintln!("[ERROR] Unable to extract \"{display_name}\" ({err:?})");
+                        return Err(err.into());
                     }
                 }
             }
@@ -1257,32 +1312,27 @@ fn to_tar(matches: &ArgMatches) -> Result<(), MlarError> {
     for fname in archive_files {
         let sub_file = match mla.get_entry(fname.clone()) {
             Err(err) => {
-                eprintln!(
-                    "[WARNING] Error while looking up subfile \"{}\" ({err:?})",
-                    &fname
-                        .to_pathbuf_escaped_string()
-                        .map_err(|_| MlarError::InvalidEntryNameToPath)?
-                );
-                continue;
+                let escaped = fname
+                    .to_pathbuf_escaped_string()
+                    .map_err(|_| MlarError::EntryNameEscapeFailed)?;
+                eprintln!("[ERROR] Error while looking up subfile \"{escaped}\" ({err:?})");
+                return Err(err.into());
             }
             Ok(None) => {
-                eprintln!(
-                    "[WARNING] Subfile \"{}\" indexed in metadata could not be found",
-                    &fname
-                        .to_pathbuf_escaped_string()
-                        .map_err(|_| MlarError::InvalidEntryNameToPath)?
-                );
-                continue;
+                let escaped = fname
+                    .to_pathbuf_escaped_string()
+                    .map_err(|_| MlarError::EntryNameEscapeFailed)?;
+                eprintln!("[ERROR] Failed to find subfile \"{escaped}\" indexed in metadata",);
+                return Err(MlarError::EntryNotFound);
             }
             Ok(Some(subfile)) => subfile,
         };
         if let Err(err) = add_file_to_tar(&mut tar_file, sub_file) {
-            eprintln!(
-                "[WARNING] Unable to add subfile \"{}\" to tarball ({err:?})",
-                &fname
-                    .to_pathbuf_escaped_string()
-                    .map_err(|_| MlarError::InvalidEntryNameToPath)?
-            );
+            let escaped = fname
+                .to_pathbuf_escaped_string()
+                .map_err(|_| MlarError::EntryNameEscapeFailed)?;
+            eprintln!("[ERROR] Unable to add subfile \"{escaped}\" to tarball ({err:?})",);
+            return Err(err);
         }
     }
     Ok(())
@@ -1315,7 +1365,7 @@ fn convert(matches: &ArgMatches) -> Result<(), MlarError> {
                 "[ERROR] Failed to read entries from archive: {err}. The file may be malformed. \
                 Consider repairing it using repair sub-command or re-create it."
             );
-            std::process::exit(1);
+            return Err(MlarError::EntriesNotFound);
         }
     };
 
@@ -1333,14 +1383,14 @@ fn convert(matches: &ArgMatches) -> Result<(), MlarError> {
                     "[ERROR] Failed to retrieve entry \"{}\": {err:?}",
                     fname.raw_content_to_escaped_string()
                 );
-                continue;
+                return Err(err.into());
             }
             Ok(None) => {
                 eprintln!(
-                    "[WARNING] Entry not found: {}",
+                    "[ERROR] Entry not found: {}",
                     fname.raw_content_to_escaped_string()
                 );
-                continue;
+                return Err(MlarError::EntryNotFound);
             }
             Ok(Some(mla_entry)) => mla_entry,
         };
@@ -1413,7 +1463,7 @@ fn keyderive(matches: &ArgMatches) -> Result<(), MlarError> {
     let Some((priv_key, pub_key)) = derive_keypair_from_path(paths.map(String::as_bytes), secret)
     else {
         eprintln!("[ERROR] Failed to derive keypair from the given path");
-        std::process::exit(1);
+        return Err(MlarError::Mla(Error::InvalidKeyFormat));
     };
 
     pub_key
@@ -1446,6 +1496,13 @@ fn info(matches: &ArgMatches) -> Result<(), MlarError> {
 
 fn app() -> clap::Command {
     // Common arguments list, for homogeneity
+    let verbose = Arg::new("verbose")
+        .long("verbose")
+        .short('v')
+        .action(ArgAction::Count) // count occurrences: -v, -vv, -vvv
+        .global(true) // enabled for all subcommands
+        .help("Increase verbosity level");
+
     let input_args = vec![
         Arg::new("input")
             .help("Archive path")
@@ -1466,7 +1523,7 @@ fn app() -> clap::Command {
             .long("skip-signature-verification")
             .help("Skip signature verification whether the archive is signed or not. This enables reading unsigned archives and reading signed archives without the cost of verification.")
             .action(ArgAction::SetTrue),
-    ];
+            ];
     let output_args = vec![
         Arg::new("output")
             .help("Output file path. Use - for stdout")
@@ -1503,12 +1560,13 @@ fn app() -> clap::Command {
             .num_args(1)
             .action(ArgAction::Append)
             .value_parser(value_parser!(PathBuf)),
-    ];
+            ];
 
     // Main parsing
     Command::new(env!("CARGO_PKG_NAME"))
-        .version(env!("CARGO_PKG_VERSION"))
-        .about(env!("CARGO_PKG_DESCRIPTION"))
+            .version(env!("CARGO_PKG_VERSION"))
+            .about(env!("CARGO_PKG_DESCRIPTION"))
+            .arg(verbose)
         .subcommand(
             Command::new("create")
                 .about("Create a new MLA Archive")
@@ -1569,12 +1627,6 @@ fn app() -> clap::Command {
                         .action(ArgAction::SetTrue)
                         .help("Do not try to interpret entry names as paths and encode everything not alphanumeric, dash, underscore or dot"),
                 )
-                .arg(
-                    Arg::new("verbose")
-                        .short('v')
-                        .action(ArgAction::Count)
-                        .help("Verbose listing, with additional information"),
-                ),
         )
         .subcommand(
             Command::new("extract")
@@ -1598,13 +1650,6 @@ fn app() -> clap::Command {
                         .help("Treat specified files as glob patterns"),
                 )
                 .arg(Arg::new("entries").value_parser(value_parser!(PathBuf)).help("List of entries to extract (all if none given)"))
-                .arg(
-                    Arg::new("verbose")
-                        .long("verbose")
-                        .short('v')
-                        .action(ArgAction::SetTrue)
-                        .help("List entries as they are extracted"),
-                ),
         )
         .subcommand(
             Command::new("cat")
@@ -1764,39 +1809,17 @@ fn app() -> clap::Command {
             Command::new("info")
                 .about("Get info on a MLA Archive")
                 .args(&input_args)
-                .arg(
-                    Arg::new("verbose")
-                        .long("verbose")
-                        .short('v')
-                        .action(ArgAction::SetTrue)
-                        .help("Get extra info for encryption and compression layers"),
-                ),
         )
 }
 
-fn main() {
+fn main() -> Result<(), MlarError> {
     let mut app = app();
     let help = app.render_long_help();
     let matches = app.get_matches();
 
-    // Determine verbose flag in subcommands that supports it
-    let (_subcommand_name, _subcommand_matches, verbose) = match matches.subcommand() {
-        Some(("list", m)) => {
-            let lvl = *m.get_one::<u8>("verbose").unwrap_or(&0);
-            ("list", m, lvl > 0)
-        }
-        Some(("extract", m)) => ("extract", m, m.get_flag("verbose")),
-        Some(("info", m)) => ("info", m, m.get_flag("verbose")),
-        Some((name, m)) => (name, m, false),
-        None => {
-            eprintln!("[ERROR] At least one command is required.");
-            eprintln!("{}", &help);
-            std::process::exit(1);
-        }
-    };
+    let verbose = *matches.get_one::<u8>("verbose").unwrap_or(&0);
 
     // User-friendly panic output
-    // Uses the previously retrieved verbose flag (from subcommand args)
     // Since Rust 2021, panic payloads are always `&'static str` or `String`
     std::panic::set_hook(Box::new(move |panic_info| {
         let msg = match panic_info.payload().downcast_ref::<&str>() {
@@ -1809,10 +1832,11 @@ fn main() {
         };
         eprintln!("[ERROR] {msg}");
 
-        if verbose && let Some(location) = panic_info.location() {
+        if verbose > 0
+            && let Some(location) = panic_info.location()
+        {
             eprintln!("(at {}:{})", location.file(), location.line());
         }
-        std::process::exit(1);
     }));
 
     // Launch sub-command
@@ -1839,15 +1863,16 @@ fn main() {
     } else if let Some(matches) = matches.subcommand_matches("info") {
         info(matches)
     } else {
-        eprintln!("[ERROR] At least one command is required.");
+        let msg = "[ERROR] At least one command is required.";
         eprintln!("{}", &help);
-        std::process::exit(1);
+        return Err(MlarError::IO(io::Error::other(format!("[ERROR] {msg}"))));
     };
 
     if let Err(err) = res {
         eprintln!("[ERROR] Command ended with error: {err:?}");
-        std::process::exit(1);
+        return Err(err);
     }
+    Ok(())
 }
 
 #[cfg(test)]
