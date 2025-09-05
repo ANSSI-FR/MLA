@@ -217,7 +217,7 @@ fn upgrade(matches: &ArgMatches) -> Result<(), MlarError> {
 
     // Read the file list using metadata
     // v1 archive still uses files, not entries
-    let fnames: Vec<String> = mla_in
+    let entries: Vec<String> = mla_in
         .list_files()
         .inspect_err(|err| {
             eprintln!("[ERROR] Archive is malformed or unreadable. Consider repairing the file. Details: {err}");
@@ -226,7 +226,7 @@ fn upgrade(matches: &ArgMatches) -> Result<(), MlarError> {
         .cloned()
         .collect();
 
-    for fname in fnames {
+    for fname in entries {
         let escaped = mla_percent_escape(fname.as_bytes(), PATH_ESCAPED_STRING_ALLOWED_BYTES);
         // Safe to convert to UTF-8 string because all disallowed bytes are escaped
         let escaped_fname = String::from_utf8(escaped)

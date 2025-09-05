@@ -2608,7 +2608,7 @@ pub(crate) mod tests {
         .unwrap();
 
         // Second, add interleaved files
-        let fnames: Vec<EntryName> = (0..=255)
+        let entries: Vec<EntryName> = (0..=255)
             .map(|i| format!("file_{i}"))
             .map(|s| EntryName::from_path(&s).unwrap())
             .collect();
@@ -2617,8 +2617,8 @@ pub(crate) mod tests {
         // Start files in normal order
         (0..=255)
             .map(|i| {
-                let id = mla.start_entry(fnames[i].clone()).unwrap();
-                name2id.insert(&fnames[i], id);
+                let id = mla.start_entry(entries[i].clone()).unwrap();
+                name2id.insert(&entries[i], id);
             })
             .for_each(drop);
 
@@ -2626,8 +2626,8 @@ pub(crate) mod tests {
         (0..=255)
             .rev()
             .map(|i| {
-                let id = name2id.get(&fnames[i]).unwrap();
-                mla.append_entry_content(*id, 32, &files.get(&fnames[i]).unwrap()[..32])
+                let id = name2id.get(&entries[i]).unwrap();
+                mla.append_entry_content(*id, 32, &files.get(&entries[i]).unwrap()[..32])
                     .unwrap();
             })
             .for_each(drop);
@@ -2635,8 +2635,8 @@ pub(crate) mod tests {
         // Add the rest of files in normal order
         (0..=255)
             .map(|i| {
-                let id = name2id.get(&fnames[i]).unwrap();
-                let data = &files.get(&fnames[i]).unwrap()[32..];
+                let id = name2id.get(&entries[i]).unwrap();
+                let data = &files.get(&entries[i]).unwrap()[32..];
                 mla.append_entry_content(*id, data.len() as u64, data)
                     .unwrap();
             })
@@ -2646,7 +2646,7 @@ pub(crate) mod tests {
         (0..=255)
             .rev()
             .map(|i| {
-                let id = name2id.get(&fnames[i]).unwrap();
+                let id = name2id.get(&entries[i]).unwrap();
                 mla.end_entry(*id).unwrap();
             })
             .for_each(drop);
