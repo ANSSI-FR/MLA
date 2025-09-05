@@ -1358,7 +1358,7 @@ fn repair(matches: &ArgMatches) -> Result<(), MlarError> {
 
 fn convert(matches: &ArgMatches) -> Result<(), MlarError> {
     let mut mla = open_mla_file(matches)?;
-    let mut fnames: Vec<EntryName> = match mla.list_entries() {
+    let mut entries: Vec<EntryName> = match mla.list_entries() {
         Ok(iter) => iter.cloned().collect(),
         Err(err) => {
             eprintln!(
@@ -1369,12 +1369,12 @@ fn convert(matches: &ArgMatches) -> Result<(), MlarError> {
         }
     };
 
-    fnames.sort();
+    entries.sort();
 
     let mut mla_out = writer_from_matches(matches, false)?;
 
     // Convert
-    for fname in fnames {
+    for fname in entries {
         eprintln!(" converting: {}", fname.raw_content_to_escaped_string());
 
         let entry = match mla.get_entry(fname.clone()) {

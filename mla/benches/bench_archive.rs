@@ -482,11 +482,11 @@ fn iter_decompress_multifiles_linear(
         pubkey,
     );
 
-    let fnames: Vec<EntryName> = mla_read.list_entries().unwrap().cloned().collect();
+    let entries: Vec<EntryName> = mla_read.list_entries().unwrap().cloned().collect();
     // Measure the time needed to get and read a file
     // Prepare output
     let mut export: HashMap<&EntryName, io::Sink> =
-        fnames.iter().map(|fname| (fname, io::sink())).collect();
+        entries.iter().map(|fname| (fname, io::sink())).collect();
     let start = Instant::now();
     linear_extract(&mut mla_read, &mut export).unwrap();
     start.elapsed()
