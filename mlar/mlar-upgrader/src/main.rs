@@ -9,7 +9,11 @@ use mla::{
     config::ArchiveWriterConfig, crypto::mlakey::MLAPublicKey, entry::EntryName, errors::Error,
     helpers::mla_percent_escape,
 };
-use std::io;
+use std::io::{self, BufReader, BufWriter};
+
+const DEFAULT_BUFFER_SIZE: usize = 128 * 1024;
+const PATH_ESCAPED_STRING_ALLOWED_BYTES: &[u8; 65] =
+    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789./\\";
 
 // ----- Error ------
 
@@ -53,9 +57,6 @@ impl error::Error for MlarError {
         }
     }
 }
-
-const PATH_ESCAPED_STRING_ALLOWED_BYTES: &[u8; 65] =
-    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789./\\";
 
 fn app() -> Command {
     Command::new(env!("CARGO_PKG_NAME"))
@@ -107,7 +108,7 @@ fn app() -> Command {
 
 fn writer_from_matches(
     matches: &ArgMatches,
-) -> Result<mla::ArchiveWriter<'static, File>, MlarError> {
+) -> Result<mla::ArchiveWriter<'_, BufWriter<File>>, MlarError> {
     let config = if let Some(public_key_args) = matches.get_many::<PathBuf>("public_keys") {
         let (pub_encryption_keys, _) = public_key_args
             .map(|pub_key_path| {
@@ -154,8 +155,9 @@ fn writer_from_matches(
         );
         MlarError::IO(e)
     })?;
+    let buf_writer = BufWriter::with_capacity(DEFAULT_BUFFER_SIZE, out_file);
 
-    mla::ArchiveWriter::from_config(out_file, config).map_err(|e| {
+    mla::ArchiveWriter::from_config(buf_writer, config).map_err(|e| {
         eprintln!("[ERROR] Failed to create archive writer: {e}");
         MlarError::Mla(e)
     })
@@ -163,7 +165,7 @@ fn writer_from_matches(
 
 fn reader_from_matches(
     matches: &ArgMatches,
-) -> Result<mla_v1::ArchiveReader<'static, File>, MlarError> {
+) -> Result<mla_v1::ArchiveReader<'_, BufReader<File>>, MlarError> {
     let mut config_v1 = mla_v1::config::ArchiveReaderConfig::new();
 
     if let Some(private_key_args) = matches.get_many::<PathBuf>("private_keys") {
@@ -204,8 +206,9 @@ fn reader_from_matches(
         );
         MlarError::IO(e)
     })?;
+    let buf_reader = BufReader::with_capacity(DEFAULT_BUFFER_SIZE, in_file);
 
-    mla_v1::ArchiveReader::from_config(in_file, config_v1).map_err(|e| {
+    mla_v1::ArchiveReader::from_config(buf_reader, config_v1).map_err(|e| {
         eprintln!("[ERROR] Failed to create archive reader: {e}");
         MlarError::MlaV1(e)
     })
