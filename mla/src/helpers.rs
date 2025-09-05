@@ -204,13 +204,13 @@ mod tests {
         let mut mla_read = ArchiveReader::from_config(dest, config).unwrap().0;
 
         // Prepare writers
-        let file_list: Vec<EntryName> = mla_read
+        let entries_list: Vec<EntryName> = mla_read
             .list_entries()
             .expect("reader.list_entries")
             .cloned()
             .collect();
         let mut export: HashMap<&EntryName, Vec<u8>> =
-            file_list.iter().map(|fname| (fname, Vec::new())).collect();
+            entries_list.iter().map(|fname| (fname, Vec::new())).collect();
         linear_extract(&mut mla_read, &mut export).expect("Extract error");
 
         // Check file per file

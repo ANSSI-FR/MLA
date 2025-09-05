@@ -110,15 +110,15 @@ fn ensure_tar_content(tar_file: &Path, files: &[NamedTempFile]) {
     assert_eq!(fname2content.len(), 0);
 }
 
-fn file_list_append_from_dir(dir: &Path, file_list: &mut Vec<String>) {
+fn entries_list_append_from_dir(dir: &Path, entries_list: &mut Vec<String>) {
     for entry in read_dir(dir).unwrap() {
         let new_path = entry.unwrap().path();
         if new_path.is_dir() {
-            file_list_append_from_dir(&new_path, file_list);
+            entries_list_append_from_dir(&new_path, entries_list);
         } else {
             let entry_name = EntryName::from_path(new_path).unwrap();
             let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
-            file_list.push(escaped.to_string());
+            entries_list.push(escaped.to_string());
         }
     }
 }
@@ -151,13 +151,13 @@ fn test_create_from_dir() {
     std::fs::create_dir(&subdir_path).unwrap();
     std::fs::write(&entry2_path, "Test2").unwrap();
 
-    // Collect paths from directory into file_list
-    let mut file_list: Vec<String> = Vec::new();
-    file_list_append_from_dir(tmp_dir.path(), &mut file_list);
+    // Collect paths from directory into entries_list
+    let mut entries_list: Vec<String> = Vec::new();
+    entries_list_append_from_dir(tmp_dir.path(), &mut entries_list);
 
     // Prepare expected stderr with " adding: {path}\n"
     let mut expected_stderr = String::new();
-    for path in &file_list {
+    for path in &entries_list {
         expected_stderr.push_str(format!(" adding: {path}\n").as_str());
     }
 
@@ -177,11 +177,11 @@ fn test_create_from_dir() {
     println!("{cmd:?}");
     cmd.assert().success().stderr(expected_stderr);
 
-    // Sort file list for consistent output
+    // Sort entries list for consistent output
     // The exact order of the files in the archive depends on the order of the
     // result of `read_dir` which is plateform and filesystem dependent.
-    file_list.sort();
-    let expected_stdout = file_list.join("\n") + "\n";
+    entries_list.sort();
+    let expected_stdout = entries_list.join("\n") + "\n";
 
     // `mlar list -i output.mla -k samples/test_mlakey.mlapriv`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
@@ -205,10 +205,10 @@ fn test_create_filelist_stdin() {
     // Create files
     let testfs = setup();
 
-    // Build the stdin file list
-    let mut file_list_stdin = String::new();
+    // Build the stdin entries list
+    let mut entries_list_stdin = String::new();
     for file in &testfs.files {
-        file_list_stdin.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
+        entries_list_stdin.push_str(format!("{}\n", file.path().to_string_lossy()).as_str());
     }
 
     // Expected stderr:  adding: <escaped> (<size> bytes)
@@ -239,7 +239,7 @@ fn test_create_filelist_stdin() {
         .arg("--stdin-file-list");
 
     println!("{cmd:?}");
-    cmd.write_stdin(file_list_stdin);
+    cmd.write_stdin(entries_list_stdin);
     println!("{expected_stderr:?}");
 
     let assert = cmd.assert();
@@ -281,7 +281,7 @@ fn test_create_list_tar() {
         .arg("-k")
         .arg(sender_private_key);
 
-    let mut file_list = String::new(); // For stdout (list)
+    let mut entries_list = String::new(); // For stdout (list)
     let mut expected_stderr = String::new(); // For stderr (create)
 
     for file in &testfs.files {
@@ -289,7 +289,7 @@ fn test_create_list_tar() {
 
         let entry_name = EntryName::from_path(file.path()).unwrap();
         let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
-        file_list.push_str(format!("{escaped}\n").as_str());
+        entries_list.push_str(format!("{escaped}\n").as_str());
         expected_stderr.push_str(format!(" adding: {escaped}\n").as_str());
     }
 
@@ -309,7 +309,7 @@ fn test_create_list_tar() {
 
     println!("{cmd:?}");
     let assert = cmd.assert();
-    assert.success().stdout(file_list);
+    assert.success().stdout(entries_list);
 
     // `mlar to-tar -i output.mla -k samples/test_mlakey.mlapriv -o output.tar`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
@@ -344,22 +344,22 @@ fn test_truncated_repair_list_tar() {
 
     // Prepare expected outputs:
     // 1. For create command stderr (with prefix)
-    let mut file_list = String::new(); // Sorted by position in archive
-    // 2. For list command stdout (plain file list, no prefix)
-    let mut file_list_no_last_plain = String::new();
+    let mut entries_list = String::new(); // Sorted by position in archive
+    // 2. For list command stdout (plain entries list, no prefix)
+    let mut entries_list_no_last_plain = String::new();
 
     for file in &testfs.files {
         if file.path() != testfs.files_archive_order.last().unwrap() {
             let entry_name = EntryName::from_path(file.path()).unwrap();
             let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
-            file_list_no_last_plain.push_str(format!("{escaped}\n").as_str());
+            entries_list_no_last_plain.push_str(format!("{escaped}\n").as_str());
         }
     }
 
     for path in &testfs.files_archive_order {
         let entry_name = EntryName::from_path(path).unwrap();
         let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
-        file_list.push_str(format!(" adding: {escaped}\n").as_str());
+        entries_list.push_str(format!(" adding: {escaped}\n").as_str());
     }
 
     // `mlar create -o output.mla -p samples/test_mlakey.mlapub file1.bin file2.bin file3.bin`
@@ -380,7 +380,7 @@ fn test_truncated_repair_list_tar() {
 
     println!("{cmd:?}");
     let assert = cmd.assert();
-    assert.success().stderr(file_list);
+    assert.success().stderr(entries_list);
 
     // Truncate output.mla to simulate corruption
     let mut data = Vec::new();
@@ -423,9 +423,9 @@ fn test_truncated_repair_list_tar() {
 
     println!("{cmd:?}");
     let assert = cmd.assert();
-    // Expect plain file list for the repaired list, without last truncated file
+    // Expect plain entries list for the repaired list, without last truncated file
     // as truncated at 6 / 7, last file being really small
-    assert.success().stdout(file_list_no_last_plain);
+    assert.success().stdout(entries_list_no_last_plain);
 
     // `mlar to-tar -i output.mla -k samples/test_mlakey.mlapriv -o output.tar`
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
@@ -899,11 +899,11 @@ fn test_stdio() {
     let testfs = setup();
 
     // Prepare expected stderr output for create command with  lines
-    let mut file_list = String::new();
+    let mut entries_list = String::new();
     for file in &testfs.files {
         let entry_name = EntryName::from_path(file.path()).unwrap();
         let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
-        file_list.push_str(format!(" adding: {escaped}\n").as_str());
+        entries_list.push_str(format!(" adding: {escaped}\n").as_str());
     }
 
     // `mlar create -o - -p samples/test_mlakey.mlapub file1.bin file2.bin file3.bin`
@@ -925,7 +925,7 @@ fn test_stdio() {
     println!("{cmd:?}");
     let assert = cmd.assert();
     let archive_data = assert.get_output().stdout.clone();
-    assert.success().stderr(file_list);
+    assert.success().stderr(entries_list);
 
     // Write archive data to temporary file for further testing
     File::create(mlar_file.path())

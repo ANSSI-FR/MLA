@@ -452,7 +452,7 @@ fn run(data: &mut [u8]) {
                         if let Ok((mut recovered_read, _)) =
                             ArchiveReader::from_config(Cursor::new(repaired.as_slice()), reader_cfg)
                         {
-                            // Verify recovered file list and contents
+                            // Verify recovered entries list and contents
                             let mut recovered_list: Vec<String> = recovered_read
                                 .list_entries()
                                 .unwrap()

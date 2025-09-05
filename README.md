@@ -98,7 +98,7 @@ curl https://raw.githubusercontent.com/ANSSI-FR/MLA/refs/heads/main/LICENSE.md |
 # Create an archive of a web file and arbitrary byte string, without compression, without encryption and without signature (chosen separator should not be present in the two entries)
 (curl https://raw.githubusercontent.com/ANSSI-FR/MLA/refs/heads/main/LICENSE.md; echo "SEPARATOR"; echo -n "All Hail MLA") | mlar create -l -o my_archive.mla --stdin-data --stdin-data-separator "SEPARATOR" --stdin-data-entry-names great_license.md,hello.txt
 
-# Create an archive passing the file list on stdin (not data)
+# Create an archive passing the entries list on stdin (not data)
 echo -n -e "/etc/issue\n/etc/os-release" | mlar create -l -o my_archive.mla --stdin-file-list
 ```
 

@@ -2348,15 +2348,15 @@ pub(crate) mod tests {
 
                 // Check *the start of* the files list is correct
                 let expected = files.iter().map(|(x, _y)| x.clone()).collect::<Vec<_>>();
-                let mut file_list = mla_read
+                let mut entries_list = mla_read
                     .list_entries()
                     .unwrap()
                     .cloned()
                     .collect::<Vec<_>>();
-                file_list.sort();
+                entries_list.sort();
                 assert_eq!(
-                    file_list[..],
-                    expected[..file_list.len()],
+                    entries_list[..],
+                    expected[..entries_list.len()],
                     "File lists not equal {} interleaving and {} bytes removed",
                     if *interleaved { "with" } else { "without" },
                     remove
@@ -2907,13 +2907,13 @@ pub(crate) mod tests {
         let file_names: Vec<EntryName> = (0..nb_file)
             .map(|nb| EntryName::from_path(format!("file_{nb:}")).unwrap())
             .collect();
-        let mut file_list = mla_read
+        let mut entries_list = mla_read
             .list_entries()
             .unwrap()
             .cloned()
             .collect::<Vec<_>>();
-        file_list.sort();
-        assert_eq!(file_list, file_names);
+        entries_list.sort();
+        assert_eq!(entries_list, file_names);
 
         // Check files content
 

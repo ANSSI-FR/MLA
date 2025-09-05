@@ -215,7 +215,7 @@ fn upgrade(matches: &ArgMatches) -> Result<(), MlarError> {
     let mut mla_in = reader_from_matches(matches)?;
     let mut mla_out = writer_from_matches(matches)?;
 
-    // Read the file list using metadata
+    // Read the entries list using metadata
     // v1 archive still uses files, not entries
     let entries: Vec<String> = mla_in
         .list_files()

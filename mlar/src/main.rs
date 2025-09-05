@@ -858,7 +858,7 @@ fn create(matches: &ArgMatches) -> Result<(), MlarError> {
     } else {
         let skip_not_found = matches.get_flag("skip-not-found");
 
-        if matches.get_flag("stdin_file_list") {
+        if matches.get_flag("stdin_entries_list") {
             for line in io::stdin().lock().lines() {
                 let line = line?;
                 add_entry_or_dir(&mut mla, Path::new(&line), skip_not_found)?;
@@ -1579,7 +1579,7 @@ fn app() -> clap::Command {
                     .action(ArgAction::Append)
                 )
                 .arg(
-                    Arg::new("stdin_file_list")
+                    Arg::new("stdin_entries_list")
                     .long("stdin-file-list")
                     .help("Add files specified on stdin (one UTF-8 path per line) rather than from positional arguments.")
                     .action(ArgAction::SetTrue)
