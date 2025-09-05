@@ -66,9 +66,9 @@ create_exception!(
 );
 create_exception!(
     mla,
-    FilenameTooLong,
+    EntryNameTooLong,
     MLAError,
-    "Filenames have a limited size `FILENAME_MAX_SIZE`"
+    "EntryNames have a limited size `ENTRY_NAME_MAX_SIZE`"
 );
 create_exception!(
     mla,
@@ -136,7 +136,7 @@ create_exception!(
     MLAError,
     "An error happens in the configuration"
 );
-create_exception!(mla, DuplicateFilename, MLAError, "Filename already used");
+create_exception!(mla, DuplicateEntryName, MLAError, "EntryName already used");
 create_exception!(
     mla,
     AuthenticatedDecryptionWrongTag,
@@ -267,8 +267,8 @@ impl From<WrappedError> for PyErr {
                 mla::errors::Error::UTF8ConversionError(err) => {
                     PyErr::new::<UTF8ConversionError, _>(err)
                 }
-                mla::errors::Error::FilenameTooLong => PyErr::new::<FilenameTooLong, _>(
-                    "Filenames have a limited size `FILENAME_MAX_SIZE`",
+                mla::errors::Error::EntryNameTooLong => PyErr::new::<EntryNameTooLong, _>(
+                    "EntryNames have a limited size `ENTRY_NAME_MAX_SIZE`",
                 ),
                 mla::errors::Error::WrongArchiveWriterState {
                     current_state,
@@ -298,8 +298,8 @@ impl From<WrappedError> for PyErr {
                 mla::errors::Error::ConfigError(err) => {
                     PyErr::new::<ConfigError, _>(format!("{err:}"))
                 }
-                mla::errors::Error::DuplicateFilename => {
-                    PyErr::new::<DuplicateFilename, _>("Filename already used")
+                mla::errors::Error::DuplicateEntryName => {
+                    PyErr::new::<DuplicateEntryName, _>("EntryName already used")
                 }
                 mla::errors::Error::AuthenticatedDecryptionWrongTag => {
                     PyErr::new::<AuthenticatedDecryptionWrongTag, _>(
@@ -885,7 +885,7 @@ impl MLAReader {
         #[allow(clippy::mutable_key_type)]
         let mut output = HashMap::new();
         let iter: Vec<RustEntryName> = inner.0.list_entries()?.cloned().collect();
-        for fname in iter {
+        for entry in iter {
             let mut metadata = FileMetadata {
                 size: None,
                 hash: None,
@@ -895,25 +895,25 @@ impl MLAReader {
                     if include_size {
                         metadata.size = Some(
                             reader
-                                .get_entry(fname.clone())?
+                                .get_entry(entry.clone())?
                                 .ok_or(PyRuntimeError::new_err(format!(
                                     "EntryNot found (escaped name): {}",
-                                    fname.raw_content_to_escaped_string()
+                                    entry.raw_content_to_escaped_string()
                                 )))?
                                 .get_size(),
                         );
                     }
                     if include_hash {
-                        metadata.hash = Some(reader.get_hash(&fname)?.ok_or(
+                        metadata.hash = Some(reader.get_hash(&entry)?.ok_or(
                             PyRuntimeError::new_err(format!(
                                 "EntryNot found (escaped name): {}",
-                                fname.raw_content_to_escaped_string()
+                                entry.raw_content_to_escaped_string()
                             )),
                         )?);
                     }
                 }
             }
-            output.insert(EntryName::from_rust_entry_name(fname), metadata);
+            output.insert(EntryName::from_rust_entry_name(entry), metadata);
         }
         Ok(output)
     }
@@ -967,12 +967,12 @@ impl MLAReader {
     ///
     /// Example:
     /// ```python
-    /// with open("/path/to/extract/file1", "wb") as f:
-    ///     archive.write_entry_to(EntryName("file1"), f)
+    /// with open("/path/to/extract/entry1", "wb") as f:
+    ///     archive.write_entry_to(EntryName("entry1"), f)
     /// ```
     /// Or
     /// ```python
-    /// archive.write_entry_to(EntryName("file1"), "/path/to/extract/file1")
+    /// archive.write_entry_to(EntryName("entry1"), "/path/to/extract/entry1")
     /// ```
     #[pyo3(signature = (key, dest, chunk_size=4_194_304))]
     fn write_entry_to(
@@ -1178,12 +1178,12 @@ impl MLAWriter {
     ///
     /// Example:
     /// ```python
-    /// archive.add_entry_from(EntryName("file1"), "/path/to/file1")
+    /// archive.add_entry_from(EntryName("entry1"), "/path/to/entry1")
     /// ```
     /// Or
     /// ```python
-    /// with open("/path/to/file1", "rb") as f:
-    ///    archive.add_entry_from(EntryName("file1"), f)
+    /// with open("/path/to/entry1", "rb") as f:
+    ///    archive.add_entry_from(EntryName("entry1"), f)
     /// ```
     #[pyo3(signature = (key, src, chunk_size=4_194_304))]
     fn add_entry_from(
@@ -1412,7 +1412,7 @@ fn pymla(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
         py.get_type::<WrongBlockSubFileType>(),
     )?;
     m.add("UTF8ConversionError", py.get_type::<UTF8ConversionError>())?;
-    m.add("FilenameTooLong", py.get_type::<FilenameTooLong>())?;
+    m.add("EntryNameTooLong", py.get_type::<EntryNameTooLong>())?;
     m.add(
         "WrongArchiveWriterState",
         py.get_type::<WrongArchiveWriterState>(),
@@ -1430,7 +1430,7 @@ fn pymla(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("BadAPIArgument", py.get_type::<BadAPIArgument>())?;
     m.add("EndOfStream", py.get_type::<EndOfStream>())?;
     m.add("ConfigError", py.get_type::<ConfigError>())?;
-    m.add("DuplicateFilename", py.get_type::<DuplicateFilename>())?;
+    m.add("DuplicateEntryName", py.get_type::<DuplicateEntryName>())?;
     m.add(
         "AuthenticatedDecryptionWrongTag",
         py.get_type::<AuthenticatedDecryptionWrongTag>(),

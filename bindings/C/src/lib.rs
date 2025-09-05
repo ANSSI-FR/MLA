@@ -36,7 +36,7 @@ pub enum MLAStatus {
     InvalidKeyFormat = 0x0004_0000,
     WrongBlockSubFileType = 0x0005_0000,
     UTF8ConversionError = 0x0006_0000,
-    FilenameTooLong = 0x0007_0000,
+    EntryNameTooLong = 0x0007_0000,
     WrongArchiveWriterState = 0x0008_0000,
     AssertionError = 0x0009_0000,
     WrongReaderState = 0x000A_0000,
@@ -63,7 +63,7 @@ pub enum MLAStatus {
     ConfigErrorMLKEMComputationError = 0x0014_000A,
     ConfigErrorKeyWrappingComputationError = 0x0014_000B,
 
-    DuplicateFilename = 0x0015_0000,
+    DuplicateEntryName = 0x0015_0000,
     AuthenticatedDecryptionWrongTag = 0x0016_0000,
     HKDFInvalidKeyLength = 0x0017_0000,
     HPKEError = 0x0018_0000,
@@ -168,7 +168,7 @@ impl From<MLAError> for MLAStatus {
             MLAError::InvalidKeyFormat => MLAStatus::InvalidKeyFormat,
             MLAError::WrongBlockSubFileType => MLAStatus::WrongBlockSubFileType,
             MLAError::UTF8ConversionError(_) => MLAStatus::UTF8ConversionError,
-            MLAError::FilenameTooLong => MLAStatus::FilenameTooLong,
+            MLAError::EntryNameTooLong => MLAStatus::EntryNameTooLong,
             MLAError::WrongArchiveWriterState {
                 current_state: _,
                 expected_state: _,
@@ -214,7 +214,7 @@ impl From<MLAError> for MLAStatus {
             MLAError::ConfigError(ConfigError::KeyWrappingComputationError) => {
                 MLAStatus::ConfigErrorKeyWrappingComputationError
             }
-            MLAError::DuplicateFilename => MLAStatus::DuplicateFilename,
+            MLAError::DuplicateEntryName => MLAStatus::DuplicateEntryName,
             MLAError::AuthenticatedDecryptionWrongTag => MLAStatus::AuthenticatedDecryptionWrongTag,
             MLAError::HKDFInvalidKeyLength => MLAStatus::HKDFInvalidKeyLength,
             MLAError::HPKEError => MLAStatus::HPKEError,
@@ -243,7 +243,7 @@ impl From<MLAError> for MLAStatus {
 pub type MLAWriterConfigHandle = *mut c_void;
 pub type MLAReaderConfigHandle = *mut c_void;
 pub type MLAArchiveHandle = *mut c_void;
-pub type MLAArchiveFileHandle = *mut c_void;
+pub type MLAArchiveEntryHandle = *mut c_void;
 
 // Internal struct definition to create a Write-able from function pointers
 
@@ -814,7 +814,7 @@ pub extern "C" fn mla_archive_start_entry_with_arbitrary_bytes_name(
     archive: MLAArchiveHandle,
     entry_name_arbitrary_bytes: *const u8,
     name_size: usize,
-    handle_out: *mut MLAArchiveFileHandle,
+    handle_out: *mut MLAArchiveEntryHandle,
 ) -> MLAStatus {
     if archive.is_null()
         || entry_name_arbitrary_bytes.is_null()
@@ -834,14 +834,14 @@ pub extern "C" fn mla_archive_start_entry_with_arbitrary_bytes_name(
 fn start_entry(
     archive: MLAArchiveHandle,
     entry_name: EntryName,
-    handle_out: *mut MLAArchiveFileHandle,
+    handle_out: *mut MLAArchiveEntryHandle,
 ) -> MLAStatus {
     let mut archive = unsafe { Box::from_raw(archive.cast::<ArchiveWriter<CallbackOutput>>()) };
     let res = match archive.start_entry(entry_name) {
         Ok(fileid) => {
             let ptr = Box::into_raw(Box::new(fileid));
             unsafe {
-                *handle_out = ptr as MLAArchiveFileHandle;
+                *handle_out = ptr as MLAArchiveEntryHandle;
             }
             MLAStatus::Success
         }
@@ -863,7 +863,7 @@ fn start_entry(
 pub extern "C" fn mla_archive_start_entry_with_path_as_name(
     archive: MLAArchiveHandle,
     entry_name: *const c_char,
-    handle_out: *mut MLAArchiveFileHandle,
+    handle_out: *mut MLAArchiveEntryHandle,
 ) -> MLAStatus {
     if archive.is_null() || entry_name.is_null() || handle_out.is_null() {
         return MLAStatus::BadAPIArgument;
@@ -910,7 +910,7 @@ fn path_to_bytes_os(p: &Path) -> Option<&[u8]> {
 #[unsafe(no_mangle)]
 pub extern "C" fn mla_archive_file_append(
     archive: MLAArchiveHandle,
-    file: MLAArchiveFileHandle,
+    file: MLAArchiveEntryHandle,
     buffer: *const u8,
     length: u64,
 ) -> MLAStatus {
@@ -959,7 +959,7 @@ pub extern "C" fn mla_archive_flush(archive: MLAArchiveHandle) -> MLAStatus {
 #[unsafe(no_mangle)]
 pub extern "C" fn mla_archive_file_close(
     archive: MLAArchiveHandle,
-    file: *mut MLAArchiveFileHandle,
+    file: *mut MLAArchiveEntryHandle,
 ) -> MLAStatus {
     if archive.is_null() || file.is_null() {
         return MLAStatus::BadAPIArgument;
