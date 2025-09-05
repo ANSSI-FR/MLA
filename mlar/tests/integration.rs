@@ -143,13 +143,13 @@ fn test_create_from_dir() {
 
     // Temporary directory with nested structure
     let tmp_dir = TempDir::new().unwrap();
-    let subfile1_path = tmp_dir.path().join("subfile1");
+    let entry1_path = tmp_dir.path().join("entry1");
     let subdir_path = tmp_dir.path().join("subdir");
-    let subfile2_path = subdir_path.join("subfile2");
+    let entry2_path = subdir_path.join("entry2");
 
-    std::fs::write(&subfile1_path, "Test1").unwrap();
+    std::fs::write(&entry1_path, "Test1").unwrap();
     std::fs::create_dir(&subdir_path).unwrap();
-    std::fs::write(&subfile2_path, "Test2").unwrap();
+    std::fs::write(&entry2_path, "Test2").unwrap();
 
     // Collect paths from directory into file_list
     let mut file_list: Vec<String> = Vec::new();

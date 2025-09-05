@@ -1140,7 +1140,7 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
                     .to_pathbuf_escaped_string()
                     .map_err(|_| MlarError::EntryNameEscapeFailed)?;
 
-                eprintln!("[ERROR] Failed to look up subfile {escaped} ({err:?})");
+                eprintln!("[ERROR] Failed to look up entry {escaped} ({err:?})");
                 return Err(err.into());
             }
             Ok(None) => {
@@ -1148,10 +1148,10 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
                     .to_pathbuf_escaped_string()
                     .map_err(|_| MlarError::EntryNameEscapeFailed)?;
 
-                eprintln!("[ERROR] Failed to find subfile {escaped} indexed in metadata");
+                eprintln!("[ERROR] Failed to find entry {escaped} indexed in metadata");
                 return Err(MlarError::EntryNotFound);
             }
-            Ok(Some(subfile)) => subfile,
+            Ok(Some(entry)) => entry,
         };
         let (mut extracted_file, _path) = match create_file(
             &output_dir,
@@ -1232,12 +1232,12 @@ fn cat(matches: &ArgMatches) -> Result<(), MlarError> {
                     }
                     Ok(None) => {
                         eprintln!(
-                            "[ERROR] Failed to find subfile \"{displayable_entry_name}\" indexed in metadata"
+                            "[ERROR] Failed to find entry \"{displayable_entry_name}\" indexed in metadata"
                         );
                         return Err(MlarError::EntryNotFound);
                     }
-                    Ok(Some(mut subfile)) => {
-                        if let Err(err) = io::copy(&mut subfile.data, &mut destination) {
+                    Ok(Some(mut entry)) => {
+                        if let Err(err) = io::copy(&mut entry.data, &mut destination) {
                             eprintln!(
                                 "[ERROR] Unable to extract \"{displayable_entry_name}\" ({err:?})"
                             );
@@ -1286,8 +1286,8 @@ fn cat(matches: &ArgMatches) -> Result<(), MlarError> {
                     eprintln!("[ERROR] File not found: \"{display_name}\"");
                     return Err(MlarError::EntryNotFound);
                 }
-                Ok(Some(mut subfile)) => {
-                    if let Err(err) = io::copy(&mut subfile.data, &mut destination) {
+                Ok(Some(mut entry)) => {
+                    if let Err(err) = io::copy(&mut entry.data, &mut destination) {
                         eprintln!("[ERROR] Unable to extract \"{display_name}\" ({err:?})");
                         return Err(err.into());
                     }
@@ -1315,23 +1315,23 @@ fn to_tar(matches: &ArgMatches) -> Result<(), MlarError> {
                 let escaped = fname
                     .to_pathbuf_escaped_string()
                     .map_err(|_| MlarError::EntryNameEscapeFailed)?;
-                eprintln!("[ERROR] Error while looking up subfile \"{escaped}\" ({err:?})");
+                eprintln!("[ERROR] Error while looking up entry \"{escaped}\" ({err:?})");
                 return Err(err.into());
             }
             Ok(None) => {
                 let escaped = fname
                     .to_pathbuf_escaped_string()
                     .map_err(|_| MlarError::EntryNameEscapeFailed)?;
-                eprintln!("[ERROR] Failed to find subfile \"{escaped}\" indexed in metadata",);
+                eprintln!("[ERROR] Failed to find entry \"{escaped}\" indexed in metadata",);
                 return Err(MlarError::EntryNotFound);
             }
-            Ok(Some(subfile)) => subfile,
+            Ok(Some(entry)) => entry,
         };
         if let Err(err) = add_entry_to_tar(&mut tar_file, entry) {
             let escaped = fname
                 .to_pathbuf_escaped_string()
                 .map_err(|_| MlarError::EntryNameEscapeFailed)?;
-            eprintln!("[ERROR] Unable to add subfile \"{escaped}\" to tarball ({err:?})",);
+            eprintln!("[ERROR] Unable to add entry \"{escaped}\" to tarball ({err:?})",);
             return Err(err);
         }
     }
