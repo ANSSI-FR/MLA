@@ -11,8 +11,8 @@ from mla import MLAReader, MLAWriter, EntryName
 
 # Test data
 FILES: Dict[EntryName, bytes] = {
-    EntryName("file1"): b"DATA1",
-    EntryName("file2"): b"DATA_2",
+    EntryName("entry1"): b"DATA1",
+    EntryName("entry2"): b"DATA_2",
 }
 
 
@@ -100,13 +100,13 @@ def test_read_api(basic_archive: str) -> None:
         name.raw_content_to_escaped_string() for name in archive.keys()
     ) == sorted(name.raw_content_to_escaped_string() for name in FILES.keys())
     # __contains__
-    assert EntryName("file1") in archive
-    assert EntryName("file3") not in archive
+    assert EntryName("entry1") in archive
+    assert EntryName("entry3") not in archive
     # __getitem__
-    assert archive[EntryName("file1")] == FILES[EntryName("file1")]
-    assert archive[EntryName("file2")] == FILES[EntryName("file2")]
+    assert archive[EntryName("entry1")] == FILES[EntryName("entry1")]
+    assert archive[EntryName("entry2")] == FILES[EntryName("entry2")]
     with pytest.raises(KeyError):
-        archive[EntryName("file3")]
+        archive[EntryName("entry3")]
     # __len__
     assert len(archive) == 2
 
@@ -188,8 +188,8 @@ def test_write_api() -> None:
     assert sorted(
         name.raw_content_to_escaped_string() for name in reader_archive.keys()
     ) == sorted(name.raw_content_to_escaped_string() for name in FILES.keys())
-    assert reader_archive[EntryName("file1")] == FILES[EntryName("file1")]
-    assert reader_archive[EntryName("file2")] == FILES[EntryName("file2")]
+    assert reader_archive[EntryName("entry1")] == FILES[EntryName("entry1")]
+    assert reader_archive[EntryName("entry2")] == FILES[EntryName("entry2")]
 
 
 def test_double_write() -> None:
@@ -198,9 +198,9 @@ def test_double_write() -> None:
         tempfile.mkstemp(suffix=".mla")[1],
         mla.WriterConfig.without_encryption_without_signature(),
     )
-    archive[EntryName("file1")] = FILES[EntryName("file1")]
+    archive[EntryName("entry1")] = FILES[EntryName("entry1")]
     with pytest.raises(mla.DuplicateEntryName):
-        archive[EntryName("file1")] = FILES[EntryName("file1")]
+        archive[EntryName("entry1")] = FILES[EntryName("entry1")]
 
 
 def test_context_read(basic_archive: str) -> None:
@@ -544,21 +544,21 @@ def test_write_entry_to_file_chunk_size(basic_archive):
     ) as archive:
         # Chunk size set to 1 -> expect 5 calls
         output = BytesIOCounter()
-        archive.write_entry_to(EntryName("file1"), output, chunk_size=1)
+        archive.write_entry_to(EntryName("entry1"), output, chunk_size=1)
 
         # Check the number of calls
-        assert output.write_count == len(FILES[EntryName("file1")])
+        assert output.write_count == len(FILES[EntryName("entry1")])
         output.seek(0)
-        assert output.read() == FILES[EntryName("file1")]
+        assert output.read() == FILES[EntryName("entry1")]
 
         # Chunk size set to 2 -> expect 3 calls
         output = BytesIOCounter()
-        archive.write_entry_to(EntryName("file1"), output, chunk_size=2)
+        archive.write_entry_to(EntryName("entry1"), output, chunk_size=2)
 
         # Check the number of calls
-        assert output.write_count == len(FILES[EntryName("file1")]) // 2 + 1
+        assert output.write_count == len(FILES[EntryName("entry1")]) // 2 + 1
         output.seek(0)
-        assert output.read() == FILES[EntryName("file1")]
+        assert output.read() == FILES[EntryName("entry1")]
 
 
 def test_add_entry_from_str() -> None:
@@ -627,14 +627,14 @@ def test_add_entry_from_io_chunk_size() -> None:
     "Test archive.add_entry_from(), using the IO input version"
     for chunk_size in [1, 2]:
         path: str = tempfile.mkstemp(suffix=".mla")[1]
-        data: bytes = FILES[EntryName("file1")]
+        data: bytes = FILES[EntryName("entry1")]
 
         # Create the archive
         with MLAWriter(
             path, mla.WriterConfig.without_encryption_without_signature()
         ) as archive:
             src = BytesIOCounter(data)
-            archive.add_entry_from(EntryName("file1"), src, chunk_size=chunk_size)
+            archive.add_entry_from(EntryName("entry1"), src, chunk_size=chunk_size)
 
             # Check the number of calls
             if chunk_size == 1:
@@ -651,4 +651,4 @@ def test_add_entry_from_io_chunk_size() -> None:
                 mla.SignatureConfig.without_signature_verification()
             ),
         ) as archive:
-            assert archive[EntryName("file1")] == data
+            assert archive[EntryName("entry1")] == data

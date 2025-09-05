@@ -304,7 +304,7 @@ mod tests {
 
         // Using io::copy
         let id = mla
-            .start_entry(EntryName::from_arbitrary_bytes(b"my_file2").unwrap())
+            .start_entry(EntryName::from_arbitrary_bytes(b"my_entry2").unwrap())
             .unwrap();
         let mut sw = StreamWriter::new(&mut mla, id);
         assert_eq!(
@@ -334,7 +334,7 @@ mod tests {
         assert_eq!(content1.as_slice(), fake_file.as_slice());
         let mut content2 = Vec::new();
         mla_read
-            .get_entry(EntryName::from_arbitrary_bytes(b"my_file2").unwrap())
+            .get_entry(EntryName::from_arbitrary_bytes(b"my_entry2").unwrap())
             .unwrap()
             .unwrap()
             .data

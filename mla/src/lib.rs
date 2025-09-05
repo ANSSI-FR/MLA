@@ -1725,13 +1725,13 @@ pub(crate) mod tests {
         )
         .unwrap();
         let fake_file = vec![5, 6, 7, 8];
-        let fake_file2 = vec![9, 10, 11, 12];
+        let fake_entry2 = vec![9, 10, 11, 12];
         let id = mla
-            .start_entry(EntryName::from_path("my_file2").unwrap())
+            .start_entry(EntryName::from_path("my_entry2").unwrap())
             .unwrap();
         mla.append_entry_content(id, fake_file.len() as u64, fake_file.as_slice())
             .unwrap();
-        mla.append_entry_content(id, fake_file2.len() as u64, fake_file2.as_slice())
+        mla.append_entry_content(id, fake_entry2.len() as u64, fake_entry2.as_slice())
             .unwrap();
         mla.end_entry(id).unwrap();
 
@@ -1751,12 +1751,12 @@ pub(crate) mod tests {
         // Explicit drop here, because otherwise mla_read.get_entry() cannot be
         // recall. It is not detected by the NLL analysis
         drop(file);
-        let mut file2 = mla_read
-            .get_entry(EntryName::from_path("my_file2").unwrap())
+        let mut entry2 = mla_read
+            .get_entry(EntryName::from_path("my_entry2").unwrap())
             .unwrap()
             .unwrap();
         let mut rez2 = Vec::new();
-        file2.data.read_to_end(&mut rez2).unwrap();
+        entry2.data.read_to_end(&mut rez2).unwrap();
         assert_eq!(rez2, vec![5, 6, 7, 8, 9, 10, 11, 12]);
     }
 
@@ -1778,13 +1778,13 @@ pub(crate) mod tests {
         )
         .unwrap();
         let fake_file = vec![5, 6, 7, 8];
-        let fake_file2 = vec![9, 10, 11, 12];
+        let fake_entry2 = vec![9, 10, 11, 12];
         let id = mla
-            .start_entry(EntryName::from_path("my_file2").unwrap())
+            .start_entry(EntryName::from_path("my_entry2").unwrap())
             .unwrap();
         mla.append_entry_content(id, fake_file.len() as u64, fake_file.as_slice())
             .unwrap();
-        mla.append_entry_content(id, fake_file2.len() as u64, fake_file2.as_slice())
+        mla.append_entry_content(id, fake_entry2.len() as u64, fake_entry2.as_slice())
             .unwrap();
         mla.end_entry(id).unwrap();
 
@@ -1804,12 +1804,12 @@ pub(crate) mod tests {
         // Explicit drop here, because otherwise mla_read.get_entry() cannot be
         // recall. It is not detected by the NLL analysis
         drop(file);
-        let mut file2 = mla_read
-            .get_entry(EntryName::from_path("my_file2").unwrap())
+        let mut entry2 = mla_read
+            .get_entry(EntryName::from_path("my_entry2").unwrap())
             .unwrap()
             .unwrap();
         let mut rez2 = Vec::new();
-        file2.data.read_to_end(&mut rez2).unwrap();
+        entry2.data.read_to_end(&mut rez2).unwrap();
         assert_eq!(rez2, vec![5, 6, 7, 8, 9, 10, 11, 12]);
     }
 
@@ -1830,13 +1830,13 @@ pub(crate) mod tests {
         )
         .unwrap();
         let fake_file = vec![5, 6, 7, 8];
-        let fake_file2 = vec![9, 10, 11, 12];
+        let fake_entry2 = vec![9, 10, 11, 12];
         let id = mla
-            .start_entry(EntryName::from_path("my_file2").unwrap())
+            .start_entry(EntryName::from_path("my_entry2").unwrap())
             .unwrap();
         mla.append_entry_content(id, fake_file.len() as u64, fake_file.as_slice())
             .unwrap();
-        mla.append_entry_content(id, fake_file2.len() as u64, fake_file2.as_slice())
+        mla.append_entry_content(id, fake_entry2.len() as u64, fake_entry2.as_slice())
             .unwrap();
         mla.end_entry(id).unwrap();
 
@@ -1855,12 +1855,12 @@ pub(crate) mod tests {
         // Explicit drop here, because otherwise mla_read.get_entry() cannot be
         // recall. It is not detected by the NLL analysis
         drop(file);
-        let mut file2 = mla_read
-            .get_entry(EntryName::from_path("my_file2").unwrap())
+        let mut entry2 = mla_read
+            .get_entry(EntryName::from_path("my_entry2").unwrap())
             .unwrap()
             .unwrap();
         let mut rez2 = Vec::new();
-        file2.data.read_to_end(&mut rez2).unwrap();
+        entry2.data.read_to_end(&mut rez2).unwrap();
         assert_eq!(rez2, vec![5, 6, 7, 8, 9, 10, 11, 12]);
     }
 
@@ -1879,13 +1879,13 @@ pub(crate) mod tests {
         )
         .unwrap();
         let fake_file = vec![5, 6, 7, 8];
-        let fake_file2 = vec![9, 10, 11, 12];
+        let fake_entry2 = vec![9, 10, 11, 12];
         let id = mla
-            .start_entry(EntryName::from_path("my_file2").unwrap())
+            .start_entry(EntryName::from_path("my_entry2").unwrap())
             .unwrap();
         mla.append_entry_content(id, fake_file.len() as u64, fake_file.as_slice())
             .unwrap();
-        mla.append_entry_content(id, fake_file2.len() as u64, fake_file2.as_slice())
+        mla.append_entry_content(id, fake_entry2.len() as u64, fake_entry2.as_slice())
             .unwrap();
         mla.end_entry(id).unwrap();
 
@@ -1904,12 +1904,12 @@ pub(crate) mod tests {
         // Explicit drop here, because otherwise mla_read.get_entry() cannot be
         // recall. It is not detected by the NLL analysis
         drop(file);
-        let mut file2 = mla_read
-            .get_entry(EntryName::from_path("my_file2").unwrap())
+        let mut entry2 = mla_read
+            .get_entry(EntryName::from_path("my_entry2").unwrap())
             .unwrap()
             .unwrap();
         let mut rez2 = Vec::new();
-        file2.data.read_to_end(&mut rez2).unwrap();
+        entry2.data.read_to_end(&mut rez2).unwrap();
         assert_eq!(rez2, vec![5, 6, 7, 8, 9, 10, 11, 12]);
     }
 
@@ -1932,13 +1932,13 @@ pub(crate) mod tests {
         )
         .unwrap();
         let fake_file = vec![5, 6, 7, 8];
-        let fake_file2 = vec![9, 10, 11, 12];
+        let fake_entry2 = vec![9, 10, 11, 12];
         let id = mla
-            .start_entry(EntryName::from_path("my_file2").unwrap())
+            .start_entry(EntryName::from_path("my_entry2").unwrap())
             .unwrap();
         mla.append_entry_content(id, fake_file.len() as u64, fake_file.as_slice())
             .unwrap();
-        mla.append_entry_content(id, fake_file2.len() as u64, fake_file2.as_slice())
+        mla.append_entry_content(id, fake_entry2.len() as u64, fake_entry2.as_slice())
             .unwrap();
         mla.end_entry(id).unwrap();
 
@@ -1960,12 +1960,12 @@ pub(crate) mod tests {
         // Explicit drop here, because otherwise mla_read.get_entry() cannot be
         // recall. It is not detected by the NLL analysis
         drop(file);
-        let mut file2 = mla_read
-            .get_entry(EntryName::from_path("my_file2").unwrap())
+        let mut entry2 = mla_read
+            .get_entry(EntryName::from_path("my_entry2").unwrap())
             .unwrap()
             .unwrap();
         let mut rez2 = Vec::new();
-        file2.data.read_to_end(&mut rez2).unwrap();
+        entry2.data.read_to_end(&mut rez2).unwrap();
         assert_eq!(rez2, vec![5, 6, 7, 8, 9, 10, 11, 12]);
     }
 
@@ -2031,16 +2031,16 @@ pub(crate) mod tests {
         };
         let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
 
-        let fname1 = EntryName::from_arbitrary_bytes(b"my_file1").unwrap();
-        let fname2 = EntryName::from_arbitrary_bytes(b"my_file2").unwrap();
-        let fname3 = EntryName::from_arbitrary_bytes(b"my_file3").unwrap();
+        let fname1 = EntryName::from_arbitrary_bytes(b"my_entry1").unwrap();
+        let fname2 = EntryName::from_arbitrary_bytes(b"my_entry2").unwrap();
+        let fname3 = EntryName::from_arbitrary_bytes(b"my_entry3").unwrap();
         let fake_file_part1 = vec![1, 2, 3];
         let fake_file_part2 = vec![4, 5, 6, 7, 8];
-        let mut fake_file1 = Vec::new();
-        fake_file1.extend_from_slice(fake_file_part1.as_slice());
-        fake_file1.extend_from_slice(fake_file_part2.as_slice());
-        let fake_file2 = vec![9, 10, 11, 12];
-        let fake_file3 = vec![13, 14, 15];
+        let mut fake_entry1 = Vec::new();
+        fake_entry1.extend_from_slice(fake_file_part1.as_slice());
+        fake_entry1.extend_from_slice(fake_file_part2.as_slice());
+        let fake_entry2 = vec![9, 10, 11, 12];
+        let fake_entry3 = vec![13, 14, 15];
 
         if interleaved {
             // Interleaved writes, expected result is:
@@ -2054,47 +2054,47 @@ pub(crate) mod tests {
             // [File1 content 4 5 6 7 8]
             // [File1 end]
             // [File2 end]
-            let id_file1 = mla.start_entry(fname1.clone()).unwrap();
+            let id_entry1 = mla.start_entry(fname1.clone()).unwrap();
             mla.append_entry_content(
-                id_file1,
+                id_entry1,
                 fake_file_part1.len() as u64,
                 fake_file_part1.as_slice(),
             )
             .unwrap();
-            let id_file2 = mla.start_entry(fname2.clone()).unwrap();
-            mla.append_entry_content(id_file2, fake_file2.len() as u64, fake_file2.as_slice())
+            let id_entry2 = mla.start_entry(fname2.clone()).unwrap();
+            mla.append_entry_content(id_entry2, fake_entry2.len() as u64, fake_entry2.as_slice())
                 .unwrap();
             mla.add_entry(
                 fname3.clone(),
-                fake_file3.len() as u64,
-                fake_file3.as_slice(),
+                fake_entry3.len() as u64,
+                fake_entry3.as_slice(),
             )
             .unwrap();
             mla.append_entry_content(
-                id_file1,
+                id_entry1,
                 fake_file_part2.len() as u64,
                 fake_file_part2.as_slice(),
             )
             .unwrap();
-            mla.end_entry(id_file1).unwrap();
-            mla.end_entry(id_file2).unwrap();
+            mla.end_entry(id_entry1).unwrap();
+            mla.end_entry(id_entry2).unwrap();
         } else {
             mla.add_entry(
                 fname1.clone(),
-                fake_file1.len() as u64,
-                fake_file1.as_slice(),
+                fake_entry1.len() as u64,
+                fake_entry1.as_slice(),
             )
             .unwrap();
             mla.add_entry(
                 fname2.clone(),
-                fake_file2.len() as u64,
-                fake_file2.as_slice(),
+                fake_entry2.len() as u64,
+                fake_entry2.as_slice(),
             )
             .unwrap();
             mla.add_entry(
                 fname3.clone(),
-                fake_file3.len() as u64,
-                fake_file3.as_slice(),
+                fake_entry3.len() as u64,
+                fake_entry3.as_slice(),
             )
             .unwrap();
         }
@@ -2107,9 +2107,9 @@ pub(crate) mod tests {
             (sender_private_key, sender_public_key),
             (receiver_private_key, receiver_public_key),
             vec![
-                (fname1, fake_file1),
-                (fname2, fake_file2),
-                (fname3, fake_file3),
+                (fname1, fake_entry1),
+                (fname2, fake_entry2),
+                (fname3, fake_entry3),
             ],
             entries_info,
             ids_info,
@@ -2453,7 +2453,7 @@ pub(crate) mod tests {
         let (mut dest, _sender_key, _receiver_key, files) =
             build_archive(false, false, false, false);
 
-        // Swap the first 2 bytes of file1
+        // Swap the first 2 bytes of entry1
         let expect = files[0].1.as_slice();
         let pos: Vec<usize> = dest
             .iter()
@@ -2953,7 +2953,7 @@ pub(crate) mod tests {
         let data = vec![10, 20, 30, 40];
         writer
             .add_entry(
-                EntryName::from_path("file1").unwrap(),
+                EntryName::from_path("entry1").unwrap(),
                 data.len() as u64,
                 data.as_slice(),
             )
@@ -3035,7 +3035,7 @@ pub(crate) mod tests {
         let data = vec![10, 20, 30, 40];
         writer
             .add_entry(
-                EntryName::from_path("file1").unwrap(),
+                EntryName::from_path("entry1").unwrap(),
                 data.len() as u64,
                 data.as_slice(),
             )
