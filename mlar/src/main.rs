@@ -20,7 +20,7 @@ use std::error;
 use std::ffi::OsStr;
 use std::fmt;
 use std::fs::{self, File, read_dir};
-use std::io::{self, BufRead as _, Read, Seek, Write};
+use std::io::{self, BufRead as _, BufReader, BufWriter, Read, Seek, Write};
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -116,7 +116,7 @@ fn escaped_path_to_string(path: &Path) -> String {
 /// can't coexist in the same code path.
 enum OutputTypes {
     Stdout,
-    File { file: File },
+    File { file: BufWriter<File> },
 }
 
 impl Write for OutputTypes {
@@ -320,8 +320,9 @@ fn destination_from_output_argument(output_argument: &PathBuf) -> Result<OutputT
         OutputTypes::Stdout
     } else {
         let path = Path::new(&output_argument);
+        let file = File::create_new(path)?;
         OutputTypes::File {
-            file: File::create_new(path)?,
+            file: BufWriter::new(file),
         }
     };
     Ok(destination)
@@ -380,15 +381,18 @@ fn readerconfig_from_matches(matches: &ArgMatches) -> Result<ArchiveReaderConfig
     }
 }
 
-fn open_mla_file<'a>(matches: &ArgMatches) -> Result<ArchiveReader<'a, File>, MlarError> {
+fn open_mla_file<'a>(
+    matches: &ArgMatches,
+) -> Result<ArchiveReader<'a, BufReader<File>>, MlarError> {
     let config = readerconfig_from_matches(matches)?;
 
     // Safe to use unwrap() because the option is required()
     let mla_file = matches.get_one::<PathBuf>("input").unwrap();
     let file = File::open(mla_file)?;
+    let buf_reader = BufReader::new(file);
 
     // Instantiate reader
-    let (reader, keys_with_valid_signatures) = ArchiveReader::from_config(file, config)?;
+    let (reader, keys_with_valid_signatures) = ArchiveReader::from_config(buf_reader, config)?;
 
     // Signature verification
     if let Some(public_keys) = matches.get_many::<PathBuf>("public_keys")
@@ -404,7 +408,7 @@ fn open_mla_file<'a>(matches: &ArgMatches) -> Result<ArchiveReader<'a, File>, Ml
 // Utils: common code to load a mla_file from arguments, fail-safe mode
 fn open_truncated_mla_file<'a>(
     matches: &ArgMatches,
-) -> Result<TruncatedArchiveReader<'a, File>, MlarError> {
+) -> Result<TruncatedArchiveReader<'a, BufReader<File>>, MlarError> {
     let truncated_decryption_mode = if matches.get_flag("allow_unauthenticated_data") {
         TruncatedReaderDecryptionMode::DataEvenUnauthenticated
     } else {
@@ -436,9 +440,10 @@ fn open_truncated_mla_file<'a>(
     // Safe to use unwrap() because the option is required()
     let mla_file = matches.get_one::<PathBuf>("input").unwrap();
     let file = File::open(mla_file)?;
+    let buf_reader = BufReader::new(file);
 
     // Instantiate reader
-    Ok(TruncatedArchiveReader::from_config(file, config)?)
+    Ok(TruncatedArchiveReader::from_config(buf_reader, config)?)
 }
 
 fn add_entry_to_tar<R: Read + Seek, W: Write>(
