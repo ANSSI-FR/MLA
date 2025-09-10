@@ -236,7 +236,7 @@ fn test_create_filelist_stdin() {
         .arg(mlar_file.path())
         .arg("-p")
         .arg(public_key)
-        .arg("--stdin-file-list");
+        .arg("--stdin-filepath-list");
 
     println!("{cmd:?}");
     cmd.write_stdin(file_list_stdin);
