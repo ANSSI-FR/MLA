@@ -238,14 +238,14 @@ impl TruncatedReaderConfig {
     /// Will refuse to open an archive without encryption.
     pub fn without_signature_verification_with_encryption(
         decryption_private_keys: &[MLADecryptionPrivateKey],
-        failsafe_mode: TruncatedReaderDecryptionMode,
+        truncated_mode: TruncatedReaderDecryptionMode,
     ) -> TruncatedReaderConfig {
         let mut encrypt = EncryptionReaderConfig::default();
         encrypt.set_private_keys(decryption_private_keys);
         TruncatedReaderConfig {
             accept_unencrypted: false,
             encrypt,
-            truncated_decryption_mode: failsafe_mode,
+            truncated_decryption_mode: truncated_mode,
         }
     }
 
@@ -255,14 +255,14 @@ impl TruncatedReaderConfig {
     /// This avoids having to open the archive a second time after decryption failure, for example to save the cost of doing signature check twice.
     pub fn without_signature_verification_with_encryption_accept_unencrypted(
         decryption_private_keys: &[MLADecryptionPrivateKey],
-        failsafe_mode: TruncatedReaderDecryptionMode,
+        truncated_mode: TruncatedReaderDecryptionMode,
     ) -> TruncatedReaderConfig {
         let mut encrypt = EncryptionReaderConfig::default();
         encrypt.set_private_keys(decryption_private_keys);
         TruncatedReaderConfig {
             accept_unencrypted: false,
             encrypt,
-            truncated_decryption_mode: failsafe_mode,
+            truncated_decryption_mode: truncated_mode,
         }
     }
 

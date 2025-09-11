@@ -104,26 +104,22 @@ pub fn linear_extract<W1: InnerWriterTrait, R: InnerReaderTrait, S: BuildHasher>
     // read calls (like the ones on ArchiveEntryBlock reading)
     let mut src = io::BufReader::new(&mut archive.src);
 
-    // Associate an ID in the archive to the corresponding filename
+    // Associate an ID in the archive to the corresponding name
     // Do not directly associate to the writer to keep an easier fn API
-    let mut id2filename: HashMap<ArchiveEntryId, EntryName> = HashMap::new();
+    let mut id2name: HashMap<ArchiveEntryId, EntryName> = HashMap::new();
 
     'read_block: loop {
         match ArchiveEntryBlock::from(&mut src)? {
-            ArchiveEntryBlock::EntryStart {
-                name: filename,
-                id,
-                opts: _,
-            } => {
+            ArchiveEntryBlock::EntryStart { name, id, opts: _ } => {
                 // If the starting file is meant to be extracted, get the
                 // corresponding writer
-                if export.contains_key(&filename) {
-                    id2filename.insert(id, filename.clone());
+                if export.contains_key(&name) {
+                    id2name.insert(id, name.clone());
                 }
             }
             ArchiveEntryBlock::EndOfEntry { id, .. } => {
                 // Drop the corresponding writer
-                id2filename.remove(&id);
+                id2name.remove(&id);
             }
             ArchiveEntryBlock::EntryContent { length, id, .. } => {
                 // Write a block to the corresponding output, if any
@@ -131,8 +127,8 @@ pub fn linear_extract<W1: InnerWriterTrait, R: InnerReaderTrait, S: BuildHasher>
                 let copy_src = &mut (&mut src).take(length);
                 // Is the file considered?
                 let mut extracted: bool = false;
-                if let Some(fname) = id2filename.get(&id)
-                    && let Some(writer) = export.get_mut(fname)
+                if let Some(entry) = id2name.get(&id)
+                    && let Some(writer) = export.get_mut(entry)
                 {
                     io::copy(copy_src, writer)?;
                     extracted = true;
@@ -218,8 +214,8 @@ mod tests {
         linear_extract(&mut mla_read, &mut export).expect("Extract error");
 
         // Check file per file
-        for (fname, content) in &files {
-            assert_eq!(export.get(fname).unwrap(), content);
+        for (entry, content) in &files {
+            assert_eq!(export.get(entry).unwrap(), content);
         }
     }
 
@@ -262,10 +258,10 @@ mod tests {
         let config = ArchiveWriterConfig::with_encryption_without_signature(&[public_key]).unwrap();
         let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
 
-        let fname = EntryName::from_arbitrary_bytes(b"my_file").unwrap();
+        let entry = EntryName::from_arbitrary_bytes(b"my_file").unwrap();
         let data: Vec<u8> = Standard.sample_iter(&mut rng).take(file_length).collect();
         assert_eq!(data.len(), file_length);
-        mla.add_entry(fname.clone(), data.len() as u64, data.as_slice())
+        mla.add_entry(entry.clone(), data.len() as u64, data.as_slice())
             .unwrap();
 
         let dest = mla.finalize().unwrap();
@@ -280,11 +276,11 @@ mod tests {
 
         // Prepare writers
         let mut export: HashMap<&EntryName, Vec<u8>> = HashMap::new();
-        export.insert(&fname, Vec::new());
+        export.insert(&entry, Vec::new());
         linear_extract(&mut mla_read, &mut export).expect("Extract error");
 
         // Check file
-        assert_eq!(export.get(&fname).unwrap(), &data);
+        assert_eq!(export.get(&entry).unwrap(), &data);
     }
 
     #[test]
@@ -308,7 +304,7 @@ mod tests {
 
         // Using io::copy
         let id = mla
-            .start_entry(EntryName::from_arbitrary_bytes(b"my_file2").unwrap())
+            .start_entry(EntryName::from_arbitrary_bytes(b"my_entry2").unwrap())
             .unwrap();
         let mut sw = StreamWriter::new(&mut mla, id);
         assert_eq!(
@@ -338,7 +334,7 @@ mod tests {
         assert_eq!(content1.as_slice(), fake_file.as_slice());
         let mut content2 = Vec::new();
         mla_read
-            .get_entry(EntryName::from_arbitrary_bytes(b"my_file2").unwrap())
+            .get_entry(EntryName::from_arbitrary_bytes(b"my_entry2").unwrap())
             .unwrap()
             .unwrap()
             .data

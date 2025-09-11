@@ -62,7 +62,7 @@ pub(crate) fn dhkem_decap(
 // rust-hpke provides `setup_sender` and `setup_receiver`
 // Unfortunately, re-using their code means:
 // - implementing the rust-hpke `Kem` trait for our Hybrid encryption KEM, while we are not yet able to convert a private key to a public one
-// - re-implement the AEAD trait for our AesGcm, to be able to repair
+// - re-implement the AEAD trait for our AesGcm, to be able to `clean-truncate` an archive in order to recover its content to some extent
 // - implementing struct to use suite ID which are not in the RFC (because we are using our own Hybrid KEM)
 //
 // Regarding the code quantity involved, the choice has been made to rather have it implemented here

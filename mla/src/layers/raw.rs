@@ -2,7 +2,7 @@ use std::io;
 use std::io::{Read, Seek, SeekFrom, Write};
 
 use crate::Error;
-use crate::layers::traits::{InnerWriterTrait, LayerFailSafeReader, LayerReader, LayerWriter};
+use crate::layers::traits::{InnerWriterTrait, LayerReader, LayerTruncatedReader, LayerWriter};
 
 use super::traits::InnerReaderTrait;
 
@@ -110,27 +110,27 @@ impl<R: InnerReaderTrait> Read for RawLayerReader<R> {
     }
 }
 
-// ---------- FailSafeReader ----------
+// ---------- TruncatedReader ----------
 
 /// Dummy layer, standing for the last layer (wrapping I/O)
-pub struct RawLayerFailSafeReader<R: Read> {
+pub struct RawLayerTruncatedReader<R: Read> {
     inner: R,
 }
 
-impl<R: Read> RawLayerFailSafeReader<R> {
+impl<R: Read> RawLayerTruncatedReader<R> {
     pub fn new(inner: R) -> Self {
         Self { inner }
     }
 }
 
-impl<R: Read> Read for RawLayerFailSafeReader<R> {
+impl<R: Read> Read for RawLayerTruncatedReader<R> {
     /// Wrapper on inner
     fn read(&mut self, into: &mut [u8]) -> io::Result<usize> {
         self.inner.read(into)
     }
 }
 
-impl<R: Read> LayerFailSafeReader<'_, R> for RawLayerFailSafeReader<R> {}
+impl<R: Read> LayerTruncatedReader<'_, R> for RawLayerTruncatedReader<R> {}
 
 #[cfg(test)]
 mod tests {
@@ -212,7 +212,7 @@ mod tests {
     }
 
     #[test]
-    fn basic_failsafe_ops() {
+    fn basic_truncated_ops() {
         let buf = Vec::new();
 
         // Write
@@ -221,14 +221,14 @@ mod tests {
         let buf = raw_w.finalize().unwrap();
 
         // Read
-        let mut raw_r = Box::new(RawLayerFailSafeReader::new(buf.as_slice()));
+        let mut raw_r = Box::new(RawLayerTruncatedReader::new(buf.as_slice()));
         let mut output = Vec::new();
         raw_r.read_to_end(&mut output).unwrap();
         assert_eq!(output.as_slice(), &DATA);
     }
 
     #[test]
-    fn basic_failsafe_truncated() {
+    fn basic_truncated_truncated() {
         let buf = Vec::new();
 
         // Write
@@ -239,7 +239,7 @@ mod tests {
         // Read
         // Truncate at the middle
         let stop = buf.len() / 2;
-        let mut raw_r = Box::new(RawLayerFailSafeReader::new(&buf[..stop]));
+        let mut raw_r = Box::new(RawLayerTruncatedReader::new(&buf[..stop]));
         let mut output = Vec::new();
         raw_r.read_to_end(&mut output).unwrap();
         // Thanks to the raw layer construction, we can recover `stop` bytes

@@ -156,27 +156,27 @@ impl<R: InnerReaderTrait> Read for StripHeadTailReader<'_, R> {
     }
 }
 
-// ---------- FailSafeReader ----------
+// ---------- TruncatedReader ----------
 
 // // Dummy layer, standing for the last layer (wrapping I/O)
-// pub struct StripHeadTailFailSafeReader<R: Read> {
+// pub struct StripHeadTailTruncatedReader<R: Read> {
 // inner: R,
 // }
 
-// impl<R: Read> StripHeadTailFailSafeReader<R> {
+// impl<R: Read> StripHeadTailTruncatedReader<R> {
 // pub fn new(inner: R) -> Self {
 // Self { inner }
 // }
 // }
 
-// impl<R: Read> Read for StripHeadTailFailSafeReader<R> {
+// impl<R: Read> Read for StripHeadTailTruncatedReader<R> {
 // /// Wrapper on inner
 // fn read(&mut self, into: &mut [u8]) -> io::Result<usize> {
 // self.inner.read(into)
 // }
 // }
 
-// impl<'a, R: Read> LayerFailSafeReader<'a, R> for StripHeadTailFailSafeReader<R> {}
+// impl<'a, R: Read> LayerTruncatedReader<'a, R> for StripHeadTailTruncatedReader<R> {}
 
 #[cfg(test)]
 mod tests {

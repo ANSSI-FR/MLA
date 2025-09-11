@@ -10,7 +10,7 @@ use crate::crypto::hybrid::{
     MLADecryptionPrivateKey, MLAEncryptionPublicKey,
 };
 use crate::layers::traits::{
-    InnerWriterTrait, InnerWriterType, LayerFailSafeReader, LayerReader, LayerWriter,
+    InnerWriterTrait, InnerWriterType, LayerReader, LayerTruncatedReader, LayerWriter,
 };
 use crate::{EMPTY_TAIL_OPTS_SERIALIZATION, Error, MLADeserialize, MLASerialize, Opts};
 use std::io;
@@ -692,7 +692,7 @@ impl<R: Read> InternalEncryptionLayerReader<R> {
 
     #[allow(clippy::unused_self)]
     fn try_tag_pos_at_from_0_to(&self, _max_pos: usize) -> Option<usize> {
-        // TODO later. For the moment we do not support repairing last bytes
+        // TODO later. For the moment we do not support recovering last bytes
         // in archives where the final tag is truncated
         None
     }
@@ -999,13 +999,13 @@ impl<R: Read + Seek> Seek for InternalEncryptionLayerReader<R> {
 
 // ---------- Fail-Safe Reader ----------
 
-pub(crate) struct EncryptionLayerFailSafeReader<'a, R: Read> {
-    inner: InternalEncryptionLayerReader<Box<dyn 'a + LayerFailSafeReader<'a, R>>>,
+pub(crate) struct EncryptionLayerTruncatedReader<'a, R: Read> {
+    inner: InternalEncryptionLayerReader<Box<dyn 'a + LayerTruncatedReader<'a, R>>>,
 }
 
-impl<'a, R: 'a + Read> EncryptionLayerFailSafeReader<'a, R> {
+impl<'a, R: 'a + Read> EncryptionLayerTruncatedReader<'a, R> {
     fn new_skip_header(
-        inner: Box<dyn 'a + LayerFailSafeReader<'a, R>>,
+        inner: Box<dyn 'a + LayerTruncatedReader<'a, R>>,
         config: &EncryptionReaderConfig,
         truncated_decryption_mode: TruncatedReaderDecryptionMode,
     ) -> Result<Self, Error> {
@@ -1017,7 +1017,7 @@ impl<'a, R: 'a + Read> EncryptionLayerFailSafeReader<'a, R> {
     }
 
     pub(crate) fn new_skip_magic(
-        mut inner: Box<dyn 'a + LayerFailSafeReader<'a, R>>,
+        mut inner: Box<dyn 'a + LayerTruncatedReader<'a, R>>,
         mut reader_config: EncryptionReaderConfig,
         persistent_config: Option<EncryptionPersistentConfig>,
         truncated_decryption_mode: TruncatedReaderDecryptionMode,
@@ -1029,9 +1029,9 @@ impl<'a, R: 'a + Read> EncryptionLayerFailSafeReader<'a, R> {
     }
 }
 
-impl<'a, R: 'a + Read> LayerFailSafeReader<'a, R> for EncryptionLayerFailSafeReader<'a, R> {}
+impl<'a, R: 'a + Read> LayerTruncatedReader<'a, R> for EncryptionLayerTruncatedReader<'a, R> {}
 
-impl<R: Read> Read for EncryptionLayerFailSafeReader<'_, R> {
+impl<R: Read> Read for EncryptionLayerTruncatedReader<'_, R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.inner.read_internal(buf).map_err(mla_error_to_io_error)
     }
@@ -1055,7 +1055,7 @@ mod tests {
 
     use crate::crypto::aesgcm::{KEY_SIZE, NONCE_AES_SIZE};
     use crate::layers::encrypt::{InternalEncryptionLayerReader, InternalEncryptionLayerWriter};
-    use crate::layers::raw::{RawLayerFailSafeReader, RawLayerReader, RawLayerWriter};
+    use crate::layers::raw::{RawLayerReader, RawLayerTruncatedReader, RawLayerWriter};
 
     static FAKE_FILE: [u8; 26] = *b"abcdefghijklmnopqrstuvwxyz";
     static KEY: Key = [2u8; KEY_SIZE];
@@ -1113,7 +1113,7 @@ mod tests {
     }
 
     #[test]
-    fn encrypt_failsafe_layer() {
+    fn encrypt_truncated_layer() {
         let file = Vec::new();
         let out = encrypt_write(file);
 
@@ -1121,21 +1121,21 @@ mod tests {
             private_keys: Vec::new(),
             encrypt_parameters: Some((KEY, NONCE)),
         };
-        let mut encrypt_r = EncryptionLayerFailSafeReader::new_skip_header(
-            Box::new(RawLayerFailSafeReader::new(out.as_slice())),
+        let mut encrypt_r = EncryptionLayerTruncatedReader::new_skip_header(
+            Box::new(RawLayerTruncatedReader::new(out.as_slice())),
             &config,
             TruncatedReaderDecryptionMode::OnlyAuthenticatedData,
         )
         .unwrap();
         let mut output = Vec::new();
         encrypt_r.read_to_end(&mut output).unwrap();
-        // Same length expected as no truncation is done and we repair in authenticated mode
+        // Same length expected as no truncation is done and we applied the `clean-truncated` operation in authenticated mode
         assert!(output.len() == FAKE_FILE.len());
         assert_eq!(output[..FAKE_FILE.len()], FAKE_FILE);
     }
 
     #[test]
-    fn encrypt_failsafe_truncated() {
+    fn encrypt_truncated_truncated() {
         let file = Vec::new();
         let out = encrypt_write(file);
         // Truncate at the middle of a data chunk + tag
@@ -1151,8 +1151,8 @@ mod tests {
             private_keys: Vec::new(),
             encrypt_parameters: Some((KEY, NONCE)),
         };
-        let mut encrypt_r = EncryptionLayerFailSafeReader::new_skip_header(
-            Box::new(RawLayerFailSafeReader::new(&out[..stop])),
+        let mut encrypt_r = EncryptionLayerTruncatedReader::new_skip_header(
+            Box::new(RawLayerTruncatedReader::new(&out[..stop])),
             &config,
             TruncatedReaderDecryptionMode::DataEvenUnauthenticated,
         )
@@ -1164,7 +1164,7 @@ mod tests {
     }
 
     #[test]
-    fn failsafe_auth_vs_unauth() {
+    fn truncated_auth_vs_unauth() {
         let mut file = Vec::new();
         file.write_all(CHUNK_MAGIC).unwrap();
         file.write_all(&[1, 0, 0, 0, 0, 0, 0, 0]).unwrap();
@@ -1207,8 +1207,8 @@ mod tests {
             private_keys: Vec::new(),
             encrypt_parameters: Some((KEY, NONCE)),
         };
-        let mut encrypt_r = EncryptionLayerFailSafeReader::new_skip_header(
-            Box::new(RawLayerFailSafeReader::new(trunc)),
+        let mut encrypt_r = EncryptionLayerTruncatedReader::new_skip_header(
+            Box::new(RawLayerTruncatedReader::new(trunc)),
             &config,
             TruncatedReaderDecryptionMode::OnlyAuthenticatedData,
         )
@@ -1228,8 +1228,8 @@ mod tests {
             encrypt_parameters: Some((KEY, NONCE)),
         };
         // read without tag checking
-        let mut encrypt_r = EncryptionLayerFailSafeReader::new_skip_header(
-            Box::new(RawLayerFailSafeReader::new(trunc)),
+        let mut encrypt_r = EncryptionLayerTruncatedReader::new_skip_header(
+            Box::new(RawLayerTruncatedReader::new(trunc)),
             &config,
             TruncatedReaderDecryptionMode::DataEvenUnauthenticated,
         )

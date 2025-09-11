@@ -19,10 +19,10 @@ pub enum Error {
     /// starting at the beginning of a block?
     WrongBlockSubFileType,
     /// An error has occurred while converting into UTF8. This error could
-    /// happens while parsing the block filename
+    /// happens while parsing the entry data name
     UTF8ConversionError(std::string::FromUtf8Error),
-    /// Filenames have a limited size `FILENAME_MAX_SIZE`
-    FilenameTooLong,
+    /// `EntryNames` have a limited size `ENTRY_NAME_MAX_SIZE`
+    EntryNameTooLong,
     /// The writer state is not in the expected state for the current operation
     WrongArchiveWriterState {
         current_state: String,
@@ -44,7 +44,7 @@ pub enum Error {
     /// Serialization error. May happens on I/O errors
     SerializationError,
     /// Missing metadata (usually means the footer has not been correctly read,
-    /// a repair might be needed)
+    /// a `clean-truncated` operation might be needed)
     MissingMetadata,
     /// Error returned on API call with incorrect argument
     BadAPIArgument(String),
@@ -52,8 +52,8 @@ pub enum Error {
     EndOfStream,
     /// An error happens in the configuration
     ConfigError(ConfigError),
-    /// Filename already used
-    DuplicateFilename,
+    /// `EntryName` already used
+    DuplicateEntryName,
     /// Wrong tag while decrypting authenticated data
     AuthenticatedDecryptionWrongTag,
     /// Unable to expand while using the HKDF
@@ -138,25 +138,25 @@ pub enum TruncatedReadError {
     /// An error occurs in the middle of a file
     ErrorInFile(io::Error, String),
     /// A file ID is being reused
-    ArchiveFileIDReuse(ArchiveEntryId),
-    /// A filename is being reused
-    FilenameReuse(String),
+    ArchiveEntryIDReuse(ArchiveEntryId),
+    /// An entry name is being reused
+    EntryNameReuse(String),
     /// Data for a file already closed
-    ArchiveFileIDAlreadyClose(ArchiveEntryId),
+    ArchiveEntryIDAlreadyClosed(ArchiveEntryId),
     /// Content for an unknown file
     ContentForUnknownFile(ArchiveEntryId),
     /// Termination of an unknwown file
     EOFForUnknownFile(ArchiveEntryId),
     /// Wraps an already existing error and indicates which files are not
     /// finished (a file can be finished but uncompleted)
-    UnfinishedFiles {
-        filenames: Vec<EntryName>,
+    UnfinishedEntries {
+        names: Vec<EntryName>,
         stopping_error: Box<TruncatedReadError>,
     },
     /// End of original archive reached - this is the best case
     EndOfOriginalArchiveData,
-    /// Error in the `FailSafeReader` internal state
-    FailSafeReadInternalError,
+    /// Error in the `TruncatedReader` internal state
+    TruncatedReadInternalError,
     /// The file's hash does not correspond to the expected one
     HashDiffers {
         expected: Vec<u8>,
