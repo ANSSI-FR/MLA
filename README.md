@@ -20,9 +20,9 @@ MLA is an archive file format with the following features:
   * Entry chunks can be interleaved (one can add the beginning of an entry, start a second one, and then continue adding the first entry's parts)
 * Architecture agnostic and portable to some extent (written entirely in Rust)
 * Archive reading is seekable, even if compressed or encrypted. An entry can be accessed in the middle of the archive without reading from the beginning
-* If truncated, archives can be repaired to some extent. Two modes are available:
-  * Authenticated repair (default): only authenticated (as in AEAD, there is no signature verification) encrypted chunks of data are retrieved
-  * Unauthenticated repair: authenticated and unauthenticated encrypted chunks of data are retrieved. Use at your own risk.
+* If truncated, archives can be recovered to some extent. Two modes are available:
+  * Authenticated recover (default): only authenticated (as in AEAD, there is no signature verification) encrypted chunks of data are retrieved
+  * Unauthenticated recover: authenticated and unauthenticated encrypted chunks of data are retrieved. Use at your own risk.
 * Arguably less prone to bugs, especially while parsing an untrusted archive (Rust safety)
 
 # Repository

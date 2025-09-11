@@ -5,7 +5,7 @@ use brotli::BrotliState;
 use brotli::writer::StandardAlloc;
 
 use crate::layers::traits::{
-    InnerWriterTrait, InnerWriterType, LayerFailSafeReader, LayerReader, LayerWriter,
+    InnerWriterTrait, InnerWriterType, LayerReader, LayerTruncatedReader, LayerWriter,
 };
 use crate::{EMPTY_TAIL_OPTS_SERIALIZATION, Error, MLADeserialize, MLASerialize, Opts};
 
@@ -702,8 +702,8 @@ impl<'a, W: 'a + InnerWriterTrait> Write for CompressionLayerWriter<'a, W> {
 
 // ---------- Fail-Safe Reader ----------
 
-/// Internal state for the `CompressionLayerFailSafeReader`
-enum CompressionLayerFailSafeReaderState<R: Read> {
+/// Internal state for the `CompressionLayerTruncatedReader`
+enum CompressionLayerTruncatedReaderState<R: Read> {
     /// Ready contains the real inner destination
     /// Only used for the initialization
     Ready(R),
@@ -753,30 +753,30 @@ enum CompressionLayerFailSafeReaderState<R: Read> {
     Empty,
 }
 
-pub struct CompressionLayerFailSafeReader<'a, R: 'a + Read> {
-    state: CompressionLayerFailSafeReaderState<Box<dyn 'a + LayerFailSafeReader<'a, R>>>,
+pub struct CompressionLayerTruncatedReader<'a, R: 'a + Read> {
+    state: CompressionLayerTruncatedReaderState<Box<dyn 'a + LayerTruncatedReader<'a, R>>>,
 }
 
-impl<'a, R: 'a + Read> CompressionLayerFailSafeReader<'a, R> {
-    fn new_skip_header(inner: Box<dyn 'a + LayerFailSafeReader<'a, R>>) -> Self {
+impl<'a, R: 'a + Read> CompressionLayerTruncatedReader<'a, R> {
+    fn new_skip_header(inner: Box<dyn 'a + LayerTruncatedReader<'a, R>>) -> Self {
         Self {
-            state: CompressionLayerFailSafeReaderState::Ready(inner),
+            state: CompressionLayerTruncatedReaderState::Ready(inner),
         }
     }
 
     pub fn new_skip_magic(
-        mut inner: Box<dyn 'a + LayerFailSafeReader<'a, R>>,
+        mut inner: Box<dyn 'a + LayerTruncatedReader<'a, R>>,
     ) -> Result<Self, Error> {
         let _ = Opts::from_reader(&mut inner)?; // No option handled at the moment
         Ok(Self::new_skip_header(inner))
     }
 }
 
-impl<'a, R: 'a + Read> LayerFailSafeReader<'a, R> for CompressionLayerFailSafeReader<'a, R> {}
+impl<'a, R: 'a + Read> LayerTruncatedReader<'a, R> for CompressionLayerTruncatedReader<'a, R> {}
 
 const FAIL_SAFE_BUFFER_SIZE: usize = 4096;
 
-impl<'a, R: 'a + Read> Read for CompressionLayerFailSafeReader<'a, R> {
+impl<'a, R: 'a + Read> Read for CompressionLayerTruncatedReader<'a, R> {
     /// This `read` is expected to end by failing
     ///
     /// Even in the best configuration, when the inner layer is not broken, the
@@ -786,10 +786,10 @@ impl<'a, R: 'a + Read> Read for CompressionLayerFailSafeReader<'a, R> {
         // Use this mem::replace trick to be able to get back the compressor
         // inner and freely move from CompressionLayerReaderState to others
         let old_state =
-            std::mem::replace(&mut self.state, CompressionLayerFailSafeReaderState::Empty);
+            std::mem::replace(&mut self.state, CompressionLayerTruncatedReaderState::Empty);
         match old_state {
-            CompressionLayerFailSafeReaderState::Ready(inner) => {
-                self.state = CompressionLayerFailSafeReaderState::InData {
+            CompressionLayerTruncatedReaderState::Ready(inner) => {
+                self.state = CompressionLayerTruncatedReaderState::InData {
                     cache: vec![0u8; FAIL_SAFE_BUFFER_SIZE],
                     read_offset: 0,
                     cache_filled_offset: 0,
@@ -803,7 +803,7 @@ impl<'a, R: 'a + Read> Read for CompressionLayerFailSafeReader<'a, R> {
                 };
                 self.read(buf)
             }
-            CompressionLayerFailSafeReaderState::InData {
+            CompressionLayerTruncatedReaderState::InData {
                 mut cache,
                 mut read_offset,
                 mut cache_filled_offset,
@@ -813,7 +813,7 @@ impl<'a, R: 'a + Read> Read for CompressionLayerFailSafeReader<'a, R> {
             } => {
                 if uncompressed_read > UNCOMPRESSED_DATA_SIZE {
                     return Err(Error::WrongReaderState(
-                        "[Compress FailSafe Layer] Too much data read".to_string(),
+                        "[Compress Truncated Layer] Too much data read".to_string(),
                     )
                     .into());
                 }
@@ -914,7 +914,7 @@ impl<'a, R: 'a + Read> Read for CompressionLayerFailSafeReader<'a, R> {
                     )),
                 };
 
-                self.state = CompressionLayerFailSafeReaderState::InData {
+                self.state = CompressionLayerTruncatedReaderState::InData {
                     cache,
                     cache_filled_offset,
                     read_offset,
@@ -925,7 +925,7 @@ impl<'a, R: 'a + Read> Read for CompressionLayerFailSafeReader<'a, R> {
 
                 ret
             }
-            CompressionLayerFailSafeReaderState::Empty => Err(Error::WrongReaderState(
+            CompressionLayerTruncatedReaderState::Empty => Err(Error::WrongReaderState(
                 "[Compression Layer] Should never happen, unless an error already occurs before"
                     .to_string(),
             )
@@ -939,7 +939,7 @@ mod tests {
     use super::*;
     use crate::config::ArchiveWriterConfig;
 
-    use crate::layers::raw::{RawLayerFailSafeReader, RawLayerReader, RawLayerWriter};
+    use crate::layers::raw::{RawLayerReader, RawLayerTruncatedReader, RawLayerWriter};
     use brotli::writer::StandardAlloc;
     use rand::SeedableRng;
     use rand::distributions::{Alphanumeric, Distribution, Standard};
@@ -1130,7 +1130,7 @@ mod tests {
     }
 
     #[test]
-    fn compress_failsafe_layer() {
+    fn compress_truncated_layer() {
         // Compress then decompress with Fail-Safe Layer structs
 
         for data in [get_data(), get_uncompressable_data()] {
@@ -1144,8 +1144,8 @@ mod tests {
             let now = Instant::now();
             comp.write_all(bytes).unwrap();
             let file = comp.finalize().unwrap();
-            let mut decomp = Box::new(CompressionLayerFailSafeReader::new_skip_header(Box::new(
-                RawLayerFailSafeReader::new(file.as_slice()),
+            let mut decomp = Box::new(CompressionLayerTruncatedReader::new_skip_header(Box::new(
+                RawLayerTruncatedReader::new(file.as_slice()),
             )));
             let mut buf = Vec::new();
             // This must ends with an error, when we start reading the footer (invalid for decompression)
@@ -1162,7 +1162,7 @@ mod tests {
     }
 
     #[test]
-    fn compress_failsafe_truncated() {
+    fn compress_truncated_truncated() {
         // Compress then decompress with Fail-Safe Layer structs, while truncating the intermediate buffer
 
         for data in [get_data(), get_uncompressable_data()] {
@@ -1180,8 +1180,8 @@ mod tests {
             // Truncate at the middle
             let stop = file.len() / 2;
 
-            let mut decomp = Box::new(CompressionLayerFailSafeReader::new_skip_header(Box::new(
-                RawLayerFailSafeReader::new(&file[..stop]),
+            let mut decomp = Box::new(CompressionLayerTruncatedReader::new_skip_header(Box::new(
+                RawLayerTruncatedReader::new(&file[..stop]),
             )));
             let mut buf = Vec::new();
             // This is expected to ends with an error
@@ -1330,21 +1330,21 @@ mod tests {
         ));
         comp.write_all(bytes).unwrap();
 
-        let file2 = Vec::new();
+        let entry2 = Vec::new();
         let config2 = ArchiveWriterConfig::without_encryption_without_signature()
             .unwrap()
             .with_compression_level(5)
             .unwrap();
         let mut comp2 = Box::new(CompressionLayerWriter::new_skip_header(
-            Box::new(RawLayerWriter::new(file2)),
+            Box::new(RawLayerWriter::new(entry2)),
             &config2.compression.unwrap(),
         ));
         comp2.write_all(bytes).unwrap();
 
-        // file2 must be better compressed than file
+        // entry2 must be better compressed than file
         let file = comp.finalize().unwrap();
-        let file2 = comp2.finalize().unwrap();
-        assert!(file.len() > file2.len());
+        let entry2 = comp2.finalize().unwrap();
+        assert!(file.len() > entry2.len());
 
         // Check content
         let buf = Cursor::new(file.as_slice());
@@ -1354,7 +1354,7 @@ mod tests {
         );
         decomp.initialize().unwrap();
         decomp.read_to_end(&mut buf_out).unwrap();
-        let buf2 = Cursor::new(file2.as_slice());
+        let buf2 = Cursor::new(entry2.as_slice());
         let mut buf_2_out = Vec::new();
         let mut decomp = Box::new(
             CompressionLayerReader::new_skip_header(Box::new(RawLayerReader::new(buf2))).unwrap(),

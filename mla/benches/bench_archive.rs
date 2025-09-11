@@ -330,14 +330,14 @@ fn read_one_file_by_chunk(
     );
 
     // Get the file (costly as `seek` are implied)
-    let subfile = mla_read
+    let entry = mla_read
         .get_entry(EntryName::from_path("file_0").unwrap())
         .unwrap()
         .unwrap();
 
     // Read iters * size bytes
     let start = Instant::now();
-    let mut src = subfile.data;
+    let mut src = entry.data;
     for _i in 0..iters {
         io::copy(&mut (&mut src).take(size), &mut io::sink()).unwrap();
     }
@@ -378,7 +378,7 @@ pub fn reader_multiple_layers_multiple_block_size(c: &mut Criterion) {
 /// Create an archive with a `iters` files of `size` bytes using `layers` and
 /// measure the time needed to read them (in a random order)
 ///
-/// This function is used to measure only the `get_file` + read time without the
+/// This function is used to measure only the `get_entry` + read time without the
 /// cost of archive creation
 fn iter_read_multifiles_random(
     iters: u64,
@@ -409,11 +409,11 @@ fn iter_read_multifiles_random(
     )
     .iter()
     {
-        let subfile = mla_read
+        let entry = mla_read
             .get_entry(EntryName::from_path(format!("file_{i}")).unwrap())
             .unwrap()
             .unwrap();
-        let mut src = subfile.data;
+        let mut src = entry.data;
         io::copy(&mut (&mut src).take(size), &mut io::sink()).unwrap();
     }
     start.elapsed()
@@ -482,11 +482,11 @@ fn iter_decompress_multifiles_linear(
         pubkey,
     );
 
-    let fnames: Vec<EntryName> = mla_read.list_entries().unwrap().cloned().collect();
+    let entries: Vec<EntryName> = mla_read.list_entries().unwrap().cloned().collect();
     // Measure the time needed to get and read a file
     // Prepare output
     let mut export: HashMap<&EntryName, io::Sink> =
-        fnames.iter().map(|fname| (fname, io::sink())).collect();
+        entries.iter().map(|entry| (entry, io::sink())).collect();
     let start = Instant::now();
     linear_extract(&mut mla_read, &mut export).unwrap();
     start.elapsed()
@@ -534,10 +534,10 @@ pub fn reader_multiple_layers_multiple_block_size_multifiles_linear(c: &mut Crit
     group.finish();
 }
 
-/// Create an archive then repair it.
+/// Create an archive then `clean-truncate` it.
 ///
-/// Return the time taken by the repair operation
-fn repair_archive(
+/// Return the time taken by the `clean-truncated` operation
+fn clean_truncated_archive(
     iters: u64,
     size: u64,
     compression: bool,
@@ -558,8 +558,7 @@ fn repair_archive(
     let buf = Cursor::new(data);
     let dest = Vec::new();
 
-    // No need to truncate the data, repair the whole file
-    let mut mla_repair = TruncatedArchiveReader::from_config(buf, config).unwrap();
+    let mut mla_clean_truncated = TruncatedArchiveReader::from_config(buf, config).unwrap();
     // Avoid any layers to speed up writing, as this is not the measurement target
     let writer_config = ArchiveWriterConfig::without_encryption_without_signature()
         .unwrap()
@@ -568,17 +567,17 @@ fn repair_archive(
 
     let start = Instant::now();
     // Measure the convert_to_archive time
-    mla_repair.convert_to_archive(mla_output).unwrap();
+    mla_clean_truncated.convert_to_archive(mla_output).unwrap();
     start.elapsed()
 }
 
-/// This benchmark measures the time needed to repair an archive depending on the
+/// This benchmark measures the time needed to `clean-truncated` an archive depending on the
 /// enabled layers.
 ///
 /// Only one-size is used, as the archive must be big enough to be representative
-pub fn failsafe_multiple_layers_repair(c: &mut Criterion) {
+pub fn truncated_multiple_layers_clean_truncated(c: &mut Criterion) {
     let size = 4 * MB as u64;
-    let mut group = c.benchmark_group("failsafe_multiple_layers_repair");
+    let mut group = c.benchmark_group("truncated_multiple_layers_clean_truncated");
     group.sample_size(10);
     group.throughput(Throughput::Bytes(size));
 
@@ -596,7 +595,7 @@ pub fn failsafe_multiple_layers_repair(c: &mut Criterion) {
             ),
             move |b| {
                 b.iter_custom(|iters| {
-                    repair_archive(
+                    clean_truncated_archive(
                         iters,
                         size,
                         *compression,
@@ -617,7 +616,7 @@ criterion_group!(
     reader_multiple_layers_multiple_block_size,
     reader_multiple_layers_multiple_block_size_multifiles_random,
     reader_multiple_layers_multiple_block_size_multifiles_linear,
-    failsafe_multiple_layers_repair,
+    truncated_multiple_layers_clean_truncated,
     // Was used to determine the best default compression quality ratio
     //
     // multiple_compression_quality,

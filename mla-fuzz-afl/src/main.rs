@@ -314,7 +314,7 @@ fn run(data: &mut [u8]) {
     let mut mla = ArchiveWriter::from_config(&mut buf, archive_config).unwrap();
 
     let mut num2id: HashMap<u8, mla::entry::ArchiveEntryId> = HashMap::new();
-    let mut filename2content: HashMap<String, Vec<u8>> = HashMap::new();
+    let mut entry_name2content: HashMap<String, Vec<u8>> = HashMap::new();
 
     for part in &test_case.parts {
         let num = if part.is_empty() {
@@ -323,9 +323,9 @@ fn run(data: &mut [u8]) {
             part[0]
                 % u8::try_from(test_case.filenames.len()).expect("Failed to convert length to u8")
         };
-        let fname = &test_case.filenames[num as usize];
+        let name = &test_case.filenames[num as usize];
 
-        let Ok(entry_name) = EntryName::from_arbitrary_bytes(fname.as_bytes()) else {
+        let Ok(entry_name) = EntryName::from_arbitrary_bytes(name.as_bytes()) else {
             continue; // Skip parts with invalid filename
         };
 
@@ -333,7 +333,7 @@ fn run(data: &mut [u8]) {
             *id
         } else {
             match mla.start_entry(entry_name.clone()) {
-                Err(Error::DuplicateFilename) => return,
+                Err(Error::DuplicateEntryName) => return,
                 Err(err) => panic!("Start block failed {err}"),
                 Ok(id) => {
                     num2id.insert(num, id);
@@ -345,15 +345,15 @@ fn run(data: &mut [u8]) {
         mla.append_entry_content(id, part.len() as u64, &part[..])
             .expect("Add part failed");
 
-        let content = filename2content.entry(fname.clone()).or_default();
+        let content = entry_name2content.entry(name.clone()).or_default();
         content.extend(part);
     }
 
     // Start entries missing from parts (with no content)
     // Also skip invalid entry names
-    for (i, fname) in test_case.filenames.iter().enumerate() {
-        if !filename2content.contains_key(fname)
-            && let Ok(entry_name) = EntryName::from_arbitrary_bytes(fname.as_bytes())
+    for (i, name) in test_case.filenames.iter().enumerate() {
+        if !entry_name2content.contains_key(name)
+            && let Ok(entry_name) = EntryName::from_arbitrary_bytes(name.as_bytes())
             && let Ok(id) = mla.start_entry(entry_name)
         {
             num2id.insert(
@@ -378,32 +378,32 @@ fn run(data: &mut [u8]) {
     let mut mla_read = ArchiveReader::from_config(buf, config).unwrap().0;
 
     // Check the list of files is correct
-    let mut flist: Vec<String> = mla_read
+    let mut actual_entry_names: Vec<String> = mla_read
         .list_entries()
         .unwrap()
         .map(mla::entry::EntryName::raw_content_to_escaped_string)
         .collect();
-    flist.sort();
+    actual_entry_names.sort();
 
     // Read expected filenames, convert to escaped EntryName strings
-    let mut tflist: Vec<String> = test_case
+    let mut expected_entry_names: Vec<String> = test_case
         .filenames
         .iter()
-        .filter_map(|fname| {
-            EntryName::from_arbitrary_bytes(fname.as_bytes())
+        .filter_map(|name| {
+            EntryName::from_arbitrary_bytes(name.as_bytes())
                 .ok()
                 .map(|entry| entry.raw_content_to_escaped_string())
         })
         .collect();
-    tflist.sort();
-    tflist.dedup();
+    expected_entry_names.sort();
+    expected_entry_names.dedup();
 
-    assert_eq!(flist, tflist);
+    assert_eq!(actual_entry_names, expected_entry_names);
 
     // Verify file contents
     let empty = Vec::new();
-    for fname in &test_case.filenames {
-        let Ok(entry_name) = EntryName::from_arbitrary_bytes(fname.as_bytes()) else {
+    for name in &test_case.filenames {
+        let Ok(entry_name) = EntryName::from_arbitrary_bytes(name.as_bytes()) else {
             continue;
         };
 
@@ -411,14 +411,14 @@ fn run(data: &mut [u8]) {
             continue;
         };
 
-        let expected = filename2content.get(fname).unwrap_or(&empty);
+        let expected = entry_name2content.get(name).unwrap_or(&empty);
         let mut readback = Vec::new();
         if mla_file.data.read_to_end(&mut readback).is_ok() {
             assert_eq!(readback, *expected);
         }
     }
 
-    // === TruncatedArchiveReader repair test (simulate corruption) ===
+    // === TruncatedArchiveReader `clean-truncated` test (simulate corruption) ===
     if !test_case.byteflip.is_empty() {
         let mut corrupted = dest.clone();
 
@@ -438,58 +438,63 @@ fn run(data: &mut [u8]) {
         ) {
             Ok(mut tr) => {
                 // We'll try to salvage it into a new buffer
-                let mut repaired = Vec::new();
+                let mut clean_truncated = Vec::new();
                 let out_cfg = ArchiveWriterConfig::without_encryption_without_signature().unwrap();
-                let mla_out = ArchiveWriter::from_config(&mut repaired, out_cfg).unwrap();
+                let mla_out = ArchiveWriter::from_config(&mut clean_truncated, out_cfg).unwrap();
 
                 match tr.convert_to_archive(mla_out) {
                     Ok(result) => {
                         eprintln!("Repair finished with: {result:?}");
 
-                        // Re-parse the repaired archive to ensure it's valid
+                        // Re-parse the `clean-truncated` archive to ensure it's valid
                         let reader_cfg = ArchiveReaderConfig::without_signature_verification()
                             .without_encryption();
-                        if let Ok((mut recovered_read, _)) =
-                            ArchiveReader::from_config(Cursor::new(repaired.as_slice()), reader_cfg)
-                        {
-                            // Verify recovered file list and contents
-                            let mut recovered_list: Vec<String> = recovered_read
+                        if let Ok((mut clean_truncated_read, _)) = ArchiveReader::from_config(
+                            Cursor::new(clean_truncated.as_slice()),
+                            reader_cfg,
+                        ) {
+                            // Verify `clean-truncated` entries list and contents
+                            let mut clean_truncated_list: Vec<String> = clean_truncated_read
                                 .list_entries()
                                 .unwrap()
                                 .map(mla::entry::EntryName::raw_content_to_escaped_string)
                                 .collect();
-                            recovered_list.sort();
+                            clean_truncated_list.sort();
 
-                            for recovered_file in &recovered_list {
-                                if tflist.binary_search(recovered_file).is_err() {
-                                    // Log and skip unexpected recovered files (possibly corrupted/mangled)
+                            for clean_truncated_file in &clean_truncated_list {
+                                if expected_entry_names
+                                    .binary_search(clean_truncated_file)
+                                    .is_err()
+                                {
+                                    // Log and skip unexpected `clean-truncated` files (possibly corrupted/mangled)
                                     eprintln!(
-                                        "Warning: unexpected recovered file: {recovered_file}"
+                                        "Warning: unexpected `clean-truncated` archive file: {clean_truncated_file}"
                                     );
                                 }
                             }
 
-                            for fname in &tflist {
+                            for name in &expected_entry_names {
                                 let Ok(entry_name) =
-                                    EntryName::from_arbitrary_bytes(fname.as_bytes())
+                                    EntryName::from_arbitrary_bytes(name.as_bytes())
                                 else {
                                     continue;
                                 };
 
-                                let Ok(Some(mut mla_file)) = recovered_read.get_entry(entry_name)
+                                let Ok(Some(mut mla_file)) =
+                                    clean_truncated_read.get_entry(entry_name)
                                 else {
                                     continue;
                                 };
 
-                                let mut recovered_data = Vec::new();
-                                if mla_file.data.read_to_end(&mut recovered_data).is_ok() {
-                                    let expected = filename2content.get(fname).unwrap_or(&empty);
+                                let mut clean_truncated_data = Vec::new();
+                                if mla_file.data.read_to_end(&mut clean_truncated_data).is_ok() {
+                                    let expected = entry_name2content.get(name).unwrap_or(&empty);
 
-                                    if recovered_data != *expected {
+                                    if clean_truncated_data != *expected {
                                         eprintln!(
-                                            "Recovered content mismatch for file `{fname}`.\nExpected: {expected:02x?}\nRecovered: {recovered_data:02x?}"
+                                            "Data mismatch after clean truncation for file `{name}`.\nExpected: {expected:02x?}\nRecovered: {clean_truncated_data:02x?}"
                                         );
-                                        // Don't panic during recovery verification as it is expected to be imperfect
+                                        // Don't panic during clean truncation verification as it is expected to be imperfect
                                     }
                                 }
                             }

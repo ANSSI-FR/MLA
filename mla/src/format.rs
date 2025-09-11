@@ -174,7 +174,7 @@ where
                 let id = ArchiveEntryId::deserialize(&mut src)?;
                 let opts = Opts::from_reader(&mut src)?;
                 let length = u64::deserialize(&mut src)?;
-                // /!\ WARNING: to avoid loading this entire subfileblock's contents
+                // /!\ WARNING: to avoid loading this entire entry block's contents
                 // in-memory, the `data` reader is None; the `src` now starts at the
                 // beginning of the data
                 Ok(ArchiveEntryBlock::EntryContent {

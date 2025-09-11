@@ -48,7 +48,7 @@ int test_writer()
     MLAStatus status = MLA_STATUS(MLA_STATUS_SUCCESS);
     MLAWriterConfigHandle hConfig = NULL;
     MLAArchiveHandle hArchive = NULL;
-    MLAArchiveFileHandle hFile = NULL;
+    MLAArchiveEntryHandle hFile = NULL;
     long keySize = 0;
     size_t readLen = 0;
     const char *message = NULL;

@@ -217,30 +217,30 @@ fn upgrade(matches: &ArgMatches) -> Result<(), MlarError> {
 
     // Read the file list using metadata
     // v1 archive still uses files, not entries
-    let fnames: Vec<String> = mla_in
+    let entries: Vec<String> = mla_in
         .list_files()
         .inspect_err(|err| {
-            eprintln!("[ERROR] Archive is malformed or unreadable. Consider repairing the file. Details: {err}");
+            eprintln!("[ERROR] Archive is malformed or unreadable. Try to recover the file. Details: {err}");
         })
         .map_err(Into::<MlarError>::into)?
         .cloned()
         .collect();
 
-    for fname in fnames {
-        let escaped = mla_percent_escape(fname.as_bytes(), PATH_ESCAPED_STRING_ALLOWED_BYTES);
+    for entry in entries {
+        let escaped = mla_percent_escape(entry.as_bytes(), PATH_ESCAPED_STRING_ALLOWED_BYTES);
         // Safe to convert to UTF-8 string because all disallowed bytes are escaped
-        let escaped_fname = String::from_utf8(escaped)
+        let escaped_entry = String::from_utf8(escaped)
             .expect("[ERROR] mla_percent_escape should produce valid UTF-8");
 
-        eprintln!(" adding: {escaped_fname}");
+        eprintln!(" adding: {escaped_entry}");
 
-        let sub_file = match mla_in.get_file(fname.clone()) {
+        let entry = match mla_in.get_file(entry.clone()) {
             Err(err) => {
-                eprintln!("[ERROR] Failed to add {escaped_fname} ({err:?})");
+                eprintln!("[ERROR] Failed to add {escaped_entry} ({err:?})");
                 return Err(err.into());
             }
             Ok(None) => {
-                let msg = format!("Unable to find {escaped_fname}");
+                let msg = format!("Unable to find {escaped_entry}");
                 return Err(MlarError::MlaV1(mla_v1::errors::Error::IOError(
                     io::Error::new(io::ErrorKind::NotFound, format!("[ERROR] {msg}")),
                 )));
@@ -249,14 +249,14 @@ fn upgrade(matches: &ArgMatches) -> Result<(), MlarError> {
         };
 
         // Normalize Windows paths by replacing backslashes with slashes
-        let normalized_filename = sub_file.filename.replace('\\', "/");
+        let normalized_filename = entry.filename.replace('\\', "/");
         let Ok(new_entry_name) = EntryName::from_path(normalized_filename) else {
             eprintln!("[ERROR] Invalid or empty entry name");
             return Err(MlarError::InvalidEntryNameToPath);
         };
 
-        if let Err(e) = mla_out.add_entry(new_entry_name, sub_file.size, sub_file.data) {
-            let msg = format!("Failed to add entry {escaped_fname}: {e}");
+        if let Err(e) = mla_out.add_entry(new_entry_name, entry.size, entry.data) {
+            let msg = format!("Failed to add entry {escaped_entry}: {e}");
             return Err(MlarError::Mla(Error::Other(format!("[ERROR] {msg}"))));
         }
     }
