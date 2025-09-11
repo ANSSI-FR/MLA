@@ -10,6 +10,8 @@ use std::collections::HashMap;
 use std::hash::BuildHasher;
 use std::io::{self, Read, Seek, Write};
 
+const DEFAULT_BUFFER_SIZE: usize = 128 * 1024;
+
 /// Escaping function used by MLA, but may be useful for others
 ///
 /// This generic escaping is described in `doc/ENTRY_NAME.md`
@@ -102,7 +104,7 @@ pub fn linear_extract<W1: InnerWriterTrait, R: InnerReaderTrait, S: BuildHasher>
 
     // Use a BufReader to cache, by merging them into one bigger read, small
     // read calls (like the ones on ArchiveEntryBlock reading)
-    let mut src = io::BufReader::new(&mut archive.src);
+    let mut src = io::BufReader::with_capacity(DEFAULT_BUFFER_SIZE, &mut archive.src);
 
     // Associate an ID in the archive to the corresponding name
     // Do not directly associate to the writer to keep an easier fn API
