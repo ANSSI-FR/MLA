@@ -14,7 +14,7 @@ use crate::layers::traits::{
 };
 use crate::{EMPTY_TAIL_OPTS_SERIALIZATION, Error, MLADeserialize, MLASerialize, Opts};
 use std::io;
-use std::io::{BufReader, Cursor, Read, Seek, SeekFrom, Write};
+use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 
 use crate::errors::ConfigError;
 use kem::{Decapsulate, Encapsulate};
@@ -444,9 +444,7 @@ impl<W: InnerWriterTrait> Write for InternalEncryptionLayerWriter<'_, W> {
             NORMAL_CHUNK_PT_SIZE - self.current_chunk_offset,
         );
         let mut buf_tmp =
-            Vec::with_capacity(usize::try_from(size).expect("Failed to convert size to usize"));
-        let buf_src = BufReader::new(buf);
-        io::copy(&mut buf_src.take(size), &mut buf_tmp)?;
+            buf[..usize::try_from(size).expect("Failed to convert size to usize")].to_vec();
         self.cipher.encrypt(&mut buf_tmp);
         self.inner.write_all(&buf_tmp)?;
         self.current_chunk_offset += size;
