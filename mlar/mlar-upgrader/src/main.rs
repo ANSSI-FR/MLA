@@ -11,7 +11,8 @@ use mla::{
 };
 use std::io::{self, BufReader, BufWriter};
 
-const DEFAULT_BUFFER_SIZE: usize = 128 * 1024;
+// from http://cgit.git.savannah.gnu.org/cgit/coreutils.git/tree/src/ioblksize.h#n25
+const DEFAULT_BUFFER_SIZE: usize = 256 * 1024;
 const PATH_ESCAPED_STRING_ALLOWED_BYTES: &[u8; 65] =
     b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789./\\";
 
