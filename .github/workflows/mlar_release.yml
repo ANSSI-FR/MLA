@@ -1,4 +1,6 @@
 name: mlar release
+# This workflow builds and releases the MLAR binary across major platforms,
+# including legacy Windows 7 targets using tier-3 targets and custom std builds.
 
 permissions: {}
 
@@ -25,6 +27,16 @@ jobs:
           - build: windows
             os: windows-latest
             extension: .exe
+          - build: windows7-i686 # Win7-compatible build using tier 3 target
+            os: windows-latest
+            target: i686-win7-windows-msvc
+            cargo_build: --target i686-win7-windows-msvc -Z build-std # Build std from source, needed for tier 3 target
+            extension: .exe
+          - build: windows7-x86_64 # Win7-compatible build using tier 3 target
+            os: windows-latest
+            target: x86_64-win7-windows-msvc
+            cargo_build: --target x86_64-win7-windows-msvc -Z build-std # Build std from source, needed for tier 3 target
+            extension: .exe
 
     runs-on: ${{matrix.os}}
 
@@ -34,10 +46,19 @@ jobs:
       with:
         toolchain: stable
     - name: Set target if any
-      if: matrix.target
+      # Skip rustup target add for win7 targets — rustup doesn't support these tier-3 targets
+      if: matrix.target && !contains(matrix.target, 'win7')
       run: rustup target add ${{ matrix.target }}
+    - name: Install rust-src (only for win7)
+      # For win7 targets, manually build std by installing rust-src
+      if: contains(matrix.target, 'win7')
+      run: rustup component add rust-src
     - name: Build
       uses: actions-rs/cargo@ae10961054e4aa8b4aa7dffede299aaf087aa33b # v1.0.1
+      env:
+        # RUSTC_BOOTSTRAP=1 allows use of -Z build-std on stable toolchain
+        # Required because win7 targets aren't officially supported in stable
+        RUSTC_BOOTSTRAP: "${{ contains(matrix.target, 'win7') && '1' || '' }}"
       with:
         command: build
         args: --release --all-features --package mlar --verbose ${{ matrix.cargo_build }}
@@ -91,6 +112,18 @@ jobs:
           name: mlar-windows
           path: mlar-windows
 
+      - name: Download Windows 32-bit Win7 artifact
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          name: mlar-windows7-i686
+          path: mlar-windows7-i686
+
+      - name: Download Windows 64-bit Win7 artifact
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          name: mlar-windows7-x86_64
+          path: mlar-windows7-x86_64
+
       - name: Download MacOS artifact
         uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
@@ -116,6 +149,26 @@ jobs:
           asset_path: ./mlar-windows/mlar.exe
           asset_content_type: application/octet-stream
           asset_name: mlar-windows-${{ steps.get_version.outputs.VERSION }}.exe
+
+      - name: Release Windows 32-bit Win7 artifact
+        uses: actions/upload-release-asset@e8f9f06c4b078e705bd2ea027f0926603fc9b4d5 # v1.0.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./mlar-windows7-i686/mlar.exe
+          asset_content_type: application/octet-stream
+          asset_name: mlar-windows7-i686-${{ steps.get_version.outputs.VERSION }}.exe
+
+      - name: Release Windows 64-bit Win7 artifact
+        uses: actions/upload-release-asset@e8f9f06c4b078e705bd2ea027f0926603fc9b4d5 # v1.0.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./mlar-windows7-x86_64/mlar.exe
+          asset_content_type: application/octet-stream
+          asset_name: mlar-windows7-x86_64-${{ steps.get_version.outputs.VERSION }}.exe
 
       - name: Release MacOS artifact
         uses: actions/upload-release-asset@e8f9f06c4b078e705bd2ea027f0926603fc9b4d5 # v1.0.2
