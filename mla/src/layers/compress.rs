@@ -228,7 +228,7 @@ impl<'a, R: 'a + InnerReaderTrait> CompressionLayerReader<'a, R> {
         uncompressed_pos: u64,
     ) -> Result<brotli::Decompressor<Take<S>>, Error> {
         // Ensure it's a starting position
-        if uncompressed_pos % u64::from(UNCOMPRESSED_DATA_SIZE) != 0 {
+        if !uncompressed_pos.is_multiple_of(u64::from(UNCOMPRESSED_DATA_SIZE)) {
             return Err(Error::BadAPIArgument(
                 "[new_decompressor_at] not a starting position".to_string(),
             ));
@@ -260,7 +260,7 @@ impl<'a, R: 'a + InnerReaderTrait> CompressionLayerReader<'a, R> {
     /// `uncompressed_pos` must be a compressed block's starting position
     fn uncompressed_block_size_at(&self, uncompressed_pos: u64) -> Result<u32, Error> {
         // Ensure it's a starting position
-        if uncompressed_pos % u64::from(UNCOMPRESSED_DATA_SIZE) != 0 {
+        if !uncompressed_pos.is_multiple_of(u64::from(UNCOMPRESSED_DATA_SIZE)) {
             return Err(Error::BadAPIArgument(
                 "[uncompressed_block_size_at] not a starting position".to_string(),
             ));
@@ -295,7 +295,7 @@ impl<'a, R: 'a + InnerReaderTrait> CompressionLayerReader<'a, R> {
         uncompressed_pos: u64,
     ) -> Result<(), Error> {
         // Ensure it's a starting position
-        if uncompressed_pos % u64::from(UNCOMPRESSED_DATA_SIZE) != 0 {
+        if !uncompressed_pos.is_multiple_of(u64::from(UNCOMPRESSED_DATA_SIZE)) {
             return Err(Error::BadAPIArgument(
                 "[sync_inner_with_uncompressed_pos] not a starting position".to_string(),
             ));
