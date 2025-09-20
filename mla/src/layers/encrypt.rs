@@ -596,7 +596,7 @@ impl<R: Read> InternalEncryptionLayerReader<R> {
     }
 
     fn last_data_chunk_number(&self) -> u64 {
-        if self.all_plaintext_size % NORMAL_CHUNK_PT_SIZE == 0 {
+        if self.all_plaintext_size.is_multiple_of(NORMAL_CHUNK_PT_SIZE) {
             (self.all_plaintext_size / NORMAL_CHUNK_PT_SIZE).saturating_sub(1)
         } else {
             self.all_plaintext_size / NORMAL_CHUNK_PT_SIZE
