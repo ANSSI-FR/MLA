@@ -23,6 +23,16 @@ jobs:
           - build: windows
             os: windows-latest
             extension: .exe
+          - build: windows7-i686 # Win7-compatible build using tier 3 target
+            os: windows-latest
+            target: i686-win7-windows-msvc
+            cargo_build: --target i686-win7-windows-msvc -Z build-std # Build std from source, needed for tier 3 target
+            extension: .exe
+          - build: windows7-x86_64 # Win7-compatible build using tier 3 target
+            os: windows-latest
+            target: x86_64-win7-windows-msvc
+            cargo_build: --target x86_64-win7-windows-msvc -Z build-std # Build std from source, needed for tier 3 target
+            extension: .exe
 
     runs-on: ${{matrix.os}}
 
