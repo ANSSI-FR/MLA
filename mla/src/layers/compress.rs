@@ -764,7 +764,7 @@ pub struct CompressionLayerFailSafeReader<'a, R: 'a + Read> {
     /// Data read from the source, not yet used
     cache: Vec<u8>,
     /// Bytes valid in the cache : [0..`cache_filled_offset`[ (0 -> no valid data)
-    cache_filled_offset: usize,
+    cache_filled_len: usize,
     /// Next offset to read from the cache
     /// Invariant:
     ///     - `read_offset <= cache_filled_offset`
@@ -782,7 +782,7 @@ impl<'a, R: 'a + Read> CompressionLayerFailSafeReader<'a, R> {
         CompressionLayerFailSafeReader {
             cache: vec![0u8; FAIL_SAFE_BUFFER_INITIAL_SIZE],
             read_offset: 0,
-            cache_filled_offset: 0,
+            cache_filled_len: 0,
             brotli_state: Box::new(BrotliState::new(
                 StandardAlloc::default(),
                 StandardAlloc::default(),
@@ -801,7 +801,7 @@ impl<'a, R: 'a + Read> CompressionLayerFailSafeReader<'a, R> {
         match brotli::BrotliDecompressStream(
             &mut args.available_in,
             &mut args.input_offset,
-            &self.cache[self.read_offset..self.cache_filled_offset],
+            &self.cache[self.read_offset..self.cache_filled_len],
             &mut args.available_out,
             &mut args.output_offset,
             buf,
@@ -841,20 +841,18 @@ impl<'a, R: 'a + Read> CompressionLayerFailSafeReader<'a, R> {
                     // (NeedsMoreInput && output_offset == 0) means we can't produce output without more input
                     //
                     // if cache is full
-                    if self.read_offset == 0 && self.cache_filled_offset == self.cache.len() {
+                    if self.read_offset == 0 && self.cache_filled_len == self.cache.len() {
                         self.cache.resize(self.cache.len() + 1, 0);
                     } else {
                         // move cache content at offset zero to make room for other input
                         self.cache
-                            .copy_within(self.read_offset..self.cache_filled_offset, 0);
-                        self.cache_filled_offset -= self.read_offset;
+                            .copy_within(self.read_offset..self.cache_filled_len, 0);
+                        self.cache_filled_len -= self.read_offset;
                         self.read_offset = 0;
-                        self.cache.resize(self.cache_filled_offset + 1, 0);
+                        self.cache.resize(self.cache_filled_len + 1, 0);
                     }
 
-                    let read = self
-                        .inner
-                        .read(&mut self.cache[self.cache_filled_offset..])?;
+                    let read = self.inner.read(&mut self.cache[self.cache_filled_len..])?;
                     if read == 0 {
                         // No more data from inner and the cache has been fully read
                         // -> return either an error or Ok(0)
@@ -868,7 +866,7 @@ impl<'a, R: 'a + Read> CompressionLayerFailSafeReader<'a, R> {
                         // No more data available but not in a stream
                         return Ok(0);
                     }
-                    self.cache_filled_offset += read;
+                    self.cache_filled_len += read;
                     return self.read(buf);
                 }
                 Ok(args.output_offset)
