@@ -52,7 +52,7 @@ impl std::default::Default for CompressionConfig {
 impl ArchiveWriterConfig {
     /// Set the compression level
     /// compression level (0-11); bigger values cause denser, but slower compression
-    pub const fn with_compression_level(&mut self, compression_level: u32) -> ConfigResult {
+    pub const fn with_compression_level(&mut self, compression_level: u32) -> ConfigResult<'_> {
         if compression_level > 11 {
             Err(ConfigError::CompressionLevelOutOfRange)
         } else {
@@ -192,7 +192,7 @@ impl<'a, R: 'a + Read> CompressionLayerReader<'a, R> {
         uncompressed_pos: u64,
     ) -> Result<brotli::Decompressor<Take<S>>, Error> {
         // Ensure it's a starting position
-        if uncompressed_pos % u64::from(UNCOMPRESSED_DATA_SIZE) != 0 {
+        if !uncompressed_pos.is_multiple_of(u64::from(UNCOMPRESSED_DATA_SIZE)) {
             return Err(Error::BadAPIArgument(
                 "[new_decompressor_at] not a starting position".to_string(),
             ));
@@ -224,7 +224,7 @@ impl<'a, R: 'a + Read> CompressionLayerReader<'a, R> {
     /// `uncompressed_pos` must be a compressed block's starting position
     fn uncompressed_block_size_at(&self, uncompressed_pos: u64) -> Result<u32, Error> {
         // Ensure it's a starting position
-        if uncompressed_pos % u64::from(UNCOMPRESSED_DATA_SIZE) != 0 {
+        if !uncompressed_pos.is_multiple_of(u64::from(UNCOMPRESSED_DATA_SIZE)) {
             return Err(Error::BadAPIArgument(
                 "[uncompressed_block_size_at] not a starting position".to_string(),
             ));
@@ -261,7 +261,7 @@ impl<'a, R: 'a + Read> CompressionLayerReader<'a, R> {
         uncompressed_pos: u64,
     ) -> Result<(), Error> {
         // Ensure it's a starting position
-        if uncompressed_pos % u64::from(UNCOMPRESSED_DATA_SIZE) != 0 {
+        if !uncompressed_pos.is_multiple_of(u64::from(UNCOMPRESSED_DATA_SIZE)) {
             return Err(Error::BadAPIArgument(
                 "[sync_inner_with_uncompressed_pos] not a starting position".to_string(),
             ));
