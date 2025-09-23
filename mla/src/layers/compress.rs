@@ -849,7 +849,6 @@ impl<'a, R: 'a + Read> CompressionLayerFailSafeReader<'a, R> {
                             .copy_within(self.read_offset..self.cache_filled_len, 0);
                         self.cache_filled_len -= self.read_offset;
                         self.read_offset = 0;
-                        self.cache.resize(self.cache_filled_len + 1, 0);
                     }
 
                     let read = self.inner.read(&mut self.cache[self.cache_filled_len..])?;
@@ -898,13 +897,15 @@ impl<'a, R: 'a + Read> LayerFailSafeReader<'a, R> for CompressionLayerFailSafeRe
     }
 }
 
-const FAIL_SAFE_BUFFER_INITIAL_SIZE: usize = 1;
+const FAIL_SAFE_BUFFER_INITIAL_SIZE: usize = 4096;
 
 impl<'a, R: 'a + Read> Read for CompressionLayerFailSafeReader<'a, R> {
     /// This `read` may end by failing.
     /// Even in the best configuration, when the inner layer is not broken, the
     /// decompression will fail if attempting to read not-compressed data such as
-    /// `CompressionLayerReader` footer
+    /// `CompressionLayerReader` footer.
+    /// This is OK right now because the only usage is `TruncatedArchiveReader::convert_to_archive`
+    /// which stops reading when `EndOfArchiveData` is encountered.
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         if self.uncompressed_read > UNCOMPRESSED_DATA_SIZE {
             return Err(Error::WrongReaderState(
