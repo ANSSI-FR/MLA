@@ -696,7 +696,7 @@ impl ArchiveWriterState {
         &mut self,
         id: ArchiveFileID,
         src: R,
-    ) -> Result<HashWrapperReader<R>, Error> {
+    ) -> Result<HashWrapperReader<'_, R>, Error> {
         let hash = match self {
             Self::OpenedFiles { hashes, .. } => match hashes.get_mut(&id) {
                 Some(hash) => hash,
@@ -1245,9 +1245,8 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
     pub fn get_hash(&mut self, filename: &str) -> Result<Option<Sha256Hash>, Error> {
         if let Some(ArchiveFooter { files_info }) = &self.metadata {
             // Get file relative information
-            let file_info = match files_info.get(filename) {
-                None => return Ok(None),
-                Some(finfo) => finfo,
+            let Some(file_info) = files_info.get(filename) else {
+                return Ok(None);
             };
             // Set the inner layer at the start of the EoF tag
             self.src.seek(SeekFrom::Start(file_info.eof_offset))?;
@@ -1268,13 +1267,12 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
     pub fn get_file(
         &mut self,
         filename: String,
-    ) -> Result<Option<ArchiveFile<BlocksToFileReader<Box<dyn 'b + LayerReader<'b, R>>>>>, Error>
+    ) -> Result<Option<ArchiveFile<BlocksToFileReader<'_, Box<dyn 'b + LayerReader<'b, R>>>>>, Error>
     {
         if let Some(ArchiveFooter { files_info }) = &self.metadata {
             // Get file relative information
-            let file_info = match files_info.get(&filename) {
-                None => return Ok(None),
-                Some(finfo) => finfo,
+            let Some(file_info) = files_info.get(&filename) else {
+                return Ok(None);
             };
             if file_info.offsets.is_empty() {
                 return Err(Error::WrongReaderState(

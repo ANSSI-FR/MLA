@@ -102,7 +102,7 @@ struct Der25519PrivateStruct<'a> {
     data: DerObject<'a>,
 }
 
-fn parse_25519_private_header(i: &[u8]) -> IResult<&[u8], Der25519PrivateHeader, BerError> {
+fn parse_25519_private_header(i: &[u8]) -> IResult<&[u8], Der25519PrivateHeader<'_>, BerError> {
     parse_der_container(|i: &[u8], hdr| {
         if hdr.tag() != Tag::Sequence {
             return Err(nom::Err::Error(BerError::InvalidTag));
@@ -113,7 +113,7 @@ fn parse_25519_private_header(i: &[u8]) -> IResult<&[u8], Der25519PrivateHeader,
     })(i)
 }
 
-fn parse_25519_private(i: &[u8]) -> IResult<&[u8], Der25519PrivateStruct, BerError> {
+fn parse_25519_private(i: &[u8]) -> IResult<&[u8], Der25519PrivateStruct<'_>, BerError> {
     parse_der_container(|i: &[u8], hdr| {
         if hdr.tag() != Tag::Sequence {
             return Err(nom::Err::Error(BerError::InvalidTag));
@@ -185,7 +185,7 @@ struct DerEd25519PublicStruct<'a> {
     data: DerObject<'a>,
 }
 
-fn parse_25519_public_header(i: &[u8]) -> IResult<&[u8], DerEd25519PublicHeader, BerError> {
+fn parse_25519_public_header(i: &[u8]) -> IResult<&[u8], DerEd25519PublicHeader<'_>, BerError> {
     parse_der_container(|i: &[u8], hdr| {
         if hdr.tag() != Tag::Sequence {
             return Err(nom::Err::Error(BerError::InvalidTag));
@@ -196,7 +196,7 @@ fn parse_25519_public_header(i: &[u8]) -> IResult<&[u8], DerEd25519PublicHeader,
     })(i)
 }
 
-fn parse_25519_public(i: &[u8]) -> IResult<&[u8], DerEd25519PublicStruct, BerError> {
+fn parse_25519_public(i: &[u8]) -> IResult<&[u8], DerEd25519PublicStruct<'_>, BerError> {
     parse_der_container(|i: &[u8], hdr| {
         if hdr.tag() != Tag::Sequence {
             return Err(nom::Err::Error(BerError::InvalidTag));

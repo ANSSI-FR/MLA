@@ -346,13 +346,11 @@ pub extern "C" fn mla_archive_new(
         return MLAStatus::BadAPIArgument;
     }
 
-    let write_callback = match write_callback {
-        None => return MLAStatus::BadAPIArgument,
-        Some(x) => x,
+    let Some(write_callback) = write_callback else {
+        return MLAStatus::BadAPIArgument;
     };
-    let flush_callback = match flush_callback {
-        None => return MLAStatus::BadAPIArgument,
-        Some(x) => x,
+    let Some(flush_callback) = flush_callback else {
+        return MLAStatus::BadAPIArgument;
     };
 
     let config_ptr = unsafe { *config.cast::<*mut ArchiveWriterConfig>() };
@@ -577,17 +575,14 @@ pub extern "C" fn mla_roarchive_extract(
         return MLAStatus::BadAPIArgument;
     }
 
-    let read_callback = match read_callback {
-        None => return MLAStatus::BadAPIArgument,
-        Some(x) => x,
+    let Some(read_callback) = read_callback else {
+        return MLAStatus::BadAPIArgument;
     };
-    let seek_callback = match seek_callback {
-        None => return MLAStatus::BadAPIArgument,
-        Some(x) => x,
+    let Some(seek_callback) = seek_callback else {
+        return MLAStatus::BadAPIArgument;
     };
-    let file_callback = match file_callback {
-        None => return MLAStatus::BadAPIArgument,
-        Some(x) => x,
+    let Some(file_callback) = file_callback else {
+        return MLAStatus::BadAPIArgument;
     };
 
     let reader = CallbackInputRead {
@@ -677,9 +672,8 @@ pub extern "C" fn mla_roarchive_info(
     if info_out.is_null() {
         return MLAStatus::BadAPIArgument;
     }
-    let read_callback = match read_callback {
-        None => return MLAStatus::BadAPIArgument,
-        Some(x) => x,
+    let Some(read_callback) = read_callback else {
+        return MLAStatus::BadAPIArgument;
     };
 
     let mut reader = CallbackInputRead {

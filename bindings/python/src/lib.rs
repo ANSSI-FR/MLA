@@ -250,7 +250,7 @@ impl FileMetadata {
     }
 
     #[getter]
-    fn hash(&self) -> Option<Cow<[u8]>> {
+    fn hash(&self) -> Option<Cow<'_, [u8]>> {
         self.hash.as_ref().map(|h| Cow::Borrowed::<[u8]>(h))
     }
 
@@ -315,7 +315,7 @@ impl PublicKeys {
 
     /// DER representation of keys
     #[getter]
-    fn keys(&self) -> Vec<Cow<[u8]>> {
+    fn keys(&self) -> Vec<Cow<'_, [u8]>> {
         self.keys
             .iter()
             .map(|pubkey| Cow::Owned(Vec::from(pubkey.to_bytes())))
@@ -380,7 +380,7 @@ impl PrivateKeys {
     /// DER representation of keys
     /// :warning: This keys must be kept secrets!
     #[getter]
-    fn keys(&self) -> Vec<Cow<[u8]>> {
+    fn keys(&self) -> Vec<Cow<'_, [u8]>> {
         self.keys
             .iter()
             .map(|privkey| Cow::Owned(Vec::from(privkey.to_bytes())))
@@ -794,7 +794,7 @@ impl MLAFile {
     }
 
     /// Return the content of a file as bytes
-    fn __getitem__(&mut self, key: &str) -> Result<Cow<[u8]>, WrappedError> {
+    fn __getitem__(&mut self, key: &str) -> Result<Cow<'_, [u8]>, WrappedError> {
         let inner = check_mode!(mut self, Read);
         match inner {
             ExplicitReaders::FileReader(reader) => {
