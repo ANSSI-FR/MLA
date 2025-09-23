@@ -744,7 +744,7 @@ pub struct CompressionLayerFailSafeReader<'a, R: 'a + Read> {
     /// 2. decompress the data from the buffer
     ///     - if there is still data to decompress, go to 1.
     ///     - if this is the end of the stream, continue to 3.
-    /// 3. the decompressor may have read too many byte, ie. `[end of stream n-1][start of stream n]`
+    /// 3. the decompressor may have read too many bytes, ie. `[end of stream n-1][start of stream n]`
     ///    `                                                                     ^                 ^
     ///    `                                                                 `input_offset`    last read position
     /// 4. rewind, using the cache, to `input_offset`
@@ -919,8 +919,8 @@ impl<'a, R: 'a + Read> Read for CompressionLayerFailSafeReader<'a, R> {
             return Ok(0);
         }
 
-        // Number of byte available in the source
-        let available_in = self.cache_filled_offset - self.read_offset;
+        // Number of bytes available in the source
+        let available_in = self.cache_filled_len - self.read_offset;
         // IN: Offset in the source
         // OUT: Offset in the source after the decompression pass
         let input_offset = 0;
