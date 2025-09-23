@@ -923,10 +923,7 @@ impl<'a, R: 'a + Read> Read for CompressionLayerFailSafeReader<'a, R> {
         // OUT: Offset in the source after the decompression pass
         let input_offset = 0;
         // Available spaces in the output
-        let available_out = std::cmp::min(
-            buf.len(),
-            (UNCOMPRESSED_DATA_SIZE - self.uncompressed_read) as usize,
-        );
+        let available_out = buf.len();
         // IN: Offset in the output
         // OUT: number of bytes written in the output
         let output_offset = 0;
