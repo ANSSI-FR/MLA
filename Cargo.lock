@@ -39,9 +39,9 @@ dependencies = [
 
 [[package]]
 name = "afl"
-version = "0.15.22"
+version = "0.15.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69ea90f20590a1ccbff46d83e8ba2d34c66dbf8a342d5b9747973f5158c28001"
+checksum = "746729756c0b253f9c37ece4c337c4f64f7e9eb093deba90a8a1d58bffd45ce8"
 dependencies = [
  "home",
  "libc",
