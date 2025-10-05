@@ -1510,4 +1510,41 @@ mod tests {
         decomp.read_to_end(&mut buf_out2).unwrap();
         assert_eq!(buf_out, buf_out2);
     }
+
+    #[test]
+    fn test_new_brotli_stream_discards_old_cache() {
+        let data = b"0123456789";
+        let inner = std::io::Cursor::new(data);
+        let mut reader = BrotliStreamReader::new(inner);
+
+        let mut buf = [0; 10];
+        reader.read_exact(&mut buf).unwrap(); // cache now has all 10 bytes
+
+        // Start new brotli stream at offset 5 (i.e., keep "56789")
+        reader.new_brotli_stream(5);
+
+        // Ensure only the new stream is in cache
+        assert_eq!(&reader.cache, b"56789");
+
+        // Rewind to start of new stream
+        reader.rewind_to_stream_start();
+        let mut buf2 = [0; 5];
+        reader.read_exact(&mut buf2).unwrap();
+        assert_eq!(&buf2, b"56789");
+    }
+
+    #[test]
+    fn test_read_continues_after_cache() {
+        let data = b"abcdeFGHIJ";
+        let inner = std::io::Cursor::new(data);
+        let mut reader = BrotliStreamReader::new(inner);
+
+        let mut buf = [0; 5];
+        reader.read_exact(&mut buf).unwrap(); // read "abcde"
+        assert_eq!(&buf, b"abcde");
+
+        let mut buf2 = [0; 5];
+        reader.read_exact(&mut buf2).unwrap(); // read "FGHIJ" from inner
+        assert_eq!(&buf2, b"FGHIJ");
+    }
 }
