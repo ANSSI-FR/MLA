@@ -763,7 +763,7 @@ pub struct CompressionLayerFailSafeReader<'a, R: 'a + Read> {
     /// ```
     /// Data read from the source, not yet used
     cache: Vec<u8>,
-    /// Bytes valid in the cache : [0..`cache_filled_offset`[ (0 -> no valid data)
+    /// Bytes valid in the cache: [0..`cache_filled_offset`[ (0 -> no valid data)
     cache_filled_len: usize,
     /// Next offset to read from the cache
     /// Invariant:
@@ -896,7 +896,7 @@ impl<'a, R: 'a + Read> CompressionLayerFailSafeReader<'a, R> {
                     // byte by byte reading fails: we cannot recover anymore data
                     Err(io::Error::new(
                         io::ErrorKind::InvalidData,
-                        "Invalid Data while decompressing",
+                        "Invalid data while decompressing",
                     ))
                 } else {
                     // we retry with a cache size of 1 because BrotliDecompressStream
@@ -914,7 +914,8 @@ impl<'a, R: 'a + Read> CompressionLayerFailSafeReader<'a, R> {
                     self.uncompressed_read = 0;
                     // rewind to brotli stream start
                     self.inner.rewind_to_stream_start();
-                    // as we have rewound, do not output what has already been :
+                    // skip over bytes that were already decompressed before the rewind
+                    // by reading and discarding them into a sink, so they aren't returned again
                     io::copy(
                         &mut self.take(u64::from(number_of_already_decompressed_bytes)),
                         &mut io::sink(),
@@ -1042,7 +1043,7 @@ impl<R: Read> Read for BrotliStreamReader<R> {
             self.number_of_bytes_read += copy_len;
             Ok(copy_len)
         } else {
-            // we are reading uncached data : read it and cache it
+            // we are reading uncached data: read it and cache it
             let nread = self.inner.read(buf)?;
             self.cache.extend_from_slice(&buf[..nread]);
             self.number_of_bytes_read += nread;
