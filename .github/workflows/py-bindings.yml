@@ -138,9 +138,7 @@ jobs:
     strategy:
       matrix:
         platform:
-          # as latest macos versions now default to aarch64, x86_64 is not available
-          - runner: macos-13
-            target: x86_64
+          # no x86_64 targets as latest macos versions now default to aarch64, x86_64 is not available
           - runner: macos-latest
             target: aarch64
     steps:
