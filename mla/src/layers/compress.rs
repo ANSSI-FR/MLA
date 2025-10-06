@@ -1,5 +1,5 @@
-use std::fmt;
 use std::io::{self, Read, Seek, SeekFrom, Take, Write};
+use std::{cmp, fmt};
 
 use bincode::Options;
 use brotli::BrotliState;
@@ -52,7 +52,7 @@ impl std::default::Default for CompressionConfig {
 impl ArchiveWriterConfig {
     /// Set the compression level
     /// compression level (0-11); bigger values cause denser, but slower compression
-    pub const fn with_compression_level(&mut self, compression_level: u32) -> ConfigResult {
+    pub const fn with_compression_level(&mut self, compression_level: u32) -> ConfigResult<'_> {
         if compression_level > 11 {
             Err(ConfigError::CompressionLevelOutOfRange)
         } else {
@@ -192,7 +192,7 @@ impl<'a, R: 'a + Read> CompressionLayerReader<'a, R> {
         uncompressed_pos: u64,
     ) -> Result<brotli::Decompressor<Take<S>>, Error> {
         // Ensure it's a starting position
-        if uncompressed_pos % u64::from(UNCOMPRESSED_DATA_SIZE) != 0 {
+        if !uncompressed_pos.is_multiple_of(u64::from(UNCOMPRESSED_DATA_SIZE)) {
             return Err(Error::BadAPIArgument(
                 "[new_decompressor_at] not a starting position".to_string(),
             ));
@@ -224,7 +224,7 @@ impl<'a, R: 'a + Read> CompressionLayerReader<'a, R> {
     /// `uncompressed_pos` must be a compressed block's starting position
     fn uncompressed_block_size_at(&self, uncompressed_pos: u64) -> Result<u32, Error> {
         // Ensure it's a starting position
-        if uncompressed_pos % u64::from(UNCOMPRESSED_DATA_SIZE) != 0 {
+        if !uncompressed_pos.is_multiple_of(u64::from(UNCOMPRESSED_DATA_SIZE)) {
             return Err(Error::BadAPIArgument(
                 "[uncompressed_block_size_at] not a starting position".to_string(),
             ));
@@ -261,7 +261,7 @@ impl<'a, R: 'a + Read> CompressionLayerReader<'a, R> {
         uncompressed_pos: u64,
     ) -> Result<(), Error> {
         // Ensure it's a starting position
-        if uncompressed_pos % u64::from(UNCOMPRESSED_DATA_SIZE) != 0 {
+        if !uncompressed_pos.is_multiple_of(u64::from(UNCOMPRESSED_DATA_SIZE)) {
             return Err(Error::BadAPIArgument(
                 "[sync_inner_with_uncompressed_pos] not a starting position".to_string(),
             ));
@@ -744,7 +744,7 @@ pub struct CompressionLayerFailSafeReader<'a, R: 'a + Read> {
     /// 2. decompress the data from the buffer
     ///     - if there is still data to decompress, go to 1.
     ///     - if this is the end of the stream, continue to 3.
-    /// 3. the decompressor may have read too many byte, ie. `[end of stream n-1][start of stream n]`
+    /// 3. the decompressor may have read too many bytes, ie. `[end of stream n-1][start of stream n]`
     ///    `                                                                     ^                 ^
     ///    `                                                                 `input_offset`    last read position
     /// 4. rewind, using the cache, to `input_offset`
@@ -763,8 +763,8 @@ pub struct CompressionLayerFailSafeReader<'a, R: 'a + Read> {
     /// ```
     /// Data read from the source, not yet used
     cache: Vec<u8>,
-    /// Bytes valid in the cache : [0..`cache_filled_offset`[ (0 -> no valid data)
-    cache_filled_offset: usize,
+    /// Bytes valid in the cache: [0..`cache_filled_offset`[ (0 -> no valid data)
+    cache_filled_len: usize,
     /// Next offset to read from the cache
     /// Invariant:
     ///     - `read_offset <= cache_filled_offset`
@@ -774,7 +774,9 @@ pub struct CompressionLayerFailSafeReader<'a, R: 'a + Read> {
     /// Number of bytes decompressed and returned for the current stream
     uncompressed_read: u32,
     /// Inner layer (data source)
-    inner: Box<dyn 'a + LayerFailSafeReader<'a, R>>,
+    inner: BrotliStreamReader<Box<dyn 'a + LayerFailSafeReader<'a, R>>>,
+    /// Flag telling if we should decompress byte by byte
+    byte_by_byte_decompression: bool,
 }
 
 impl<'a, R: 'a + Read> CompressionLayerFailSafeReader<'a, R> {
@@ -782,14 +784,15 @@ impl<'a, R: 'a + Read> CompressionLayerFailSafeReader<'a, R> {
         CompressionLayerFailSafeReader {
             cache: vec![0u8; FAIL_SAFE_BUFFER_INITIAL_SIZE],
             read_offset: 0,
-            cache_filled_offset: 0,
+            cache_filled_len: 0,
             brotli_state: Box::new(BrotliState::new(
                 StandardAlloc::default(),
                 StandardAlloc::default(),
                 StandardAlloc::default(),
             )),
             uncompressed_read: 0,
-            inner,
+            inner: BrotliStreamReader::new(inner),
+            byte_by_byte_decompression: false,
         }
     }
 
@@ -801,7 +804,7 @@ impl<'a, R: 'a + Read> CompressionLayerFailSafeReader<'a, R> {
         match brotli::BrotliDecompressStream(
             &mut args.available_in,
             &mut args.input_offset,
-            &self.cache[self.read_offset..self.cache_filled_offset],
+            &self.cache[self.read_offset..self.cache_filled_len],
             &mut args.available_out,
             &mut args.output_offset,
             buf,
@@ -812,7 +815,7 @@ impl<'a, R: 'a + Read> CompressionLayerFailSafeReader<'a, R> {
                 // End of stream reached
 
                 // Rewind the cache to the actual start of the new block
-                // input_offset \in [0; cache_filled_offset - read_offset[
+                // input_offset \in [0; cache_filled_len - read_offset[
                 self.read_offset += args.input_offset;
 
                 // Reset others
@@ -823,6 +826,9 @@ impl<'a, R: 'a + Read> CompressionLayerFailSafeReader<'a, R> {
                 ));
 
                 self.uncompressed_read = 0;
+
+                self.inner
+                    .new_brotli_stream(self.cache_filled_len - self.read_offset);
 
                 if args.output_offset == 0 {
                     return self.read(buf);
@@ -841,20 +847,23 @@ impl<'a, R: 'a + Read> CompressionLayerFailSafeReader<'a, R> {
                     // (NeedsMoreInput && output_offset == 0) means we can't produce output without more input
                     //
                     // if cache is full
-                    if self.read_offset == 0 && self.cache_filled_offset == self.cache.len() {
+                    if self.read_offset == 0 && self.cache_filled_len == self.cache.len() {
                         self.cache.resize(self.cache.len() + 1, 0);
                     } else {
                         // move cache content at offset zero to make room for other input
                         self.cache
-                            .copy_within(self.read_offset..self.cache_filled_offset, 0);
-                        self.cache_filled_offset -= self.read_offset;
+                            .copy_within(self.read_offset..self.cache_filled_len, 0);
+                        self.cache_filled_len -= self.read_offset;
                         self.read_offset = 0;
-                        self.cache.resize(self.cache_filled_offset + 1, 0);
+                        if self.byte_by_byte_decompression {
+                            // Revert to one byte cache length if it was previously increased
+                            if self.cache.len() != 1 {
+                                self.cache.resize(1, 0);
+                            }
+                        }
                     }
 
-                    let read = self
-                        .inner
-                        .read(&mut self.cache[self.cache_filled_offset..])?;
+                    let read = self.inner.read(&mut self.cache[self.cache_filled_len..])?;
                     if read == 0 {
                         // No more data from inner and the cache has been fully read
                         // -> return either an error or Ok(0)
@@ -868,7 +877,7 @@ impl<'a, R: 'a + Read> CompressionLayerFailSafeReader<'a, R> {
                         // No more data available but not in a stream
                         return Ok(0);
                     }
-                    self.cache_filled_offset += read;
+                    self.cache_filled_len += read;
                     return self.read(buf);
                 }
                 Ok(args.output_offset)
@@ -882,31 +891,61 @@ impl<'a, R: 'a + Read> CompressionLayerFailSafeReader<'a, R> {
 
                 Ok(args.output_offset)
             }
-            brotli::BrotliResult::ResultFailure => Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Invalid Data while decompressing",
-            )),
+            brotli::BrotliResult::ResultFailure => {
+                if self.byte_by_byte_decompression {
+                    // byte by byte reading fails: we cannot recover anymore data
+                    Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "Invalid data while decompressing",
+                    ))
+                } else {
+                    // we retry with a cache size of 1 because BrotliDecompressStream
+                    // may hold unreturned decompressed data in its internal state otherwise
+                    self.byte_by_byte_decompression = true;
+                    self.cache.resize(1, 0);
+                    self.cache_filled_len = 0;
+                    self.read_offset = 0;
+                    self.brotli_state = Box::new(BrotliState::new(
+                        StandardAlloc::default(),
+                        StandardAlloc::default(),
+                        StandardAlloc::default(),
+                    ));
+                    let number_of_already_decompressed_bytes = self.uncompressed_read;
+                    self.uncompressed_read = 0;
+                    // rewind to brotli stream start
+                    self.inner.rewind_to_stream_start();
+                    // skip over bytes that were already decompressed before the rewind
+                    // by reading and discarding them into a sink, so they aren't returned again
+                    io::copy(
+                        &mut self.take(u64::from(number_of_already_decompressed_bytes)),
+                        &mut io::sink(),
+                    )?;
+                    self.read(buf)
+                }
+            }
         }
     }
 }
 
 impl<'a, R: 'a + Read> LayerFailSafeReader<'a, R> for CompressionLayerFailSafeReader<'a, R> {
     fn into_inner(self) -> Option<Box<dyn 'a + LayerFailSafeReader<'a, R>>> {
-        Some(self.inner)
+        Some(self.inner.into_inner())
     }
 
     fn into_raw(self: Box<Self>) -> R {
-        self.inner.into_raw()
+        self.inner.into_inner().into_raw()
     }
 }
 
-const FAIL_SAFE_BUFFER_INITIAL_SIZE: usize = 1;
+const FAIL_SAFE_BUFFER_INITIAL_SIZE: usize = 4096;
 
 impl<'a, R: 'a + Read> Read for CompressionLayerFailSafeReader<'a, R> {
     /// This `read` may end by failing.
     /// Even in the best configuration, when the inner layer is not broken, the
     /// decompression will fail if attempting to read not-compressed data such as
-    /// `CompressionLayerReader` footer
+    /// `CompressionLayerReader` footer.
+    /// This is OK right now because the only usage is `TruncatedArchiveReader::convert_to_archive`
+    /// which stops reading when `EndOfArchiveData` is encountered.
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         if self.uncompressed_read > UNCOMPRESSED_DATA_SIZE {
             return Err(Error::WrongReaderState(
@@ -919,16 +958,13 @@ impl<'a, R: 'a + Read> Read for CompressionLayerFailSafeReader<'a, R> {
             return Ok(0);
         }
 
-        // Number of byte available in the source
-        let available_in = self.cache_filled_offset - self.read_offset;
+        // Number of bytes available in the source
+        let available_in = self.cache_filled_len - self.read_offset;
         // IN: Offset in the source
         // OUT: Offset in the source after the decompression pass
         let input_offset = 0;
         // Available spaces in the output
-        let available_out = std::cmp::min(
-            buf.len(),
-            (UNCOMPRESSED_DATA_SIZE - self.uncompressed_read) as usize,
-        );
+        let available_out = buf.len();
         // IN: Offset in the output
         // OUT: number of bytes written in the output
         let output_offset = 0;
@@ -952,6 +988,68 @@ struct FailSafeDecompressStreamParams {
     available_out: usize,
     output_offset: usize,
     written: usize,
+}
+
+/// This is a reader for the inner content with a cache.
+/// The inner content is meant to be a succession of brotli streams.
+/// This reader caches the current stream, giving possibility to rewind at its stat.
+struct BrotliStreamReader<R> {
+    cache: Vec<u8>,
+    inner: R,
+    number_of_bytes_read: usize,
+}
+
+impl<R> BrotliStreamReader<R> {
+    const fn new(inner: R) -> Self {
+        Self {
+            cache: Vec::new(),
+            inner,
+            number_of_bytes_read: 0,
+        }
+    }
+
+    fn into_inner(self) -> R {
+        self.inner
+    }
+
+    /// Drop the previous brotli stream from the cache, move cached part of the
+    /// new brotli stream to start of cache and get ready to read and cache the rest
+    fn new_brotli_stream(&mut self, offset_from_current_pos: usize) {
+        let cache_len = self.cache.len();
+        // Take the cached new brotli stream and move it to the start of the cache
+        self.cache
+            .copy_within(offset_from_current_pos..cache_len, 0);
+        // discard the rest of the cache
+        let new_cache_len = cache_len - offset_from_current_pos;
+        self.cache.truncate(new_cache_len);
+        self.number_of_bytes_read = new_cache_len;
+    }
+
+    /// Rewind at start of cached data
+    const fn rewind_to_stream_start(&mut self) {
+        self.number_of_bytes_read = 0;
+    }
+}
+
+impl<R: Read> Read for BrotliStreamReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        if self.number_of_bytes_read < self.cache.len() {
+            // we previously got rewound: read from cache
+            let remaining_in_cache = self.cache.len() - self.number_of_bytes_read;
+            let copy_len = cmp::min(remaining_in_cache, buf.len());
+            buf[0..copy_len].copy_from_slice(
+                &self.cache[self.number_of_bytes_read..(self.number_of_bytes_read + copy_len)],
+            );
+            self.number_of_bytes_read += copy_len;
+            Ok(copy_len)
+        } else {
+            // we are reading uncached data: read it and cache it
+            let nread = self.inner.read(buf)?;
+            self.cache.extend_from_slice(&buf[..nread]);
+            self.number_of_bytes_read += nread;
+            Ok(nread)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1171,7 +1269,7 @@ mod tests {
                 RawLayerFailSafeReader::new(file.as_slice()),
             )));
             let mut buf = Vec::new();
-            // This must ends with an error, when we start reading the footer (invalid for decompression)
+            // This must end with an error, when we start reading the footer (invalid for decompression)
             decomp.read_to_end(&mut buf).unwrap_err();
             println!(
                 "Compression / Decompression (fail-safe): {} us for {} bytes ({} compressed)",
@@ -1208,7 +1306,7 @@ mod tests {
                 RawLayerFailSafeReader::new(&file[..stop]),
             )));
             let mut buf = Vec::new();
-            // This is expected to ends with an error
+            // This is expected to end with an error
             decomp.read_to_end(&mut buf).unwrap_err();
             println!(
                 "Compression / Decompression (fail-safe): {} us for {} bytes ({} compressed, {} keeped)",
@@ -1411,5 +1509,42 @@ mod tests {
         decomp.initialize().unwrap();
         decomp.read_to_end(&mut buf_out2).unwrap();
         assert_eq!(buf_out, buf_out2);
+    }
+
+    #[test]
+    fn test_new_brotli_stream_discards_old_cache() {
+        let data = b"0123456789";
+        let inner = std::io::Cursor::new(data);
+        let mut reader = BrotliStreamReader::new(inner);
+
+        let mut buf = [0; 10];
+        reader.read_exact(&mut buf).unwrap(); // cache now has all 10 bytes
+
+        // Start new brotli stream at offset 5 (i.e., keep "56789")
+        reader.new_brotli_stream(5);
+
+        // Ensure only the new stream is in cache
+        assert_eq!(&reader.cache, b"56789");
+
+        // Rewind to start of new stream
+        reader.rewind_to_stream_start();
+        let mut buf2 = [0; 5];
+        reader.read_exact(&mut buf2).unwrap();
+        assert_eq!(&buf2, b"56789");
+    }
+
+    #[test]
+    fn test_read_continues_after_cache() {
+        let data = b"abcdeFGHIJ";
+        let inner = std::io::Cursor::new(data);
+        let mut reader = BrotliStreamReader::new(inner);
+
+        let mut buf = [0; 5];
+        reader.read_exact(&mut buf).unwrap(); // read "abcde"
+        assert_eq!(&buf, b"abcde");
+
+        let mut buf2 = [0; 5];
+        reader.read_exact(&mut buf2).unwrap(); // read "FGHIJ" from inner
+        assert_eq!(&buf2, b"FGHIJ");
     }
 }
