@@ -7,7 +7,7 @@ edition = "2024"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-afl = "0.15"
+afl = "0.16"
 mla = { path = "../mla" }
 
 [lints]
