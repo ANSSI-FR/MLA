@@ -17,7 +17,7 @@ rand = { version = "0.8", default-features = false, features = ["getrandom", "st
 # Wait that all MLA dependencies upgrade below crate to do it too as there is a trait modification (CryptoRngCore -> CryptoRng + RngCore)
 rand_chacha = { version = "0.3", default-features = false}
 brotli = { version = "8.0", default-features = false, features = ["std"]}
-bitflags = { version = "2.9", default-features = false }
+bitflags = { version = "2.10", default-features = false }
 # Crypto needs
 # Version fixed due to avoid conflict dependencies with `aes`, `aes-ctr` and `ghash`
 generic-array = { version = "0.14", default-features = false}
