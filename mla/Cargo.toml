@@ -44,7 +44,7 @@ ml-dsa = { version = "0.0.4", default-features = false, features = ["rand_core",
 workspace = true
 
 [dev-dependencies]
-hex-literal = { version = "1.0", default-features = false}
+hex-literal = { version = "1.1", default-features = false}
 aes-gcm = { version = "0.10", default-features = false, features = ["aes"]}
 aead = { version = "0.5", default-features = false, features = ["alloc"]}
 criterion = { version = "0.7", default-features = false, features = ["html_reports"]}
