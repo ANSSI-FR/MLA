@@ -912,6 +912,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "kem"
+version = "0.4.0-pre.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c1ec5336e2804a5746a2cf0575537afae902c0a29e82c542918b4c5adf392456"
+dependencies = [
+ "rand_core 0.9.3",
+ "zeroize",
+]
+
+[[package]]
 name = "libc"
 version = "0.2.176"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -988,7 +998,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "44fde1200e61dd95a2c6143baa22dbab79d8dad2644f55e955dd8a3d535f5d9f"
 dependencies = [
  "hybrid-array 0.2.3",
- "kem",
+ "kem 0.3.0-pre.0",
  "rand_core 0.6.4",
  "sha3",
  "zeroize",
@@ -1039,7 +1049,7 @@ dependencies = [
  "hex-literal",
  "hkdf",
  "hpke",
- "kem",
+ "kem 0.4.0-pre.0",
  "ml-dsa",
  "ml-kem",
  "rand 0.8.5",
