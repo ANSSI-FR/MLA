@@ -36,7 +36,7 @@ ml-kem = "=0.3.0-pre"
 workspace = true
 
 [dev-dependencies]
-assert_cmd = "2.0"
+assert_cmd = "2.1"
 assert_fs = "1.1"
 permutate = "0.3"
 winapi = { version = "0.3", features = ["winbase"] }
