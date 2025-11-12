@@ -361,6 +361,9 @@ pub(crate) mod tests {
         );
 
         // 2.2 Verify no backslashes in output from Windows archive upgrade
+        // cf. https://github.com/rust-lang/rust/issues/148426
+        // TODO: check that warning disappears when issue is fixed
+        #[allow(deprecated)]
         let mut cmd = Command::cargo_bin("mlar").expect("[ERROR] Failed to find mlar binary");
         cmd.arg("list")
             .arg("-k")

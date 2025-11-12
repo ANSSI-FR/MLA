@@ -118,7 +118,7 @@ fn file_list_append_from_dir(dir: &Path, file_list: &mut Vec<String>) {
         } else {
             let entry_name = EntryName::from_path(new_path).unwrap();
             let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
-            file_list.push(escaped.to_string());
+            file_list.push(escaped);
         }
     }
 }
@@ -126,6 +126,9 @@ fn file_list_append_from_dir(dir: &Path, file_list: &mut Vec<String>) {
 #[test]
 fn test_help() {
     // `mlar --help`
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("--help");
 
@@ -162,6 +165,9 @@ fn test_create_from_dir() {
     }
 
     // `mlar create -o output.mla -p samples/test_mlakey.mlapub <tmp_dir>`
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-l")
@@ -181,9 +187,15 @@ fn test_create_from_dir() {
     // The exact order of the files in the archive depends on the order of the
     // result of `read_dir` which is plateform and filesystem dependent.
     file_list.sort();
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let expected_stdout = file_list.join("\n") + "\n";
 
     // `mlar list -i output.mla -k samples/test_mlakey.mlapriv`
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
         .arg("--skip-signature-verification")
@@ -226,6 +238,9 @@ fn test_create_filelist_stdin() {
     }
 
     // `mlar create -o output.mla -p samples/test_mlakey.mlapub -`
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-l")
@@ -246,6 +261,9 @@ fn test_create_filelist_stdin() {
     assert.success().stderr(expected_stderr);
 
     // `mlar list -i output.mla -k samples/test_mlakey.mlapriv`
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
         .arg("--skip-signature-verification")
@@ -272,6 +290,9 @@ fn test_create_list_tar() {
     let testfs = setup();
 
     // `mlar create -o output.mla -p samples/test_mlakey.mlapub file1.bin file2.bin file3.bin`
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-o")
@@ -298,6 +319,9 @@ fn test_create_list_tar() {
     assert.success().stderr(expected_stderr);
 
     // `mlar list -i output.mla -k samples/test_mlakey.mlapriv`
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
         .arg("-i")
@@ -312,6 +336,9 @@ fn test_create_list_tar() {
     assert.success().stdout(file_list);
 
     // `mlar to-tar -i output.mla -k samples/test_mlakey.mlapriv -o output.tar`
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("to-tar")
         .arg("-i")
@@ -363,6 +390,9 @@ fn test_truncated_clean_truncated_list_tar() {
     }
 
     // `mlar create -o output.mla -p samples/test_mlakey.mlapub file1.bin file2.bin file3.bin`
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-l")
@@ -394,6 +424,9 @@ fn test_truncated_clean_truncated_list_tar() {
         .unwrap();
 
     // `mlar clean-truncated -i output.mla -k samples/test_mlakey.mlapriv -p samples/test_mlakey.mlapub -o clean_truncated.mla`
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("clean-truncated")
         .arg("--skip-signature-verification")
@@ -413,6 +446,9 @@ fn test_truncated_clean_truncated_list_tar() {
     assert.success();
 
     // `mlar list -i clean_truncated.mla -k samples/test_mlakey.mlapriv`
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
         .arg("--skip-signature-verification")
@@ -428,6 +464,9 @@ fn test_truncated_clean_truncated_list_tar() {
     assert.success().stdout(file_list_no_last_plain);
 
     // `mlar to-tar -i output.mla -k samples/test_mlakey.mlapriv -o output.tar`
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("to-tar")
         .arg("--skip-signature-verification")
@@ -498,6 +537,9 @@ fn test_clean_truncated_auth_unauth() {
         let list_stdout = format!("{escaped}\n");
 
         // Create archive with encrypt layer
+        // cf. https://github.com/rust-lang/rust/issues/148426
+        // TODO: check that warning disappears when issue is fixed
+        #[allow(deprecated)]
         let mut cmd = Command::cargo_bin(UTIL).unwrap();
         cmd.arg("create")
             .arg("-o")
@@ -513,6 +555,9 @@ fn test_clean_truncated_auth_unauth() {
         assert.success().stderr(create_stderr.clone());
 
         // List archive content
+        // cf. https://github.com/rust-lang/rust/issues/148426
+        // TODO: check that warning disappears when issue is fixed
+        #[allow(deprecated)]
         let mut cmd = Command::cargo_bin(UTIL).unwrap();
         cmd.arg("list")
             .arg("--skip-signature-verification")
@@ -537,6 +582,9 @@ fn test_clean_truncated_auth_unauth() {
             .unwrap();
 
         // Attempt `clean-truncated` (authenticated)
+        // cf. https://github.com/rust-lang/rust/issues/148426
+        // TODO: check that warning disappears when issue is fixed
+        #[allow(deprecated)]
         let mut cmd = Command::cargo_bin(UTIL).unwrap();
         cmd.arg("clean-truncated")
             .arg("--skip-signature-verification")
@@ -565,6 +613,9 @@ fn test_clean_truncated_auth_unauth() {
         }
 
         // Try to read content from `clean-truncated` archive (authenticated)
+        // cf. https://github.com/rust-lang/rust/issues/148426
+        // TODO: check that warning disappears when issue is fixed
+        #[allow(deprecated)]
         let mut cmd = Command::cargo_bin(UTIL).unwrap();
         cmd.arg("cat")
             .arg("--skip-signature-verification")
@@ -582,6 +633,9 @@ fn test_clean_truncated_auth_unauth() {
         let _ = std::fs::remove_file(mlar_clean_truncated_file.path());
 
         // Repair allowing unauthenticated data
+        // cf. https://github.com/rust-lang/rust/issues/148426
+        // TODO: check that warning disappears when issue is fixed
+        #[allow(deprecated)]
         let mut cmd = Command::cargo_bin(UTIL).unwrap();
         cmd.arg("clean-truncated")
             .arg("--allow-unauthenticated-data")
@@ -602,6 +656,9 @@ fn test_clean_truncated_auth_unauth() {
         assert.success();
 
         // Read content from `clean-truncated` archive (unauthenticated)
+        // cf. https://github.com/rust-lang/rust/issues/148426
+        // TODO: check that warning disappears when issue is fixed
+        #[allow(deprecated)]
         let mut cmd = Command::cargo_bin(UTIL).unwrap();
         cmd.arg("cat")
             .arg("--skip-signature-verification")
@@ -673,6 +730,9 @@ fn test_multiple_keys() {
     }
 
     // Run `mlar create` with compress + encrypt and public keys
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-l")
@@ -694,6 +754,9 @@ fn test_multiple_keys() {
     cmd.assert().success().stderr(expected_stderr.clone());
 
     // Run `mlar list` with both private keys
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
         .arg("--skip-signature-verification")
@@ -708,6 +771,9 @@ fn test_multiple_keys() {
     cmd.assert().success().stdout(expected_stdout.clone());
 
     // Run `mlar list` with second private key only
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
         .arg("--skip-signature-verification")
@@ -720,6 +786,9 @@ fn test_multiple_keys() {
     cmd.assert().success().stdout(expected_stdout.clone());
 
     // Run `mlar list` with wrong private key (should fail)
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
         .arg("--skip-signature-verification")
@@ -744,6 +813,9 @@ fn test_multiple_compression_level() {
 
     for (dest, compression_level) in &[(mlar_file_q0.path(), "0"), (mlar_file_q5.path(), "5")] {
         // `mlar create -o {dest} -l compress -q {compression_level} file1.bin file2.bin file3.bin`
+        // cf. https://github.com/rust-lang/rust/issues/148426
+        // TODO: check that warning disappears when issue is fixed
+        #[allow(deprecated)]
         let mut cmd = Command::cargo_bin(UTIL).unwrap();
         cmd.arg("create")
             .arg("-o")
@@ -776,6 +848,9 @@ fn test_multiple_compression_level() {
     // Ensure files are correct
     for (src, tar_name) in [(mlar_file_q0, &tar_file_q0), (mlar_file_q5, &tar_file_q5)] {
         // `mlar to-tar -i {src} -o {tar_name}`
+        // cf. https://github.com/rust-lang/rust/issues/148426
+        // TODO: check that warning disappears when issue is fixed
+        #[allow(deprecated)]
         let mut cmd = Command::cargo_bin(UTIL).unwrap();
         cmd.arg("to-tar")
             .arg("--skip-signature-verification")
@@ -812,6 +887,9 @@ fn test_convert() {
     let testfs = setup();
 
     // === Step 1: Create the original archive
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-l")
@@ -836,6 +914,9 @@ fn test_convert() {
     assert.success().stderr(create_stderr.clone());
 
     // === Step 2: Convert the archive to a new key
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("convert")
         .arg("--skip-signature-verification")
@@ -869,6 +950,9 @@ fn test_convert() {
     assert!(size_output < size_convert);
 
     // === Step 4: Extract converted archive to TAR
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("to-tar")
         .arg("--skip-signature-verification")
@@ -907,6 +991,9 @@ fn test_stdio() {
     }
 
     // `mlar create -o - -p samples/test_mlakey.mlapub file1.bin file2.bin file3.bin`
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-l")
@@ -934,6 +1021,9 @@ fn test_stdio() {
         .unwrap();
 
     // `mlar to-tar -i output.mla -k samples/test_mlakey.mlapriv -o output.tar`
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("to-tar")
         .arg("--skip-signature-verification")
@@ -978,6 +1068,9 @@ fn test_multi_fileorders() {
         }
 
         // `mlar create -o output.mla -p samples/test_mlakey.mlapub file1.bin file2.bin file3.bin`
+        // cf. https://github.com/rust-lang/rust/issues/148426
+        // TODO: check that warning disappears when issue is fixed
+        #[allow(deprecated)]
         let mut cmd = Command::cargo_bin(UTIL).unwrap();
         cmd.arg("create")
             .arg("-l")
@@ -1004,6 +1097,9 @@ fn test_multi_fileorders() {
         assert.success().stderr(expected_stderr);
 
         // `mlar to-tar -i convert.mla -k samples/test_mlakey.mlapriv -o output.tar`
+        // cf. https://github.com/rust-lang/rust/issues/148426
+        // TODO: check that warning disappears when issue is fixed
+        #[allow(deprecated)]
         let mut cmd = Command::cargo_bin(UTIL).unwrap();
         cmd.arg("to-tar")
             .arg("--skip-signature-verification")
@@ -1031,6 +1127,9 @@ fn test_verbose_listing() {
     let testfs = setup();
 
     // `mlar create -l -o output.mla
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-l")
@@ -1052,6 +1151,9 @@ fn test_verbose_listing() {
     assert.success().stderr(expected_stderr);
 
     // `mlar list -i output.mla`
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
         .arg("--skip-signature-verification")
@@ -1073,6 +1175,9 @@ fn test_verbose_listing() {
     assert.success().stdout(expected_stdout);
 
     // `mlar list -v -i output.mla`
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
         .arg("--skip-signature-verification")
@@ -1086,6 +1191,9 @@ fn test_verbose_listing() {
     assert.success();
 
     // `mlar list -vv -i output.mla`
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
         .arg("--skip-signature-verification")
@@ -1131,6 +1239,9 @@ fn test_extract() {
     }
 
     // Create archive passing multiple --filenames flags
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-l")
@@ -1152,6 +1263,9 @@ fn test_extract() {
 
     // === 1. Linear extraction ===
     let output_dir = TempDir::new().unwrap();
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("extract")
         .arg("-v")
@@ -1176,6 +1290,9 @@ fn test_extract() {
 
     // === 2. Glob extraction ===
     let output_dir = TempDir::new().unwrap();
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("extract")
         .arg("-v")
@@ -1210,6 +1327,9 @@ fn test_extract() {
     let single_file_data = &files[0].1;
 
     let output_dir = TempDir::new().unwrap();
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("extract")
         .arg("-v")
@@ -1238,6 +1358,9 @@ fn test_cat() {
     let testfs = setup();
 
     // `mlar create -l compress -o output.mla ...`
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-l")
@@ -1259,6 +1382,9 @@ fn test_cat() {
     assert.success().stderr(expected_stderr);
 
     // `mlar cat -i output.mla fileX`
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("cat")
         .arg("-i")
@@ -1289,6 +1415,9 @@ fn test_keygen() {
     let testfs = setup();
 
     // Generate keypair
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("keygen").arg(&base_path);
     cmd.assert().success();
@@ -1310,6 +1439,9 @@ fn test_keygen() {
     }
 
     // Create archive using public key
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-l")
@@ -1329,6 +1461,9 @@ fn test_keygen() {
     cmd.assert().success().stderr(expected_stderr.clone());
 
     // List archive contents with private key
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
         .arg("--skip-signature-verification")
@@ -1360,6 +1495,9 @@ fn test_keygen_seed() {
     let pub_path = base_path.with_extension("mlapub");
 
     // `mlar keygen tempdir/key -s TESTSEED`
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("keygen").arg(&base_path).arg("-s").arg("TESTSEED");
     cmd.assert().success();
@@ -1376,6 +1514,9 @@ fn test_keygen_seed() {
     let _ = std::fs::remove_file(&pub_path);
 
     // `mlar keygen tempdir/key -s TESTSEED2`
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("keygen").arg(&base_path).arg("-s").arg("TESTSEED2");
     cmd.assert().success();
@@ -1427,6 +1568,9 @@ fn test_keyderive() {
     };
 
     // `mlar keygen tempdir/key_parent`
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("keygen").arg(&key_parent_pfx);
     cmd.assert().success();
@@ -1434,6 +1578,9 @@ fn test_keyderive() {
     keys.parent = fs::read(&key_parent_priv).unwrap();
 
     // `mlar keyderive tempdir/key_parent tempdir/key_child1 --path "Child 1"`
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("keyderive")
         .arg(&key_parent_priv)
@@ -1445,6 +1592,9 @@ fn test_keyderive() {
     keys.child1 = fs::read(&key_child1_priv).unwrap();
 
     // `mlar keyderive tempdir/key_parent tempdir/key_child2 --path "Child 2"`
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("keyderive")
         .arg(&key_parent_priv)
@@ -1456,6 +1606,9 @@ fn test_keyderive() {
     keys.child2 = fs::read(&key_child2_priv).unwrap();
 
     // `mlar keyderive tempdir/key_child1 tempdir/key_child1_child1 --path "Child 1"`
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("keyderive")
         .arg(&key_child1_priv)
@@ -1480,6 +1633,9 @@ fn test_keyderive() {
     let key_tmp_pfx = output_dir.path().join("key_tmp");
     let key_tmp_priv = key_tmp_pfx.with_extension("mlapriv");
     // `mlar keyderive tempdir/key_parent tempdir/key_tmp --path "Child 2"`
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("keyderive")
         .arg(&key_parent_priv)
@@ -1495,6 +1651,9 @@ fn test_keyderive() {
     let key_tmp_2_pfx = output_dir.path().join("key_tmp2");
     let key_tmp_2_priv = key_tmp_2_pfx.with_extension("mlapriv");
     // `mlar keyderive tempdir/key_parent tempdir/key_tmp2 --path "Child 1" --path "Child 1"`
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("keyderive")
         .arg(&key_parent_priv)
@@ -1517,6 +1676,9 @@ fn test_verbose_info() {
     let testfs = setup();
 
     // `mlar create -l -o output.mla`
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create").arg("-o").arg(mlar_file.path());
     cmd.arg("-l").arg("compress");
@@ -1538,6 +1700,9 @@ fn test_verbose_info() {
     assert.success().stderr(expected_stderr);
 
     // `mlar info -i output.mla`
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("info").arg("-i").arg(mlar_file.path());
 
@@ -1551,6 +1716,9 @@ Signature: false
     );
 
     // `mlar info -v -i output.mla`
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("info").arg("-v").arg("-i").arg(mlar_file.path());
 
@@ -1577,6 +1745,9 @@ fn test_no_open_on_encrypt() {
     }
 
     // `mlar create -o output.mla -l compress file1.bin file2.bin file3.bin`
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-l")
@@ -1596,6 +1767,9 @@ fn test_no_open_on_encrypt() {
     // - mlar refuses to open the MLA file if a private key is provided
 
     // `mlar list -i output.mla -k samples/test_mlakey.mlapriv`
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("list")
         .arg("-i")
@@ -1641,6 +1815,9 @@ fn test_extract_lot_files() {
     }
 
     // Create archive passing multiple --filenames flags
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-l")
@@ -1661,6 +1838,9 @@ fn test_extract_lot_files() {
 
     // === 1. Linear extraction ===
     let output_dir = TempDir::new().unwrap();
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("extract")
         .arg("-v")
@@ -1685,6 +1865,9 @@ fn test_extract_lot_files() {
 
     // === 2. Glob extraction ===
     let output_dir = TempDir::new().unwrap();
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("extract")
         .arg("-v")
@@ -1719,6 +1902,9 @@ fn test_extract_lot_files() {
     let single_file_data = &files[0].1;
 
     let output_dir = TempDir::new().unwrap();
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("extract")
         .arg("-v")
@@ -1749,6 +1935,9 @@ fn test_stdin() {
     let output_files = ["default-entry"];
 
     // `echo "echo... echo... echo..." | mlar create -l -o output.mla --filenames file.txt -`
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-l")
@@ -1764,6 +1953,9 @@ fn test_stdin() {
 
     // `mlar extract -v --accept-unencrypted -i output.mla -o output_dir`
     let output_dir = TempDir::new().unwrap();
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("extract")
         .arg("-v")
@@ -1787,6 +1979,9 @@ fn test_stdin() {
 fn test_stdin_empty_input() {
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
 
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-l")
@@ -1801,9 +1996,12 @@ fn test_stdin_empty_input() {
     cmd.assert().success();
 
     let output_dir = TempDir::new().unwrap();
-    let mut extract_cmd = Command::cargo_bin(UTIL).unwrap();
-    extract_cmd
-        .arg("extract")
+
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("extract")
         .arg("--accept-unencrypted")
         .arg("--skip-signature-verification")
         .arg("-i")
@@ -1811,7 +2009,7 @@ fn test_stdin_empty_input() {
         .arg("-o")
         .arg(output_dir.path());
 
-    extract_cmd.assert().success();
+    cmd.assert().success();
 
     let content = fs::read(output_dir.path().join("empty-entry")).unwrap();
     assert!(content.is_empty(), "Expected empty file, got {content:?}");
@@ -1851,6 +2049,9 @@ fn test_consecutive_sep_stdin() {
     ];
 
     // `echo -n -e "SEP\xff\xfe\xad\xdeSEPSEPSEPecho... echo... echo...SEP" | mlar create -l -o output.mla --separator SEP -`
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-l")
@@ -1870,6 +2071,9 @@ fn test_consecutive_sep_stdin() {
 
     // `mlar extract -v --accept-unencrypted -i output.mla -o output_dir`
     let output_dir = TempDir::new().unwrap();
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("extract")
         .arg("-v")
@@ -1910,6 +2114,9 @@ fn test_stdin_separator_across_chunks() {
             .collect::<Vec<u8>>();
         let stdin = [stdin1.as_slice(), SEPARATOR.as_bytes(), stdin2.as_slice()].concat();
 
+        // cf. https://github.com/rust-lang/rust/issues/148426
+        // TODO: check that warning disappears when issue is fixed
+        #[allow(deprecated)]
         let mut cmd = Command::cargo_bin(UTIL).unwrap();
         cmd.arg("create")
             .arg("-l")
@@ -1930,6 +2137,9 @@ fn test_stdin_separator_across_chunks() {
         assert.success();
 
         let output_dir = TempDir::new().unwrap();
+        // cf. https://github.com/rust-lang/rust/issues/148426
+        // TODO: check that warning disappears when issue is fixed
+        #[allow(deprecated)]
         let mut cmd = Command::cargo_bin(UTIL).unwrap();
         cmd.arg("extract")
             .arg("-v")
@@ -1958,6 +2168,9 @@ fn test_stdin_separator_not_in_input_should_fallback_to_single_entry() {
 
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
 
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-l")
@@ -1981,6 +2194,9 @@ fn test_missing_entry_names_should_fail() {
 
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
 
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("compress")
@@ -2006,6 +2222,9 @@ fn test_archive_with_missing_file_should_fail() {
     let missing_file_name = "missing_file.bin";
 
     // === mlar create ===
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     cmd.arg("create")
         .arg("-l")
@@ -2030,6 +2249,9 @@ fn test_archive_with_missing_file_skips_and_succeeds() {
     let missing_file_name = "missing_file.bin";
 
     // === mlar create ===
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     let output = cmd
         .arg("create")
@@ -2063,6 +2285,9 @@ fn test_archive_with_missing_file_skips_and_succeeds() {
     );
 
     // === mlar list ===
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
     let output = cmd
         .arg("list")
