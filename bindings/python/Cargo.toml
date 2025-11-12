@@ -38,4 +38,4 @@ too-many-lines = "allow"
 [dependencies]
 pyo3 = "0.25"
 mla = { version = "2.0.0-alpha", features = ["send"], path = "../../mla"}
-ml-kem = "0.3.0-pre"
+ml-kem = "=0.3.0-pre"
