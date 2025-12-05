@@ -84,8 +84,8 @@ impl<'a, W: 'a + InnerWriterTrait> LayerWriter<'a, W> for SignatureLayerWriter<'
         let mut rng = self.signature_config.rng.get_rng()?;
 
         for key in self.signature_config.signature_keys.keys {
-            let ed25519ph_signature = key.sign_ed25519ph(&self.hash.clone());
-            ed25519ph_signature.serialize(&mut out)?;
+            let ed25519_signature = key.sign_ed25519(&self.hash.clone());
+            ed25519_signature.serialize(&mut out)?;
             let mldsa87_signature = key.sign_mldsa87(self.hash.clone(), &mut rng)?;
             mldsa87_signature.serialize(&mut out)?;
         }
@@ -214,7 +214,7 @@ impl<'a, R: 'a + InnerReaderTrait> SignatureLayerReader<'a, R> {
                     .collect::<Vec<_>>();
                 let traditional_signature_verified = verified_signatures
                     .iter()
-                    .any(|sig| matches!(sig, MLASignature::MLAEd25519Ph(_)));
+                    .any(|sig| matches!(sig, MLASignature::MLAEd25519(_)));
                 let post_quantum_signature_verified = verified_signatures
                     .iter()
                     .any(|sig| matches!(sig, MLASignature::MLAMlDsa87(_)));
