@@ -1,6 +1,8 @@
 use std::io::{Read, Write};
 
-use ed25519_dalek::{SIGNATURE_LENGTH as ED25519_SIGNATURE_LENGTH, Signature as Ed25519Signature};
+use ed25519_dalek::{
+    SIGNATURE_LENGTH as ED25519_SIGNATURE_LENGTH, Signature as Ed25519Signature, Signer, Verifier,
+};
 use ml_dsa::{EncodedSignature, MlDsa87, Signature};
 use rand_chacha::rand_core::CryptoRngCore;
 use sha2::{Digest, Sha512};
@@ -11,7 +13,6 @@ use crate::{
     errors::Error,
 };
 
-const ED25519PH_CONTEXT: &[u8] = b"MLAEd25519SigMethod";
 const MLDSA87_CONTEXT: &[u8] = b"MLAMLDSA87SigMethod";
 
 pub(crate) struct HybridMultiRecipientSigningKeys {
@@ -19,12 +20,10 @@ pub(crate) struct HybridMultiRecipientSigningKeys {
 }
 
 impl MLASigningPrivateKey {
-    pub(crate) fn sign_ed25519ph(&self, hash_to_sign: &Sha512) -> MLAEd25519PhSignature {
-        let ed25519ph_sig = self
-            .private_key_ed25519
-            .sign_prehashed(hash_to_sign.clone(), Some(ED25519PH_CONTEXT))
-            .unwrap(); // Should not fail as it can fail only if context length is greater than 255
-        MLAEd25519PhSignature { ed25519ph_sig }
+    pub(crate) fn sign_ed25519(&self, hash_to_sign: &Sha512) -> MLAEd25519Signature {
+        let finalized_hash = hash_to_sign.clone().finalize();
+        let ed25519_sig = self.private_key_ed25519.sign(finalized_hash.as_slice());
+        MLAEd25519Signature { ed25519_sig }
     }
     pub(crate) fn sign_mldsa87(
         &self,
@@ -44,14 +43,12 @@ impl MLASigningPrivateKey {
 impl MLASignatureVerificationPublicKey {
     pub(crate) fn verify(&self, hash_to_verify: Sha512, signature: &MLASignature) -> bool {
         match signature {
-            MLASignature::MLAEd25519Ph(signature) => self
-                .public_key_ed25519
-                .verify_prehashed(
-                    hash_to_verify,
-                    Some(ED25519PH_CONTEXT),
-                    &signature.ed25519ph_sig,
-                )
-                .is_ok(),
+            MLASignature::MLAEd25519(signature) => {
+                let message = hash_to_verify.finalize();
+                self.public_key_ed25519
+                    .verify(message.as_slice(), &signature.ed25519_sig)
+                    .is_ok()
+            }
             MLASignature::MLAMlDsa87(signature) => {
                 let message = hash_to_verify.finalize();
                 self.public_key_mldsa87.verify_with_context(
@@ -64,8 +61,8 @@ impl MLASignatureVerificationPublicKey {
     }
 }
 
-pub(crate) struct MLAEd25519PhSignature {
-    ed25519ph_sig: Ed25519Signature,
+pub(crate) struct MLAEd25519Signature {
+    ed25519_sig: Ed25519Signature,
 }
 
 pub(crate) struct MLAMLDSA87Signature {
@@ -77,18 +74,18 @@ pub(crate) const ML_DSA87_SIGNATURE_SIZE: usize = 4627;
 const MLAED25519_SIG_METHOD: u16 = 0;
 const MLAMLDSA87_SIG_METHOD: u16 = 1;
 
-impl MLAEd25519PhSignature {
+impl MLAEd25519Signature {
     fn from_bytes(bytes: &[u8; 64]) -> Self {
         Self {
-            ed25519ph_sig: Ed25519Signature::from_bytes(bytes),
+            ed25519_sig: Ed25519Signature::from_bytes(bytes),
         }
     }
 }
 
-impl<W: Write> MLASerialize<W> for MLAEd25519PhSignature {
+impl<W: Write> MLASerialize<W> for MLAEd25519Signature {
     fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
         MLAED25519_SIG_METHOD.serialize(dest)?;
-        dest.write_all(&self.ed25519ph_sig.to_bytes())?;
+        dest.write_all(&self.ed25519_sig.to_bytes())?;
         Ok(2 + ED25519_SIGNATURE_LENGTH as u64)
     }
 }
@@ -112,7 +109,7 @@ impl<W: Write> MLASerialize<W> for MLAMLDSA87Signature {
 
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum MLASignature {
-    MLAEd25519Ph(MLAEd25519PhSignature),
+    MLAEd25519(MLAEd25519Signature),
     MLAMlDsa87(MLAMLDSA87Signature),
 }
 
@@ -122,8 +119,8 @@ impl<R: Read> MLADeserialize<R> for MLASignature {
         match signature_method_id {
             0 => {
                 let bytes = MLADeserialize::deserialize(src)?;
-                let parsed_signature = MLAEd25519PhSignature::from_bytes(&bytes);
-                Ok(MLASignature::MLAEd25519Ph(parsed_signature))
+                let parsed_signature = MLAEd25519Signature::from_bytes(&bytes);
+                Ok(MLASignature::MLAEd25519(parsed_signature))
             }
             1 => {
                 let bytes = MLADeserialize::deserialize(src)?;

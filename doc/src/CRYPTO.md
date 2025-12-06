@@ -14,9 +14,9 @@ A PQ/T key consists of a pair of a post-quantum key and a traditional key. An ar
 
 Two signature methods are available and must be used together. Signature method input is called `m`. The SHA-512 hash `h` of `m` may be computed in a first step.
 
-For method `MLAEd25519SigMethod`, `signature_data` is the Ed25519ph (as described in RFC 8032 [^rfc8032]) signature of `m` (not `h` even though it can be used for computing the result). The context given as parameter to Ed25519ph is the ASCII `MLAEd25519SigMethod`. Signature verification and key generation are done as described in RFC 8032. Key storage is described in `KEY_FORMAT.md`.
+For method `MLAEd25519SigMethod`, `signature_data` is the Ed25519 signature (as described in RFC 8032 [^rfc8032]) of `h`. No context string is used for this method. Signature verification and key generation are done as described in RFC 8032. Key storage is described in `KEY_FORMAT.md`.
 
-For method `MLAMLDSA87SigMethod`, `signature_data` is the ML-DSA-87 signature (as described in FIPS 204 [^fips204], not HashML-DSA) of `h` (not `m` this time) with the ASCII `MLAMLDSA87SigMethod` as context. Signature verification and key generation are done as described in FIPS 204. Key storage is described in `KEY_FORMAT.md`.
+For method `MLAMLDSA87SigMethod`, `signature_data` is the ML-DSA-87 signature (as described in FIPS 204 [^fips204], not HashML-DSA) of `h` with the ASCII `MLAMLDSA87SigMethod` as context. Signature verification and key generation are done as described in FIPS 204. Key storage is described in `KEY_FORMAT.md`.
 
 An archive can be signed with multiple signing keys. If a user provides a set of PQ/T keys for signature verification, implementations should give a way for the user to know if archive is correctly signed for at least one key. Implementations may give a way for users to know if archive is correctly signed for all keys. Users must explicitly know if they are validating against at least one or all keys. Implementations may also give a way for users to know which PQ/T keys correspond to valid signatures or their number.
 
@@ -472,7 +472,7 @@ MLA relies on several external cryptographic libraries for its primitives. Below
 #### Traditional Signature
 
 - **ed25519-dalek**
-    - **Role:** Ed25519ph signatures (RFC 8032) for the traditional part of hybrid signatures.
+    - **Role:** Ed25519 signatures (RFC 8032) for the traditional part of hybrid signatures.
     - **Review** [^reviewqb].
     - **Documentation:** Well documented, widely used, and considered production-grade.
 
@@ -487,7 +487,7 @@ MLA relies on several external cryptographic libraries for its primitives. Below
 #### Hybrid Signature Logic
 
 - **Custom implementation in MLA (`hybrid_signature.rs`, `mlakey.rs`)**
-    - **Role:** Combines Ed25519ph and ML-DSA-87 for hybrid PQ/T signatures.
+    - **Role:** Combines Ed25519 and ML-DSA-87 for hybrid PQ/T signatures.
     - **Review:** No third-party audit. Covered by internal tests and verified against official test vectors.
 
 #### Asymmetric Encryption (Hybrid KEM)
@@ -543,7 +543,7 @@ MLA relies on several external cryptographic libraries for its primitives. Below
 | Dependency         | Purpose                              | Review Status                | Documentation      |
 |--------------------|--------------------------------------|------------------------------|--------------------|
 | aes-gcm            | AES-256-GCM encryption               | NCC Group                    | Excellent          |
-| ed25519-dalek      | Ed25519ph signature                  | Quarkslab                    | Excellent          |
+| ed25519-dalek      | Ed25519 signature                    | Quarkslab                    | Excellent          |
 | ml-dsa             | ML-DSA-87 signature                  | None (open-source, FIPS)     | Good               |
 | ml-kem             | MLKEM-1024 (Kyber) KEM               | None (open-source, FIPS)     | Good               |
 | curve25519-dalek   | X25519 KEM                           | Community, SafeCurves        | Excellent          |
