@@ -21,11 +21,17 @@ jobs:
         with:
           toolchain: stable
 
-      - name: Install mdbook and mdbook-katex
+      - name: Install mdbook
         uses: actions-rs/cargo@ae10961054e4aa8b4aa7dffede299aaf087aa33b # v1.0.1
         with:
           command: install
           args: mdbook mdbook-katex --locked
+
+      - name: Install mdbook-katex
+        uses: actions-rs/cargo@ae10961054e4aa8b4aa7dffede299aaf087aa33b # v1.0.1
+        with:
+          command: install
+          args: --git https://github.com/lzanini/mdbook-katex --rev 5bb959bb61945e863f5b9d28425bb201d4054994 mdbook-katex --locked
 
       # GitHub Flavored Markdown's ```math blocks are not supported by GitHub Pages,
       # but KaTeX requires $$ math delimiters. This step converts ```math blocks to $$ blocks.
