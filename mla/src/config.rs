@@ -2,6 +2,7 @@
 use crate::crypto::hybrid::{MLADecryptionPrivateKey, MLAEncryptionPublicKey};
 use crate::crypto::mlakey::{MLASignatureVerificationPublicKey, MLASigningPrivateKey};
 use crate::errors::ConfigError;
+use crate::helpers::shared_secret::MLADecryptionSharedSecret;
 use crate::layers::compress::CompressionConfig;
 use crate::layers::encrypt::{EncryptionConfig, EncryptionReaderConfig};
 use crate::layers::signature::{SignatureConfig, SignatureReaderConfig};
@@ -142,6 +143,7 @@ impl ArchiveReaderConfig {
         let mut signature_reader_config = SignatureReaderConfig::default();
         signature_reader_config.set_public_keys(signature_verification_public_keys);
         IncompleteArchiveReaderConfig {
+            shared_secrets: Vec::new(),
             signature_reader_config,
         }
     }
@@ -155,6 +157,7 @@ impl ArchiveReaderConfig {
         let mut signature_reader_config = SignatureReaderConfig::default();
         signature_reader_config.signature_check = false;
         IncompleteArchiveReaderConfig {
+            shared_secrets: Vec::new(),
             signature_reader_config,
         }
     }
@@ -170,18 +173,25 @@ impl ArchiveReaderConfig {
 ///
 /// This ensures we configure both signature and encryption in a flexible
 /// way before being able to operate on an archive.
+#[must_use]
 pub struct IncompleteArchiveReaderConfig {
+    shared_secrets: Vec<MLADecryptionSharedSecret>,
     signature_reader_config: SignatureReaderConfig,
 }
 
 impl IncompleteArchiveReaderConfig {
     /// Will refuse to open an archive without encryption.
+    ///
+    /// Will try to decrypt with each of provided ones until a working one is found.
     pub fn with_encryption(
         self,
         decryption_private_keys: &[MLADecryptionPrivateKey],
     ) -> ArchiveReaderConfig {
         let mut encrypt = EncryptionReaderConfig::default();
         encrypt.set_private_keys(decryption_private_keys);
+        if !self.shared_secrets.is_empty() {
+            encrypt.set_shared_secrets(self.shared_secrets);
+        }
         ArchiveReaderConfig {
             accept_unencrypted: false,
             encrypt,
@@ -199,6 +209,9 @@ impl IncompleteArchiveReaderConfig {
     ) -> ArchiveReaderConfig {
         let mut encrypt = EncryptionReaderConfig::default();
         encrypt.set_private_keys(decryption_private_keys);
+        if !self.shared_secrets.is_empty() {
+            encrypt.set_shared_secrets(self.shared_secrets);
+        }
         ArchiveReaderConfig {
             accept_unencrypted: false,
             encrypt,
@@ -212,6 +225,19 @@ impl IncompleteArchiveReaderConfig {
         ArchiveReaderConfig {
             accept_unencrypted: true,
             encrypt,
+            signature_reader_config: self.signature_reader_config,
+        }
+    }
+
+    /// This is only for advanced use cases. Use this if you want to use `mla::helpers::shared_secret` functionality.
+    ///
+    /// Adds shared secrets to try to decrypt with.
+    pub fn add_decryption_shared_secrets(
+        self,
+        shared_secrets: &[MLADecryptionSharedSecret],
+    ) -> Self {
+        Self {
+            shared_secrets: shared_secrets.to_vec(),
             signature_reader_config: self.signature_reader_config,
         }
     }

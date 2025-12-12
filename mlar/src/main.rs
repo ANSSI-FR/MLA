@@ -11,7 +11,9 @@ use mla::crypto::mlakey::{
     generate_mla_keypair, generate_mla_keypair_from_seed,
 };
 use mla::entry::{ENTRY_NAME_RAW_CONTENT_ALLOWED_BYTES, EntryName, EntryNameError};
+use mla::errors::ConfigError;
 use mla::errors::{ConfigError::IncoherentPersistentConfig, Error, TruncatedReadError};
+use mla::helpers::shared_secret::{MLADecryptionMetadata, MLADecryptionSharedSecret};
 use mla::helpers::{StreamWriter, linear_extract, mla_percent_escape, mla_percent_unescape};
 use mla::{ArchiveReader, ArchiveWriter, TruncatedArchiveReader, entry::ArchiveEntry};
 use sha2::{Digest, Sha512};
@@ -362,12 +364,30 @@ fn readerconfig_from_matches(matches: &ArgMatches) -> Result<ArchiveReaderConfig
         return Err(MlarError::Config(IncoherentPersistentConfig));
     };
 
-    if matches.contains_id("private_keys") {
-        let (private_dec_keys, _private_sig_keys) = open_private_keys(matches, "private_keys")
-            .map_err(|error| {
-                eprintln!("[ERROR] Unable to open private keys: {error}");
-                MlarError::Mla(Error::InvalidKeyFormat)
-            })?;
+    if matches.contains_id("private_keys") || matches.contains_id("shared_secret") {
+        let private_dec_keys = if matches.contains_id("private_keys") {
+            open_private_keys(matches, "private_keys")
+                .map_err(|error| {
+                    eprintln!("[ERROR] Unable to open private keys: {error}");
+                    MlarError::Mla(Error::InvalidKeyFormat)
+                })?
+                .0
+        } else {
+            Vec::new()
+        };
+        let incomplete_config = if matches.contains_id("shared_secret") {
+            let shared_secrets = matches
+                .get_many::<PathBuf>("shared_secret")
+                .unwrap()
+                .map(|path| {
+                    let mut shared_secret_file = File::open(path)?;
+                    MLADecryptionSharedSecret::deserialize_shared_secret(&mut shared_secret_file)
+                })
+                .collect::<Result<Vec<_>, Error>>()?;
+            incomplete_config.add_decryption_shared_secrets(&shared_secrets)
+        } else {
+            incomplete_config
+        };
 
         if matches.get_flag("accept_unencrypted") {
             Ok(incomplete_config.with_encryption_accept_unencrypted(&private_dec_keys))
@@ -1505,6 +1525,56 @@ fn info(matches: &ArgMatches) -> Result<(), MlarError> {
     Ok(())
 }
 
+fn handle_get_decryption_metadata_command(matches: &ArgMatches) -> Result<(), MlarError> {
+    // Safe to use unwrap() because the option is required()
+    let mla_file_path = matches.get_one::<PathBuf>("input").unwrap();
+    let mut src = File::open(mla_file_path)?;
+    let metadata = MLADecryptionMetadata::from_archive(&mut src)?;
+
+    let output_file_path = matches.get_one::<PathBuf>("output").unwrap();
+    let mut output_file = File::create_new(output_file_path)?;
+    metadata.serialize_metadata(&mut output_file)?;
+
+    Ok(())
+}
+
+fn handle_decapsulate_command(matches: &ArgMatches) -> Result<(), MlarError> {
+    // Safe to use unwrap() because the option is required()
+    let metadata_file_path = matches.get_one::<PathBuf>("decryption_metadata").unwrap();
+    let mut src = File::open(metadata_file_path)?;
+    let metadata = MLADecryptionMetadata::deserialize_metadata(&mut src)?;
+
+    let (decryption_private_keys, _) = open_private_keys(matches, "private_keys")?;
+    let mut shared_secret = None;
+    for k in decryption_private_keys {
+        if let Ok(found_shared_secret) = metadata.decapsulate_shared_secret(&k) {
+            shared_secret = Some(found_shared_secret);
+            break;
+        }
+    }
+    let shared_secret = shared_secret.ok_or(ConfigError::PrivateKeyNotFound)?;
+
+    let output_file_path = matches.get_one::<PathBuf>("output").unwrap();
+    let mut output_file = File::create_new(output_file_path)?;
+    shared_secret.serialize_shared_secret(&mut output_file)?;
+
+    Ok(())
+}
+
+fn handle_shared_secret_command(matches: &ArgMatches) -> Result<(), MlarError> {
+    match matches.subcommand() {
+        Some(("get-decryption-metadata", matches)) => {
+            handle_get_decryption_metadata_command(matches)
+        }
+        Some(("decapsulate", matches)) => handle_decapsulate_command(matches),
+        _ => {
+            let msg = "[ERROR] Invalid subcommand";
+            eprintln!("{msg}");
+            Err(MlarError::IO(io::Error::other(msg.to_owned())))
+        }
+    }
+}
+
 fn app() -> clap::Command {
     // Common arguments list, for homogeneity
     let verbose = Arg::new("verbose")
@@ -1514,14 +1584,34 @@ fn app() -> clap::Command {
         .global(true) // enabled for all subcommands
         .help("Increase verbosity level");
 
-    let input_args = vec![
-        Arg::new("input")
-            .help("Archive path")
-            .long("input")
-            .short('i')
+    let input_arg = Arg::new("input")
+        .help("Archive path")
+        .long("input")
+        .short('i')
+        .num_args(1)
+        .value_parser(value_parser!(PathBuf))
+        .required(true);
+    let output_arg = Arg::new("output")
+        .help("Output file path. Use - for stdout")
+        .long("output")
+        .short('o')
+        .value_parser(value_parser!(PathBuf))
+        .required(true);
+    let private_keys = Arg::new("private_keys")
+            .long("private-key")
+            .short('k')
+            .help("MLA private key file. If A creates an archive for B, A uses A's private key for signing. For reading, B uses B's private key to decrypt. This parameter can be specified multiple times, for example to try many keys for decryption or to sign with multiple keys.")
             .num_args(1)
-            .value_parser(value_parser!(PathBuf))
-            .required(true),
+            .action(ArgAction::Append)
+            .value_parser(value_parser!(PathBuf));
+    let shared_secret_arg = Arg::new("shared_secret")
+            .long("shared-secret")
+            .help("Advanced use case: File path to a shared secret. See Rust documentation of `mla::helpers::shared_secret`.")
+            .num_args(1)
+            .action(ArgAction::Append)
+            .value_parser(value_parser!(PathBuf));
+    let input_args = vec![
+        input_arg.clone(),
         Arg::new("accept_unencrypted")
             .long("accept-unencrypted")
             .help("Accept to operate on unencrypted archives")
@@ -1536,12 +1626,7 @@ fn app() -> clap::Command {
             .action(ArgAction::SetTrue),
             ];
     let output_args = vec![
-        Arg::new("output")
-            .help("Output file path. Use - for stdout")
-            .long("output")
-            .short('o')
-            .value_parser(value_parser!(PathBuf))
-            .required(true),
+        output_arg.clone(),
         Arg::new("layers")
             .long("layers")
             .short('l')
@@ -1557,21 +1642,15 @@ fn app() -> clap::Command {
             .help("Compression level (0-11); ; bigger values cause denser, but slower compression"),
     ];
     let both_args = vec![
-        Arg::new("private_keys")
-            .long("private-key")
-            .short('k')
-            .help("MLA private key file. If A creates an archive for B, A uses A's private key for signing. For reading, B uses B's private key to decrypt. This parameter can be specified multiple times, for example to try many keys for decryption or to sign with multiple keys.")
-            .num_args(1)
-            .action(ArgAction::Append)
-            .value_parser(value_parser!(PathBuf)),
+        private_keys.clone(),
         Arg::new("public_keys")
-            .help("MLA public key file. If A creates an archive for B, A uses B's public key for encryption. For reading, B uses A's public key to verifying the signature. This parameter can be specified multiple times, for example to try many keys for decryption or to sign with multiple keys.")
+            .help("MLA public key file. If A creates an archive for B, A uses B's public key for encryption. For reading, B uses A's public key to verify the signature. This parameter can be specified multiple times, for example to try many keys for decryption or to sign with multiple keys.")
             .long("public-key")
             .short('p')
             .num_args(1)
             .action(ArgAction::Append)
             .value_parser(value_parser!(PathBuf)),
-            ];
+    ];
 
     // Main parsing
     Command::new(env!("CARGO_PKG_NAME"))
@@ -1638,12 +1717,14 @@ fn app() -> clap::Command {
                         .action(ArgAction::SetTrue)
                         .help("Do not try to interpret entry names as paths and encode everything not alphanumeric, dash, underscore or dot"),
                 )
+                .arg(shared_secret_arg.clone())
         )
         .subcommand(
             Command::new("extract")
                 .about("Extract entries from a MLA Archive to files")
                 .args(&input_args)
                 .args(&both_args)
+                .arg(shared_secret_arg.clone())
                 .arg(
                     Arg::new("outputdir")
                         .help("Output directory where files are extracted")
@@ -1667,6 +1748,7 @@ fn app() -> clap::Command {
                 .about("Display entries from a MLA Archive, like 'cat'")
                 .args(&input_args)
                 .args(&both_args)
+                .arg(shared_secret_arg.clone())
                 .arg(
                     Arg::new("output")
                         .help("Output file")
@@ -1701,6 +1783,7 @@ fn app() -> clap::Command {
                 .about("Convert a MLA Archive to a TAR Archive")
                 .args(&input_args)
                 .args(&both_args)
+                .arg(shared_secret_arg.clone())
                 .arg(
                     Arg::new("output")
                         .help("Tar Archive path")
@@ -1717,6 +1800,7 @@ fn app() -> clap::Command {
                 .args(&input_args)
                 .args(&output_args)
                 .args(&both_args)
+                .arg(shared_secret_arg.clone())
                 .arg(
                     Arg::new("out_pub")
                         .help("MLA public key file for output archive encryption")
@@ -1749,6 +1833,7 @@ fn app() -> clap::Command {
                 .args(&input_args)
                 .args(&output_args)
                 .args(&both_args)
+                .arg(shared_secret_arg.clone())
                 .arg(
                     Arg::new("out_pub")
                         .help("MLA public key file for output archive encryption")
@@ -1790,7 +1875,7 @@ fn app() -> clap::Command {
         .subcommand(
             Command::new("keyderive")
                 .about(
-                    "Advanced: Derive a new public/private keypair from an existing one and a public path, see `doc/KEY_DERIVATION.md`",
+                    "Advanced use case: Derive a new public/private keypair from an existing one and a public path, see `doc/KEY_DERIVATION.md`",
                 )
                 .arg(
                     Arg::new("input")
@@ -1820,6 +1905,30 @@ fn app() -> clap::Command {
             Command::new("info")
                 .about("Get info on a MLA Archive")
                 .args(&input_args)
+        )
+        .subcommand(
+            Command::new("shared-secret")
+                .about("Advanced use case: See Rust documentation of `mla::helpers::shared_secret`.")
+                .subcommand(
+                    Command::new("get-decryption-metadata")
+                        .about("Get decryption metadata")
+                        .arg(input_arg.clone())
+                        .arg(output_arg.clone())
+                )
+                .subcommand(
+                    Command::new("decapsulate")
+                        .about("Decapsulate metadata to obtain shared secret.")
+                        .arg(
+                            Arg::new("decryption_metadata")
+                            .help("Decryption metadata file path")
+                            .long("decryption-metadata")
+                            .short('m')
+                            .num_args(1)
+                            .value_parser(value_parser!(PathBuf))
+                            .required(true))
+                        .arg(private_keys)
+                        .arg(output_arg.clone())
+                )
         )
 }
 
@@ -1873,6 +1982,8 @@ fn main() -> Result<(), MlarError> {
         keyderive(matches)
     } else if let Some(matches) = matches.subcommand_matches("info") {
         info(matches)
+    } else if let Some(matches) = matches.subcommand_matches("shared-secret") {
+        handle_shared_secret_command(matches)
     } else {
         let msg = "[ERROR] At least one command is required.";
         eprintln!("{}", &help);
