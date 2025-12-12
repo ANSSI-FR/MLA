@@ -33,13 +33,25 @@ type EncryptedSharedSecret = HybridKemSharedSecretArray;
 /// A shared secret, as produced by the Hybrid KEM decapsulation/encapsulation
 ///
 /// The type is wrapped to ease future changes & traits implementation
-#[derive(Zeroize, ZeroizeOnDrop, Debug)]
+#[derive(Clone, Debug, Zeroize, ZeroizeOnDrop)]
 pub(crate) struct HybridKemSharedSecret(pub(crate) HybridKemSharedSecretArray);
 
 impl HybridKemSharedSecret {
     /// Generate a new `HybridKemSharedSecret` from a CSPRNG
     pub fn from_rng<R: CryptoRngCore>(csprng: &mut R) -> Self {
         Self(csprng.r#gen::<HybridKemSharedSecretArray>())
+    }
+}
+
+impl<R: Read> MLADeserialize<R> for HybridKemSharedSecret {
+    fn deserialize(src: &mut R) -> Result<Self, Error> {
+        Ok(HybridKemSharedSecret(MLADeserialize::deserialize(src)?))
+    }
+}
+
+impl<W: Write> MLASerialize<W> for HybridKemSharedSecret {
+    fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
+        self.0.as_slice().serialize(dest)
     }
 }
 
