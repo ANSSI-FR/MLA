@@ -17,10 +17,10 @@ use x25519_dalek::{PublicKey, StaticSecret};
 use crate::base64::{base64_decode, base64_encode};
 pub use crate::crypto::hybrid::{MLADecryptionPrivateKey, MLAEncryptionPublicKey};
 
-use crate::MLADeserialize;
 use crate::crypto::hybrid::{MLKEM_DZ_SIZE, MLKEMEncapsulationKey, MLKEMSeed};
 use crate::errors::Error;
 use crate::layers::encrypt::get_crypto_rng;
+use crate::{EMPTY_OPTS_SERIALIZATION, MLADeserialize};
 
 use super::hybrid::generate_keypair_from_rng;
 
@@ -115,19 +115,55 @@ struct KeyOpts;
 impl KeyOpts {
     #[allow(clippy::unused_self)]
     fn serialize_key_opts<W: Write>(&self, mut dst: W) -> Result<(), Error> {
-        // nothing for the moment
-        dst.write_all(b"AAAAAA==\r\n")?;
+        // empty options for the moment: tag 0 as a single byte, base64 encoded on its own line
+        // keep format consistent with other uses which place base64-encoded
+        // serialized chunks on a single line ending with CRLF.
+        let encoded = base64_encode(EMPTY_OPTS_SERIALIZATION);
+        dst.write_all(&encoded)?;
+        dst.write_all(b"\r\n")?;
         Ok(())
     }
 }
 
 impl<R: Read> MLADeserialize<R> for KeyOpts {
     fn deserialize(src: &mut R) -> Result<Self, Error> {
-        let opts_len = u32::deserialize(src)?;
-        let mut opts = vec![0; opts_len as usize];
-        src.read_exact(opts.as_mut_slice())
-            .map_err(|_| Error::DeserializationError)?;
-        Ok(KeyOpts)
+        const BUFFER_SIZE: usize = 4096;
+
+        let discriminant = u8::deserialize(src)?;
+        match discriminant {
+            0 => Ok(KeyOpts),
+            1 => {
+                let mut key_opts_len = [0; 8];
+                src.read_exact(&mut key_opts_len)?;
+                let key_opts_len = usize::try_from(u64::from_le_bytes(key_opts_len))
+                    .map_err(|_| Error::DeserializationError)?;
+
+                // read by small chunks to avoid allocating a lot if not needed and to zeroize
+                let number_of_chunks = key_opts_len / BUFFER_SIZE;
+                let last_chunk_remainder = key_opts_len % BUFFER_SIZE;
+                let mut buffer = [0; BUFFER_SIZE];
+                for _ in 0..number_of_chunks {
+                    let result = src.read_exact(&mut buffer);
+                    // no action implemented for the moment, hence no further use
+                    buffer.zeroize();
+                    if result.is_err() {
+                        return Err(Error::DeserializationError);
+                    }
+                }
+                // read last chunk smaller than CHUNK_SIZE
+                {
+                    let mut buffer = vec![0; last_chunk_remainder];
+                    let result = src.read_exact(&mut buffer);
+                    buffer.zeroize();
+                    if result.is_err() {
+                        return Err(Error::DeserializationError);
+                    }
+                }
+
+                Ok(KeyOpts)
+            }
+            _ => Err(Error::DeserializationError),
+        }
     }
 }
 
@@ -165,12 +201,10 @@ impl MLADecryptionPrivateKey {
     }
 
     fn serialize_decryption_private_key<W: Write>(&self, mut dst: W) -> Result<(), Error> {
-        const KEY_OPTS_LEN: usize = 4;
-
         dst.write_all(MLA_PRIV_DEC_KEY_HEADER)?;
         let mut b64data = vec![];
         b64data.extend_from_slice(DEC_METHOD_ID_0_PRIV);
-        b64data.extend_from_slice(&[0u8; KEY_OPTS_LEN]); // key opts, empty length for the moment
+        b64data.extend_from_slice(EMPTY_OPTS_SERIALIZATION);
         b64data.extend_from_slice(&self.private_key_ecc.to_bytes());
         b64data.extend_from_slice(self.private_key_seed_ml.to_d_z_64().as_ref());
         let mut encoded = base64_encode(&b64data);
@@ -313,12 +347,10 @@ impl MLASigningPrivateKey {
     }
 
     fn serialize_signing_private_key<W: Write>(&self, mut dst: W) -> Result<(), Error> {
-        const KEY_OPTS_LEN: usize = 4;
-
         dst.write_all(MLA_PRIV_SIG_KEY_HEADER)?;
         let mut b64data = vec![];
         b64data.extend_from_slice(SIG_METHOD_ID_0_PRIV);
-        b64data.extend_from_slice(&[0u8; KEY_OPTS_LEN]); // key opts, empty length for the moment
+        b64data.extend_from_slice(EMPTY_OPTS_SERIALIZATION);
         b64data.extend_from_slice(&self.private_key_ed25519.to_bytes());
         b64data.extend_from_slice(self.private_key_seed_mldsa.as_slice());
         let mut encoded = base64_encode(&b64data);
@@ -364,7 +396,6 @@ impl MLAPrivateKey {
         }
         let decryption_private_key =
             MLADecryptionPrivateKey::deserialize_decryption_private_key(lines[1])?;
-        // TODO: deserialize signature private key when implemented
         let signing_private_key = MLASigningPrivateKey::deserialize_signing_private_key(lines[2])?;
         content.zeroize();
         Ok(Self {
@@ -452,12 +483,10 @@ impl MLAEncryptionPublicKey {
     }
 
     fn serialize_encryption_public_key<W: Write>(&self, mut dst: W) -> Result<(), Error> {
-        const KEY_OPTS_LEN: usize = 4;
-
         dst.write_all(MLA_PUB_ENC_KEY_HEADER)?;
         let mut b64data = vec![];
         b64data.extend_from_slice(ENC_METHOD_ID_0_PUB);
-        b64data.extend_from_slice(&[0u8; KEY_OPTS_LEN]); // key opts, empty length for the moment
+        b64data.extend_from_slice(EMPTY_OPTS_SERIALIZATION); // key opts, empty length for the moment
         b64data.extend_from_slice(&self.public_key_ecc.to_bytes());
         b64data.extend_from_slice(&self.public_key_ml.as_bytes());
         dst.write_all(&base64_encode(&b64data))?;
@@ -515,12 +544,10 @@ impl MLASignatureVerificationPublicKey {
         &self,
         mut dst: W,
     ) -> Result<(), Error> {
-        const KEY_OPTS_LEN: usize = 4;
-
         dst.write_all(MLA_PUB_SIGVERIF_KEY_HEADER)?;
         let mut b64data = vec![];
         b64data.extend_from_slice(SIGVERIF_METHOD_ID_0_PUB);
-        b64data.extend_from_slice(&[0u8; KEY_OPTS_LEN]); // key opts, empty length for the moment
+        b64data.extend_from_slice(EMPTY_OPTS_SERIALIZATION); // key opts, empty length for the moment
         b64data.extend_from_slice(self.public_key_ed25519.as_bytes());
         b64data.extend_from_slice(self.public_key_mldsa87.encode().as_slice());
         let mut encoded = base64_encode(&b64data);

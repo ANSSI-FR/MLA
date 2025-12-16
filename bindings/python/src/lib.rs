@@ -338,7 +338,7 @@ impl From<WrappedError> for PyErr {
                 mla::errors::Error::UnknownTagPosition => {
                     PyErr::new::<UnknownTagPosition, _>("UnknownTagPosition")
                 }
-                mla::errors::Error::Other(err) => PyErr::new::<MLAOther, _>(err.to_string()),
+                mla::errors::Error::Other(err) => PyErr::new::<MLAOther, _>(err.clone()),
             },
             WrappedError::WrappedPy(inner_err) => inner_err,
             WrappedError::EntryNameError => PyErr::new::<EntryNameError, _>(
