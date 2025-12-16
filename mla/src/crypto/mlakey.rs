@@ -115,8 +115,12 @@ struct KeyOpts;
 impl KeyOpts {
     #[allow(clippy::unused_self)]
     fn serialize_key_opts<W: Write>(&self, mut dst: W) -> Result<(), Error> {
-        // nothing for the moment
-        dst.write_all(b"AA==\r\n")?;
+        // empty options for the moment: tag 0 as a single byte, base64 encoded on its own line
+        // keep format consistent with other uses which place base64-encoded
+        // serialized chunks on a single line ending with CRLF.
+        let encoded = base64_encode(EMPTY_OPTS_SERIALIZATION);
+        dst.write_all(&encoded)?;
+        dst.write_all(b"\r\n")?;
         Ok(())
     }
 }
