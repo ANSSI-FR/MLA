@@ -133,6 +133,7 @@ Bindings are available for:
 * Even if encrypted with an authenticated cipher, if you receive an unsigned archive, it may have been crafted by anyone having your public key and thus can contain arbitrary data.
 * Read API documentation and mlar help before using their functionalities. They sometimes provide important security warnings. `doc/src/ENTRY_NAME.md` is also of particular interest.
 * mlar escapes entry names on output to avoid security issues.
+* MLA does not provide any guarantee against side channel attacks. However, if you spot problems in this regard, please contact us and we will study if we fix it.
 * Except for symbolic link attacks, mlar will not extract outside given output directory.
 
 ## FAQ
