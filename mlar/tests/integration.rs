@@ -1406,6 +1406,102 @@ fn test_cat() {
 }
 
 #[test]
+fn test_shared_secret() {
+    let mlar_file = NamedTempFile::new("output.mla").unwrap();
+    let public_key = Path::new("../samples/test_mlakey.mlapub");
+    let private_key = Path::new("../samples/test_mlakey.mlapriv");
+
+    // Temporary directory with nested structure
+    let tmp_dir = TempDir::new().unwrap();
+    let entry1_path = tmp_dir.path().join("entry1");
+    let subdir_path = tmp_dir.path().join("subdir");
+    let entry2_path = subdir_path.join("entry2");
+
+    std::fs::write(&entry1_path, "Test1").unwrap();
+    std::fs::create_dir(&subdir_path).unwrap();
+    std::fs::write(&entry2_path, "Test2").unwrap();
+
+    // Collect paths from directory into file_list
+    let mut file_list: Vec<String> = Vec::new();
+    file_list_append_from_dir(tmp_dir.path(), &mut file_list);
+
+    // Prepare expected stderr with " adding: {path}\n"
+    let mut expected_stderr = String::new();
+    for path in &file_list {
+        expected_stderr.push_str(format!(" adding: {path}\n").as_str());
+    }
+
+    // `mlar create -o output.mla -p samples/test_mlakey.mlapub <tmp_dir>`
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("create")
+        .arg("-l")
+        .arg("compress")
+        .arg("-l")
+        .arg("encrypt")
+        .arg("-o")
+        .arg(mlar_file.path())
+        .arg("-p")
+        .arg(public_key)
+        .arg(tmp_dir.path());
+
+    println!("{cmd:?}");
+    cmd.assert().success().stderr(expected_stderr);
+
+    // Sort file list for consistent output
+    // The exact order of the files in the archive depends on the order of the
+    // result of `read_dir` which is plateform and filesystem dependent.
+    file_list.sort();
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
+    let expected_stdout = file_list.join("\n") + "\n";
+
+    let metadata_file = NamedTempFile::new("metadata.bin").unwrap();
+    #[allow(deprecated)]
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("shared-secret")
+        .arg("get-decryption-metadata")
+        .arg("-i")
+        .arg(mlar_file.path())
+        .arg("-o")
+        .arg(metadata_file.path());
+    println!("{cmd:?}");
+    cmd.assert().success();
+
+    let shared_secret_file = NamedTempFile::new("shared_secret.bin").unwrap();
+    #[allow(deprecated)]
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("shared-secret")
+        .arg("decapsulate")
+        .arg("-m")
+        .arg(metadata_file.path())
+        .arg("-k")
+        .arg(private_key)
+        .arg("-o")
+        .arg(shared_secret_file.path());
+    println!("{cmd:?}");
+    cmd.assert().success();
+
+    // `mlar list -i output.mla -k samples/test_mlakey.mlapriv`
+    // cf. https://github.com/rust-lang/rust/issues/148426
+    // TODO: check that warning disappears when issue is fixed
+    #[allow(deprecated)]
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("list")
+        .arg("--skip-signature-verification")
+        .arg("-i")
+        .arg(mlar_file.path())
+        .arg("--shared-secret")
+        .arg(shared_secret_file.path());
+
+    println!("{cmd:?}");
+    cmd.assert().success().stdout(expected_stdout);
+}
+
+#[test]
 fn test_keygen() {
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
     let output_dir = TempDir::new().unwrap();

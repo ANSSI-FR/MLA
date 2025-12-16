@@ -177,6 +177,167 @@ impl<W: InnerWriterTrait> Write for StreamWriter<'_, '_, W> {
     }
 }
 
+/// Advanced use case: Enables decrypting archives by handing off shared secret decapsulation to another computer.
+///
+/// ```rust
+/// # use std::io::Cursor;
+/// # use mla::crypto::mlakey::MLAPrivateKey;
+/// # use mla::helpers::shared_secret::{MLADecryptionMetadata, MLADecryptionSharedSecret};
+/// # use mla::ArchiveReader;
+/// # use mla::config::ArchiveReaderConfig;
+///
+/// // On computer A:
+///
+/// // Get raw archive
+/// let mla_data: &'static [u8] = include_bytes!("../../samples/archive_v2.mla");
+/// let mut cursor = Cursor::new(mla_data);
+///
+/// // Extract decryption metadata from it
+/// let metadata = MLADecryptionMetadata::from_archive(&mut cursor).unwrap();
+///
+/// // Serialize metadata to send it to another computer
+/// let mut serialized_data = Vec::new();
+/// let serialized_size = metadata.serialize_metadata(&mut serialized_data).unwrap();
+/// # assert_eq!(serialized_size, 1656);
+///
+/// // On computer B:
+///
+/// // Deserialize metadata
+/// let metadata =
+///   MLADecryptionMetadata::deserialize_metadata(serialized_data.as_slice()).unwrap();
+///
+/// // Recover shared secret thanks to the private key.
+/// let privbytes: &'static [u8] =
+///     include_bytes!("../../samples/test_mlakey_archive_v2_receiver.mlapriv");
+/// let (decryption_private_key, _) = MLAPrivateKey::deserialize_private_key(privbytes)
+///     .unwrap()
+///     .get_private_keys();
+/// let shared_secret = metadata.decapsulate_shared_secret(&decryption_private_key).unwrap();
+///
+/// // Serialize shared secret to send it to computer A.
+/// serialized_data.truncate(0);
+/// let serialized_size = shared_secret.serialize_shared_secret(&mut serialized_data).unwrap();
+/// # assert_eq!(serialized_size, 32);
+///
+/// // On computer A:
+///
+/// // Deserialize shared secret
+/// let shared_secret =
+///   MLADecryptionSharedSecret::deserialize_shared_secret(serialized_data.as_slice()).unwrap();
+///
+/// // Decrypt archive thanks to shared secret, without having private key on this computer
+/// let config = ArchiveReaderConfig::without_signature_verification()
+///     .add_decryption_shared_secrets(&[shared_secret])
+///     .with_encryption(&[]);
+/// cursor.set_position(0);
+/// let _ = ArchiveReader::from_config(cursor, config).unwrap();
+/// ```
+pub mod shared_secret {
+    use std::io::{Read, Write};
+
+    use kem::Decapsulate as _;
+    use zeroize::Zeroize as _;
+
+    use crate::{
+        MLADeserialize, MLASerialize,
+        crypto::hybrid::{
+            HybridKemSharedSecret, HybridMultiRecipientEncapsulatedKey, MLADecryptionPrivateKey,
+        },
+        errors::{ConfigError, Error},
+        format::ArchiveHeader,
+        layers::{
+            encrypt::{ENCRYPTION_LAYER_MAGIC, read_encryption_header_after_magic},
+            raw::RawLayerTruncatedReader,
+            signature::{SIGNATURE_LAYER_MAGIC, SignatureLayerTruncatedReader},
+            traits::LayerTruncatedReader,
+        },
+        read_layer_magic,
+    };
+
+    /// Structure holding decryption metadata of an archive, allowing one with a private key to recover the shared secret encrypting the archive.
+    pub struct MLADecryptionMetadata(pub(crate) HybridMultiRecipientEncapsulatedKey);
+
+    impl MLADecryptionMetadata {
+        /// Get decryption metadata from archive
+        pub fn from_archive<R: Read>(mut src: R) -> Result<Self, Error> {
+            let _ = ArchiveHeader::deserialize(&mut src)?;
+            let mut src: Box<dyn LayerTruncatedReader<R>> =
+                Box::new(RawLayerTruncatedReader::new(src));
+            let mut layer_magic = read_layer_magic(&mut src)?;
+            if layer_magic == SIGNATURE_LAYER_MAGIC {
+                src = Box::new(SignatureLayerTruncatedReader::new_skip_magic(src)?);
+                layer_magic = read_layer_magic(&mut src)?;
+            }
+            if &layer_magic == ENCRYPTION_LAYER_MAGIC {
+                let (read_encryption_metadata, _) = read_encryption_header_after_magic(&mut src)?;
+                Ok(MLADecryptionMetadata(
+                    read_encryption_metadata.hybrid_multi_recipient_encapsulate_key,
+                ))
+            } else {
+                Err(Error::EncryptionAskedButNotMarkedPresent)
+            }
+        }
+
+        /// Serialize decryption metadata.
+        ///
+        /// The serialization format is that of the `Vec<PerRecipientEncapsulatedKey>` documented in `doc/src/FORMAT.md`.
+        pub fn serialize_metadata(&self, mut dest: impl Write) -> Result<u64, Error> {
+            self.0.serialize(&mut dest)
+        }
+
+        /// Deserialize decryption metadata.
+        ///
+        /// The serialization format is that of the `Vec<PerRecipientEncapsulatedKey>` documented in `doc/src/FORMAT.md`.
+        pub fn deserialize_metadata(mut src: impl Read) -> Result<Self, Error> {
+            Ok(MLADecryptionMetadata(MLADeserialize::deserialize(
+                &mut src,
+            )?))
+        }
+
+        /// Given a `decryption_private_key`, recover the shared secret with which the archive is encrypted.
+        pub fn decapsulate_shared_secret(
+            &self,
+            decryption_private_key: &MLADecryptionPrivateKey,
+        ) -> Result<MLADecryptionSharedSecret, ConfigError> {
+            if let Ok(ss_hybrid) = decryption_private_key.decapsulate(&self.0) {
+                Ok(MLADecryptionSharedSecret(ss_hybrid))
+            } else {
+                Err(ConfigError::PrivateKeyNotFound)
+            }
+        }
+    }
+
+    /// This is sensitive data. It is the symmetric shared secret with which the archive is encrypted. Handle with care.
+    ///
+    /// This is the `shared_secret` described in section `5.1` of RFC 9180.
+    #[derive(Clone)]
+    pub struct MLADecryptionSharedSecret(pub(crate) HybridKemSharedSecret);
+
+    impl MLADecryptionSharedSecret {
+        /// Serialize the decryption shared secret.
+        ///
+        /// It is serialized as the raw 32 bytes of the `shared_secret`.
+        pub fn serialize_shared_secret(&self, mut dest: impl Write) -> Result<u64, Error> {
+            self.0.serialize(&mut dest)
+        }
+
+        /// Deserialize the decryption shared secret.
+        ///
+        /// It is serialized as the raw 32 bytes of the `shared_secret`.
+        pub fn deserialize_shared_secret(mut src: impl Read) -> Result<Self, Error> {
+            Ok(MLADecryptionSharedSecret(MLADeserialize::deserialize(
+                &mut src,
+            )?))
+        }
+    }
+
+    impl Drop for MLADecryptionSharedSecret {
+        fn drop(&mut self) {
+            self.0.zeroize();
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crypto::hybrid::generate_keypair_from_seed;

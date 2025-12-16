@@ -9,6 +9,7 @@ use crate::crypto::hybrid::{
     HybridKemSharedSecret, HybridMultiRecipientEncapsulatedKey, HybridMultiRecipientsPublicKeys,
     MLADecryptionPrivateKey, MLAEncryptionPublicKey,
 };
+use crate::helpers::shared_secret::MLADecryptionSharedSecret;
 use crate::layers::traits::{
     InnerWriterTrait, InnerWriterType, LayerReader, LayerTruncatedReader, LayerWriter,
 };
@@ -267,6 +268,7 @@ pub struct EncryptionReaderConfig {
     /// Symmetric encryption key and nonce, if decrypted successfully from header
     // TODO: split in two, like InternalEncryptionConfig
     encrypt_parameters: Option<(Key, Nonce)>,
+    shared_secrets: Vec<MLADecryptionSharedSecret>,
 }
 
 impl EncryptionReaderConfig {
@@ -274,22 +276,40 @@ impl EncryptionReaderConfig {
         self.private_keys = private_keys.to_vec();
     }
 
+    pub(crate) fn set_shared_secrets(&mut self, shared_secrets: Vec<MLADecryptionSharedSecret>) {
+        self.shared_secrets = shared_secrets;
+    }
+
     pub fn load_persistent(
         &mut self,
         config: &EncryptionPersistentConfig,
     ) -> Result<(), ConfigError> {
-        // Unwrap the private key
-        if self.private_keys.is_empty() {
+        if self.private_keys.is_empty() && self.shared_secrets.is_empty() {
             return Err(ConfigError::PrivateKeyNotSet);
         }
-        for private_key in &self.private_keys {
-            if let Ok(ss_hybrid) =
-                private_key.decapsulate(&config.hybrid_multi_recipient_encapsulate_key)
-            {
-                let (key, nonce) = key_schedule_base_hybrid_kem(&ss_hybrid.0, HPKE_INFO_LAYER)
-                    .or(Err(ConfigError::KeyWrappingComputationError))?;
+
+        // First try all given shared secrets
+        for shared_secret in &self.shared_secrets {
+            let (key, nonce) = key_schedule_base_hybrid_kem(&shared_secret.0.0, HPKE_INFO_LAYER)
+                .or(Err(ConfigError::KeyWrappingComputationError))?;
+            // check if this shared_secret is valid for this archive
+            if check_key_commitment(&key, &nonce, &config.key_commitment).is_ok() {
                 self.encrypt_parameters = Some((key, nonce));
                 break;
+            }
+        }
+
+        // If no shared secret is valid, try each private key
+        if self.encrypt_parameters.is_none() {
+            for private_key in &self.private_keys {
+                if let Ok(ss_hybrid) =
+                    private_key.decapsulate(&config.hybrid_multi_recipient_encapsulate_key)
+                {
+                    let (key, nonce) = key_schedule_base_hybrid_kem(&ss_hybrid.0, HPKE_INFO_LAYER)
+                        .or(Err(ConfigError::KeyWrappingComputationError))?;
+                    self.encrypt_parameters = Some((key, nonce));
+                    break;
+                }
             }
         }
 
@@ -297,7 +317,7 @@ impl EncryptionReaderConfig {
             .encrypt_parameters
             .ok_or(ConfigError::PrivateKeyNotFound)?;
 
-        // A key has been found, check if it is the one expected
+        // A key has been found, check if it is the expected one
         check_key_commitment(key, nonce, &config.key_commitment)
     }
 }
@@ -1100,6 +1120,7 @@ mod tests {
         let config = EncryptionReaderConfig {
             private_keys: Vec::new(),
             encrypt_parameters: Some((KEY, NONCE)),
+            shared_secrets: Vec::new(),
         };
         let mut encrypt_r =
             InternalEncryptionLayerReader::new(Box::new(RawLayerReader::new(buf)), &config, None)
@@ -1118,6 +1139,7 @@ mod tests {
         let config = EncryptionReaderConfig {
             private_keys: Vec::new(),
             encrypt_parameters: Some((KEY, NONCE)),
+            shared_secrets: Vec::new(),
         };
         let mut encrypt_r = EncryptionLayerTruncatedReader::new_skip_header(
             Box::new(RawLayerTruncatedReader::new(out.as_slice())),
@@ -1148,6 +1170,7 @@ mod tests {
         let config = EncryptionReaderConfig {
             private_keys: Vec::new(),
             encrypt_parameters: Some((KEY, NONCE)),
+            shared_secrets: Vec::new(),
         };
         let mut encrypt_r = EncryptionLayerTruncatedReader::new_skip_header(
             Box::new(RawLayerTruncatedReader::new(&out[..stop])),
@@ -1204,6 +1227,7 @@ mod tests {
         let config = EncryptionReaderConfig {
             private_keys: Vec::new(),
             encrypt_parameters: Some((KEY, NONCE)),
+            shared_secrets: Vec::new(),
         };
         let mut encrypt_r = EncryptionLayerTruncatedReader::new_skip_header(
             Box::new(RawLayerTruncatedReader::new(trunc)),
@@ -1224,6 +1248,7 @@ mod tests {
         let config = EncryptionReaderConfig {
             private_keys: Vec::new(),
             encrypt_parameters: Some((KEY, NONCE)),
+            shared_secrets: Vec::new(),
         };
         // read without tag checking
         let mut encrypt_r = EncryptionLayerTruncatedReader::new_skip_header(
@@ -1251,6 +1276,7 @@ mod tests {
         let config = EncryptionReaderConfig {
             private_keys: Vec::new(),
             encrypt_parameters: Some((KEY, NONCE)),
+            shared_secrets: Vec::new(),
         };
         let mut encrypt_r =
             InternalEncryptionLayerReader::new(Box::new(RawLayerReader::new(buf)), &config, None)
@@ -1314,6 +1340,7 @@ mod tests {
         let config = EncryptionReaderConfig {
             private_keys: Vec::new(),
             encrypt_parameters: Some((KEY, NONCE)),
+            shared_secrets: Vec::new(),
         };
         let mut encrypt_r =
             InternalEncryptionLayerReader::new(Box::new(RawLayerReader::new(buf)), &config, None)
