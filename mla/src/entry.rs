@@ -77,6 +77,7 @@ mod entryname {
         b"conout$",
     ];
 
+    #[non_exhaustive]
     #[derive(Debug)]
     pub enum EntryNameError {
         ForbiddenPathTraversalComponent,
@@ -484,6 +485,7 @@ pub(crate) fn deserialize_entry_name(mut src: impl Read) -> Result<EntryName, Er
 }
 
 /// Represents an entry in the archive.
+#[non_exhaustive]
 pub struct ArchiveEntry<'a, T> {
     pub name: EntryName,
     pub data: ArchiveEntryDataReader<'a, T>,

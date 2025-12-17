@@ -5,6 +5,7 @@ use std::error;
 use std::fmt;
 use std::io;
 
+#[non_exhaustive]
 #[derive(Debug)]
 pub enum Error {
     /// IO Error (not enough data, etc.)
@@ -125,6 +126,7 @@ impl error::Error for Error {
     }
 }
 
+#[non_exhaustive]
 #[derive(Debug)]
 pub enum TruncatedReadError {
     /// Everything ends correctly
@@ -182,6 +184,7 @@ impl error::Error for TruncatedReadError {
     }
 }
 
+#[non_exhaustive]
 #[derive(Debug)]
 pub enum ConfigError {
     IncoherentPersistentConfig,
