@@ -213,7 +213,7 @@ impl IncompleteArchiveReaderConfig {
             encrypt.set_shared_secrets(self.shared_secrets);
         }
         ArchiveReaderConfig {
-            accept_unencrypted: false,
+            accept_unencrypted: true,
             encrypt,
             signature_reader_config: self.signature_reader_config,
         }
