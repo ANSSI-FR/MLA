@@ -232,7 +232,7 @@ impl From<MLAError> for MLAStatus {
             }
             MLAError::TruncatedTag => MLAStatus::TruncatedTag,
             MLAError::UnknownTagPosition => MLAStatus::UnknownTagPosition,
-            MLAError::Other(_) => MLAStatus::Other,
+            _ => MLAStatus::Other,
         }
     }
 }
