@@ -235,7 +235,6 @@ impl<W: InnerWriterTrait> Write for StreamWriter<'_, '_, W> {
 pub mod shared_secret {
     use std::io::{Read, Write};
 
-    use kem::Decapsulate as _;
     use zeroize::Zeroize as _;
 
     use crate::{

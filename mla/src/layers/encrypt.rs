@@ -18,7 +18,6 @@ use std::io;
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 
 use crate::errors::ConfigError;
-use kem::{Decapsulate, Encapsulate};
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 
