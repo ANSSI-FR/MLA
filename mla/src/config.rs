@@ -244,6 +244,7 @@ impl IncompleteArchiveReaderConfig {
 }
 
 /// `TruncatedReader` decryption mode
+#[non_exhaustive]
 #[derive(Default, Clone, Copy, Eq, PartialEq, Debug)]
 pub enum TruncatedReaderDecryptionMode {
     /// Returns only the data that have been authenticated (in AEAD meaning, there will be NO signature verification) on decryption
