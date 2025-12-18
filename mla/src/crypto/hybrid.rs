@@ -5,8 +5,10 @@ use crate::crypto::hpke::{DHKEMCiphertext, dhkem_decap, key_schedule_base_hybrid
 use crate::errors::{ConfigError, Error};
 use crate::{MLADeserialize, MLASerialize};
 use hkdf::Hkdf;
-use kem::{Decapsulate, Encapsulate};
-use ml_kem::{B32, KemCore, MlKem1024};
+use ml_kem::{
+    B32, KemCore, MlKem1024,
+    kem::{Decapsulate, Encapsulate},
+};
 use rand::Rng;
 use rand_chacha::rand_core::CryptoRngCore;
 use sha2::Sha512;
@@ -192,13 +194,6 @@ impl<R: Read> MLADeserialize<R> for HybridMultiRecipientEncapsulatedKey {
     }
 }
 
-impl HybridMultiRecipientEncapsulatedKey {
-    /// Return the number of recipients' key
-    pub fn count_keys(&self) -> usize {
-        self.recipients.len()
-    }
-}
-
 /// Represents a 64-byte seed split into two 32-byte parts (`d` and `z`).
 ///
 /// This seed is used internally in the ML-KEM encryption scheme for
@@ -284,15 +279,11 @@ impl Drop for MLADecryptionPrivateKey {
     }
 }
 
-impl Decapsulate<HybridMultiRecipientEncapsulatedKey, HybridKemSharedSecret>
-    for MLADecryptionPrivateKey
-{
-    type Error = ConfigError;
-
-    fn decapsulate(
+impl MLADecryptionPrivateKey {
+    pub(crate) fn decapsulate(
         &self,
         encapsulated_key: &HybridMultiRecipientEncapsulatedKey,
-    ) -> Result<HybridKemSharedSecret, Self::Error> {
+    ) -> Result<HybridKemSharedSecret, ConfigError> {
         // For each possible recipient, compute the candidate hybrid shared secret
         for recipient in &encapsulated_key.recipients {
             let ss_ecc = dhkem_decap(&recipient.ct_ecc, &self.private_key_ecc)
@@ -348,15 +339,11 @@ pub(crate) struct HybridMultiRecipientsPublicKeys {
     pub(crate) keys: Vec<MLAEncryptionPublicKey>,
 }
 
-impl Encapsulate<HybridMultiRecipientEncapsulatedKey, HybridKemSharedSecret>
-    for HybridMultiRecipientsPublicKeys
-{
-    type Error = ConfigError;
-
-    fn encapsulate(
+impl HybridMultiRecipientsPublicKeys {
+    pub(crate) fn encapsulate(
         &self,
         csprng: &mut impl CryptoRngCore,
-    ) -> Result<(HybridMultiRecipientEncapsulatedKey, HybridKemSharedSecret), Self::Error> {
+    ) -> Result<(HybridMultiRecipientEncapsulatedKey, HybridKemSharedSecret), ConfigError> {
         // Generate the final shared secret -- the one each recipient will finally retrieve
         let final_ss_hybrid = HybridKemSharedSecret::from_rng(csprng);
 
