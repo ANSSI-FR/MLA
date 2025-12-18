@@ -757,7 +757,7 @@ mod tests {
     use std::io::{Seek, SeekFrom};
 
     use super::*;
-    use kem::{Decapsulate, Encapsulate};
+    use ml_kem::kem::{Decapsulate, Encapsulate};
     use x25519_dalek::PublicKey;
 
     /// Check key coherence
