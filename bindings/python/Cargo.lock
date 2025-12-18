@@ -500,7 +500,6 @@ dependencies = [
 name = "pymla"
 version = "0.5.0"
 dependencies = [
- "ml-kem",
  "mla",
  "pyo3",
 ]
