@@ -1039,7 +1039,6 @@ dependencies = [
  "hex-literal",
  "hkdf",
  "hpke",
- "kem",
  "ml-dsa",
  "ml-kem",
  "rand 0.8.5",
