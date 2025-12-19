@@ -1,6 +1,5 @@
 use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use glob::Pattern;
-use humansize::{DECIMAL, FormatSize};
 use lru::LruCache;
 use mla::config::{
     ArchiveReaderConfig, ArchiveWriterConfig, TruncatedReaderConfig, TruncatedReaderDecryptionMode,
@@ -943,7 +942,7 @@ fn list(matches: &ArgMatches) -> Result<(), MlarError> {
             Ok(Some(mla)) => mla,
         };
 
-        let size = mla_file.get_size().format_size(DECIMAL);
+        let size = mla_file.get_size();
         let name = mla_file.name;
 
         if verbose == 1 {
