@@ -129,12 +129,19 @@ Bindings are available for:
 
 ## Security
 
-* Please keep in mind, it is generally not safe to extract in a place where at least one ancestor is writable by others (symbolic link attacks).
-* Even if encrypted with an authenticated cipher, if you receive an unsigned archive, it may have been crafted by anyone having your public key and thus can contain arbitrary data.
-* Read API documentation and mlar help before using their functionalities. They sometimes provide important security warnings. `doc/src/ENTRY_NAME.md` is also of particular interest.
+You should read [API documentation](https://github.com/ANSSI-FR/MLA#api-usage) and `mlar --help` before using them. They sometimes provide important security warnings. [`doc/src/ENTRY_NAME.md`](doc/src/ENTRY_NAME.md) is also essential for understanding entry naming conventions and security implications.
+
+**Potential issues**
+
+* It is generally unsafe to extract archives into directories where at least one ancestor directory is writable by other users (e.g. `/tmp` or other shared directories), due to symbolic link attacks.
+  * Apart from symbolic link attacks, mlar will not extract outside the given output directory.
+* Even if encrypted with an authenticated cipher, an unsigned archive does not authenticate its author. Anyone in possession of your public key can create such an archive, which may therefore contain arbitrary (potentially malicious) data.
 * mlar escapes entry names on output to avoid security issues.
-* MLA does not provide any guarantee against side channel attacks. However, if you spot problems in this regard, please contact us and we will study if we fix it.
-* Except for symbolic link attacks, mlar will not extract outside given output directory.
+
+**Guarantees and limitations**
+
+* MLA does not provide any guarantee against side channel attacks. However, if you spot problems in this regard, please contact us and we will assess whether we will fix it.
+* The security and maintenance level of the MLA Python bindings is explicitely not guaranteed.
 
 ## FAQ
 
