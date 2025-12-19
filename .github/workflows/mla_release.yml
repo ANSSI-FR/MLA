@@ -90,13 +90,19 @@ jobs:
     steps:
     - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
     - uses: actions-rs/toolchain@b2417cde72dcf67f306c0ae8e0828a81bf0b189f # v1.0.6
-      # Skip rustup target add for win7 targets — rustup doesn't support these tier-3 targets
-      if: matrix.target && !contains(matrix.target, 'win7')
       with:
-        toolchain: stable
-        target: ${{ matrix.target }}
+        # Pin Rust toolchain for releases to a known-good previous stable release (1.91.1)
+        # for increased stability and security.
+        # Rust does not provide an "old-stable" channel, so we explicitly specify the version (including its patch level, e.g. 1.91.1).
+        toolchain: 1.91.1
+        # For non-release builds, use 'stable'.
+        # toolchain: stable
     - uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce # v2.0.0
       if: matrix.msvc_platform
+    - name: Set target if any
+      # Skip rustup target add for win7 targets — rustup doesn't support these tier-3 targets
+      if: matrix.target && !contains(matrix.target, 'win7')
+      run: rustup target add ${{ matrix.target }}
     - name: Install rust-src (only for win7)
       # For win7 targets, manually build std by installing rust-src
       if: contains(matrix.target, 'win7')
