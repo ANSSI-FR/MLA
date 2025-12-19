@@ -93,7 +93,12 @@ jobs:
       # Skip rustup target add for win7 targets — rustup doesn't support these tier-3 targets
       if: matrix.target && !contains(matrix.target, 'win7')
       with:
-        toolchain: stable
+        # Pin Rust toolchain for releases to a known-good previous stable release (1.91.1)
+        # for increased stability and security.
+        # Rust does not provide an "old-stable" channel, so we explicitly specify the version (including its patch level, e.g. 1.91.1).
+        toolchain: 1.91.1
+        # For non-release builds, use 'stable'.
+        # toolchain: stable
         target: ${{ matrix.target }}
     - uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce # v2.0.0
       if: matrix.msvc_platform
