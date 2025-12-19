@@ -16,6 +16,11 @@
 //!   * Unauthenticated recover: authenticated and unauthenticated encrypted chunks of data are retrieved. Use at your own risk.
 //! * Arguably less prone to bugs, especially while parsing an untrusted archive (Rust safety)
 //!
+//! Security
+//! =
+//!
+//! For security-related information, please refer to our [README security section](https://github.com/ANSSI-FR/MLA#security).
+//!
 //! Repository
 //! =
 //!
