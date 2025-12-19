@@ -1,6 +1,6 @@
 use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
+use clru::CLruCache;
 use glob::Pattern;
-use lru::LruCache;
 use mla::config::{
     ArchiveReaderConfig, ArchiveWriterConfig, TruncatedReaderConfig, TruncatedReaderDecryptionMode,
 };
@@ -620,7 +620,7 @@ struct FileWriter<'a> {
     path: PathBuf,
     /// Reference on the cache
     // A `Mutex` is used instead of a `RefCell` as `FileWriter` can be `Send`
-    cache: &'a Mutex<LruCache<PathBuf, File>>,
+    cache: &'a Mutex<CLruCache<PathBuf, File>>,
     /// Is verbose mode enabled
     verbose: u8,
     /// `entry_name`
@@ -1109,7 +1109,7 @@ fn extract(matches: &ArgMatches) -> Result<(), MlarError> {
         if verbose > 0 {
             println!("Extracting the whole archive using a linear extraction");
         }
-        let cache = Mutex::new(LruCache::new(
+        let cache = Mutex::new(CLruCache::new(
             NonZeroUsize::new(FILE_WRITER_POOL_SIZE).unwrap(),
         ));
         let mut export: HashMap<&EntryName, FileWriter> = HashMap::new();
