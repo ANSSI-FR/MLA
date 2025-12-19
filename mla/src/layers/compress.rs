@@ -792,11 +792,11 @@ impl<'a, R: 'a + Read> CompressionLayerTruncatedReader<'a, R> {
                 self.read_offset += args.input_offset;
 
                 // Reset others
-                self.brotli_state = Box::new(BrotliState::new(
+                *self.brotli_state = BrotliState::new(
                     StandardAlloc::default(),
                     StandardAlloc::default(),
                     StandardAlloc::default(),
-                ));
+                );
 
                 self.uncompressed_read = 0;
 
@@ -878,11 +878,11 @@ impl<'a, R: 'a + Read> CompressionLayerTruncatedReader<'a, R> {
                     self.cache.resize(1, 0);
                     self.cache_filled_len = 0;
                     self.read_offset = 0;
-                    self.brotli_state = Box::new(BrotliState::new(
+                    *self.brotli_state = BrotliState::new(
                         StandardAlloc::default(),
                         StandardAlloc::default(),
                         StandardAlloc::default(),
-                    ));
+                    );
                     let number_of_already_decompressed_bytes = self.uncompressed_read;
                     self.uncompressed_read = 0;
                     // rewind to brotli stream start
