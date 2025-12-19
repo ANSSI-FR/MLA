@@ -1341,7 +1341,7 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
 
 /// Use this to convert a truncated archive to one that can be opened with `ArchiveReader`, eventually loosing some content and security or performance properties.
 pub struct TruncatedArchiveReader<'a, R: 'a + Read> {
-    /// MLA Archive format Reader (fail-safe)
+    /// MLA Archive format Reader for eventually truncated archives
     //
     /// Source
     src: Box<dyn 'a + LayerTruncatedReader<'a, R>>,

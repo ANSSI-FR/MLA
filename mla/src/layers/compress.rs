@@ -1,5 +1,5 @@
-use std::fmt;
 use std::io::{self, Read, Seek, SeekFrom, Take, Write};
+use std::{cmp, fmt};
 
 use brotli::BrotliState;
 use brotli::writer::StandardAlloc;
@@ -700,67 +700,65 @@ impl<'a, W: 'a + InnerWriterTrait> Write for CompressionLayerWriter<'a, W> {
     }
 }
 
-// ---------- Fail-Safe Reader ----------
+// ---------- Truncated Reader ----------
 
 /// Internal state for the `CompressionLayerTruncatedReader`
-enum CompressionLayerTruncatedReaderState<R: Read> {
-    /// Ready contains the real inner destination
-    /// Only used for the initialization
-    Ready(R),
-    /// Inside a decompression stream
-    InData {
-        /// While decompressing, one doesn't know in advance the number of compressed bytes
-        /// As a result, the following is done:
-        /// 1. read from the source inside a buffer
-        /// 2. decompress the data from the buffer
-        ///     - if there is still data to decompress, go to 1.
-        ///     - if this is the end of the stream, continue to 3.
-        /// 3. the decompressor may have read too many byte, ie. `[end of stream n-1][start of stream n]`
-        ///    `                                                                    `^                 ^
-        ///    `                                                               ``input_offset`    last read position
-        /// 4. rewind, using the cache, to `input_offset`
-        ///
-        /// A cache must be used, as the source is `Read` but not `Seek`.
-        /// `input_offset` is guaranted to be in the cache because it must be in the decompressor working buffer,
-        /// and the working buffer is contained in the cache (in the worst case, it is the whole cache)
-        ///
-        /// Cache management:
-        /// ```ascii
-        ///                cache_filled_offset
-        ///                        v
-        /// cache: [................    ]
-        ///            ^
-        ///        read_offset
-        /// ```
-        /// Data read from the source, not yet used
-        /// Invariant:
-        ///     - `cache.len() == FAIL_SAFE_BUFFER_SIZE` (cache always allocated)
-        cache: Vec<u8>,
-        /// Bytes valid in the cache : [0..`cache_filled_offset`[ (0 -> no valid data)
-        cache_filled_offset: usize,
-        /// Next offset to read from the cache
-        /// Invariant:
-        ///     - `read_offset` <= `cache_filled_offset`
-        read_offset: usize,
-        /// Internal decompressor state
-        state: Box<BrotliState<StandardAlloc, StandardAlloc, StandardAlloc>>,
-        /// Number of bytes decompressed and returned for the current stream
-        uncompressed_read: u32,
-        /// Inner layer (data source)
-        inner: R,
-    },
-    /// Empty is a placeholder to allow state replacement
-    Empty,
-}
-
 pub struct CompressionLayerTruncatedReader<'a, R: 'a + Read> {
-    state: CompressionLayerTruncatedReaderState<Box<dyn 'a + LayerTruncatedReader<'a, R>>>,
+    /// While decompressing, one doesn't know in advance the number of compressed bytes
+    /// As a result, the following is done:
+    /// 1. read from the source inside a buffer
+    /// 2. decompress the data from the buffer
+    ///     - if there is still data to decompress, go to 1.
+    ///     - if this is the end of the stream, continue to 3.
+    /// 3. the decompressor may have read too many bytes, ie. `[end of stream n-1][start of stream n]`
+    ///    `                                                                     ^                 ^
+    ///    `                                                                 `input_offset`    last read position
+    /// 4. rewind, using the cache, to `input_offset`
+    ///
+    /// A cache must be used, as the source is `Read` but not `Seek`.
+    /// `input_offset` is guaranted to be in the cache because it must be in the decompressor working buffer,
+    /// and the working buffer is contained in the cache (in the worst case, it is the whole cache)
+    ///
+    /// Cache management:
+    /// ```ascii
+    ///                cache_filled_offset
+    ///                        v
+    /// cache: [................    ]
+    ///            ^
+    ///        read_offset
+    /// ```
+    /// Data read from the source, not yet used
+    cache: Vec<u8>,
+    /// Bytes valid in the cache: [0..`cache_filled_offset`[ (0 -> no valid data)
+    cache_filled_len: usize,
+    /// Next offset to read from the cache
+    /// Invariant:
+    ///     - `read_offset <= cache_filled_offset`
+    read_offset: usize,
+    /// Internal decompressor state
+    brotli_state: Box<BrotliState<StandardAlloc, StandardAlloc, StandardAlloc>>,
+    /// Number of bytes decompressed and returned for the current stream
+    uncompressed_read: u32,
+    /// Inner layer (data source)
+    inner: BrotliStreamReader<Box<dyn 'a + LayerTruncatedReader<'a, R>>>,
+    /// Flag telling if we should decompress byte by byte
+    byte_by_byte_decompression: bool,
 }
 
 impl<'a, R: 'a + Read> CompressionLayerTruncatedReader<'a, R> {
     fn new_skip_header(inner: Box<dyn 'a + LayerTruncatedReader<'a, R>>) -> Self {
         Self {
-            state: CompressionLayerTruncatedReaderState::Ready(inner),
+            cache: vec![0u8; TRUNCATED_READER_BUFFER_INITIAL_SIZE],
+            read_offset: 0,
+            cache_filled_len: 0,
+            brotli_state: Box::new(BrotliState::new(
+                StandardAlloc::default(),
+                StandardAlloc::default(),
+                StandardAlloc::default(),
+            )),
+            uncompressed_read: 0,
+            inner: BrotliStreamReader::new(inner),
+            byte_by_byte_decompression: false,
         }
     }
 
@@ -770,166 +768,247 @@ impl<'a, R: 'a + Read> CompressionLayerTruncatedReader<'a, R> {
         let _ = Opts::from_reader(&mut inner)?; // No option handled at the moment
         Ok(Self::new_skip_header(inner))
     }
+
+    fn truncated_reader_decompress_stream(
+        &mut self,
+        mut args: TruncatedReaderDecompressStreamParams,
+        buf: &mut [u8],
+    ) -> io::Result<usize> {
+        match brotli::BrotliDecompressStream(
+            &mut args.available_in,
+            &mut args.input_offset,
+            &self.cache[self.read_offset..self.cache_filled_len],
+            &mut args.available_out,
+            &mut args.output_offset,
+            buf,
+            &mut args.written,
+            &mut self.brotli_state,
+        ) {
+            brotli::BrotliResult::ResultSuccess => {
+                // End of stream reached
+
+                // Seek in the cache to the actual start of the new block
+                // input_offset \in [0; cache_filled_offset - read_offset[
+                self.read_offset += args.input_offset;
+
+                // Reset others
+                *self.brotli_state = BrotliState::new(
+                    StandardAlloc::default(),
+                    StandardAlloc::default(),
+                    StandardAlloc::default(),
+                );
+
+                self.uncompressed_read = 0;
+
+                self.inner
+                    .new_brotli_stream(self.cache_filled_len - self.read_offset);
+
+                if args.output_offset == 0 {
+                    return self.read(buf);
+                }
+
+                Ok(args.output_offset)
+            }
+            brotli::BrotliResult::NeedsMoreInput => {
+                // Bytes may have been read and produced
+                self.read_offset += args.input_offset;
+                self.uncompressed_read += u32::try_from(args.output_offset).map_err(|_| {
+                    io::Error::new(io::ErrorKind::InvalidData, "Integer conversion failed")
+                })?;
+
+                if args.output_offset == 0 {
+                    // (NeedsMoreInput && output_offset == 0) means we can't produce output without more input
+                    //
+                    // if cache is full
+                    if self.read_offset == 0 && self.cache_filled_len == self.cache.len() {
+                        self.cache.resize(self.cache.len() + 1, 0);
+                    } else {
+                        // move cache content at offset zero to make room for other input
+                        self.cache
+                            .copy_within(self.read_offset..self.cache_filled_len, 0);
+                        self.cache_filled_len -= self.read_offset;
+                        self.read_offset = 0;
+                        if self.byte_by_byte_decompression {
+                            // Revert to one byte cache length if it was previously increased
+                            if self.cache.len() != 1 {
+                                self.cache.resize(1, 0);
+                            }
+                        }
+                    }
+
+                    let read = self.inner.read(&mut self.cache[self.cache_filled_len..])?;
+                    if read == 0 {
+                        // No more data from inner and the cache has been fully read
+                        // -> return either an error or Ok(0)
+                        if self.uncompressed_read > 0 {
+                            // Inside a stream and no more data available
+                            return Err(io::Error::new(
+                                io::ErrorKind::UnexpectedEof,
+                                "No more data from the inner layer",
+                            ));
+                        }
+                        // No more data available but not in a stream
+                        return Ok(0);
+                    }
+                    self.cache_filled_len += read;
+                    return self.read(buf);
+                }
+                Ok(args.output_offset)
+            }
+            brotli::BrotliResult::NeedsMoreOutput => {
+                // Bytes may have been read and produced
+                self.read_offset += args.input_offset;
+                self.uncompressed_read += u32::try_from(args.output_offset).map_err(|_| {
+                    io::Error::new(io::ErrorKind::InvalidData, "Integer conversion failed")
+                })?;
+
+                Ok(args.output_offset)
+            }
+            brotli::BrotliResult::ResultFailure => {
+                if self.byte_by_byte_decompression {
+                    // byte by byte reading fails: we cannot recover anymore data
+                    Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "Invalid data while decompressing",
+                    ))
+                } else {
+                    // we retry with a cache size of 1 because BrotliDecompressStream
+                    // may hold unreturned decompressed data in its internal state otherwise
+                    self.byte_by_byte_decompression = true;
+                    self.cache.resize(1, 0);
+                    self.cache_filled_len = 0;
+                    self.read_offset = 0;
+                    *self.brotli_state = BrotliState::new(
+                        StandardAlloc::default(),
+                        StandardAlloc::default(),
+                        StandardAlloc::default(),
+                    );
+                    let number_of_already_decompressed_bytes = self.uncompressed_read;
+                    self.uncompressed_read = 0;
+                    // rewind to brotli stream start
+                    self.inner.rewind_to_stream_start();
+                    // skip over bytes that were already decompressed before the rewind
+                    // by reading and discarding them into a sink, so they aren't returned again
+                    io::copy(
+                        &mut self.take(u64::from(number_of_already_decompressed_bytes)),
+                        &mut io::sink(),
+                    )?;
+                    self.read(buf)
+                }
+            }
+        }
+    }
 }
 
 impl<'a, R: 'a + Read> LayerTruncatedReader<'a, R> for CompressionLayerTruncatedReader<'a, R> {}
 
-const FAIL_SAFE_BUFFER_SIZE: usize = 4096;
+const TRUNCATED_READER_BUFFER_INITIAL_SIZE: usize = 4096;
 
 impl<'a, R: 'a + Read> Read for CompressionLayerTruncatedReader<'a, R> {
-    /// This `read` is expected to end by failing
-    ///
+    /// This `read` may end by failing.
     /// Even in the best configuration, when the inner layer is not broken, the
-    /// decompression will fail while reading not-compressed data such as
-    /// `CompressionLayerReader` footer
+    /// decompression will fail if attempting to read not-compressed data such as
+    /// `CompressionLayerReader` footer.
+    /// This is OK right now because the only usage is `TruncatedArchiveReader::convert_to_archive`
+    /// which stops reading when `EndOfArchiveData` is encountered.
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        // Use this mem::replace trick to be able to get back the compressor
-        // inner and freely move from CompressionLayerReaderState to others
-        let old_state =
-            std::mem::replace(&mut self.state, CompressionLayerTruncatedReaderState::Empty);
-        match old_state {
-            CompressionLayerTruncatedReaderState::Ready(inner) => {
-                self.state = CompressionLayerTruncatedReaderState::InData {
-                    cache: vec![0u8; FAIL_SAFE_BUFFER_SIZE],
-                    read_offset: 0,
-                    cache_filled_offset: 0,
-                    state: Box::new(BrotliState::new(
-                        StandardAlloc::default(),
-                        StandardAlloc::default(),
-                        StandardAlloc::default(),
-                    )),
-                    uncompressed_read: 0,
-                    inner,
-                };
-                self.read(buf)
-            }
-            CompressionLayerTruncatedReaderState::InData {
-                mut cache,
-                mut read_offset,
-                mut cache_filled_offset,
-                mut state,
-                mut uncompressed_read,
-                mut inner,
-            } => {
-                if uncompressed_read > UNCOMPRESSED_DATA_SIZE {
-                    return Err(Error::WrongReaderState(
-                        "[Compress Truncated Layer] Too much data read".to_string(),
-                    )
-                    .into());
-                }
-
-                if read_offset == cache_filled_offset
-                    && cache_filled_offset == FAIL_SAFE_BUFFER_SIZE
-                {
-                    // Cache is full and there is no more data to read from
-                    // -> cache must be reset
-                    cache.fill(0);
-                    cache_filled_offset = 0;
-                    read_offset = 0;
-                }
-
-                // Try to fill the cache from the inner source
-                match inner.read(&mut cache[cache_filled_offset..]) {
-                    Ok(read) => {
-                        if read == 0 && read_offset == cache_filled_offset {
-                            // No more data from inner and the cache has been fully read
-                            // -> return either an error or Ok(0)
-                            if uncompressed_read > 0 {
-                                // Inside a stream and no more data available
-                                return Err(io::Error::new(
-                                    io::ErrorKind::UnexpectedEof,
-                                    "No more data from the inner layer",
-                                ));
-                            }
-                            // No more data available but not in a stream
-                            return Ok(0);
-                        }
-                        cache_filled_offset += read;
-                    }
-                    error => {
-                        if read_offset == cache_filled_offset {
-                            // No more data in the cache
-                            return error;
-                        }
-                        // There is still data in the cache to read
-                        // Will fail and return the error on the next .read()
-                    }
-                }
-
-                // Number of byte available in the source
-                let mut available_in = cache_filled_offset - read_offset;
-                // IN: Offset in the source
-                // OUT: Offset in the source after the decompression pass
-                let mut input_offset = 0;
-                // Available spaces in the output
-                let mut available_out = std::cmp::min(
-                    buf.len(),
-                    (UNCOMPRESSED_DATA_SIZE - uncompressed_read) as usize,
-                );
-                // IN: Offset in the output
-                // OUT: number of bytes written in the output
-                let mut output_offset = 0;
-                // OUT: total number of byte written for the current stream (cumulative)
-                let mut written = 0;
-
-                let ret = match brotli::BrotliDecompressStream(
-                    &mut available_in,
-                    &mut input_offset,
-                    &cache[read_offset..cache_filled_offset],
-                    &mut available_out,
-                    &mut output_offset,
-                    buf,
-                    &mut written,
-                    &mut state,
-                ) {
-                    brotli::BrotliResult::ResultSuccess => {
-                        // End of stream reached
-
-                        // Rewind the cache to the actual start of the new block
-                        // input_offset \in [0; cache_filled_offset - read_offset[
-                        read_offset += input_offset;
-
-                        // Reset others
-                        state = Box::new(BrotliState::new(
-                            StandardAlloc::default(),
-                            StandardAlloc::default(),
-                            StandardAlloc::default(),
-                        ));
-                        uncompressed_read = 0;
-
-                        Ok(output_offset)
-                    }
-                    brotli::BrotliResult::NeedsMoreInput
-                    | brotli::BrotliResult::NeedsMoreOutput => {
-                        // Bytes may have been read and produced
-                        read_offset += input_offset;
-                        uncompressed_read += u32::try_from(output_offset)
-                            .expect("Failed to convert output offset to u32");
-
-                        Ok(output_offset)
-                    }
-                    brotli::BrotliResult::ResultFailure => Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        "Invalid Data while decompressing",
-                    )),
-                };
-
-                self.state = CompressionLayerTruncatedReaderState::InData {
-                    cache,
-                    cache_filled_offset,
-                    read_offset,
-                    state,
-                    uncompressed_read,
-                    inner,
-                };
-
-                ret
-            }
-            CompressionLayerTruncatedReaderState::Empty => Err(Error::WrongReaderState(
-                "[Compression Layer] Should never happen, unless an error already occurs before"
-                    .to_string(),
+        if self.uncompressed_read > UNCOMPRESSED_DATA_SIZE {
+            return Err(Error::WrongReaderState(
+                "[Compress FailSafe Layer] Too much data read".to_string(),
             )
-            .into()),
+            .into());
+        }
+
+        if buf.is_empty() {
+            return Ok(0);
+        }
+
+        // Number of bytes available in the source
+        let available_in = self.cache_filled_len - self.read_offset;
+        // IN: Offset in the source
+        // OUT: Offset in the source after the decompression pass
+        let input_offset = 0;
+        // Available space in the output
+        let available_out = buf.len();
+        // IN: Offset in the output
+        // OUT: number of bytes written in the output
+        let output_offset = 0;
+        // OUT: total number of byte written for the current stream (cumulative)
+        let written = 0;
+
+        let params = TruncatedReaderDecompressStreamParams {
+            available_in,
+            input_offset,
+            available_out,
+            output_offset,
+            written,
+        };
+        self.truncated_reader_decompress_stream(params, buf)
+    }
+}
+
+struct TruncatedReaderDecompressStreamParams {
+    available_in: usize,
+    input_offset: usize,
+    available_out: usize,
+    output_offset: usize,
+    written: usize,
+}
+
+/// This is a reader for the inner content with a cache.
+/// The inner content is meant to be a succession of brotli streams.
+/// This reader caches the current stream, giving possibility to rewind at its stat.
+struct BrotliStreamReader<R> {
+    cache: Vec<u8>,
+    inner: R,
+    number_of_bytes_read: usize,
+}
+
+impl<R> BrotliStreamReader<R> {
+    const fn new(inner: R) -> Self {
+        Self {
+            cache: Vec::new(),
+            inner,
+            number_of_bytes_read: 0,
+        }
+    }
+
+    /// Drop the previous brotli stream from the cache, move cached part of the
+    /// new brotli stream to start of cache and get ready to read and cache the rest
+    fn new_brotli_stream(&mut self, offset_from_current_pos: usize) {
+        let cache_len = self.cache.len();
+        // Take the cached new brotli stream and move it to the start of the cache
+        self.cache
+            .copy_within(offset_from_current_pos..cache_len, 0);
+        // discard the rest of the cache
+        let new_cache_len = cache_len - offset_from_current_pos;
+        self.cache.truncate(new_cache_len);
+        self.number_of_bytes_read = new_cache_len;
+    }
+
+    /// Rewind at start of cached data
+    const fn rewind_to_stream_start(&mut self) {
+        self.number_of_bytes_read = 0;
+    }
+}
+
+impl<R: Read> Read for BrotliStreamReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        if self.number_of_bytes_read < self.cache.len() {
+            // we previously got rewound: read from cache
+            let remaining_in_cache = self.cache.len() - self.number_of_bytes_read;
+            let copy_len = cmp::min(remaining_in_cache, buf.len());
+            buf[0..copy_len].copy_from_slice(
+                &self.cache[self.number_of_bytes_read..(self.number_of_bytes_read + copy_len)],
+            );
+            self.number_of_bytes_read += copy_len;
+            Ok(copy_len)
+        } else {
+            // we are reading uncached data: read it and cache it
+            let nread = self.inner.read(buf)?;
+            self.cache.extend_from_slice(&buf[..nread]);
+            self.number_of_bytes_read += nread;
+            Ok(nread)
         }
     }
 }
