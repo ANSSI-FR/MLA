@@ -79,11 +79,11 @@ fn zeroizeable_read_to_end(mut src: impl Read) -> Result<Vec<u8>, Error> {
 
 /// No buffering to avoid having to zeroize eventual secret data parsed by this function
 #[allow(clippy::needless_range_loop)]
-fn split_five_lines_without_buffering(content: &[u8]) -> Result<[&[u8]; 5], Error> {
-    fn split_line(content: &[u8]) -> Result<(&[u8], &[u8]), Error> {
+fn split_in_five_parts_without_buffering(content: &[u8]) -> Result<[&[u8]; 5], Error> {
+    fn split_separator(content: &[u8]) -> Result<(&[u8], &[u8]), Error> {
         let mut carriage_return_index = 0;
         for i in 0..content.len() {
-            if content[i] == b'\r' {
+            if content[i] == b'\r' || content[i] == b'_' {
                 carriage_return_index = i;
                 break;
             }
@@ -91,22 +91,26 @@ fn split_five_lines_without_buffering(content: &[u8]) -> Result<[&[u8]; 5], Erro
         if carriage_return_index == 0 {
             return Err(Error::DeserializationError);
         }
-        let (line, rest) = content.split_at(carriage_return_index);
-        if rest.len() < 2 || rest[0] != b'\r' && rest[1] != b'\n' {
+        let (part, rest) = content.split_at(carriage_return_index);
+        if rest.len() < 2
+            || (rest[0] != b'\r' && rest[0] != b'_')
+            || (rest[0] == b'\r' && rest[1] != b'\n')
+            || (rest[0] == b'_' && rest[1] != b'_')
+        {
             return Err(Error::DeserializationError);
         }
         let rest = &rest[2..];
-        Ok((line, rest))
+        Ok((part, rest))
     }
-    let (first_line, rest) = split_line(content)?;
-    let (second_line, rest) = split_line(rest)?;
-    let (third_line, rest) = split_line(rest)?;
-    let (fourth_line, rest) = split_line(rest)?;
-    let (fifth_line, rest) = split_line(rest)?;
+    let (first_part, rest) = split_separator(content)?;
+    let (second_part, rest) = split_separator(rest)?;
+    let (third_part, rest) = split_separator(rest)?;
+    let (fourth_part, rest) = split_separator(rest)?;
+    let (fifth_part, rest) = split_separator(rest)?;
     if !rest.is_empty() {
         return Err(Error::DeserializationError);
     }
-    Ok([first_line, second_line, third_line, fourth_line, fifth_line])
+    Ok([first_part, second_part, third_part, fourth_part, fifth_part])
 }
 
 #[derive(Clone)]
@@ -387,7 +391,7 @@ impl MLAPrivateKey {
     /// The serialization format is described in `doc/src/KEY_FORMAT.md`.
     pub fn deserialize_private_key(src: impl Read) -> Result<Self, Error> {
         let mut content = zeroizeable_read_to_end(src)?;
-        let lines = split_five_lines_without_buffering(&content)?;
+        let lines = split_in_five_parts_without_buffering(&content)?;
         if lines[0] != PRIV_KEY_FILE_HEADER {
             return Err(Error::DeserializationError);
         }
@@ -569,7 +573,7 @@ pub struct MLAPublicKey {
 impl MLAPublicKey {
     pub fn deserialize_public_key(src: impl Read) -> Result<Self, Error> {
         let mut content = zeroizeable_read_to_end(src)?;
-        let lines = split_five_lines_without_buffering(&content)?;
+        let lines = split_in_five_parts_without_buffering(&content)?;
         if lines[0] != PUB_KEY_FILE_HEADER {
             return Err(Error::DeserializationError);
         }
@@ -805,6 +809,43 @@ mod tests {
         check_key_pair(
             pub_key.get_encryption_public_key(),
             priv_key.get_decryption_private_key(),
+        );
+    }
+
+    /// Ensure the key format without newlines works
+    #[test]
+    fn keypair_without_newlines() {
+        let (priv_key, pub_key) = generate_mla_keypair().unwrap();
+
+        let mut ser1 = Vec::new();
+        priv_key.serialize_private_key(&mut ser1).unwrap();
+        let mut replaced = ser1.clone();
+        for b in &mut replaced {
+            if *b == b'\r' || *b == b'\n' {
+                *b = b'_';
+            }
+        }
+        let priv_key2 = MLAPrivateKey::deserialize_private_key(replaced.as_slice()).unwrap();
+        let mut ser2 = Vec::new();
+        priv_key2.serialize_private_key(&mut ser2).unwrap();
+        assert_eq!(ser1, ser2);
+
+        let mut ser1 = Vec::new();
+        pub_key.serialize_public_key(&mut ser1).unwrap();
+        let mut replaced = ser1.clone();
+        for b in &mut replaced {
+            if *b == b'\r' || *b == b'\n' {
+                *b = b'_';
+            }
+        }
+        let pub_key2 = MLAPublicKey::deserialize_public_key(replaced.as_slice()).unwrap();
+        let mut ser2 = Vec::new();
+        pub_key2.serialize_public_key(&mut ser2).unwrap();
+        assert_eq!(ser1, ser2);
+
+        check_key_pair(
+            pub_key2.get_encryption_public_key(),
+            priv_key2.get_decryption_private_key(),
         );
     }
 
