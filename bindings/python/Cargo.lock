@@ -404,7 +404,7 @@ dependencies = [
 
 [[package]]
 name = "mla"
-version = "2.0.0-alpha"
+version = "2.0.0-beta"
 dependencies = [
  "aes",
  "bitflags",
