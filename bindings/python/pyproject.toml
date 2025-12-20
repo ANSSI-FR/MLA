@@ -25,3 +25,4 @@ repository = "https://github.com/ANSSI-FR/MLA"
 [tool.maturin]
 features = ["pyo3/extension-module"]
 module-name = "mla"
+strip = true
