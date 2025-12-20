@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0-beta] – 2025-12-20
+
+### Added / Changed
+
+**Breaking changes**
+
+- TLV-based options: introduce a TLV structure for `KeyOpts` and archive-level `Opts`
+- Key format improvements: support alternative key-format line separators
+- Signature compatibility: replace `ed25519ph` usage with `ed25519` for better compatibility
+
+---
+
+- Mark some public items (enum, struct) as non exhaustive to enable future additions without breaking existing code
+- Documentation: improved security section and examples; MLA Book and docs refreshed
+- CLI and tooling: `mlar` and `mlar-upgrader` enhancements:
+  - Optimized read/write
+  - Improved error handling
+- Build & CI: 
+  - Specify toolchain for releases
+  - Remove macos-13 x86_64 support due to obsolescence
+  - Deliver Windows 7 builds using tier 3 target 
+- Dependencies: 
+  - Removed unneeded deps (e.g., `humansize`, direct `kem` dependency)
+  - Switched `ml-kem` to a maintained version
+- Clippy fixes including pedantic mode
+- [Advanced use case] HSM / shared-secret decryption: add an option to decrypt archives using a shared secret
+
+### Fixed
+
+- Fix stdin handling as input
+- Backported truncated compression-layer fix from v1 where applicable
+- Documentation: fix math environment for GFM and KaTeX conversion for GitHub Pages
+- Fix `with_encryption_accept_unencrypted` behaviour
+
 ## [2.0.0-alpha] – 2025-08-01
 
 ### Added/Changed
