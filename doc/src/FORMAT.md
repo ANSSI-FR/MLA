@@ -1,4 +1,4 @@
-# MLA FORMAT
+# MLA Format
 
 Relation between the MLA library version and the file format version:
 

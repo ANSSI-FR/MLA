@@ -85,12 +85,14 @@ The API is available in [mla.h](mla.h) and [mla.hpp](mla.hpp).
 ### Reader config creation
 
 - `create_mla_reader_config(...)`
-  (Provide private keys for decryption and public keys for signature verification.)
+
+Provide private keys for decryption and public keys for signature verification.
 
 ### Compression
 
 - `mla_writer_config_set_compression_level(hConfig, level)`
-  Valid levels: 1 (fastest) to 11 (best), 6 is default.
+
+Valid levels: 1 (fastest) to 11 (best), 6 is default.
 
 ### Archive writing
 
