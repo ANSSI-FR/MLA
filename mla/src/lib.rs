@@ -37,7 +37,7 @@
 //! Quick API usage
 //! =
 //!
-//! * Create an archive, with compression and encryption:
+//! * Create an archive, with compression, encryption and signature:
 //! ```rust
 //! use mla::ArchiveWriter;
 //! use mla::config::ArchiveWriterConfig;
