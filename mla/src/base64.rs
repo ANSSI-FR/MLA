@@ -8,7 +8,8 @@ const BASE64_CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwx
 // it is time constant and won't vary like std on different platforms
 #[allow(clippy::cast_lossless)]
 pub(crate) fn base64_encode(data: &[u8]) -> Vec<u8> {
-    let mut encoded = Vec::new();
+    // We know output size given input size, so we allocate everything now to avoid Vec reallocations which would let buffers unzeroized
+    let mut encoded = Vec::with_capacity(data.len() * 4 / 3 + 3);
     let mut i = 0;
     while i < data.len() {
         let mut val: u32 = 0;
@@ -42,11 +43,16 @@ pub(crate) fn base64_encode(data: &[u8]) -> Vec<u8> {
 // it is time constant and won't vary like std on different platforms
 #[allow(clippy::cast_lossless)]
 pub(crate) fn base64_decode(encoded: &[u8]) -> Result<Vec<u8>, Error> {
+    if !encoded.len().is_multiple_of(4) {
+        return Err(Error::DeserializationError);
+    }
+    let decoded_len = (encoded.len() / 4) * 3;
     let encoded = match encoded {
         [rest @ .., b'=', b'='] | [rest @ .., b'='] => rest,
         _ => encoded,
     };
-    let mut decoded = Vec::new();
+    // We know output size given input size, so we allocate everything now to avoid Vec reallocations which would let buffers unzeroized
+    let mut decoded = Vec::with_capacity(decoded_len);
     let mut i = 0;
     while i < encoded.len() {
         let mut val: u32 = 0;
