@@ -28,6 +28,7 @@ use super::strip_head_tail::StripHeadTailReader;
 use super::traits::InnerReaderTrait;
 
 const CIPHER_BUF_SIZE: u64 = 4096;
+// /!\ NORMAL_CHUNK_PT_SIZE value is SECURITY CRITICAL : a chunk size of 64GB or more would be out of AES-GCM security bounds. Please keep this value below. /!\
 const NORMAL_CHUNK_PT_SIZE: u64 = 128 * 1024;
 const NORMAL_CHUNK_PT_AND_TAG_SIZE: u64 = NORMAL_CHUNK_PT_SIZE + TAG_LENGTH as u64;
 // allowed as NORMAL_CHUNK_PT_SIZE and TAG_LENGTH are small enough and known at compile time
