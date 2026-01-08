@@ -46,7 +46,7 @@ As a result, some optimization have not been performed -- which help keeping an 
 #### Main bricks: Encryption
 
 The data is encrypted using AES-256-GCM, an AEAD algorithm.
-To offer a *seekable* layer, data is encrypted using chunks of 128KB each, except for the last one. These encrypted chunks are all present with their associated tag. Tags are checked during decryption before returning data to the upper layer.
+To offer a *seekable* layer, data is encrypted using chunks of 128KB each (chunk size must be less than 64GB because of AES-GCM usage), except for the last one, which may be smaller. These encrypted chunks are all present with their associated tag. Tags are checked during decryption before returning data to the upper layer.
 
 To prevent truncation attacks, another chunk is added at the end corresponding to the encryption of the ASCII string "FINALBLOCK" with "FINALAAD" as additional authenticated data. Any usage of the archive must check correct decryption (including tag verification) of this last block.
 
@@ -312,7 +312,7 @@ keycommit& = \textrm{Encrypt}_{AES\ 256\ GCM}(\\
 \end{align*}
 ```
 
-4. For each 128KB $chunk_j$ of data:
+4. For each 128KB $chunk_j$ of data (128KB is less than 64GB, thus in AES-GCM security bounds):
 
 ```math
 \begin{align*}
@@ -417,7 +417,7 @@ chunk_j& = \textrm{Decrypt}_{AES\ 256\ GCM}(\\
     - the base nonce, and therefore each nonce used, are unique per archive because they are generated from the archive-specific shared secret, limiting the nonce-reuse risk to standard acceptability [^hpke]
     - no more than $2^{64}$ chunks will be produced, as the sequence's type used in MLA implementation is a `u64` checked for overflow. As this is a widely accepted limit of AES-GCM, this value is also within the range provided by [^hpke]
     - the tag size is 128-bits (standard one), avoiding attacks described in [^weaknessgcm]
-    - 128KiB is lower than the maximum plaintext length for a single message in AES-GCM (64 GiB)[^weaknessgcm]
+    - 128KiB chunk size is lower than the maximum plaintext length for a single message in AES-GCM (64 GiB)[^weaknessgcm]
 
 #### Seed derivation
 
