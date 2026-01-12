@@ -192,23 +192,10 @@ fn open_public_keys(
 }
 
 /// Return the `ArchiveWriterConfig` corresponding to provided arguments
-fn config_from_matches(
+fn writer_config_from_matches(
     matches: &ArgMatches,
     create_command: bool,
 ) -> Result<ArchiveWriterConfig, MlarError> {
-    // Get compression/encryption/signing layers
-    let mut layers = Vec::new();
-    if matches.contains_id("layers") {
-        for layer in matches.get_many::<String>("layers").unwrap() {
-            layers.push(layer.as_str());
-        }
-    } else {
-        // Default layers
-        layers.push("compress");
-        layers.push("encrypt");
-        layers.push("sign");
-    }
-
     let output_public_keys_arg_name = if create_command {
         "public_keys"
     } else {
@@ -222,15 +209,19 @@ fn config_from_matches(
     };
 
     // Encryption layer requested but no public keys given
-    if layers.contains(&"encrypt") && !matches.contains_id(output_public_keys_arg_name) {
-        eprintln!(
-            "[ERROR] Encryption layer was requested, but no '{output_public_keys_arg_name}' was provided."
-        );
-        return Err(MlarError::Config(IncoherentPersistentConfig));
+    if matches.get_flag("encrypted") {
+        if !matches.contains_id(output_public_keys_arg_name) {
+            eprintln!(
+                "[ERROR] Encryption layer was requested, but no '{output_public_keys_arg_name}' was provided."
+            );
+            return Err(MlarError::Config(IncoherentPersistentConfig));
+        }
+    } else {
+        eprintln!("WARNING, output archive will NOT be encrypted !");
     }
 
     // Sign layer requested but no private signing keys
-    if layers.contains(&"sign") && !matches.contains_id(output_private_keys_arg_name) {
+    if matches.get_flag("signed") && !matches.contains_id(output_private_keys_arg_name) {
         eprintln!(
             "[ERROR] Signature layer was requested, but no '{output_private_keys_arg_name}' was provided."
         );
@@ -239,7 +230,7 @@ fn config_from_matches(
 
     // Construct base config
     let config = if matches.contains_id(output_public_keys_arg_name) {
-        if !layers.contains(&"encrypt") {
+        if !matches.get_flag("encrypted") {
             eprintln!(
                 "[ERROR] '{output_public_keys_arg_name}' was provided, but 'encrypt' layer was not requested. Enabling encryption."
             );
@@ -253,7 +244,7 @@ fn config_from_matches(
             })?;
 
         if matches.contains_id(output_private_keys_arg_name) {
-            if !layers.contains(&"sign") {
+            if !matches.get_flag("signed") {
                 eprintln!(
                     "[ERROR] '{output_private_keys_arg_name}' was provided, but 'sign' layer was not requested. Enabling signing."
                 );
@@ -274,7 +265,7 @@ fn config_from_matches(
             ArchiveWriterConfig::with_encryption_without_signature(&public_encryption_keys)
         }
     } else if matches.contains_id(output_private_keys_arg_name) {
-        if !layers.contains(&"sign") {
+        if !matches.get_flag("signeded") {
             eprintln!(
                 "[ERROR] '{output_private_keys_arg_name}' was provided, but 'sign' layer was not requested. Enabling signing."
             );
@@ -293,8 +284,8 @@ fn config_from_matches(
     }?;
 
     // Add compression if requested or implied by compression level
-    let config = if layers.contains(&"compress") || matches.contains_id("compression_level") {
-        if !layers.contains(&"compress") && matches.contains_id("compression_level") {
+    let config = if matches.get_flag("compressed") || matches.contains_id("compression_level") {
+        if !matches.get_flag("compressed") && matches.contains_id("compression_level") {
             eprintln!(
                 "[ERROR] 'compression_level' was specified without requesting 'compress' layer. Enabling compression."
             );
@@ -335,7 +326,7 @@ fn writer_from_matches<'a>(
     matches: &ArgMatches,
     create_command: bool,
 ) -> Result<ArchiveWriter<'a, OutputTypes>, MlarError> {
-    let config = config_from_matches(matches, create_command)?;
+    let config = writer_config_from_matches(matches, create_command)?;
 
     // Safe to use unwrap() because the option is required()
     let output = matches.get_one::<PathBuf>("output").unwrap();
@@ -900,6 +891,11 @@ fn create(matches: &ArgMatches) -> Result<(), MlarError> {
     }
 
     mla.finalize()?;
+
+    if !matches.get_flag("encrypted") {
+        eprintln!("WARNING, output archive was NOT encrypted !");
+    }
+
     Ok(())
 }
 
@@ -1382,6 +1378,11 @@ fn clean_truncated(matches: &ArgMatches) -> Result<(), MlarError> {
             eprintln!("[WARNING] Conversion ends with {status}");
         }
     }
+
+    if !matches.get_flag("encrypted") {
+        eprintln!("WARNING, output archive was NOT encrypted !");
+    }
+
     Ok(())
 }
 
@@ -1430,6 +1431,10 @@ fn convert(matches: &ArgMatches) -> Result<(), MlarError> {
     }
 
     mla_out.finalize().expect("[ERROR] Finalization error");
+
+    if !matches.get_flag("encrypted") {
+        eprintln!("WARNING, output archive was NOT encrypted !");
+    }
 
     Ok(())
 }
@@ -1626,19 +1631,24 @@ fn app() -> clap::Command {
             ];
     let output_args = vec![
         output_arg.clone(),
-        Arg::new("layers")
-            .long("layers")
-            .short('l')
-            .help("Layers to use. Default is '-l compress -l encrypt -l sign'")
-            .value_parser(["compress", "encrypt", "sign"])
-            .num_args(0..=1)
-            .action(ArgAction::Append),
         Arg::new("compression_level")
             .group("Compression layer")
             .short('q')
             .long("compression_level")
             .value_parser(value_parser!(u32).range(0..=11))
             .help("Compression level (0-11); ; bigger values cause denser, but slower compression"),
+        Arg::new("compressed")
+            .long("uncompressed")
+            .help("Disable compression.")
+            .action(ArgAction::SetFalse),
+        Arg::new("encrypted")
+            .long("unencrypted")
+            .help("Disable encryption.")
+            .action(ArgAction::SetFalse),
+        Arg::new("signed")
+            .long("unsigned")
+            .help("Disable signature.")
+            .action(ArgAction::SetFalse),
     ];
     let both_args = vec![
         private_keys.clone(),
