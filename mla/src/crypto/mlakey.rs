@@ -124,7 +124,7 @@ impl KeyOpts {
         // empty options for the moment: tag 0 as a single byte, base64 encoded on its own line
         // keep format consistent with other uses which place base64-encoded
         // serialized chunks on a single line ending with CRLF.
-        let encoded = base64_encode(EMPTY_OPTS_SERIALIZATION);
+        let encoded = base64_encode(EMPTY_OPTS_SERIALIZATION)?;
         dst.write_all(&encoded)?;
         dst.write_all(b"\r\n")?;
         Ok(())
@@ -223,7 +223,7 @@ impl MLADecryptionPrivateKey {
         b64data.extend_from_slice(EMPTY_OPTS_SERIALIZATION);
         b64data.extend_from_slice(self.private_key_ecc.as_bytes());
         b64data.extend_from_slice(self.private_key_seed_ml.to_d_z_64().as_ref());
-        let mut encoded = base64_encode(&b64data);
+        let mut encoded = base64_encode(&b64data)?;
         b64data.zeroize();
         dst.write_all(&encoded)?;
         encoded.zeroize();
@@ -380,7 +380,7 @@ impl MLASigningPrivateKey {
         b64data.extend_from_slice(EMPTY_OPTS_SERIALIZATION);
         b64data.extend_from_slice(self.private_key_ed25519.as_bytes());
         b64data.extend_from_slice(self.private_key_seed_mldsa.as_slice());
-        let mut encoded = base64_encode(&b64data);
+        let mut encoded = base64_encode(&b64data)?;
         b64data.zeroize();
         dst.write_all(&encoded)?;
         encoded.zeroize();
@@ -517,7 +517,7 @@ impl MLAEncryptionPublicKey {
         b64data.extend_from_slice(EMPTY_OPTS_SERIALIZATION); // key opts, empty length for the moment
         b64data.extend_from_slice(&self.public_key_ecc.to_bytes());
         b64data.extend_from_slice(&self.public_key_ml.as_bytes());
-        dst.write_all(&base64_encode(&b64data))?;
+        dst.write_all(&(base64_encode(&b64data)?))?;
         dst.write_all(b"\r\n")?;
         Ok(())
     }
@@ -578,7 +578,7 @@ impl MLASignatureVerificationPublicKey {
         b64data.extend_from_slice(EMPTY_OPTS_SERIALIZATION); // key opts, empty length for the moment
         b64data.extend_from_slice(self.public_key_ed25519.as_bytes());
         b64data.extend_from_slice(self.public_key_mldsa87.encode().as_slice());
-        let mut encoded = base64_encode(&b64data);
+        let mut encoded = base64_encode(&b64data)?;
         dst.write_all(&encoded)?;
         encoded.zeroize();
         dst.write_all(b"\r\n")?;
