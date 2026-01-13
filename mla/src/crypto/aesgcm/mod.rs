@@ -95,7 +95,7 @@ impl AesGcm256 {
             self.bytes_encrypted
                 .saturating_add(self.associated_data_bits_len / 8)
                 < AES256_GCM_MAX_PLAINTEXT_LENGTH,
-            "Attempted to encrypt more than AES-GCM is secure for"
+            "Attempted to encrypt more than what AES-GCM is secure for"
         );
 
         // Finish the current block, if any
@@ -170,7 +170,7 @@ impl AesGcm256 {
         assert!(
             buffer_len.saturating_add(self.associated_data_bits_len / 8)
                 < AES256_GCM_MAX_PLAINTEXT_LENGTH,
-            "Attempted to decrypt more than AES-GCM is secure for"
+            "Attempted to decrypt more than what AES-GCM is secure for"
         );
         let mut chunks = buffer.chunks_exact_mut(BLOCK_SIZE);
 

@@ -593,7 +593,7 @@ impl<W: Write> Write for WriterWithCount<W> {
                 u32::try_from(written)
                     .map_err(|_| io::Error::other("Failed to convert written data size to u32"))?,
             )
-            .ok_or_else(|| io::Error::other("overflow in WriterWithCount"))?;
+            .ok_or_else(|| io::Error::other("Overflow in WriterWithCount"))?;
         Ok(written)
     }
 
