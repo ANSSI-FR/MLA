@@ -73,10 +73,10 @@ mlar cat -k receiver.mlapriv -p sender.mlapub -i my_archive.mla etc/os-release
 # Convert the archive into a long-term format, primarily for archival purposes.
 # Below operation also removes encryption and applies
 # the highest (but slowest) compression level.
-mlar convert -k receiver.mlapriv -p sender.mlapub -i my_archive.mla -o longterm.mla -l compress -q 11
+mlar convert -k receiver.mlapriv -p sender.mlapub -i my_archive.mla -o longterm.mla --unencrypted --unsigned -q 11
 
 # Create an archive with multiple recipients and without signature nor compression
-mlar create -l encrypt -p archive.mlapub -p client1.mlapub -o my_archive.mla ...
+mlar create --unsigned --uncompressed -p archive.mlapub -p client1.mlapub -o my_archive.mla ...
 
 # List an archive containing an entry with a name that cannot be interpreted as path.
 # This outputs:
@@ -92,14 +92,14 @@ mlar list -k samples/test_mlakey_archive_v2_receiver.mlapriv -p samples/test_mla
 # `' OR 1=1`
 mlar cat -k samples/test_mlakey_archive_v2_receiver.mlapriv -p samples/test_mlakey_archive_v2_sender.mlapub -i samples/archive_weird.mla --raw-escaped-names c%3a%2f%00%3b%e2%80%ae%0ac%0dd%1b%5b1%3b31ma%3cscript%3eevil%5c..%2f%d8%01%c2%85%e2%88%95
 
-# Create an archive of a web file, without compression, without encryption and without signature
-curl https://raw.githubusercontent.com/ANSSI-FR/MLA/refs/heads/main/LICENSE.md | mlar create -l -o my_archive.mla --stdin-data
+# Create an archive of a web file, without encryption and without signature
+curl https://raw.githubusercontent.com/ANSSI-FR/MLA/refs/heads/main/LICENSE.md | mlar create --unencrypted --unsigned -o my_archive.mla --stdin-data
 
-# Create an archive of a web file and arbitrary byte string, without compression, without encryption and without signature (chosen separator should not be present in the two entries)
-(curl https://raw.githubusercontent.com/ANSSI-FR/MLA/refs/heads/main/LICENSE.md; echo "SEPARATOR"; echo -n "All Hail MLA") | mlar create -l -o my_archive.mla --stdin-data --stdin-data-separator "SEPARATOR" --stdin-data-entry-names great_license.md,hello.txt
+# Create an archive of a web file and arbitrary byte string, without encryption and without signature (chosen separator should not be present in the two entries)
+(curl https://raw.githubusercontent.com/ANSSI-FR/MLA/refs/heads/main/LICENSE.md; echo "SEPARATOR"; echo -n "All Hail MLA") | mlar create --unencrypted --unsigned -o my_archive.mla --stdin-data --stdin-data-separator "SEPARATOR" --stdin-data-entry-names great_license.md,hello.txt
 
 # Create an archive passing the file list on stdin (not data)
-echo -n -e "/etc/issue\n/etc/os-release" | mlar create -l -o my_archive.mla --stdin-file-list
+echo -n -e "/etc/issue\n/etc/os-release" | mlar create -unencrypted --unsigned -o my_archive.mla --stdin-file-list
 ```
 
 `mlar` can be obtained:

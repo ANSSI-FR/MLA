@@ -18,7 +18,7 @@ mlar keygen sender
 mlar keygen receiver
 ```
 
-Note: if you don't need signatures for mlar archive creation, specify only the layers you want (e.g. `-l encrypt -l compress`) and omit the `-l sign` otherwise it will be present by default. For reading with mlar, If you understand the associated risks, you can skip signature verification using the `--skip-signature-verification` flag.
+Note: if you don't need signatures for mlar archive creation, use `--unsigned` otherwise it will try to sign by default and fail if no private key is specified. For reading with mlar, If you understand the associated risks, you can skip signature verification using the `--skip-signature-verification` flag.
 
 ### Upgrade your archives
 
