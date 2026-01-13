@@ -1,4 +1,6 @@
-use ed25519_dalek::{SigningKey as Ed25519SigningKey, VerifyingKey as Ed25519VerifyingKey};
+use ed25519_dalek::{
+    SECRET_KEY_LENGTH, SigningKey as Ed25519SigningKey, VerifyingKey as Ed25519VerifyingKey,
+};
 use hkdf::Hkdf;
 use ml_dsa::{B32, EncodedVerifyingKey, KeyGen as _, KeyPair, MlDsa87, SigningKey, VerifyingKey};
 use rand::SeedableRng as _;
@@ -206,12 +208,23 @@ impl MLADecryptionPrivateKey {
 
     fn serialize_decryption_private_key<W: Write>(&self, mut dst: W) -> Result<(), Error> {
         dst.write_all(MLA_PRIV_DEC_KEY_HEADER)?;
-        let mut b64data = vec![];
+        // We allocate exactly the needed capacity now to avoid Vec reallocations which would let buffers unzeroized
+        let mut b64data = Vec::with_capacity(
+            DEC_METHOD_ID_0_PRIV
+                .len()
+                .checked_add(EMPTY_OPTS_SERIALIZATION.len())
+                .unwrap()
+                .checked_add(32)
+                .unwrap()
+                .checked_add(64)
+                .unwrap(),
+        );
         b64data.extend_from_slice(DEC_METHOD_ID_0_PRIV);
         b64data.extend_from_slice(EMPTY_OPTS_SERIALIZATION);
-        b64data.extend_from_slice(&self.private_key_ecc.to_bytes());
+        b64data.extend_from_slice(self.private_key_ecc.as_bytes());
         b64data.extend_from_slice(self.private_key_seed_ml.to_d_z_64().as_ref());
         let mut encoded = base64_encode(&b64data);
+        b64data.zeroize();
         dst.write_all(&encoded)?;
         encoded.zeroize();
         dst.write_all(b"\r\n")?;
@@ -352,12 +365,23 @@ impl MLASigningPrivateKey {
 
     fn serialize_signing_private_key<W: Write>(&self, mut dst: W) -> Result<(), Error> {
         dst.write_all(MLA_PRIV_SIG_KEY_HEADER)?;
-        let mut b64data = vec![];
+        // We allocate exactly the needed capacity now to avoid Vec reallocations which would let buffers unzeroized
+        let mut b64data = Vec::with_capacity(
+            SIG_METHOD_ID_0_PRIV
+                .len()
+                .checked_add(EMPTY_OPTS_SERIALIZATION.len())
+                .unwrap()
+                .checked_add(SECRET_KEY_LENGTH)
+                .unwrap()
+                .checked_add(32)
+                .unwrap(),
+        );
         b64data.extend_from_slice(SIG_METHOD_ID_0_PRIV);
         b64data.extend_from_slice(EMPTY_OPTS_SERIALIZATION);
-        b64data.extend_from_slice(&self.private_key_ed25519.to_bytes());
+        b64data.extend_from_slice(self.private_key_ed25519.as_bytes());
         b64data.extend_from_slice(self.private_key_seed_mldsa.as_slice());
         let mut encoded = base64_encode(&b64data);
+        b64data.zeroize();
         dst.write_all(&encoded)?;
         encoded.zeroize();
         dst.write_all(b"\r\n")?;
