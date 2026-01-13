@@ -32,18 +32,18 @@ Full documentation: [mlar-upgrader usage](https://github.com/ANSSI-FR/MLA/tree/m
 
 ### API
 
-MLA 2 introduces signifiant API changes for archive creation, encryption and signature handling, see [quick API usage](https://docs.rs/mla/2.0.0-beta/mla/#quick-api-usage).
+MLA 2 introduces significant API changes for archive creation, encryption and signature handling, see [quick API usage](https://docs.rs/mla/2.0.0-beta/mla/#quick-api-usage).
 
 ### Bindings
 
 #### C/C++
 
-MLA 2 introduces signifiant API changes for archive creation, encryption and signature handling. Updated examples to read and write an MLA on Linux and Windows [can be found here](https://github.com/ANSSI-FR/MLA/tree/main/bindings/C#examples).
+MLA 2 introduces significant API changes for archive creation, encryption and signature handling. Updated examples to read and write an MLA on Linux and Windows [can be found here](https://github.com/ANSSI-FR/MLA/tree/main/bindings/C#examples).
 
 Full documentation: [MLA's C/C++ API](https://github.com/ANSSI-FR/MLA/tree/main/bindings/C#api).
 
 #### Python
 
-MLA 2 introduces one major change in the Python bindings: `MLAFile` split: this class got split into `MLAReader` and `MLAWriter`, see [usage example](https://github.com/ANSSI-FR/MLA/tree/main/bindings/python#usage-example).
+MLA 2 introduces one major change in the Python bindings: `MLAFile` class got split into `MLAReader` and `MLAWriter` classes, see [usage example](https://github.com/ANSSI-FR/MLA/tree/main/bindings/python#usage-example).
 
 Also, MLA 2 now includes stub files (`.pyi`) for better IDE support (type checking, autocompletion).
