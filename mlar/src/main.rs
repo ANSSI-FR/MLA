@@ -217,7 +217,7 @@ fn writer_config_from_matches(
             return Err(MlarError::Config(IncoherentPersistentConfig));
         }
     } else {
-        eprintln!("WARNING, output archive will NOT be encrypted !");
+        eprintln!("[WARNING] Output archive will NOT be encrypted!");
     }
 
     // Sign layer requested but no private signing keys
@@ -265,7 +265,7 @@ fn writer_config_from_matches(
             ArchiveWriterConfig::with_encryption_without_signature(&public_encryption_keys)
         }
     } else if matches.contains_id(output_private_keys_arg_name) {
-        if !matches.get_flag("signeded") {
+        if !matches.get_flag("signed") {
             eprintln!(
                 "[ERROR] '{output_private_keys_arg_name}' was provided, but 'sign' layer was not requested. Enabling signing."
             );
@@ -893,7 +893,7 @@ fn create(matches: &ArgMatches) -> Result<(), MlarError> {
     mla.finalize()?;
 
     if !matches.get_flag("encrypted") {
-        eprintln!("WARNING, output archive was NOT encrypted !");
+        eprintln!("[WARNING] Output archive was NOT encrypted!");
     }
 
     Ok(())
@@ -1380,7 +1380,7 @@ fn clean_truncated(matches: &ArgMatches) -> Result<(), MlarError> {
     }
 
     if !matches.get_flag("encrypted") {
-        eprintln!("WARNING, output archive was NOT encrypted !");
+        eprintln!("[WARNING] Output archive was NOT encrypted!");
     }
 
     Ok(())
@@ -1433,7 +1433,7 @@ fn convert(matches: &ArgMatches) -> Result<(), MlarError> {
     mla_out.finalize().expect("[ERROR] Finalization error");
 
     if !matches.get_flag("encrypted") {
-        eprintln!("WARNING, output archive was NOT encrypted !");
+        eprintln!("[WARNING] Output archive was NOT encrypted!");
     }
 
     Ok(())
