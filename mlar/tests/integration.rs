@@ -814,7 +814,7 @@ fn test_multiple_compression_level() {
             .arg(compression_level);
 
         let mut expected_stderr = String::new();
-        expected_stderr.push_str("WARNING, output archive will NOT be encrypted !\n");
+        expected_stderr.push_str("[WARNING] Output archive will NOT be encrypted!\n");
         for file in &testfs.files {
             cmd.arg(file.path());
 
@@ -823,7 +823,7 @@ fn test_multiple_compression_level() {
 
             expected_stderr.push_str(format!(" adding: {escaped}\n").as_str());
         }
-        expected_stderr.push_str("WARNING, output archive was NOT encrypted !\n");
+        expected_stderr.push_str("[WARNING] Output archive was NOT encrypted!\n");
 
         println!("{cmd:?}");
         let assert = cmd.assert();
@@ -1120,14 +1120,14 @@ fn test_verbose_listing() {
 
     // Build expected stderr with full " adding: ... (N bytes)" lines
     let mut expected_stderr = String::new();
-    expected_stderr.push_str("WARNING, output archive will NOT be encrypted !\n");
+    expected_stderr.push_str("[WARNING] Output archive will NOT be encrypted!\n");
     for file in &testfs.files {
         cmd.arg(file.path());
         let entry_name = EntryName::from_path(file.path()).unwrap();
         let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
         expected_stderr.push_str(format!(" adding: {escaped}\n").as_str());
     }
-    expected_stderr.push_str("WARNING, output archive was NOT encrypted !\n");
+    expected_stderr.push_str("[WARNING] Output archive was NOT encrypted!\n");
 
     println!("{cmd:?}");
     let assert = cmd.assert();
@@ -1352,7 +1352,7 @@ fn test_cat() {
         .arg(mlar_file.path());
 
     let mut expected_stderr = String::new();
-    expected_stderr.push_str("WARNING, output archive will NOT be encrypted !\n");
+    expected_stderr.push_str("[WARNING] Output archive will NOT be encrypted!\n");
     for file in &testfs.files {
         cmd.arg(file.path());
 
@@ -1360,7 +1360,7 @@ fn test_cat() {
         let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
         expected_stderr.push_str(format!(" adding: {escaped}\n").as_str());
     }
-    expected_stderr.push_str("WARNING, output archive was NOT encrypted !\n");
+    expected_stderr.push_str("[WARNING] Output archive was NOT encrypted!\n");
 
     println!("{cmd:?}");
     let assert = cmd.assert();
@@ -1812,13 +1812,13 @@ fn test_no_open_on_encrypt() {
 
     // Prepare expected stderr for create
     let mut expected_stderr = String::new();
-    expected_stderr.push_str("WARNING, output archive will NOT be encrypted !\n");
+    expected_stderr.push_str("[WARNING] Output archive will NOT be encrypted!\n");
     for file in &testfs.files {
         let entry_name = EntryName::from_path(file.path()).unwrap();
         let escaped = entry_name.to_pathbuf_escaped_string().unwrap();
         expected_stderr.push_str(format!(" adding: {escaped}\n").as_str());
     }
-    expected_stderr.push_str("WARNING, output archive was NOT encrypted !\n");
+    expected_stderr.push_str("[WARNING] Output archive was NOT encrypted!\n");
 
     // `mlar create --unencrypted --unsigned -o output.mla file1.bin file2.bin file3.bin`
     // cf. https://github.com/rust-lang/rust/issues/148426
