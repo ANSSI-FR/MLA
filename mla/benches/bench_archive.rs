@@ -576,7 +576,7 @@ fn clean_truncated_archive(
 ///
 /// Only one-size is used, as the archive must be big enough to be representative
 pub fn truncated_multiple_layers_clean_truncated(c: &mut Criterion) {
-    let size = 4usize.wrapping_mul(MB) as u64;
+    let size = 4usize.checked_mul(MB).unwrap() as u64;
     let mut group = c.benchmark_group("truncated_multiple_layers_clean_truncated");
     group.sample_size(10);
     group.throughput(Throughput::Bytes(size));
