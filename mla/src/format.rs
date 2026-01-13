@@ -20,9 +20,13 @@ pub(crate) struct ArchiveHeader {
 impl<W: Write> MLASerialize<W> for ArchiveHeader {
     fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
         dest.write_all(MLA_MAGIC)?;
-        let mut len = 8;
-        len += MLA_FORMAT_VERSION.serialize(dest)?;
-        len += Opts.dump(dest)?;
+        let mut len: u64 = 8;
+        len = len
+            .checked_add(MLA_FORMAT_VERSION.serialize(dest)?)
+            .ok_or(Error::SerializationError)?;
+        len = len
+            .checked_add(Opts.dump(dest)?)
+            .ok_or(Error::SerializationError)?;
         Ok(len)
     }
 }

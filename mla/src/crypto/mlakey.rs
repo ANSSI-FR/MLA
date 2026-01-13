@@ -47,13 +47,15 @@ const PUB_KEY_FILE_FOOTER: &[u8] = b"END OF MLA PUBLIC KEY FILE";
 #[allow(clippy::slow_vector_initialization, clippy::manual_memcpy)]
 fn zeroizeable_read_to_end(mut src: impl Read) -> Result<Vec<u8>, Error> {
     let mut buf = Vec::new();
-    let mut min_capacity = 4096; // buf has always at least this capacity
+    let mut min_capacity: usize = 4096; // buf has always at least this capacity
     buf.resize(min_capacity, 0);
-    let mut read_offset = 0; // up to where in buf we have read data
+    let mut read_offset: usize = 0; // up to where in buf we have read data
     loop {
         if read_offset == min_capacity {
             // grow with zeroizing
-            min_capacity *= 2;
+            min_capacity = min_capacity
+                .checked_mul(2)
+                .ok_or(Error::DeserializationError)?;
             let mut new_buf = Vec::new();
             new_buf.resize(min_capacity, 0);
             for i in 0..buf.len() {
@@ -68,7 +70,9 @@ fn zeroizeable_read_to_end(mut src: impl Read) -> Result<Vec<u8>, Error> {
                     buf.resize(read_offset, 0);
                     return Ok(buf);
                 }
-                read_offset += n;
+                read_offset = read_offset
+                    .checked_add(n)
+                    .ok_or(Error::DeserializationError)?;
             }
             Err(e) if e.kind() == ErrorKind::Interrupted => {}
             Err(_) => {

@@ -74,13 +74,19 @@ impl<'a, R: InnerReaderTrait> StripHeadTailReader<'a, R> {
     }
 
     #[inline(always)]
-    fn tail_offset_from_inner_start(&self) -> u64 {
-        self.inner_len_incl_head_tail - self.tail_len
+    fn tail_offset_from_inner_start(&self) -> io::Result<u64> {
+        self.inner_len_incl_head_tail
+            .checked_sub(self.tail_len)
+            .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))
     }
 
     #[inline(always)]
-    fn this_layer_length(&self) -> u64 {
-        self.inner_len_incl_head_tail - self.head_len - self.tail_len
+    fn this_layer_length(&self) -> io::Result<u64> {
+        self.inner_len_incl_head_tail
+            .checked_sub(self.head_len)
+            .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))?
+            .checked_sub(self.tail_len)
+            .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))
     }
 }
 
@@ -102,7 +108,7 @@ impl<R: InnerReaderTrait> Seek for StripHeadTailReader<'_, R> {
                 let new_inner_position = asked_offset
                     .checked_add(self.head_len)
                     .ok_or(ErrorKind::InvalidInput)?;
-                if new_inner_position > self.tail_offset_from_inner_start() {
+                if new_inner_position > self.tail_offset_from_inner_start()? {
                     Err(ErrorKind::InvalidInput.into())
                 } else {
                     self.inner.seek(SeekFrom::Start(new_inner_position))?;
@@ -115,7 +121,7 @@ impl<R: InnerReaderTrait> Seek for StripHeadTailReader<'_, R> {
                     .current_position_in_this_layer
                     .checked_add_signed(asked_offset)
                     .ok_or(ErrorKind::InvalidInput)?;
-                if new_current_position_in_this_layer > self.this_layer_length() {
+                if new_current_position_in_this_layer > self.this_layer_length()? {
                     Err(ErrorKind::InvalidInput.into())
                 } else {
                     self.inner.seek(asked_seek)?;
@@ -125,7 +131,7 @@ impl<R: InnerReaderTrait> Seek for StripHeadTailReader<'_, R> {
             }
             SeekFrom::End(asked_offset) => {
                 let new_current_position = self
-                    .this_layer_length()
+                    .this_layer_length()?
                     .checked_add_signed(asked_offset)
                     .ok_or(ErrorKind::InvalidInput)?;
                 if asked_offset > 0 {
@@ -146,12 +152,17 @@ impl<R: InnerReaderTrait> Seek for StripHeadTailReader<'_, R> {
 impl<R: InnerReaderTrait> Read for StripHeadTailReader<'_, R> {
     /// Wrapper on inner
     fn read(&mut self, into: &mut [u8]) -> io::Result<usize> {
-        let remaining_bytes_in_inner_layer =
-            self.this_layer_length() - self.current_position_in_this_layer;
+        let remaining_bytes_in_inner_layer = self
+            .this_layer_length()?
+            .checked_sub(self.current_position_in_this_layer)
+            .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))?;
         let inner_ref = &mut self.inner;
         let n = inner_ref.take(remaining_bytes_in_inner_layer).read(into)?;
-        self.current_position_in_this_layer +=
-            u64::try_from(n).map_err(|_| io::Error::other("read overflowed u64"))?;
+        let n_u64 = u64::try_from(n).map_err(|_| io::Error::other("read overflowed u64"))?;
+        self.current_position_in_this_layer = self
+            .current_position_in_this_layer
+            .checked_add(n_u64)
+            .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))?;
         Ok(n)
     }
 }
