@@ -760,7 +760,7 @@ fn add_from_stdin_separated(
     };
 
     let mut stdin = io::stdin().lock();
-    let e = || MlarError::Other("arithmetic overflow".into());
+    let e = || MlarError::Other("Arithmetic overflow".into());
 
     // Read stdin in chunks
     loop {
@@ -792,7 +792,7 @@ fn add_from_stdin_separated(
                         .checked_sub(previous_separator_end_idx)
                         .ok_or_else(e)?,
                 )
-                .map_err(|_| MlarError::Other("arithmetic overflow".into()))?;
+                .map_err(|_| MlarError::Other("Arithmetic overflow".into()))?;
 
                 mla.append_entry_content(
                     entry_id,
@@ -836,7 +836,7 @@ fn add_from_stdin_separated(
                     .checked_sub(previous_separator_end_idx)
                     .ok_or_else(e)?,
             )
-            .map_err(|_| MlarError::Other("arithmetic overflow".into()))?;
+            .map_err(|_| MlarError::Other("Arithmetic overflow".into()))?;
             mla.append_entry_content(
                 entry_id,
                 content_size,
@@ -853,7 +853,7 @@ fn add_from_stdin_separated(
                     .checked_sub(previous_separator_end_idx)
                     .ok_or_else(e)?,
             )
-            .map_err(|_| MlarError::Other("arithmetic overflow".into()))?;
+            .map_err(|_| MlarError::Other("Arithmetic overflow".into()))?;
             mla.append_entry_content(entry_id, content_size, last_subslice)?;
             in_buffer_next_read_offset = 0;
         }
