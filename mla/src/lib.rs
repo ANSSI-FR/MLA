@@ -521,12 +521,19 @@ impl ArchiveFooter {
         tmp.sort_by_key(|(k, _)| *k);
 
         tmp.len().serialize(&mut dest)?;
-        let mut footer_serialization_length = 8;
+        let mut footer_serialization_length: u64 = 8;
         for (k, i) in tmp {
-            footer_serialization_length += serialize_entry_name(k, &mut dest)?;
-            footer_serialization_length += i.serialize(&mut dest)?;
+            footer_serialization_length = footer_serialization_length
+                .checked_add(serialize_entry_name(k, &mut dest)?)
+                .ok_or(Error::SerializationError)?;
+            footer_serialization_length = footer_serialization_length
+                .checked_add(i.serialize(&mut dest)?)
+                .ok_or(Error::SerializationError)?;
         }
-        (footer_serialization_length + 1).serialize(&mut dest)?; // +1 for tag indicating index presence
+        footer_serialization_length
+            .checked_add(1)
+            .ok_or(Error::SerializationError)?
+            .serialize(&mut dest)?; // +1 for tag indicating index presence
         Ok(())
     }
 
@@ -862,7 +869,12 @@ impl<W: InnerWriterTrait> ArchiveWriter<'_, W> {
 
         // Create ID for this file
         let id = self.next_id;
-        self.next_id = ArchiveEntryId(self.next_id.0 + 1);
+        self.next_id = ArchiveEntryId(
+            self.next_id
+                .0
+                .checked_add(1)
+                .ok_or(Error::SerializationError)?,
+        );
         self.current_id = id;
         self.entries_info.insert(name.clone(), id);
 
@@ -1056,7 +1068,9 @@ impl<R: Read> MLADeserialize<R> for u8 {
 impl<W: Write, A: MLASerialize<W>, B: MLASerialize<W>> MLASerialize<W> for (A, B) {
     fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
         let mut serialization_length = self.0.serialize(dest)?;
-        serialization_length += self.1.serialize(dest)?;
+        serialization_length = serialization_length
+            .checked_add(self.1.serialize(dest)?)
+            .ok_or(Error::SerializationError)?;
         Ok(serialization_length)
     }
 }
@@ -1065,16 +1079,20 @@ impl<W: Write, T: MLASerialize<W>> MLASerialize<W> for Vec<T> {
     fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
         let u64len = u64::try_from(self.len()).map_err(|_| Error::SerializationError)?;
         let mut serialization_length = u64len.serialize(dest)?;
-        serialization_length += self.as_slice().serialize(dest)?;
+        serialization_length = serialization_length
+            .checked_add(self.as_slice().serialize(dest)?)
+            .ok_or(Error::SerializationError)?;
         Ok(serialization_length)
     }
 }
 
 impl<W: Write, T: MLASerialize<W>> MLASerialize<W> for &[T] {
     fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
-        let mut serialization_length = 0;
+        let mut serialization_length: u64 = 0;
         for e in *self {
-            serialization_length += e.serialize(dest)?;
+            serialization_length = serialization_length
+                .checked_add(e.serialize(dest)?)
+                .ok_or(Error::SerializationError)?;
         }
         Ok(serialization_length)
     }
@@ -1186,8 +1204,12 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
         }
         src.seek(SeekFrom::End(-16))?;
         let mla_footer_options_length = u64::deserialize(&mut src)?;
-        let mla_tail_len = mla_footer_options_length + 16;
-        let inner_len = end_magic_position + 8;
+        let mla_tail_len = mla_footer_options_length
+            .checked_add(16)
+            .ok_or(Error::DeserializationError)?;
+        let inner_len = end_magic_position
+            .checked_add(8)
+            .ok_or(Error::DeserializationError)?;
         src.seek(SeekFrom::Start(0))?;
         src = Box::new(StripHeadTailReader::new(
             src,
@@ -1530,7 +1552,9 @@ impl<'b, R: 'b + Read> TruncatedArchiveReader<'b, R> {
                                                 // EOF
                                                 break 'buf_fill;
                                             }
-                                            next_write_pos += read;
+                                            next_write_pos = next_write_pos
+                                                .checked_add(read)
+                                                .ok_or(Error::DeserializationError)?;
                                         }
                                         Err(err) => {
                                             // Stop reconstruction

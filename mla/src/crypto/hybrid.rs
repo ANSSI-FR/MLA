@@ -145,13 +145,21 @@ pub struct HybridRecipientEncapsulatedKey {
 
 impl<W: Write> MLASerialize<W> for HybridRecipientEncapsulatedKey {
     fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
-        let mut serialization_length = 0;
-        serialization_length += self.ct_ml.as_slice().serialize(dest)?;
+        let mut serialization_length: u64 = 0;
+        serialization_length = serialization_length
+            .checked_add(self.ct_ml.as_slice().serialize(dest)?)
+            .unwrap();
         let mut ct_ecc_bytes = self.ct_ecc.to_bytes();
-        serialization_length += ct_ecc_bytes.as_slice().serialize(dest)?;
+        serialization_length = serialization_length
+            .checked_add(ct_ecc_bytes.as_slice().serialize(dest)?)
+            .unwrap();
         ct_ecc_bytes.zeroize();
-        serialization_length += self.wrapped_ss.as_slice().serialize(dest)?;
-        serialization_length += self.tag.as_slice().serialize(dest)?;
+        serialization_length = serialization_length
+            .checked_add(self.wrapped_ss.as_slice().serialize(dest)?)
+            .unwrap();
+        serialization_length = serialization_length
+            .checked_add(self.tag.as_slice().serialize(dest)?)
+            .unwrap();
         Ok(serialization_length)
     }
 }

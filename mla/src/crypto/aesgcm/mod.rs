@@ -20,6 +20,8 @@ pub const NONCE_AES_SIZE: usize = 96 / 8;
 // Key commitment chain must be as long as twice the expected security strength
 pub const KEY_COMMITMENT_SIZE: usize = KEY_SIZE * 2;
 
+const AES256_GCM_MAX_PLAINTEXT_LENGTH: u64 = (1 << 39) - 256;
+
 pub type Nonce = [u8; NONCE_AES_SIZE];
 pub type Key = [u8; KEY_SIZE];
 
@@ -52,6 +54,9 @@ impl AesGcm256 {
     // errors are from mla/src/error.rs
     #[allow(clippy::unnecessary_wraps)]
     pub fn new(key: &Key, nonce: &Nonce, associated_data: &[u8]) -> Result<AesGcm256, Error> {
+        let associated_data_len = u64::try_from(associated_data.len()).unwrap();
+        assert!(associated_data_len < AES256_GCM_MAX_PLAINTEXT_LENGTH);
+
         // Convert the nonce (96 bits) to the AES-GCM form
         let mut counter_block = [0u8; BLOCK_SIZE];
         counter_block[..12].copy_from_slice(nonce);
@@ -74,7 +79,7 @@ impl AesGcm256 {
         Ok(AesGcm256 {
             cipher,
             ghash,
-            associated_data_bits_len: (associated_data.len() as u64) * 8,
+            associated_data_bits_len: associated_data_len.checked_mul(8).unwrap(),
             current_block: Vec::with_capacity(BLOCK_SIZE),
             bytes_encrypted: 0,
         })
@@ -82,17 +87,27 @@ impl AesGcm256 {
 
     pub fn encrypt(&mut self, mut buffer: &mut [u8]) {
         // Update the number of byte encrypted
-        self.bytes_encrypted += buffer.len() as u64;
+        self.bytes_encrypted = self
+            .bytes_encrypted
+            .checked_add(u64::try_from(buffer.len()).unwrap())
+            .unwrap();
+        assert!(
+            self.bytes_encrypted
+                .saturating_add(self.associated_data_bits_len / 8)
+                < AES256_GCM_MAX_PLAINTEXT_LENGTH,
+            "Attempted to encrypt more than AES-GCM is secure for"
+        );
 
         // Finish the current block, if any
         if !self.current_block.is_empty() {
-            if (self.current_block.len() + buffer.len()) < BLOCK_SIZE {
+            if (self.current_block.len().checked_add(buffer.len()).unwrap()) < BLOCK_SIZE {
                 self.cipher.apply_keystream(buffer);
                 self.current_block.extend_from_slice(buffer);
                 return;
             }
 
-            let (in_block, out_block) = buffer.split_at_mut(BLOCK_SIZE - self.current_block.len());
+            let (in_block, out_block) =
+                buffer.split_at_mut(BLOCK_SIZE.checked_sub(self.current_block.len()).unwrap());
             self.cipher.apply_keystream(in_block);
             self.current_block.extend_from_slice(in_block);
             // `current_block` length is now BLOCK_SIZE -> update GHash and
@@ -129,7 +144,7 @@ impl AesGcm256 {
         self.ghash.update_padded(&self.current_block);
 
         // Compute "len(associated data) || len(bytes encrypted)"
-        let buffer_bits = self.bytes_encrypted * 8;
+        let buffer_bits = self.bytes_encrypted.checked_mul(8).unwrap();
         let mut block = GenericArray::default();
         block[..8].copy_from_slice(&self.associated_data_bits_len.to_be_bytes());
         block[8..].copy_from_slice(&buffer_bits.to_be_bytes());
@@ -151,6 +166,12 @@ impl AesGcm256 {
 
     /// Decrypt and compute the associated tag
     pub fn decrypt(&mut self, buffer: &mut [u8]) -> Tag {
+        let buffer_len = u64::try_from(buffer.len()).unwrap();
+        assert!(
+            buffer_len.saturating_add(self.associated_data_bits_len / 8)
+                < AES256_GCM_MAX_PLAINTEXT_LENGTH,
+            "Attempted to decrypt more than AES-GCM is secure for"
+        );
         let mut chunks = buffer.chunks_exact_mut(BLOCK_SIZE);
 
         // Interleaved ghash update
@@ -167,7 +188,7 @@ impl AesGcm256 {
         }
 
         // Compute "len(associated data) || len(bytes encrypted)"
-        let buffer_bits = (buffer.len() as u64) * 8;
+        let buffer_bits = buffer_len.checked_mul(8).unwrap();
         let mut block = GenericArray::default();
         block[..8].copy_from_slice(&self.associated_data_bits_len.to_be_bytes());
         block[8..].copy_from_slice(&buffer_bits.to_be_bytes());
@@ -211,11 +232,11 @@ mod tests {
         assert_eq!(tag.len(), TAG_LENGTH);
 
         assert_eq!(
-            &extern_ciphertext[..extern_ciphertext.len() - TAG_LENGTH],
+            &extern_ciphertext[..extern_ciphertext.len().checked_sub(TAG_LENGTH).unwrap()],
             buf.as_slice()
         );
         assert_eq!(
-            extern_ciphertext[extern_ciphertext.len() - TAG_LENGTH..],
+            extern_ciphertext[extern_ciphertext.len().checked_sub(TAG_LENGTH).unwrap()..],
             tag[..]
         );
 
@@ -234,11 +255,11 @@ mod tests {
             assert_eq!(tag.len(), TAG_LENGTH);
 
             assert_eq!(
-                &extern_ciphertext[..extern_ciphertext.len() - TAG_LENGTH],
+                &extern_ciphertext[..extern_ciphertext.len().checked_sub(TAG_LENGTH).unwrap()],
                 buffer.as_slice()
             );
             assert_eq!(
-                extern_ciphertext[extern_ciphertext.len() - TAG_LENGTH..],
+                extern_ciphertext[extern_ciphertext.len().checked_sub(TAG_LENGTH).unwrap()..],
                 tag[..]
             );
         }

@@ -1,4 +1,4 @@
-use std::io;
+use std::io::{self, ErrorKind};
 use std::io::{Read, Seek, SeekFrom, Write};
 
 use crate::Error;
@@ -76,9 +76,12 @@ impl<R: InnerReaderTrait> LayerReader<'_, R> for RawLayerReader<R> {
 impl<R: InnerReaderTrait> Seek for RawLayerReader<R> {
     /// Offer a position relatively to `self.offset_pos`
     fn seek(&mut self, ask_pos: SeekFrom) -> io::Result<u64> {
+        let e = || io::Error::from(ErrorKind::InvalidInput);
         match ask_pos {
             SeekFrom::Start(pos) => {
-                self.inner.seek(SeekFrom::Start(self.offset_pos + pos))?;
+                self.inner.seek(SeekFrom::Start(
+                    self.offset_pos.checked_add(pos).ok_or_else(e)?,
+                ))?;
                 Ok(pos)
             }
             SeekFrom::Current(_pos) => {
@@ -87,7 +90,7 @@ impl<R: InnerReaderTrait> Seek for RawLayerReader<R> {
                     self.inner.seek(SeekFrom::Start(self.offset_pos))?;
                     Ok(0)
                 } else {
-                    Ok(inner_pos - self.offset_pos)
+                    Ok(inner_pos.checked_sub(self.offset_pos).ok_or_else(e)?)
                 }
             }
             SeekFrom::End(_pos) => {
@@ -96,7 +99,7 @@ impl<R: InnerReaderTrait> Seek for RawLayerReader<R> {
                     self.inner.seek(SeekFrom::Start(self.offset_pos))?;
                     Ok(0)
                 } else {
-                    Ok(inner_pos - self.offset_pos)
+                    Ok(inner_pos.checked_sub(self.offset_pos).ok_or_else(e)?)
                 }
             }
         }

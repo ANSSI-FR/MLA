@@ -16,7 +16,7 @@ const DEFAULT_BUFFER_SIZE: usize = 128 * 1024;
 ///
 /// This generic escaping is described in `doc/ENTRY_NAME.md`
 pub fn mla_percent_escape(bytes: &[u8], bytes_to_preserve: &[u8]) -> Vec<u8> {
-    let mut s = Vec::with_capacity(bytes.len() * 3);
+    let mut s = Vec::with_capacity(bytes.len().checked_mul(3).unwrap());
     for byte in bytes {
         if bytes_to_preserve.contains(byte) {
             s.push(*byte);
@@ -59,6 +59,10 @@ pub fn mla_percent_unescape(input: &[u8], bytes_to_allow: &[u8]) -> Option<Vec<u
 }
 
 #[inline(always)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    reason = "Given valid values as input, cannot overflow"
+)]
 fn nibble_to_hex_char(nibble: u8) -> u8 {
     if nibble <= 0x9 {
         b'0' + nibble
@@ -68,6 +72,10 @@ fn nibble_to_hex_char(nibble: u8) -> u8 {
 }
 
 #[inline(always)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    reason = "Given conditions on each branch, cannot overflow"
+)]
 fn hex_char_to_nibble(hex_char: u8) -> Option<u8> {
     if hex_char.is_ascii_digit() {
         Some(hex_char - b'0')

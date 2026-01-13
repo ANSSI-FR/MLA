@@ -11,6 +11,7 @@ resolver = "3"
 [workspace.lints.clippy]
 # all lints that are on by default (correctness, suspicious, style, complexity, perf)
 all = {level = "deny", priority = -1}
+arithmetic_side_effects = {level = "deny", priority = -1}
 # lints which are rather strict or have occasional false positives
 pedantic = {level = "deny", priority = -1}
 # new lints that are still under development
