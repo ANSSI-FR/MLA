@@ -7,9 +7,16 @@ const BASE64_CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwx
 // Uses compilation cast `as` for safe conversion from u8 to u32 because
 // it is time constant and won't vary like std on different platforms
 #[allow(clippy::cast_lossless)]
-pub(crate) fn base64_encode(data: &[u8]) -> Vec<u8> {
-    // We know output size given input size, so we allocate everything now to avoid Vec reallocations which would let buffers unzeroized
-    let mut encoded = Vec::with_capacity(data.len() * 4 / 3 + 3);
+pub(crate) fn base64_encode(data: &[u8]) -> Result<Vec<u8>, Error> {
+    // We know output size given input size, so we allocate exactly needed capacity now to avoid Vec reallocations which would let buffers unzeroized
+    // Vec capacity is defined as a manual implementation of div_ceil(3) function with overflow checks: 4 * ((data.len() + 2) / 3)
+    let capacity = data
+        .len()
+        .checked_add(2)
+        .and_then(|x| x.checked_div(3))
+        .and_then(|x| x.checked_mul(4))
+        .ok_or(Error::SerializationError)?;
+    let mut encoded = Vec::with_capacity(capacity);
     let mut i = 0;
     while i < data.len() {
         let mut val: u32 = 0;
@@ -36,7 +43,7 @@ pub(crate) fn base64_encode(data: &[u8]) -> Vec<u8> {
         val.zeroize();
     }
 
-    encoded
+    Ok(encoded)
 }
 
 // Uses compilation cast `as` for safe conversion from u8 to u32 because
@@ -46,12 +53,16 @@ pub(crate) fn base64_decode(encoded: &[u8]) -> Result<Vec<u8>, Error> {
     if !encoded.len().is_multiple_of(4) {
         return Err(Error::DeserializationError);
     }
-    let decoded_len = (encoded.len() / 4) * 3;
+    let decoded_len = encoded
+        .len()
+        .checked_div(4)
+        .and_then(|x| x.checked_mul(3))
+        .ok_or(Error::DeserializationError)?;
     let encoded = match encoded {
         [rest @ .., b'=', b'='] | [rest @ .., b'='] => rest,
         _ => encoded,
     };
-    // We know output size given input size, so we allocate everything now to avoid Vec reallocations which would let buffers unzeroized
+    // We know output size given input size, so we allocate needed capacity now to avoid Vec reallocations which would let buffers unzeroized
     let mut decoded = Vec::with_capacity(decoded_len);
     let mut i = 0;
     while i < encoded.len() {
