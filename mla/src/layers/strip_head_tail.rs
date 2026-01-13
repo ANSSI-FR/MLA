@@ -158,7 +158,7 @@ impl<R: InnerReaderTrait> Read for StripHeadTailReader<'_, R> {
             .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))?;
         let inner_ref = &mut self.inner;
         let n = inner_ref.take(remaining_bytes_in_inner_layer).read(into)?;
-        let n_u64 = u64::try_from(n).map_err(|_| io::Error::other("read overflowed u64"))?;
+        let n_u64 = u64::try_from(n).map_err(|_| io::Error::other("Read overflowed u64"))?;
         self.current_position_in_this_layer = self
             .current_position_in_this_layer
             .checked_add(n_u64)
