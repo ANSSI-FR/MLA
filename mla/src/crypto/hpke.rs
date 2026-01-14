@@ -168,7 +168,11 @@ pub(crate) fn compute_nonce(base_nonce: &Nonce, seq: u64) -> Nonce {
     let mut nonce = *base_nonce;
     let seq_be = seq.to_be_bytes();
     for i in 0..seq_be.len() {
-        let nonce_idx = i + nonce.len() - seq_be.len();
+        let nonce_idx = i
+            .checked_add(nonce.len())
+            .unwrap()
+            .checked_sub(seq_be.len())
+            .unwrap();
         nonce[nonce_idx] ^= seq_be[i];
     }
     nonce

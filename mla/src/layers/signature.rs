@@ -73,10 +73,23 @@ impl<'a, W: 'a + InnerWriterTrait> LayerWriter<'a, W> for SignatureLayerWriter<'
         //  (number of keys) * (ed25519 signature size + mldsa signature size + 2 + 2)
         // There are two +2: one for each signature algo corresponding to the u16 encoding signature_method_id
         // See doc/src/FORMAT.md
-        let signature_data_content_size: usize = self.signature_config.signature_keys.keys.len()
-            * (2 + ED25519_SIGNATURE_LENGTH + 2 + ML_DSA87_SIGNATURE_SIZE);
+        let signature_data_content_size: usize = self
+            .signature_config
+            .signature_keys
+            .keys
+            .len()
+            .checked_mul(
+                2usize
+                    .checked_add(ED25519_SIGNATURE_LENGTH)
+                    .ok_or(Error::SerializationError)?
+                    .checked_add(2)
+                    .ok_or(Error::SerializationError)?
+                    .checked_add(ML_DSA87_SIGNATURE_SIZE)
+                    .ok_or(Error::SerializationError)?,
+            )
+            .ok_or(Error::SerializationError)?;
         let signature_data_content_size =
-            u64::try_from(signature_data_content_size).map_err(|_| Error::DeserializationError)?;
+            u64::try_from(signature_data_content_size).map_err(|_| Error::SerializationError)?;
         // Serialize signature_data_content_size:
         signature_data_content_size.serialize(&mut out)?;
 
@@ -89,7 +102,10 @@ impl<'a, W: 'a + InnerWriterTrait> LayerWriter<'a, W> for SignatureLayerWriter<'
             let mldsa87_signature = key.sign_mldsa87(self.hash.clone(), &mut rng)?;
             mldsa87_signature.serialize(&mut out)?;
         }
-        (signature_data_content_size + 8).serialize(&mut out)?; // +8 for the Vec's length encoding
+        signature_data_content_size
+            .checked_add(8)
+            .ok_or(Error::SerializationError)?
+            .serialize(&mut out)?; // +8 for the Vec's length encoding
 
         Ok(out)
     }

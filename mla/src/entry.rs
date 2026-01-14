@@ -472,7 +472,9 @@ pub use entryname::{
 pub(crate) fn serialize_entry_name(name: &EntryName, mut dst: impl Write) -> Result<u64, Error> {
     let slice = name.as_arbitrary_bytes();
     let mut serialization_length = slice.len().serialize(&mut dst)?;
-    serialization_length += slice.serialize(&mut dst)?;
+    serialization_length = serialization_length
+        .checked_add(slice.serialize(&mut dst)?)
+        .unwrap();
     Ok(serialization_length)
 }
 pub(crate) fn deserialize_entry_name(mut src: impl Read) -> Result<EntryName, Error> {
@@ -545,7 +547,10 @@ impl<'a, R: Read + Seek> ArchiveEntryDataReader<'a, R> {
     }
 
     fn increment_current_offsets_and_sizes_index(&mut self) -> Result<(), Error> {
-        self.current_offsets_and_sizes_index += 1;
+        self.current_offsets_and_sizes_index = self
+            .current_offsets_and_sizes_index
+            .checked_add(1)
+            .ok_or(Error::DeserializationError)?;
         if self.current_offsets_and_sizes_index >= self.offsets_and_sizes.len() {
             Err(Error::WrongReaderState(
                 "[ArchiveEntryDataReader] No more continuous blocks".to_string(),
@@ -574,7 +579,12 @@ impl<T: Read + Seek> Read for ArchiveEntryDataReader<'_, T> {
                         if id == self.id {
                             let count = self.src.by_ref().take(length).read(into)?;
                             let count_as_u64 = usize_as_u64(count)?;
-                            (length - count_as_u64, count)
+                            (
+                                length
+                                    .checked_sub(count_as_u64)
+                                    .ok_or(Error::DeserializationError)?,
+                                count,
+                            )
                         } else {
                             self.move_to_block_at_current_offsets_and_sizes_index()?;
                             return self.read(into);
@@ -608,7 +618,12 @@ impl<T: Read + Seek> Read for ArchiveEntryDataReader<'_, T> {
             ArchiveEntryDataReaderState::InEntryContent(remaining) => {
                 let count = self.src.by_ref().take(remaining).read(into)?;
                 let count_as_u64 = usize_as_u64(count)?;
-                (remaining - count_as_u64, count)
+                (
+                    remaining
+                        .checked_sub(count_as_u64)
+                        .ok_or(Error::DeserializationError)?,
+                    count,
+                )
             }
             ArchiveEntryDataReaderState::Finish => {
                 return Ok(0);
@@ -618,7 +633,10 @@ impl<T: Read + Seek> Read for ArchiveEntryDataReader<'_, T> {
             self.state = ArchiveEntryDataReaderState::InEntryContent(remaining);
         } else {
             // remaining is 0 (> never happens thanks to take)
-            self.current_offsets_and_sizes_index += 1;
+            self.current_offsets_and_sizes_index = self
+                .current_offsets_and_sizes_index
+                .checked_add(1)
+                .ok_or(Error::DeserializationError)?;
             self.state = ArchiveEntryDataReaderState::Ready;
         }
         Ok(count)
@@ -629,11 +647,13 @@ impl<T: Read + Seek> Seek for ArchiveEntryDataReader<'_, T> {
     fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
         match pos {
             SeekFrom::Start(asked_seek_offset) => {
-                let mut sum = 0;
+                let mut sum: u64 = 0;
                 let mut found = None;
                 // look for block containing asked_seek_offset
                 for (index, (offset, size)) in self.offsets_and_sizes.iter().copied().enumerate() {
-                    sum += size;
+                    sum = sum
+                        .checked_add(size)
+                        .ok_or(io::Error::from(ErrorKind::InvalidInput))?;
                     if sum > asked_seek_offset {
                         // return found info and index
                         found = Some((offset, size, index));
@@ -643,7 +663,11 @@ impl<T: Read + Seek> Seek for ArchiveEntryDataReader<'_, T> {
 
                 if sum == asked_seek_offset {
                     // we seeked to end offset
-                    let last_index = self.offsets_and_sizes.len() - 1;
+                    let last_index = self
+                        .offsets_and_sizes
+                        .len()
+                        .checked_sub(1)
+                        .ok_or(io::Error::from(ErrorKind::InvalidInput))?;
                     let (offset, size) = self.offsets_and_sizes[last_index];
                     found = Some((offset, size, last_index));
                 }
@@ -653,8 +677,15 @@ impl<T: Read + Seek> Seek for ArchiveEntryDataReader<'_, T> {
                     self.state = ArchiveEntryDataReaderState::Ready;
                     self.current_offsets_and_sizes_index = index;
                     let mut v = Vec::new();
-                    let offset_from_block_start = usize::try_from(asked_seek_offset - (sum - size))
-                        .map_err(|_| io::Error::from(ErrorKind::InvalidInput))?;
+                    let offset_from_block_start = usize::try_from(
+                        asked_seek_offset
+                            .checked_sub(
+                                sum.checked_sub(size)
+                                    .ok_or(io::Error::from(ErrorKind::InvalidInput))?,
+                            )
+                            .ok_or(io::Error::from(ErrorKind::InvalidInput))?,
+                    )
+                    .map_err(|_| io::Error::from(ErrorKind::InvalidInput))?;
                     v.resize(offset_from_block_start, 0);
                     self.read_exact(&mut v)?;
                     Ok(asked_seek_offset)
@@ -664,15 +695,21 @@ impl<T: Read + Seek> Seek for ArchiveEntryDataReader<'_, T> {
             }
             SeekFrom::End(asked_seek_offset) => {
                 let offset_from_end = 0u64
-                    .checked_add_signed(-asked_seek_offset)
+                    .checked_add_signed(
+                        asked_seek_offset
+                            .checked_neg()
+                            .ok_or(io::Error::from(ErrorKind::InvalidInput))?,
+                    )
                     .ok_or(io::Error::from(ErrorKind::InvalidInput))?;
-                let mut sum = 0;
+                let mut sum: u64 = 0;
                 let mut found = None;
                 // look for block containing asked_seek_offset from end (.rev())
                 for (index, (offset, size)) in
                     self.offsets_and_sizes.iter().copied().enumerate().rev()
                 {
-                    sum += size;
+                    sum = sum
+                        .checked_add(size)
+                        .ok_or(io::Error::from(ErrorKind::InvalidInput))?;
                     if sum > offset_from_end {
                         // return found info and index
                         found = Some((offset, size, index));
@@ -691,8 +728,11 @@ impl<T: Read + Seek> Seek for ArchiveEntryDataReader<'_, T> {
                     self.state = ArchiveEntryDataReaderState::Ready;
                     self.current_offsets_and_sizes_index = index;
                     let mut v = Vec::new();
-                    let offset_from_block_start = usize::try_from(sum - offset_from_end)
-                        .map_err(|_| io::Error::from(ErrorKind::InvalidInput))?;
+                    let offset_from_block_start = usize::try_from(
+                        sum.checked_sub(offset_from_end)
+                            .ok_or(io::Error::from(ErrorKind::InvalidInput))?,
+                    )
+                    .map_err(|_| io::Error::from(ErrorKind::InvalidInput))?;
                     v.resize(offset_from_block_start, 0);
                     self.read_exact(&mut v)?;
 
@@ -706,9 +746,12 @@ impl<T: Read + Seek> Seek for ArchiveEntryDataReader<'_, T> {
                     let offset_from_start = self.offsets_and_sizes
                         [..=self.current_offsets_and_sizes_index]
                         .iter()
-                        .map(|p| p.1)
-                        .sum::<u64>()
-                        - remaining;
+                        .try_fold(0, |acc: u64, p| {
+                            acc.checked_add(p.1)
+                                .ok_or(io::Error::from(ErrorKind::InvalidInput))
+                        })? // sum all sizes
+                        .checked_sub(remaining)
+                        .ok_or(io::Error::from(ErrorKind::InvalidInput))?;
                     let new_pos = offset_from_start
                         .checked_add_signed(asked_seek_offset)
                         .ok_or(io::Error::from(ErrorKind::InvalidInput))?;

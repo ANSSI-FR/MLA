@@ -42,7 +42,12 @@ impl<'a, W: 'a + InnerWriterTrait> Write for PositionLayerWriter<'a, W> {
     /// Wrapper on inner
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let written = self.inner.write(buf)?;
-        self.pos += written as u64;
+        let written_u64 =
+            u64::try_from(written).map_err(|_| io::Error::other("Invalid written"))?;
+        self.pos = self
+            .pos
+            .checked_add(written_u64)
+            .ok_or_else(|| io::Error::other("Invalid pos+written_u64"))?;
         Ok(written)
     }
 
@@ -73,7 +78,12 @@ impl<R> PositionLayerReader<R> {
 impl<R: Read> Read for PositionLayerReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let n = self.inner.read(buf)?;
-        self.pos += u64::try_from(n).or(Err(io::Error::other("Failed to convert usize to u64")))?;
+        let n_u64 =
+            u64::try_from(n).map_err(|_| io::Error::other("Failed to convert usize to u64"))?;
+        self.pos = self
+            .pos
+            .checked_add(n_u64)
+            .ok_or_else(|| io::Error::other("Failed to add pos and n_u64"))?;
         Ok(n)
     }
 }

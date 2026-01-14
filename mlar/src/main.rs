@@ -51,6 +51,7 @@ enum MlarError {
     EntryNameEscapeFailed,
     EntryNotFound,
     EntriesNotFound,
+    Other(String),
 }
 
 impl fmt::Display for MlarError {
@@ -60,6 +61,7 @@ impl fmt::Display for MlarError {
                 f,
                 "An MLA entry name cannot be interpreted as a valid MLA path encoding, try listing with --raw-escaped-names to debug"
             ),
+            MlarError::Other(s) => write!(f, "mlar Error: {s}"),
             _ => {
                 // For now, use the debug derived version
                 write!(f, "{self:?}")
@@ -99,7 +101,8 @@ impl error::Error for MlarError {
             | MlarError::EntryNameEscapeFailed
             | MlarError::EntryNotFound
             | MlarError::EntriesNotFound
-            | MlarError::MissingHash => None,
+            | MlarError::MissingHash
+            | MlarError::Other(_) => None,
         }
     }
 }
@@ -757,6 +760,7 @@ fn add_from_stdin_separated(
     };
 
     let mut stdin = io::stdin().lock();
+    let e = || MlarError::Other("Arithmetic overflow".into());
 
     // Read stdin in chunks
     loop {
@@ -767,17 +771,28 @@ fn add_from_stdin_separated(
         }
 
         // up to where the buffer has been filled by the read call
-        in_buffer_end_offset = in_buffer_next_read_offset + bytes_read_len;
+        in_buffer_end_offset = in_buffer_next_read_offset
+            .checked_add(bytes_read_len)
+            .ok_or_else(e)?;
 
         // Find potential separators
         let mut previous_separator_end_idx = 0;
-        let mut eventual_separator_idx = 0;
+        let mut eventual_separator_idx: usize = 0;
 
         // test if we found a separator
-        while eventual_separator_idx + separator.len() <= in_buffer_end_offset {
+        while eventual_separator_idx
+            .checked_add(separator.len())
+            .ok_or_else(e)?
+            <= in_buffer_end_offset
+        {
             if in_buffer[eventual_separator_idx..].starts_with(separator) {
                 let separator_idx = eventual_separator_idx;
-                let content_size = (separator_idx - previous_separator_end_idx) as u64;
+                let content_size = u64::try_from(
+                    separator_idx
+                        .checked_sub(previous_separator_end_idx)
+                        .ok_or_else(e)?,
+                )
+                .map_err(|_| MlarError::Other("Arithmetic overflow".into()))?;
 
                 mla.append_entry_content(
                     entry_id,
@@ -795,10 +810,11 @@ fn add_from_stdin_separated(
                 entry_id = mla.start_entry(next_entry_name)?;
 
                 // next separator will be at least after this one, so we advance by separator.len()
-                eventual_separator_idx = separator_idx + separator.len();
+                eventual_separator_idx =
+                    separator_idx.checked_add(separator.len()).ok_or_else(e)?;
                 previous_separator_end_idx = eventual_separator_idx;
             } else {
-                eventual_separator_idx += 1;
+                eventual_separator_idx = eventual_separator_idx.checked_add(1).ok_or_else(e)?;
             }
         }
 
@@ -812,8 +828,15 @@ fn add_from_stdin_separated(
             separator_prefixes.find(|prefix| last_subslice.ends_with(prefix))
         {
             // only write content up to potential new separator. If it is not a real separator, rest will be written in next iteration.
-            let cut_point = in_buffer_end_offset - separator_prefix.len();
-            let content_size = (cut_point - previous_separator_end_idx) as u64;
+            let cut_point = in_buffer_end_offset
+                .checked_sub(separator_prefix.len())
+                .ok_or_else(e)?;
+            let content_size = u64::try_from(
+                cut_point
+                    .checked_sub(previous_separator_end_idx)
+                    .ok_or_else(e)?,
+            )
+            .map_err(|_| MlarError::Other("Arithmetic overflow".into()))?;
             mla.append_entry_content(
                 entry_id,
                 content_size,
@@ -825,7 +848,12 @@ fn add_from_stdin_separated(
             in_buffer_next_read_offset = separator_prefix.len();
         } else {
             // no separator prefix found, write everything in last_subslice
-            let content_size = (in_buffer_end_offset - previous_separator_end_idx) as u64;
+            let content_size = u64::try_from(
+                in_buffer_end_offset
+                    .checked_sub(previous_separator_end_idx)
+                    .ok_or_else(e)?,
+            )
+            .map_err(|_| MlarError::Other("Arithmetic overflow".into()))?;
             mla.append_entry_content(entry_id, content_size, last_subslice)?;
             in_buffer_next_read_offset = 0;
         }
