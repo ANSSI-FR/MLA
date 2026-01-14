@@ -167,12 +167,12 @@ impl<W: Write> MLASerialize<W> for TestInput {
 
         // Serialize config as 1 byte
         dest.write_all(&[self.config.to_u8()])?;
-        total_written += 1;
+        total_written = total_written.wrapping_add(1);
 
         // Serialize the number of filenames
         let count = self.filenames.len() as u64;
         dest.write_all(&count.to_le_bytes())?;
-        total_written += 8;
+        total_written = total_written.wrapping_add(8);
 
         // Serialize each filename
         for name in &self.filenames {
@@ -180,30 +180,30 @@ impl<W: Write> MLASerialize<W> for TestInput {
             let len = bytes.len() as u64;
             dest.write_all(&len.to_le_bytes())?;
             dest.write_all(bytes)?;
-            total_written += 8 + len;
+            total_written = total_written.wrapping_add(8).wrapping_add(len);
         }
 
         // Serialize parts
         let parts_count = self.parts.len() as u64;
         dest.write_all(&parts_count.to_le_bytes())?;
-        total_written += 8;
+        total_written = total_written.wrapping_add(8);
 
         for part in &self.parts {
             let part_len = part.len() as u64;
             dest.write_all(&part_len.to_le_bytes())?;
             dest.write_all(part)?;
-            total_written += 8 + part_len;
+            total_written = total_written.wrapping_add(8).wrapping_add(part_len);
         }
 
         // Serialize byteflip
         let flip_count = u32::try_from(self.byteflip.len())
             .expect("Failed to convert byteflip array length to u32");
         dest.write_all(&flip_count.to_le_bytes())?;
-        total_written += 4;
+        total_written = total_written.wrapping_add(4);
 
         for flip in &self.byteflip {
             dest.write_all(&flip.to_le_bytes())?;
-            total_written += 4;
+            total_written = total_written.wrapping_add(4);
         }
 
         Ok(total_written)
@@ -321,7 +321,11 @@ fn run(data: &mut [u8]) {
             0
         } else {
             part[0]
-                % u8::try_from(test_case.filenames.len()).expect("Failed to convert length to u8")
+                .checked_rem(
+                    u8::try_from(test_case.filenames.len())
+                        .expect("Failed to convert length to u8"),
+                )
+                .unwrap()
         };
         let name = &test_case.filenames[num as usize];
 

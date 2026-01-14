@@ -86,7 +86,9 @@ impl<W: Write> MLASerialize<W> for MLAEd25519Signature {
     fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
         MLAED25519_SIG_METHOD.serialize(dest)?;
         dest.write_all(&self.ed25519_sig.to_bytes())?;
-        Ok(2 + ED25519_SIGNATURE_LENGTH as u64)
+        Ok(2u64
+            .checked_add(u64::try_from(ED25519_SIGNATURE_LENGTH).unwrap())
+            .unwrap())
     }
 }
 
@@ -103,7 +105,9 @@ impl<W: Write> MLASerialize<W> for MLAMLDSA87Signature {
     fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
         MLAMLDSA87_SIG_METHOD.serialize(dest)?;
         dest.write_all(self.mldsa87_sig.encode().as_slice())?;
-        Ok(2 + ML_DSA87_SIGNATURE_SIZE as u64)
+        Ok(2u64
+            .checked_add(u64::try_from(ML_DSA87_SIGNATURE_SIZE).unwrap())
+            .unwrap())
     }
 }
 

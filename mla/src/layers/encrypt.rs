@@ -14,7 +14,7 @@ use crate::layers::traits::{
     InnerWriterTrait, InnerWriterType, LayerReader, LayerTruncatedReader, LayerWriter,
 };
 use crate::{EMPTY_TAIL_OPTS_SERIALIZATION, Error, MLADeserialize, MLASerialize, Opts};
-use std::io;
+use std::io::{self, ErrorKind};
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 
 use crate::errors::ConfigError;
@@ -112,9 +112,13 @@ struct KeyCommitmentAndTag {
 
 impl<W: Write> MLASerialize<W> for KeyCommitmentAndTag {
     fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
-        let mut serialization_length = 0;
-        serialization_length += self.key_commitment.as_slice().serialize(dest)?;
-        serialization_length += self.tag.as_slice().serialize(dest)?;
+        let mut serialization_length: u64 = 0;
+        serialization_length = serialization_length
+            .checked_add(self.key_commitment.as_slice().serialize(dest)?)
+            .ok_or(Error::SerializationError)?;
+        serialization_length = serialization_length
+            .checked_add(self.tag.as_slice().serialize(dest)?)
+            .ok_or(Error::SerializationError)?;
         Ok(serialization_length)
     }
 }
@@ -183,11 +187,16 @@ pub struct EncryptionPersistentConfig {
 
 impl<W: Write> MLASerialize<W> for EncryptionPersistentConfig {
     fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
-        let mut serialization_length = 0;
-        serialization_length += self
-            .hybrid_multi_recipient_encapsulate_key
-            .serialize(dest)?;
-        serialization_length += self.key_commitment.serialize(dest)?;
+        let mut serialization_length: u64 = 0;
+        serialization_length = serialization_length
+            .checked_add(
+                self.hybrid_multi_recipient_encapsulate_key
+                    .serialize(dest)?,
+            )
+            .ok_or(Error::SerializationError)?;
+        serialization_length = serialization_length
+            .checked_add(self.key_commitment.serialize(dest)?)
+            .ok_or(Error::SerializationError)?;
         Ok(serialization_length)
     }
 }
@@ -459,16 +468,24 @@ impl<W: InnerWriterTrait> Write for InternalEncryptionLayerWriter<'_, W> {
         }
 
         // StreamingCipher is working in place, so we use a temporary buffer
+        let buf_len_u64 =
+            u64::try_from(buf.len()).map_err(|_| io::Error::other("Invalid buf len"))?;
+        let remaining_len_in_chunk = NORMAL_CHUNK_PT_SIZE
+            .checked_sub(self.current_chunk_offset)
+            .ok_or_else(|| io::Error::other("Invalid current_chunk_offset"))?;
         let size = std::cmp::min(
-            std::cmp::min(CIPHER_BUF_SIZE, buf.len() as u64),
-            NORMAL_CHUNK_PT_SIZE - self.current_chunk_offset,
+            std::cmp::min(CIPHER_BUF_SIZE, buf_len_u64),
+            remaining_len_in_chunk,
         );
         let mut buf_tmp =
             buf[..usize::try_from(size).expect("Failed to convert size to usize")].to_vec();
         self.cipher.encrypt(&mut buf_tmp);
         self.inner.write_all(&buf_tmp)?;
-        self.current_chunk_offset += size;
-        Ok(usize::try_from(size).expect("Failed to convert size to usize"))
+        self.current_chunk_offset = self
+            .current_chunk_offset
+            .checked_add(size)
+            .ok_or_else(|| io::Error::other("Invalid current_chunk_offset or size"))?;
+        usize::try_from(size).map_err(|_| io::Error::other("Invalid size"))
     }
 
     fn flush(&mut self) -> io::Result<()> {
@@ -606,9 +623,12 @@ impl<R: Read> InternalEncryptionLayerReader<R> {
         }
     }
 
-    fn is_at_least_in_last_data_chunk(&self) -> bool {
-        self.current_position_in_this_layer
-            >= (self.last_data_chunk_number() * NORMAL_CHUNK_PT_SIZE)
+    fn is_at_least_in_last_data_chunk(&self) -> Result<bool, Error> {
+        let last_data_chunk_pos = self
+            .last_data_chunk_number()
+            .checked_mul(NORMAL_CHUNK_PT_SIZE)
+            .ok_or(Error::DeserializationError)?;
+        Ok(self.current_position_in_this_layer >= last_data_chunk_pos)
     }
 
     fn current_data_chunk_number(&self) -> u64 {
@@ -626,12 +646,15 @@ impl<R: Read> InternalEncryptionLayerReader<R> {
     fn _check_final(&mut self) -> Result<(), Error> {
         #[allow(clippy::used_underscore_binding)]
         if let Some(mut final_block) = self._final_block.take() {
+            let final_chunk_number = self
+                .current_data_chunk_number()
+                .checked_add(1)
+                .ok_or(Error::DeserializationError)?
+                .checked_add(FIRST_DATA_CHUNK_NUMBER)
+                .ok_or(Error::DeserializationError)?;
             let mut cipher = AesGcm256::new(
                 &self.key,
-                &compute_nonce(
-                    &self.nonce,
-                    self.current_data_chunk_number() + 1 + FIRST_DATA_CHUNK_NUMBER,
-                ),
+                &compute_nonce(&self.nonce, final_chunk_number),
                 FINAL_ASSOCIATED_DATA,
             )?;
             let data_part = final_block
@@ -660,7 +683,7 @@ impl<R: Read> InternalEncryptionLayerReader<R> {
         }
     }
 
-    // Search for finall block magic in both chunk caches.
+    // Search for final block magic in both chunk caches.
     // This lets us detect end of tag if in TruncatedReaderDecryptionMode::OnlyAuthenticatedData (if the magic has not been truncated away).
     fn final_block_magic_scan(&self) -> Option<usize> {
         // search in chunk_cache
@@ -678,14 +701,17 @@ impl<R: Read> InternalEncryptionLayerReader<R> {
                 .windows(FINAL_BLOCK_MAGIC.len())
                 .position(|candidate| candidate == FINAL_BLOCK_MAGIC)
             {
-                Some(self.chunk_cache.get_ref().len() + pos)
+                Some(self.chunk_cache.get_ref().len().checked_add(pos)?)
             } else {
                 // search across the boundary
                 (1..FINAL_BLOCK_MAGIC.len())
                     .find(|number_in_chunk_cache| {
                         let chunk_cache = self.chunk_cache.get_ref();
-                        let number_in_next_chunk_cache =
-                            FINAL_BLOCK_MAGIC.len() - *number_in_chunk_cache;
+                        let Some(number_in_next_chunk_cache) =
+                            FINAL_BLOCK_MAGIC.len().checked_sub(*number_in_chunk_cache)
+                        else {
+                            return false;
+                        };
                         if chunk_cache.len() < *number_in_chunk_cache
                             || self.next_chunk_cache.len() < number_in_next_chunk_cache
                         {
@@ -693,8 +719,12 @@ impl<R: Read> InternalEncryptionLayerReader<R> {
                         } else {
                             let magic_part1 = &FINAL_BLOCK_MAGIC[..*number_in_chunk_cache];
                             let magic_part2 = &FINAL_BLOCK_MAGIC[*number_in_chunk_cache..];
-                            let end_of_chunk_cache =
-                                &chunk_cache[(chunk_cache.len() - *number_in_chunk_cache)..];
+                            let Some(remaining) =
+                                chunk_cache.len().checked_sub(*number_in_chunk_cache)
+                            else {
+                                return false;
+                            };
+                            let end_of_chunk_cache = &chunk_cache[remaining..];
                             let start_of_next_chunk_cache =
                                 &self.next_chunk_cache[..number_in_next_chunk_cache];
                             end_of_chunk_cache == magic_part1
@@ -702,8 +732,11 @@ impl<R: Read> InternalEncryptionLayerReader<R> {
                         }
                     })
                     .map(|number_in_chunk_cache| {
-                        self.chunk_cache.get_ref().len() - number_in_chunk_cache
-                    })
+                        self.chunk_cache
+                            .get_ref()
+                            .len()
+                            .checked_sub(number_in_chunk_cache)
+                    })?
             }
         }
     }
@@ -737,7 +770,9 @@ impl<R: Read> InternalEncryptionLayerReader<R> {
                             Some(TruncatedReaderDecryptionMode::DataEvenUnauthenticated)
                         ) {
                             // If data contains <16 bytes of tag, we may interpret it like ciphertext and return garbage
-                            chunk_cache_len + TAG_LENGTH // +TAG_LENGTH is fake, it will be subtracted for end_of_ciphertext_pos
+                            chunk_cache_len
+                                .checked_add(TAG_LENGTH)
+                                .ok_or(Error::DeserializationError)? // +TAG_LENGTH is fake, it will be subtracted for end_of_ciphertext_pos
                         } else {
                             return Err(Error::UnknownTagPosition);
                         }
@@ -768,7 +803,7 @@ impl<R: Read> InternalEncryptionLayerReader<R> {
         // At this point, chunk_cache points to the start of a (maybe empty) ciphertext block.
         // Our read implementation never calls load_in_cache again if the plaintext/ciphertext content in chunk_cache is smaller than NORMAL_CHUNK_CT_SIZE
         let end_of_tag_pos =
-            if self.truncated_decryption_mode.is_none() && self.is_at_least_in_last_data_chunk() {
+            if self.truncated_decryption_mode.is_none() && self.is_at_least_in_last_data_chunk()? {
                 let content_len = usize::try_from(
                     self.all_plaintext_size
                         .saturating_sub(self.current_position_in_this_layer),
@@ -778,7 +813,11 @@ impl<R: Read> InternalEncryptionLayerReader<R> {
                     return Ok(None);
                 }
 
-                content_len + TAG_LENGTH + CHUNK_HEAD_USIZE
+                content_len
+                    .checked_add(TAG_LENGTH)
+                    .ok_or(Error::DeserializationError)?
+                    .checked_add(CHUNK_HEAD_USIZE)
+                    .ok_or(Error::DeserializationError)?
             } else {
                 self.get_end_of_tag_pos()?
             };
@@ -789,12 +828,13 @@ impl<R: Read> InternalEncryptionLayerReader<R> {
             return Ok(None);
         }
 
+        let sequence_number = self
+            .current_data_chunk_number()
+            .checked_add(FIRST_DATA_CHUNK_NUMBER)
+            .ok_or(Error::DeserializationError)?;
         self.cipher = AesGcm256::new(
             &self.key,
-            &compute_nonce(
-                &self.nonce,
-                self.current_data_chunk_number() + FIRST_DATA_CHUNK_NUMBER,
-            ),
+            &compute_nonce(&self.nonce, sequence_number),
             ASSOCIATED_DATA,
         )?;
 
@@ -831,7 +871,9 @@ impl<R: Read> InternalEncryptionLayerReader<R> {
     ///
     /// This method checks the tag of each decrypted block
     fn read_internal(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
-        let cache_to_consume = NORMAL_CHUNK_PT_AND_TAG_SIZE - self.chunk_cache.position();
+        let cache_to_consume = NORMAL_CHUNK_PT_AND_TAG_SIZE
+            .checked_sub(self.chunk_cache.position())
+            .ok_or(Error::DeserializationError)?;
         if cache_to_consume == 0 {
             // Cache totally consumed, renew it
             if self.load_in_cache()?.is_none() {
@@ -846,8 +888,12 @@ impl<R: Read> InternalEncryptionLayerReader<R> {
             buf.len(),
         );
         let chunk_cache_read_size = self.chunk_cache.read(&mut buf[..size])?;
-        self.current_position_in_this_layer += u64::try_from(chunk_cache_read_size)
-            .expect("Failed to convert read chunk cache size to usize");
+        let chunk_cache_read_size_u64 = u64::try_from(chunk_cache_read_size)
+            .map_err(|_| Error::Other("Failed to convert read chunk cache size to usize".into()))?;
+        self.current_position_in_this_layer = self
+            .current_position_in_this_layer
+            .checked_add(chunk_cache_read_size_u64)
+            .ok_or(Error::DeserializationError)?;
         if chunk_cache_read_size == 0 {
             // TODO: self.check_final()?;
         }
@@ -857,19 +903,28 @@ impl<R: Read> InternalEncryptionLayerReader<R> {
 
 impl<R: Read + Seek> InternalEncryptionLayerReader<R> {
     fn check_last_block(&mut self) -> Result<(), Error> {
-        let offset_usize = FINAL_INFO_SIZE_WOM + END_OF_ENCRYPTED_INNER_LAYER_MAGIC.len();
+        let offset_usize = FINAL_INFO_SIZE_WOM
+            .checked_add(END_OF_ENCRYPTED_INNER_LAYER_MAGIC.len())
+            .ok_or(Error::DeserializationError)?;
 
         let offset_i64 = i64::try_from(offset_usize)
             .map_err(|_| Error::Other("Offset too large for i64 conversion".into()))?;
 
-        self.inner.seek(SeekFrom::End(-offset_i64))?;
+        self.inner.seek(SeekFrom::End(
+            offset_i64
+                .checked_neg()
+                .ok_or(Error::DeserializationError)?,
+        ))?;
 
+        let sequence_number = self
+            .last_data_chunk_number()
+            .checked_add(1)
+            .ok_or(Error::DeserializationError)?
+            .checked_add(FIRST_DATA_CHUNK_NUMBER)
+            .ok_or(Error::DeserializationError)?;
         self.cipher = AesGcm256::new(
             &self.key,
-            &compute_nonce(
-                &self.nonce,
-                self.last_data_chunk_number() + 1 + FIRST_DATA_CHUNK_NUMBER,
-            ),
+            &compute_nonce(&self.nonce, sequence_number),
             FINAL_ASSOCIATED_DATA,
         )?;
 
@@ -912,15 +967,29 @@ impl<R: Read + Seek> InternalEncryptionLayerReader<R> {
 
     fn set_all_plaintext_size(&mut self) -> Result<(), Error> {
         let input_size = self.inner.seek(SeekFrom::End(0))?;
-        let input_size_without_final_nor_header = input_size.saturating_sub(
-            END_OF_ENCRYPTED_INNER_LAYER_MAGIC.len() as u64 + FINAL_INFO_SIZE + CHUNK_HEAD_SIZE,
-        );
+        let end_of_encrypted_inner_layer_magic_len_u64 =
+            u64::try_from(END_OF_ENCRYPTED_INNER_LAYER_MAGIC.len())
+                .map_err(|_| Error::DeserializationError)?;
+        let final_and_header_len = end_of_encrypted_inner_layer_magic_len_u64
+            .checked_add(FINAL_INFO_SIZE)
+            .ok_or(Error::DeserializationError)?
+            .checked_add(CHUNK_HEAD_SIZE)
+            .ok_or(Error::DeserializationError)?;
+        let input_size_without_final_nor_header = input_size.saturating_sub(final_and_header_len);
         let chunk_number_at_end_of_data = input_size_without_final_nor_header / M0_CHUNK_SIZE;
         let last_chunk_size = input_size_without_final_nor_header % M0_CHUNK_SIZE;
         self.all_plaintext_size = if last_chunk_size == 0 {
-            chunk_number_at_end_of_data * NORMAL_CHUNK_PT_SIZE
+            chunk_number_at_end_of_data
+                .checked_mul(NORMAL_CHUNK_PT_SIZE)
+                .ok_or(Error::DeserializationError)?
         } else {
-            chunk_number_at_end_of_data * NORMAL_CHUNK_PT_SIZE + last_chunk_size - TAG_LENGTH as u64
+            chunk_number_at_end_of_data
+                .checked_mul(NORMAL_CHUNK_PT_SIZE)
+                .ok_or(Error::DeserializationError)?
+                .checked_add(last_chunk_size)
+                .ok_or(Error::DeserializationError)?
+                .checked_sub(TAG_LENGTH as u64)
+                .ok_or(Error::DeserializationError)?
         };
         Ok(())
     }
@@ -933,44 +1002,74 @@ impl<R: InnerReaderTrait> Read for InternalEncryptionLayerReader<R> {
 }
 
 // Returns how many chunk are present at position `position`
-fn this_layer_position_to_inner_position(position: u64) -> u64 {
+fn this_layer_position_to_inner_position(position: u64) -> io::Result<u64> {
     let cur_chunk = position / NORMAL_CHUNK_PT_SIZE;
     let cur_chunk_pos = position % NORMAL_CHUNK_PT_SIZE;
-    cur_chunk * M0_CHUNK_SIZE + cur_chunk_pos + CHUNK_HEAD_SIZE
+    let e = || io::Error::from(ErrorKind::InvalidInput);
+    cur_chunk
+        .checked_mul(M0_CHUNK_SIZE)
+        .ok_or_else(e)?
+        .checked_add(cur_chunk_pos)
+        .ok_or_else(e)?
+        .checked_add(CHUNK_HEAD_SIZE)
+        .ok_or_else(e)
 }
 
 // Given `position` me be inside the "plaintext", not the tag nor the CHUNK_HEAD
-fn _inner_position_in_plaintext_to_this_layer_position(position: u64) -> u64 {
+fn _inner_position_in_plaintext_to_this_layer_position(position: u64) -> io::Result<u64> {
     let cur_chunk = position / M0_CHUNK_SIZE;
-    let cur_chunk_pos = position % M0_CHUNK_SIZE - CHUNK_HEAD_SIZE;
-    cur_chunk * NORMAL_CHUNK_PT_SIZE + cur_chunk_pos
+    let e = || io::Error::from(ErrorKind::InvalidInput);
+    let cur_chunk_pos = position
+        .checked_rem(M0_CHUNK_SIZE)
+        .ok_or_else(e)?
+        .checked_sub(CHUNK_HEAD_SIZE)
+        .ok_or_else(e)?;
+    cur_chunk
+        .checked_mul(NORMAL_CHUNK_PT_SIZE)
+        .ok_or_else(e)?
+        .checked_add(cur_chunk_pos)
+        .ok_or_else(e)
 }
 
 impl<R: Read + Seek> Seek for InternalEncryptionLayerReader<R> {
     fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+        let e = || io::Error::from(ErrorKind::InvalidInput);
         // `pos` is the position without considering tags
         match pos {
             SeekFrom::Start(asked_pos) => {
-                let inner_position_of_asked_pos = this_layer_position_to_inner_position(asked_pos);
+                let inner_position_of_asked_pos = this_layer_position_to_inner_position(asked_pos)?;
                 let asked_pos_chunk_number = inner_position_of_asked_pos / M0_CHUNK_SIZE;
-                let inner_position_of_m0_chunk_start = asked_pos_chunk_number * M0_CHUNK_SIZE;
-                let asked_pos_in_chunk_plaintext =
-                    (inner_position_of_asked_pos % M0_CHUNK_SIZE) - CHUNK_HEAD_SIZE;
+                let inner_position_of_m0_chunk_start = asked_pos_chunk_number
+                    .checked_mul(M0_CHUNK_SIZE)
+                    .ok_or_else(e)?;
+                let asked_pos_in_chunk_plaintext = inner_position_of_asked_pos
+                    .checked_rem(M0_CHUNK_SIZE)
+                    .ok_or_else(e)?
+                    .checked_sub(CHUNK_HEAD_SIZE)
+                    .ok_or_else(e)?;
 
                 // Seek the inner layer at the beginning of the chunk
                 self.inner
                     .seek(SeekFrom::Start(inner_position_of_m0_chunk_start))?;
 
                 // Load and move into the cache
-                self.current_position_in_this_layer = asked_pos_chunk_number * NORMAL_CHUNK_PT_SIZE;
+                self.current_position_in_this_layer = asked_pos_chunk_number
+                    .checked_mul(NORMAL_CHUNK_PT_SIZE)
+                    .ok_or_else(e)?;
                 self.next_chunk_cache.clear();
                 (&mut self.inner)
                     .take(M0_CHUNK_SIZE)
                     .read_to_end(&mut self.next_chunk_cache)?;
                 self.load_in_cache()?;
-                self.chunk_cache
-                    .set_position(CHUNK_HEAD_SIZE + asked_pos_in_chunk_plaintext);
-                self.current_position_in_this_layer += asked_pos_in_chunk_plaintext;
+                self.chunk_cache.set_position(
+                    CHUNK_HEAD_SIZE
+                        .checked_add(asked_pos_in_chunk_plaintext)
+                        .ok_or_else(e)?,
+                );
+                self.current_position_in_this_layer = self
+                    .current_position_in_this_layer
+                    .checked_add(asked_pos_in_chunk_plaintext)
+                    .ok_or_else(e)?;
                 Ok(asked_pos)
             }
             SeekFrom::Current(value) => {
@@ -1097,15 +1196,26 @@ mod tests {
         encrypt_w.write_all(&FAKE_FILE[21..]).unwrap();
 
         let mut out = encrypt_w.finalize().unwrap();
-        out.resize(out.len() - EMPTY_TAIL_OPTS_SERIALIZATION.len(), 0);
+        out.resize(
+            out.len()
+                .checked_sub(EMPTY_TAIL_OPTS_SERIALIZATION.len())
+                .unwrap(),
+            0,
+        );
         assert_eq!(
             out.len(),
-            FAKE_FILE.len()
-                + CHUNK_MAGIC.len()
-                + 8
-                + TAG_LENGTH
-                + FINAL_INFO_USIZE
-                + END_OF_ENCRYPTED_INNER_LAYER_MAGIC.len()
+            FAKE_FILE
+                .len()
+                .checked_add(CHUNK_MAGIC.len())
+                .unwrap()
+                .checked_add(8)
+                .unwrap()
+                .checked_add(TAG_LENGTH)
+                .unwrap()
+                .checked_add(FINAL_INFO_USIZE)
+                .unwrap()
+                .checked_add(END_OF_ENCRYPTED_INNER_LAYER_MAGIC.len())
+                .unwrap()
         );
         assert_ne!(out[..FAKE_FILE.len()], FAKE_FILE);
         out

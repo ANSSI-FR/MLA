@@ -1,4 +1,4 @@
-use std::io::{self, Read, Seek, SeekFrom, Take, Write};
+use std::io::{self, ErrorKind, Read, Seek, SeekFrom, Take, Write};
 use std::{cmp, fmt};
 
 use brotli::BrotliState;
@@ -103,7 +103,9 @@ struct SizesInfo {
 impl<W: Write> MLASerialize<W> for SizesInfo {
     fn serialize(&self, dest: &mut W) -> Result<u64, Error> {
         let mut serialization_length = self.compressed_sizes.serialize(dest)?;
-        serialization_length += self.last_block_size.serialize(dest)?;
+        serialization_length = serialization_length
+            .checked_add(self.last_block_size.serialize(dest)?)
+            .ok_or(Error::SerializationError)?;
         Ok(serialization_length)
     }
 }
@@ -121,25 +123,41 @@ impl<R: Read> MLADeserialize<R> for SizesInfo {
 
 impl SizesInfo {
     /// Get the uncompressed block size of block `block_num`
-    fn uncompressed_block_size_at(&self, block_num: usize) -> u32 {
-        if block_num < self.compressed_sizes.len() - 1 {
-            UNCOMPRESSED_DATA_SIZE
+    fn uncompressed_block_size_at(&self, block_num: usize) -> Result<u32, Error> {
+        if block_num
+            < self
+                .compressed_sizes
+                .len()
+                .checked_sub(1)
+                .ok_or(Error::DeserializationError)?
+        {
+            Ok(UNCOMPRESSED_DATA_SIZE)
         } else {
-            self.last_block_size
+            Ok(self.last_block_size)
         }
     }
 
     /// Get the compressed block at position `uncompressed_pos`
-    fn compressed_block_size_at(&self, uncompressed_pos: u64) -> u32 {
-        let block_num = uncompressed_pos / u64::from(UNCOMPRESSED_DATA_SIZE);
+    fn compressed_block_size_at(&self, uncompressed_pos: u64) -> Result<u32, Error> {
+        let block_num = uncompressed_pos
+            .checked_div(u64::from(UNCOMPRESSED_DATA_SIZE))
+            .ok_or(Error::DeserializationError)?;
         self.compressed_sizes
-            [usize::try_from(block_num).expect("Failed to convert block number to usize")]
+            .get(usize::try_from(block_num).or(Err(Error::DeserializationError))?)
+            .copied()
+            .ok_or(Error::DeserializationError)
     }
 
     /// Maximum uncompressed available position
-    fn max_uncompressed_pos(&self) -> u64 {
-        (self.compressed_sizes.len() as u64 - 1) * u64::from(UNCOMPRESSED_DATA_SIZE)
-            + u64::from(self.last_block_size)
+    fn max_uncompressed_pos(&self) -> Result<u64, Error> {
+        u64::try_from(self.compressed_sizes.len())
+            .or(Err(Error::DeserializationError))?
+            .checked_sub(1)
+            .ok_or(Error::DeserializationError)?
+            .checked_mul(u64::from(UNCOMPRESSED_DATA_SIZE))
+            .ok_or(Error::DeserializationError)?
+            .checked_add(u64::from(self.last_block_size))
+            .ok_or(Error::DeserializationError)
     }
 }
 
@@ -210,14 +228,14 @@ impl<'a, R: 'a + InnerReaderTrait> CompressionLayerReader<'a, R> {
 
     /// Returns whether `uncompressed_pos` is in the data stream
     /// If no index is used, always return `true`
-    fn pos_in_stream(&self, uncompressed_pos: u64) -> bool {
-        match &self.sizes_info {
+    fn pos_in_stream(&self, uncompressed_pos: u64) -> Result<bool, Error> {
+        Ok(match &self.sizes_info {
             Some(sizes_info) => {
-                let pos_max = sizes_info.max_uncompressed_pos();
+                let pos_max = sizes_info.max_uncompressed_pos()?;
                 uncompressed_pos < pos_max
             }
             None => true,
-        }
+        })
     }
 
     /// Instantiate a new decompressor at position `uncompressed_pos`
@@ -235,7 +253,7 @@ impl<'a, R: 'a + InnerReaderTrait> CompressionLayerReader<'a, R> {
         }
 
         // Check we are still in the stream
-        if !self.pos_in_stream(uncompressed_pos) {
+        if !self.pos_in_stream(uncompressed_pos)? {
             // No more in the compressed stream -> nothing to read
             return Err(Error::EndOfStream);
         }
@@ -244,7 +262,8 @@ impl<'a, R: 'a + InnerReaderTrait> CompressionLayerReader<'a, R> {
             Some(sizes_info) => {
                 // Use index for faster decompression
                 let compressed_block_size =
-                    sizes_info.compressed_block_size_at(uncompressed_pos) as usize;
+                    usize::try_from(sizes_info.compressed_block_size_at(uncompressed_pos)?)
+                        .or(Err(Error::DeserializationError))?;
                 Ok(brotli::Decompressor::new(
                     // Make the Decompressor work only on the compressed block's bytes, no more
                     inner.take(compressed_block_size as u64),
@@ -267,7 +286,10 @@ impl<'a, R: 'a + InnerReaderTrait> CompressionLayerReader<'a, R> {
         }
 
         // Check we are still in the stream
-        if !self.pos_in_stream(uncompressed_pos) {
+        if !self
+            .pos_in_stream(uncompressed_pos)
+            .or(Err(Error::DeserializationError))?
+        {
             // No more in the compressed stream -> nothing to read
             return Err(Error::EndOfStream);
         }
@@ -277,10 +299,12 @@ impl<'a, R: 'a + InnerReaderTrait> CompressionLayerReader<'a, R> {
                 // Use index for faster decompression
 
                 // Get the uncompressed block size
-                let block_num = uncompressed_pos / u64::from(UNCOMPRESSED_DATA_SIZE);
+                let block_num = uncompressed_pos
+                    .checked_div(u64::from(UNCOMPRESSED_DATA_SIZE))
+                    .ok_or(Error::DeserializationError)?;
                 Ok(sizes_info.uncompressed_block_size_at(
-                    usize::try_from(block_num).expect("Failed to convert block number to usize"),
-                ))
+                    usize::try_from(block_num).or(Err(Error::DeserializationError))?,
+                )?)
             }
             None => Err(Error::MissingMetadata),
         }
@@ -302,13 +326,18 @@ impl<'a, R: 'a + InnerReaderTrait> CompressionLayerReader<'a, R> {
         }
 
         // Check we are still in the stream
-        if !self.pos_in_stream(uncompressed_pos) {
+        if !self
+            .pos_in_stream(uncompressed_pos)
+            .or(Err(Error::DeserializationError))?
+        {
             // No more in the compressed stream -> nothing to read
             return Err(Error::EndOfStream);
         }
 
         // Find the right block
-        let block_num = uncompressed_pos / u64::from(UNCOMPRESSED_DATA_SIZE);
+        let block_num = uncompressed_pos
+            .checked_div(u64::from(UNCOMPRESSED_DATA_SIZE))
+            .ok_or(Error::DeserializationError)?;
         match &self.sizes_info {
             Some(SizesInfo {
                 compressed_sizes, ..
@@ -345,7 +374,9 @@ impl<'a, R: 'a + InnerReaderTrait> LayerReader<'a, R> for CompressionLayerReader
                 let len = u64::deserialize(inner)?;
 
                 // Read SizesInfo
-                inner.seek(SeekFrom::Start(pos - len))?;
+                inner.seek(SeekFrom::Start(
+                    pos.checked_sub(len).ok_or(Error::DeserializationError)?,
+                ))?;
                 self.sizes_info = Some(MLADeserialize::deserialize(&mut inner.take(len))?);
 
                 Ok(())
@@ -362,7 +393,10 @@ impl<'a, R: 'a + InnerReaderTrait> LayerReader<'a, R> for CompressionLayerReader
 
 impl<'a, R: 'a + InnerReaderTrait> Read for CompressionLayerReader<'a, R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        if !self.pos_in_stream(self.underlayer_pos) {
+        if !self
+            .pos_in_stream(self.underlayer_pos)
+            .or(Err(Error::DeserializationError))?
+        {
             // No more in the compressed stream -> nothing to read
             return Ok(0);
         }
@@ -399,13 +433,24 @@ impl<'a, R: 'a + InnerReaderTrait> Read for CompressionLayerReader<'a, R> {
                     // Start a new block, fill it with new values!
                     return self.read(buf);
                 }
-                let size = std::cmp::min((uncompressed_size - read) as usize, buf.len());
+                let size = std::cmp::min(
+                    usize::try_from(
+                        uncompressed_size
+                            .checked_sub(read)
+                            .ok_or(Error::DeserializationError)?,
+                    )
+                    .or(Err(Error::DeserializationError))?,
+                    buf.len(),
+                );
                 let read_add = decompressor.read(&mut buf[..size])?;
-                self.underlayer_pos += read_add as u64;
+                self.underlayer_pos = self
+                    .underlayer_pos
+                    .checked_add(u64::try_from(read_add).or(Err(Error::DeserializationError))?)
+                    .ok_or(Error::DeserializationError)?;
                 self.state = CompressionLayerReaderState::InData {
                     read: read
-                        + u32::try_from(read_add)
-                            .expect("Failed to convert additional read data to u32"),
+                        .checked_add(u32::try_from(read_add).or(Err(Error::DeserializationError))?)
+                        .ok_or(Error::DeserializationError)?,
                     uncompressed_size,
                     decompressor,
                 };
@@ -430,8 +475,12 @@ impl<R: InnerReaderTrait> Seek for CompressionLayerReader<'_, R> {
                 match pos {
                     SeekFrom::Start(pos) => {
                         // Find the right block
-                        let inside_block = pos % u64::from(UNCOMPRESSED_DATA_SIZE);
-                        let rounded_pos = pos - inside_block;
+                        let inside_block = pos
+                            .checked_rem(u64::from(UNCOMPRESSED_DATA_SIZE))
+                            .ok_or(io::Error::from(ErrorKind::InvalidInput))?;
+                        let rounded_pos = pos
+                            .checked_sub(inside_block)
+                            .ok_or(io::Error::from(ErrorKind::InvalidInput))?;
 
                         // Move the underlayer at the start of the block
                         let old_state =
@@ -490,10 +539,18 @@ impl<R: InnerReaderTrait> Seek for CompressionLayerReader<'_, R> {
                             return Err(Error::EndOfStream.into());
                         }
 
-                        let end_pos = self.sizes_info.as_ref().unwrap().max_uncompressed_pos();
+                        let end_pos = self
+                            .sizes_info
+                            .as_ref()
+                            .unwrap()
+                            .max_uncompressed_pos()
+                            .or(Err(io::Error::from(ErrorKind::InvalidInput)))?;
 
-                        let distance_from_end_u64 = u64::try_from(-pos)
-                            .map_err(|_| Error::Other("Invalid negative seek offset".into()))?;
+                        let distance_from_end_u64 = u64::try_from(
+                            pos.checked_neg()
+                                .ok_or(io::Error::from(ErrorKind::InvalidInput))?,
+                        )
+                        .map_err(|_| Error::Other("Invalid negative seek offset".into()))?;
 
                         let target_pos =
                             end_pos.checked_sub(distance_from_end_u64).ok_or_else(|| {
@@ -529,9 +586,15 @@ impl<W: Write> WriterWithCount<W> {
 
 impl<W: Write> Write for WriterWithCount<W> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.inner.write(buf).inspect(|&i| {
-            self.pos += u32::try_from(i).expect("Failed to convert written data size to u32");
-        })
+        let written = self.inner.write(buf)?;
+        self.pos = self
+            .pos
+            .checked_add(
+                u32::try_from(written)
+                    .map_err(|_| io::Error::other("Failed to convert written data size to u32"))?,
+            )
+            .ok_or_else(|| io::Error::other("Overflow in WriterWithCount"))?;
+        Ok(written)
     }
 
     fn flush(&mut self) -> io::Result<()> {
@@ -676,10 +739,12 @@ impl<'a, W: 'a + InnerWriterTrait> Write for CompressionLayerWriter<'a, W> {
                     // Start a new block, fill it with new values!
                     return self.write(buf);
                 }
-                let size = std::cmp::min((UNCOMPRESSED_DATA_SIZE - written) as usize, buf.len());
+                let remaining_writable = usize::try_from(UNCOMPRESSED_DATA_SIZE.checked_sub(written).ok_or_else(|| io::Error::other("invalid written"))?).map_err(|_| io::Error::other("Invalid remaining_writable"))?;
+                let size = std::cmp::min(remaining_writable, buf.len());
                 let written_add = compress.write(&buf[..size])?;
+                let new_written = u32::try_from(written_add).map_err(|_| io::Error::other("Failed to convert added written data size to u32"))?.checked_add(written).ok_or_else(|| io::Error::other("Failed to add written"))?;
                 self.state =
-                    CompressionLayerWriterState::InData(written + u32::try_from(written_add).expect("Failed to convert added written data size to u32"), compress);
+                    CompressionLayerWriterState::InData(new_written, compress);
                 Ok(written_add)
             }
             CompressionLayerWriterState::Empty => {
@@ -789,7 +854,10 @@ impl<'a, R: 'a + Read> CompressionLayerTruncatedReader<'a, R> {
 
                 // Seek in the cache to the actual start of the new block
                 // input_offset \in [0; cache_filled_offset - read_offset[
-                self.read_offset += args.input_offset;
+                self.read_offset = self
+                    .read_offset
+                    .checked_add(args.input_offset)
+                    .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))?;
 
                 // Reset others
                 *self.brotli_state = BrotliState::new(
@@ -800,8 +868,11 @@ impl<'a, R: 'a + Read> CompressionLayerTruncatedReader<'a, R> {
 
                 self.uncompressed_read = 0;
 
-                self.inner
-                    .new_brotli_stream(self.cache_filled_len - self.read_offset);
+                let remaining_cached = self
+                    .cache_filled_len
+                    .checked_sub(self.read_offset)
+                    .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))?;
+                self.inner.new_brotli_stream(remaining_cached)?;
 
                 if args.output_offset == 0 {
                     return self.read(buf);
@@ -811,22 +882,36 @@ impl<'a, R: 'a + Read> CompressionLayerTruncatedReader<'a, R> {
             }
             brotli::BrotliResult::NeedsMoreInput => {
                 // Bytes may have been read and produced
-                self.read_offset += args.input_offset;
-                self.uncompressed_read += u32::try_from(args.output_offset).map_err(|_| {
-                    io::Error::new(io::ErrorKind::InvalidData, "Integer conversion failed")
-                })?;
+                self.read_offset = self
+                    .read_offset
+                    .checked_add(args.input_offset)
+                    .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))?;
+                let output_offset_u32 = u32::try_from(args.output_offset)
+                    .map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))?;
+                self.uncompressed_read = self
+                    .uncompressed_read
+                    .checked_add(output_offset_u32)
+                    .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))?;
 
                 if args.output_offset == 0 {
                     // (NeedsMoreInput && output_offset == 0) means we can't produce output without more input
                     //
                     // if cache is full
                     if self.read_offset == 0 && self.cache_filled_len == self.cache.len() {
-                        self.cache.resize(self.cache.len() + 1, 0);
+                        let new_cache_len = self
+                            .cache
+                            .len()
+                            .checked_add(1)
+                            .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))?;
+                        self.cache.resize(new_cache_len, 0);
                     } else {
                         // move cache content at offset zero to make room for other input
                         self.cache
                             .copy_within(self.read_offset..self.cache_filled_len, 0);
-                        self.cache_filled_len -= self.read_offset;
+                        self.cache_filled_len = self
+                            .cache_filled_len
+                            .checked_sub(self.read_offset)
+                            .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))?;
                         self.read_offset = 0;
                         if self.byte_by_byte_decompression {
                             // Revert to one byte cache length if it was previously increased
@@ -850,17 +935,26 @@ impl<'a, R: 'a + Read> CompressionLayerTruncatedReader<'a, R> {
                         // No more data available but not in a stream
                         return Ok(0);
                     }
-                    self.cache_filled_len += read;
+                    self.cache_filled_len = self
+                        .cache_filled_len
+                        .checked_add(read)
+                        .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))?;
                     return self.read(buf);
                 }
                 Ok(args.output_offset)
             }
             brotli::BrotliResult::NeedsMoreOutput => {
                 // Bytes may have been read and produced
-                self.read_offset += args.input_offset;
-                self.uncompressed_read += u32::try_from(args.output_offset).map_err(|_| {
-                    io::Error::new(io::ErrorKind::InvalidData, "Integer conversion failed")
-                })?;
+                self.read_offset = self
+                    .read_offset
+                    .checked_add(args.input_offset)
+                    .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))?;
+                let output_offset_u32 = u32::try_from(args.output_offset)
+                    .map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))?;
+                self.uncompressed_read = self
+                    .uncompressed_read
+                    .checked_add(output_offset_u32)
+                    .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))?;
 
                 Ok(args.output_offset)
             }
@@ -924,7 +1018,10 @@ impl<'a, R: 'a + Read> Read for CompressionLayerTruncatedReader<'a, R> {
         }
 
         // Number of bytes available in the source
-        let available_in = self.cache_filled_len - self.read_offset;
+        let available_in = self
+            .cache_filled_len
+            .checked_sub(self.read_offset)
+            .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))?;
         // IN: Offset in the source
         // OUT: Offset in the source after the decompression pass
         let input_offset = 0;
@@ -975,15 +1072,18 @@ impl<R> BrotliStreamReader<R> {
 
     /// Drop the previous brotli stream from the cache, move cached part of the
     /// new brotli stream to start of cache and get ready to read and cache the rest
-    fn new_brotli_stream(&mut self, offset_from_current_pos: usize) {
+    fn new_brotli_stream(&mut self, offset_from_current_pos: usize) -> Result<(), Error> {
         let cache_len = self.cache.len();
         // Take the cached new brotli stream and move it to the start of the cache
         self.cache
             .copy_within(offset_from_current_pos..cache_len, 0);
         // discard the rest of the cache
-        let new_cache_len = cache_len - offset_from_current_pos;
+        let new_cache_len = cache_len
+            .checked_sub(offset_from_current_pos)
+            .ok_or(Error::DeserializationError)?;
         self.cache.truncate(new_cache_len);
         self.number_of_bytes_read = new_cache_len;
+        Ok(())
     }
 
     /// Rewind at start of cached data
@@ -996,18 +1096,31 @@ impl<R: Read> Read for BrotliStreamReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         if self.number_of_bytes_read < self.cache.len() {
             // we previously got rewound: read from cache
-            let remaining_in_cache = self.cache.len() - self.number_of_bytes_read;
+            let remaining_in_cache = self
+                .cache
+                .len()
+                .checked_sub(self.number_of_bytes_read)
+                .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))?;
             let copy_len = cmp::min(remaining_in_cache, buf.len());
-            buf[0..copy_len].copy_from_slice(
-                &self.cache[self.number_of_bytes_read..(self.number_of_bytes_read + copy_len)],
-            );
-            self.number_of_bytes_read += copy_len;
+            let cache_copy_end_offset = self
+                .number_of_bytes_read
+                .checked_add(copy_len)
+                .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))?;
+            buf[0..copy_len]
+                .copy_from_slice(&self.cache[self.number_of_bytes_read..cache_copy_end_offset]);
+            self.number_of_bytes_read = self
+                .number_of_bytes_read
+                .checked_add(copy_len)
+                .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))?;
             Ok(copy_len)
         } else {
             // we are reading uncached data: read it and cache it
             let nread = self.inner.read(buf)?;
             self.cache.extend_from_slice(&buf[..nread]);
-            self.number_of_bytes_read += nread;
+            self.number_of_bytes_read = self
+                .number_of_bytes_read
+                .checked_add(nread)
+                .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))?;
             Ok(nread)
         }
     }
@@ -1376,18 +1489,22 @@ mod tests {
         };
 
         assert_eq!(
-            sizes_info.uncompressed_block_size_at(1),
+            sizes_info.uncompressed_block_size_at(1).unwrap(),
             UNCOMPRESSED_DATA_SIZE
         );
-        assert_eq!(sizes_info.uncompressed_block_size_at(3), 42);
+        assert_eq!(sizes_info.uncompressed_block_size_at(3).unwrap(), 42);
 
         assert_eq!(
-            sizes_info.max_uncompressed_pos(),
-            u64::from(2 * UNCOMPRESSED_DATA_SIZE) + 42
+            sizes_info.max_uncompressed_pos().unwrap(),
+            u64::from(UNCOMPRESSED_DATA_SIZE.checked_mul(2).unwrap())
+                .checked_add(42)
+                .unwrap()
         );
 
         assert_eq!(
-            sizes_info.compressed_block_size_at(u64::from(UNCOMPRESSED_DATA_SIZE) + 1),
+            sizes_info
+                .compressed_block_size_at(u64::from(UNCOMPRESSED_DATA_SIZE).checked_add(1).unwrap())
+                .unwrap(),
             2
         );
     }
