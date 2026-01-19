@@ -1,3 +1,5 @@
+mod privkey;
+
 use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use clru::CLruCache;
 use glob::Pattern;
@@ -21,6 +23,7 @@ use std::error;
 use std::ffi::OsStr;
 use std::fmt;
 use std::fs::{self, File, read_dir};
+use privkey::create_private_key;
 use std::io::{self, BufRead as _, BufReader, BufWriter, Read, Seek, Write};
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
@@ -1474,7 +1477,7 @@ fn keygen(matches: &ArgMatches) -> Result<(), MlarError> {
 
     let mut output_pub = File::create_new(output_base.with_extension("mlapub"))
         .expect("[ERROR] Unable to create the public file");
-    let mut output_priv = File::create_new(output_base.with_extension("mlapriv"))
+    let mut output_priv = create_private_key(output_base.with_extension("mlapriv"))
         .expect("[ERROR] Unable to create the private file");
 
     // handle seed
