@@ -39,7 +39,7 @@ mod windows {
     use std::fs::File;
     use std::io::Error;
     use std::os::windows::ffi::OsStrExt;
-    use std::os::windows::io::FromRawHandle;
+    use std::os::windows::io::{FromRawHandle, RawHandle};
     use std::path::Path;
     use std::ptr;
     use windows::Win32::Foundation::{GENERIC_WRITE, HLOCAL, INVALID_HANDLE_VALUE, LocalFree};
@@ -110,7 +110,7 @@ mod windows {
             }
 
             // Create file from handle
-            File::from_raw_handle(std::mem::transmute(handle))
+            File::from_raw_handle(handle.0 as RawHandle)
         };
         // Return file
         Ok(file)
