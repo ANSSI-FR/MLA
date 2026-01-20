@@ -102,13 +102,6 @@ mod windows {
                 None,            // Template file
             )?;
 
-            // Check handle
-            if handle == INVALID_HANDLE_VALUE {
-                // Get the last error code for debugging
-                let error = windows::core::Error::from_thread();
-                return Err(error.into());
-            }
-
             // Create file from handle
             File::from_raw_handle(handle.0 as RawHandle)
         };
