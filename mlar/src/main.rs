@@ -17,13 +17,13 @@ use mla::errors::{ConfigError::IncoherentPersistentConfig, Error, TruncatedReadE
 use mla::helpers::shared_secret::{MLADecryptionMetadata, MLADecryptionSharedSecret};
 use mla::helpers::{StreamWriter, linear_extract, mla_percent_escape, mla_percent_unescape};
 use mla::{ArchiveReader, ArchiveWriter, TruncatedArchiveReader, entry::ArchiveEntry};
+use privkey::create_private_key;
 use sha2::{Digest, Sha512};
 use std::collections::{HashMap, HashSet};
 use std::error;
 use std::ffi::OsStr;
 use std::fmt;
 use std::fs::{self, File, read_dir};
-use privkey::create_private_key;
 use std::io::{self, BufRead as _, BufReader, BufWriter, Read, Seek, Write};
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
