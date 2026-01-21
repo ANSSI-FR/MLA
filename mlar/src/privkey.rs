@@ -39,14 +39,9 @@ mod windows {
     use std::fs::File;
     use std::io::Error;
     use std::os::windows::ffi::OsStrExt;
-    use std::os::windows::io::{FromRawHandle, RawHandle};
+    use std::os::windows::io::FromRawHandle;
     use std::path::Path;
-    use std::ptr;
-    use windows::Win32::Foundation::{GENERIC_WRITE, HLOCAL, LocalFree};
-    use windows::Win32::Security::Authorization::{
-        ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
-    };
-    use windows::Win32::Security::PSECURITY_DESCRIPTOR;
+    use windows::Win32::Foundation::GENERIC_WRITE;
     use windows::Win32::Security::SECURITY_ATTRIBUTES;
     use windows::Win32::Storage::FileSystem::{
         CREATE_NEW, CreateFileW, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_NONE,
@@ -54,17 +49,29 @@ mod windows {
     use windows::core::PCWSTR;
 
     pub fn create_private_file<P: AsRef<Path>>(p: P) -> Result<File, Error> {
-        // Wrap it in a struct ensuring proper free on drop
-        struct SDWrapper(PSECURITY_DESCRIPTOR);
+        // SDDL is a stable function since Windows 2000, hardcoding the Security Descriptor is reasonably safe then
+        //
+        // SDDL used: D:P(A;;FA;;;OW)
+        // Details:
+        // D:          - Discretionary ACL
+        // P           - Protected (no inheritance)
+        // (A;;FA;;;OW) - Allow Full Access to Owner (OW)
+        // OW: Owner Rights SID (S-1-3-4) exists since Windows Vista and Windows Server 2008
+        //
+        // How it was generated with PowerShell:
+        // $sddl = "D:P(A;;FA;;;OW)"
+        // $sd  = New-Object System.Security.AccessControl.RawSecurityDescriptor $sddl
+        // $bytes = New-Object byte[] $sd.BinaryLength
+        // $sd.GetBinaryForm($bytes, 0)
+        // Rust formatting of the byte array skipped [...]
 
-        impl Drop for SDWrapper {
-            fn drop(&mut self) {
-                if !self.0.0.is_null() {
-                    // SAFETY: pointer is not null
-                    unsafe { LocalFree(Some(HLOCAL(self.0.0.cast()))) };
-                }
-            }
-        }
+        // Self-relative SECURITY_DESCRIPTOR for: D:P(A;;FA;;;OW)
+        let sd_private_owner_full: &mut [u8; 48] = &mut [
+            0x01, 0x00, 0x04, 0x90, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x02, 0x00, 0x1C, 0x00, 0x01, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x14, 0x00, 0xFF, 0x01, 0x1F, 0x00, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x03, 0x04, 0x00, 0x00, 0x00,
+        ];
 
         let filename_wide: Vec<u16> = p
             .as_ref()
@@ -73,24 +80,13 @@ mod windows {
             .chain(std::iter::once(0))
             .collect();
 
-        // Create a SDDL disabling inheritance
-        let mut sd_ptr: PSECURITY_DESCRIPTOR = PSECURITY_DESCRIPTOR(ptr::null_mut());
-        // SDDL details:
-        // D:          - Discretionary ACL
-        // P           - Protected (no inheritance)
-        // (A;;FA;;;OW) - Allow Full Access to Owner (OW)
-        // OW: Owner Rights SID (S-1-3-4) exists since Windows Vista and Windows Server 2008
-        create_security_descriptor_from_sddl("D:P(A;;FA;;;OW)", ptr::from_mut(&mut sd_ptr).cast())?;
-
-        // Ensure SD is freed when going out of scope
-        let _sd_wrapper = SDWrapper(sd_ptr);
-
         // Create SA with SDDL
         let sa = SECURITY_ATTRIBUTES {
             nLength: u32::try_from(std::mem::size_of::<SECURITY_ATTRIBUTES>()).map_err(|e| {
                 Error::other(format!("Security Attributes size conversion failed: {e}"))
             })?,
-            lpSecurityDescriptor: sd_ptr.0.cast(),
+            // mut pointer needed by Windows API but no modifications are done
+            lpSecurityDescriptor: sd_private_owner_full.as_mut_ptr().cast(),
             bInheritHandle: false.into(),
         };
 
@@ -109,29 +105,10 @@ mod windows {
             // No error handling needed like in C because of the ? operator
 
             // Create file from handle
-            File::from_raw_handle(handle.0 as RawHandle)
+            File::from_raw_handle(handle.0)
         };
         // Return file
         Ok(file)
-    }
-
-    // Creating a SD from SDDL, modifying sd_ptr in-place
-    fn create_security_descriptor_from_sddl(
-        sddl: &str,
-        sd_ptr: *mut PSECURITY_DESCRIPTOR,
-    ) -> Result<(), std::io::Error> {
-        let wide: Vec<u16> = sddl.encode_utf16().chain(std::iter::once(0u16)).collect();
-
-        // SAFETY: sd_ptr points to a pointer for SECURITY_DESCRIPTOR allocation
-        unsafe {
-            ConvertStringSecurityDescriptorToSecurityDescriptorW(
-                PCWSTR(wide.as_ptr()),
-                SDDL_REVISION_1,
-                sd_ptr,
-                None,
-            )?;
-        }
-        Ok(())
     }
 }
 
@@ -143,12 +120,11 @@ mod tests {
 
     #[cfg(target_family = "unix")]
     #[test]
-    fn create_private_key_creates_file_with_0600() {
+    fn unix_create_private_key_with_rw_owner() {
         use std::os::unix::fs::PermissionsExt;
 
         let path = NamedTempFile::new("privkey_unix").unwrap();
-        let file = create_private_key(&path).expect("create_private_key failed");
-        drop(file);
+        create_private_key(&path).expect("create_private_key failed");
         let meta = fs::metadata(&path).expect("metadata failed");
         let perm = meta.permissions().mode() & 0o777;
         assert_eq!(perm, 0o600);
@@ -157,12 +133,18 @@ mod tests {
 
     #[cfg(target_family = "windows")]
     #[test]
-    fn create_private_key_windows_success() {
+    fn windows_create_private_key_with_rw_owner() {
+        use std::fs::OpenOptions;
+
         let path = NamedTempFile::new("privkey_windows").unwrap();
         let file = create_private_key(&path).expect("create_private_key failed");
-        drop(file);
-        // won't check security descriptor here, just that the file was created
-        assert!(path.exists());
+        drop(file); // as FILE_SHARE_NONE is used, we need to close the file first
+        // tries to open file with open and write access to verify permissions
+        let file = OpenOptions::new().read(true).write(true).open(&path);
+        assert!(
+            file.is_ok(),
+            "Private key is not readable or not writable by the current user"
+        );
         fs::remove_file(&path).ok();
     }
 }
