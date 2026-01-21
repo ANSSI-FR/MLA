@@ -49,11 +49,23 @@ mod windows {
     use windows::Win32::Security::PSECURITY_DESCRIPTOR;
     use windows::Win32::Security::SECURITY_ATTRIBUTES;
     use windows::Win32::Storage::FileSystem::{
-        CREATE_NEW, CreateFileW, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ,
+        CREATE_NEW, CreateFileW, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_NONE,
     };
     use windows::core::PCWSTR;
 
     pub fn create_private_file<P: AsRef<Path>>(p: P) -> Result<File, Error> {
+        // Wrap it in a struct ensuring proper free on drop
+        struct SDWrapper(PSECURITY_DESCRIPTOR);
+
+        impl Drop for SDWrapper {
+            fn drop(&mut self) {
+                if !self.0.0.is_null() {
+                    // SAFETY: pointer is not null
+                    unsafe { LocalFree(Some(HLOCAL(self.0.0.cast()))) };
+                }
+            }
+        }
+
         let filename_wide: Vec<u16> = p
             .as_ref()
             .as_os_str()
@@ -62,32 +74,22 @@ mod windows {
             .collect();
 
         // Create a SDDL disabling inheritance
-        let mut sd_ptr: PSECURITY_DESCRIPTOR = ptr::null_mut();
+        let mut sd_ptr: PSECURITY_DESCRIPTOR = PSECURITY_DESCRIPTOR(ptr::null_mut());
         // SDDL details:
         // D:          - Discretionary ACL
         // P           - Protected (no inheritance)
         // (A;;FA;;;OW) - Allow Full Access to Owner (OW)
         create_security_descriptor_from_sddl("D:P(A;;FA;;;OW)", ptr::from_mut(&mut sd_ptr).cast())?;
 
-        // Wrap it in a struct ensuring proper free on drop
-        struct SDWrapper(PSECURITY_DESCRIPTOR);
-
-        impl Drop for SDWrapper {
-            fn drop(&mut self) {
-                if !self.0.is_null() {
-                    // SAFETY: pointer is not null
-                    unsafe { LocalFree(Some(HLOCAL(self.0.cast()))) };
-                }
-            }
-        }
-
         // Ensure SD is freed when going out of scope
         let _sd_wrapper = SDWrapper(sd_ptr);
 
         // Create SA with SDDL
-        let mut sa = SECURITY_ATTRIBUTES {
-            nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
-            lpSecurityDescriptor: sd_ptr.cast(),
+        let sa = SECURITY_ATTRIBUTES {
+            nLength: u32::try_from(std::mem::size_of::<SECURITY_ATTRIBUTES>()).map_err(|e| {
+                Error::other(format!("Security Attributes size conversion failed: {e}"))
+            })?,
+            lpSecurityDescriptor: sd_ptr.0.cast(),
             bInheritHandle: false.into(),
         };
 
@@ -96,8 +98,8 @@ mod windows {
             let handle = CreateFileW(
                 PCWSTR(filename_wide.as_ptr()), // File name
                 GENERIC_WRITE.0,                // Access rights
-                0,                              // Share mode: no sharing
-                Some(&mut sa),                  // Security Attributes (The ACL)
+                FILE_SHARE_NONE,                // Share mode: no sharing
+                Some(&raw const sa),            // Security Attributes (The ACL)
                 CREATE_NEW,                     // Creation disposition (Fail if exists)
                 FILE_ATTRIBUTE_NORMAL,          // Flags
                 None,                           // Template file
@@ -128,7 +130,7 @@ mod windows {
                 None,
             )?;
         }
-        Ok()
+        Ok(())
     }
 }
 
@@ -155,7 +157,7 @@ mod tests {
     #[cfg(target_family = "windows")]
     #[test]
     fn create_private_key_windows_success() {
-        let path = tmp_path("privkey_win");
+        let path = NamedTempFile::new("privkey_windows").unwrap();
         let file = create_private_key(&path).expect("create_private_key failed");
         drop(file);
         // won't check security descriptor here, just that the file was created
