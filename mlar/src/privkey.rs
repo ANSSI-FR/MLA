@@ -46,8 +46,8 @@ mod windows {
     use windows::Win32::Security::Authorization::{
         ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
     };
+    use windows::Win32::Security::PSECURITY_DESCRIPTOR;
     use windows::Win32::Security::SECURITY_ATTRIBUTES;
-    use windows::Win32::Security::{PSECURITY_DESCRIPTOR};
     use windows::Win32::Storage::FileSystem::{
         CREATE_NEW, CreateFileW, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ,
     };
@@ -129,5 +129,37 @@ mod windows {
             )?;
         }
         Ok()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use assert_fs::NamedTempFile;
+    use std::fs;
+
+    #[cfg(target_family = "unix")]
+    #[test]
+    fn create_private_key_creates_file_with_0600() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let path = NamedTempFile::new("privkey_unix").unwrap();
+        let file = create_private_key(&path).expect("create_private_key failed");
+        drop(file);
+        let meta = fs::metadata(&path).expect("metadata failed");
+        let perm = meta.permissions().mode() & 0o777;
+        assert_eq!(perm, 0o600);
+        fs::remove_file(&path).ok();
+    }
+
+    #[cfg(target_family = "windows")]
+    #[test]
+    fn create_private_key_windows_success() {
+        let path = tmp_path("privkey_win");
+        let file = create_private_key(&path).expect("create_private_key failed");
+        drop(file);
+        // won't check security descriptor here, just that the file was created
+        assert!(path.exists());
+        fs::remove_file(&path).ok();
     }
 }
