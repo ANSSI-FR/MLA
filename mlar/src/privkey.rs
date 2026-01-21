@@ -79,6 +79,7 @@ mod windows {
         // D:          - Discretionary ACL
         // P           - Protected (no inheritance)
         // (A;;FA;;;OW) - Allow Full Access to Owner (OW)
+        // OW: Owner Rights SID (S-1-3-4) exists since Windows Vista and Windows Server 2008
         create_security_descriptor_from_sddl("D:P(A;;FA;;;OW)", ptr::from_mut(&mut sd_ptr).cast())?;
 
         // Ensure SD is freed when going out of scope
