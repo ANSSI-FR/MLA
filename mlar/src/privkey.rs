@@ -42,12 +42,12 @@ mod windows {
     use std::os::windows::io::{FromRawHandle, RawHandle};
     use std::path::Path;
     use std::ptr;
-    use windows::Win32::Foundation::{GENERIC_WRITE, HLOCAL, INVALID_HANDLE_VALUE, LocalFree};
+    use windows::Win32::Foundation::{GENERIC_WRITE, HLOCAL, LocalFree};
     use windows::Win32::Security::Authorization::{
         ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
     };
     use windows::Win32::Security::SECURITY_ATTRIBUTES;
-    use windows::Win32::Security::{PSECURITY_DESCRIPTOR, SECURITY_DESCRIPTOR};
+    use windows::Win32::Security::{PSECURITY_DESCRIPTOR};
     use windows::Win32::Storage::FileSystem::{
         CREATE_NEW, CreateFileW, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ,
     };
@@ -62,7 +62,7 @@ mod windows {
             .collect();
 
         // Create a SDDL disabling inheritance
-        let mut sd_ptr: *mut SECURITY_DESCRIPTOR = ptr::null_mut();
+        let mut sd_ptr: PSECURITY_DESCRIPTOR = ptr::null_mut();
         // SDDL details:
         // D:          - Discretionary ACL
         // P           - Protected (no inheritance)
@@ -70,7 +70,7 @@ mod windows {
         create_security_descriptor_from_sddl("D:P(A;;FA;;;OW)", ptr::from_mut(&mut sd_ptr).cast())?;
 
         // Wrap it in a struct ensuring proper free on drop
-        struct SDWrapper(*mut SECURITY_DESCRIPTOR);
+        struct SDWrapper(PSECURITY_DESCRIPTOR);
 
         impl Drop for SDWrapper {
             fn drop(&mut self) {
@@ -81,7 +81,8 @@ mod windows {
             }
         }
 
-        let _wrapped = SDWrapper(sd_ptr);
+        // Ensure SD is freed when going out of scope
+        let _sd_wrapper = SDWrapper(sd_ptr);
 
         // Create SA with SDDL
         let mut sa = SECURITY_ATTRIBUTES {
@@ -95,12 +96,14 @@ mod windows {
             let handle = CreateFileW(
                 PCWSTR(filename_wide.as_ptr()), // File name
                 GENERIC_WRITE.0,                // Access rights
-                FILE_SHARE_READ, // Share mode (allow others to read? No, if ACL works)
-                Some(&mut sa),   // Security Attributes (The ACL)
-                CREATE_NEW,      // Creation disposition (Fail if exists)
-                FILE_ATTRIBUTE_NORMAL, // Flags
-                None,            // Template file
+                0,                              // Share mode: no sharing
+                Some(&mut sa),                  // Security Attributes (The ACL)
+                CREATE_NEW,                     // Creation disposition (Fail if exists)
+                FILE_ATTRIBUTE_NORMAL,          // Flags
+                None,                           // Template file
             )?;
+
+            // No error handling needed like in C because of the ? operator
 
             // Create file from handle
             File::from_raw_handle(handle.0 as RawHandle)
@@ -109,11 +112,11 @@ mod windows {
         Ok(file)
     }
 
-    // Creating a SD from SDDL.
+    // Creating a SD from SDDL, modifying sd_ptr in-place
     fn create_security_descriptor_from_sddl(
         sddl: &str,
         sd_ptr: *mut PSECURITY_DESCRIPTOR,
-    ) -> Result<*mut PSECURITY_DESCRIPTOR, std::io::Error> {
+    ) -> Result<(), std::io::Error> {
         let wide: Vec<u16> = sddl.encode_utf16().chain(std::iter::once(0u16)).collect();
 
         // SAFETY: sd_ptr points to a pointer for SECURITY_DESCRIPTOR allocation
@@ -125,6 +128,6 @@ mod windows {
                 None,
             )?;
         }
-        Ok(sd_ptr)
+        Ok()
     }
 }
