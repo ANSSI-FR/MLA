@@ -1,3 +1,5 @@
+mod privkey;
+
 use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use clru::CLruCache;
 use glob::Pattern;
@@ -15,6 +17,7 @@ use mla::errors::{ConfigError::IncoherentPersistentConfig, Error, TruncatedReadE
 use mla::helpers::shared_secret::{MLADecryptionMetadata, MLADecryptionSharedSecret};
 use mla::helpers::{StreamWriter, linear_extract, mla_percent_escape, mla_percent_unescape};
 use mla::{ArchiveReader, ArchiveWriter, TruncatedArchiveReader, entry::ArchiveEntry};
+use privkey::create_private_key;
 use sha2::{Digest, Sha512};
 use std::collections::{HashMap, HashSet};
 use std::error;
@@ -1474,7 +1477,7 @@ fn keygen(matches: &ArgMatches) -> Result<(), MlarError> {
 
     let mut output_pub = File::create_new(output_base.with_extension("mlapub"))
         .expect("[ERROR] Unable to create the public file");
-    let mut output_priv = File::create_new(output_base.with_extension("mlapriv"))
+    let mut output_priv = create_private_key(output_base.with_extension("mlapriv"))
         .expect("[ERROR] Unable to create the private file");
 
     // handle seed
