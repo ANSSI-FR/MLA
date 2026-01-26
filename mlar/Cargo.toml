@@ -38,6 +38,5 @@ assert_cmd = "2.1"
 assert_fs = "1.1"
 permutate = "0.3"
 rand = "0.9"
-# Wait that all MLA dependencies upgrade below crate to do it too as there is a trait modification (CryptoRngCore -> CryptoRng + RngCore)
 rand_chacha = "0.9"
 winapi = { version = "0.3", features = ["winbase"] }
