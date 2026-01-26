@@ -32,7 +32,7 @@ hkdf = { version = "0.12", default-features = false}
 sha2 = { version = "0.10", default-features = false}
 zeroize = { version = "1.8", default-features = false}
 # Post-quantum
-ml-kem = { version = "=0.2.1", default-features = false, features = ["deterministic", "zeroize"] }
+ml-kem = { version = "=0.2.2", default-features = false, features = ["deterministic", "zeroize"] }
 # Wait that all MLA dependencies upgrade below crate to do it too as there is a trait modification (CryptoRngCore -> CryptoRng + RngCore)
 hpke = { version = "0.12", default-features = false, features = ["alloc", "x25519"] }
 curve25519-dalek = { version = "4.1", default-features = false}
