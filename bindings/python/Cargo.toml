@@ -20,6 +20,7 @@ crate-type = ["cdylib"]
 [lints.clippy]
 # all lints that are on by default (correctness, suspicious, style, complexity, perf)
 all = {level = "deny", priority = -1}
+arithmetic_side_effects = {level = "deny", priority = -1}
 # lints which are rather strict or have occasional false positives
 pedantic = {level = "deny", priority = -1}
 # new lints that are still under development
@@ -36,5 +37,5 @@ must_use_candidate = "allow"
 too-many-lines = "allow"
 
 [dependencies]
-pyo3 = "0.25"
+pyo3 = "0.27"
 mla = { version = "2.0.0-beta", features = ["send"], path = "../../mla"}
