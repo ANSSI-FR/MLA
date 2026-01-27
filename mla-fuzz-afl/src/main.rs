@@ -212,6 +212,13 @@ impl<W: Write> MLASerialize<W> for TestInput {
 
 impl<R: Read> MLADeserialize<R> for TestInput {
     fn deserialize(src: &mut R) -> Result<Self, Error> {
+        // Safety limits for untrusted input to avoid huge allocations
+        const MAX_FILES: usize = 255;
+        const MAX_FILENAME_LEN: usize = 4 * 1024; // 4 KiB
+        const MAX_PARTS: usize = 1024;
+        const MAX_PART_LEN: usize = 10 * 1024 * 1024; // 10 MiB
+        const MAX_BYTEFLIPS: usize = 1024;
+
         let mut buf1 = [0u8; 1];
         src.read_exact(&mut buf1)?;
         let config = FuzzMode::from_u8(buf1[0]).ok_or(Error::DeserializationError)?;
@@ -220,15 +227,21 @@ impl<R: Read> MLADeserialize<R> for TestInput {
 
         // Read number of filenames
         src.read_exact(&mut buf8)?;
-        let num_files = usize::try_from(u64::from_le_bytes(buf8))
-            .expect("Failed to convert filenames number to usize");
+        let num_files_u64 = u64::from_le_bytes(buf8);
+        let num_files = usize::try_from(num_files_u64).map_err(|_| Error::DeserializationError)?;
+        if num_files > MAX_FILES {
+            return Err(Error::DeserializationError);
+        }
 
         let mut filenames = Vec::with_capacity(num_files);
         for _ in 0..num_files {
             // Read string length
             src.read_exact(&mut buf8)?;
-            let str_len = usize::try_from(u64::from_le_bytes(buf8))
-                .expect("Failed to convert length to usize");
+            let str_len_u64 = u64::from_le_bytes(buf8);
+            let str_len = usize::try_from(str_len_u64).map_err(|_| Error::DeserializationError)?;
+            if str_len > MAX_FILENAME_LEN {
+                return Err(Error::DeserializationError);
+            }
 
             // Read string bytes
             let mut str_buf = vec![0u8; str_len];
@@ -239,15 +252,22 @@ impl<R: Read> MLADeserialize<R> for TestInput {
 
         // Read number of parts
         src.read_exact(&mut buf8)?;
-        let num_parts = usize::try_from(u64::from_le_bytes(buf8))
-            .expect("Failed to convert parts number to usize");
+        let num_parts_u64 = u64::from_le_bytes(buf8);
+        let num_parts = usize::try_from(num_parts_u64).map_err(|_| Error::DeserializationError)?;
+        if num_parts > MAX_PARTS {
+            return Err(Error::DeserializationError);
+        }
 
         let mut parts = Vec::with_capacity(num_parts);
         for _ in 0..num_parts {
             // Read part length
             src.read_exact(&mut buf8)?;
-            let part_len = usize::try_from(u64::from_le_bytes(buf8))
-                .expect("Failed to convert parts number length to usize");
+            let part_len_u64 = u64::from_le_bytes(buf8);
+            let part_len =
+                usize::try_from(part_len_u64).map_err(|_| Error::DeserializationError)?;
+            if part_len > MAX_PART_LEN {
+                return Err(Error::DeserializationError);
+            }
 
             // Read part bytes
             let mut part_buf = vec![0u8; part_len];
@@ -259,6 +279,9 @@ impl<R: Read> MLADeserialize<R> for TestInput {
         let mut buf4 = [0u8; 4];
         src.read_exact(&mut buf4)?;
         let num_flips = u32::from_le_bytes(buf4) as usize;
+        if num_flips > MAX_BYTEFLIPS {
+            return Err(Error::DeserializationError);
+        }
 
         let mut byteflip = Vec::with_capacity(num_flips);
         for _ in 0..num_flips {
@@ -276,6 +299,13 @@ impl<R: Read> MLADeserialize<R> for TestInput {
 }
 
 fn run(data: &mut [u8]) {
+    // limit data size to avoid OOM
+    // 10 Mo max
+    if data.len() > 10 * 1024 * 1024 {
+        eprintln!("Input too large, skipping");
+        return;
+    }
+
     // load public and private keys
     let (pub_enc_key, pub_sig_verif_key) = MLAPublicKey::deserialize_public_key(PUB_KEY)
         .unwrap()
@@ -286,12 +316,14 @@ fn run(data: &mut [u8]) {
 
     let mut cursor = Cursor::new(&*data);
 
-    let test_case = TestInput::deserialize(&mut cursor).unwrap_or(TestInput {
-        config: FuzzMode::None,
-        filenames: Vec::new(),
-        parts: Vec::new(),
-        byteflip: vec![],
-    });
+    // skip invalid inputs
+    let test_case = match TestInput::deserialize(&mut cursor) {
+        Ok(test_case) => test_case,
+        Err(e) => {
+            eprintln!("Deserialization failed: {e:?}");
+            return;
+        }
+    };
 
     if test_case.filenames.is_empty() || test_case.filenames.len() >= 256 {
         return; // early exit on invalid
