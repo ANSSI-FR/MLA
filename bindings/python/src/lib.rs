@@ -223,6 +223,19 @@ impl From<mla::entry::EntryNameError> for WrappedError {
     }
 }
 
+// Convert PyO3 casting/guard errors into our WrappedError
+impl<'a, 'py> From<pyo3::pyclass::PyClassGuardError<'a, 'py>> for WrappedError {
+    fn from(err: pyo3::pyclass::PyClassGuardError<'a, 'py>) -> Self {
+        WrappedError::WrappedPy(err.into())
+    }
+}
+
+impl<'a, 'py> From<pyo3::CastError<'a, 'py>> for WrappedError {
+    fn from(err: pyo3::CastError<'a, 'py>) -> Self {
+        WrappedError::WrappedPy(err.into())
+    }
+}
+
 /// Converts a `WrappedError` into a Python exception (`PyErr`) for use with `PyO3` bindings.
 ///
 /// This implementation maps each variant of `WrappedError` (and its inner error types)
@@ -405,7 +418,7 @@ impl PublicKeys {
         let mut keys = Vec::new();
 
         for element in args {
-            if let Ok(data) = element.downcast::<PyString>() {
+            if let Ok(data) = element.cast::<PyString>() {
                 // Convert PyString to &str
                 let string = data.to_str()?;
                 // Convert &str to &[u8]
@@ -414,7 +427,7 @@ impl PublicKeys {
                     MLAPublicKey::deserialize_public_key(bytes)
                         .map_err(|_| mla::errors::Error::InvalidKeyFormat)?,
                 );
-            } else if let Ok(data) = element.downcast::<PyBytes>() {
+            } else if let Ok(data) = element.cast::<PyBytes>() {
                 keys.push(
                     MLAPublicKey::deserialize_public_key(&data[..])
                         .map_err(|_| mla::errors::Error::InvalidKeyFormat)?,
@@ -480,7 +493,7 @@ impl PrivateKeys {
         let mut keys = Vec::new();
 
         for element in args {
-            if let Ok(data) = element.downcast::<PyString>() {
+            if let Ok(data) = element.cast::<PyString>() {
                 // Convert PyString to &str
                 let string = data.to_str()?;
                 // Convert &str to &[u8]
@@ -489,7 +502,7 @@ impl PrivateKeys {
                     MLAPrivateKey::deserialize_private_key(bytes)
                         .map_err(|_| mla::errors::Error::InvalidKeyFormat)?,
                 );
-            } else if let Ok(data) = element.downcast::<PyBytes>() {
+            } else if let Ok(data) = element.cast::<PyBytes>() {
                 keys.push(
                     MLAPrivateKey::deserialize_private_key(&data[..])
                         .map_err(|_| mla::errors::Error::InvalidKeyFormat)?,
@@ -957,7 +970,9 @@ impl MLAReader {
     // Purpose: only one import
     #[classattr]
     fn _buffered_type(py: Python) -> PyResult<Py<PyType>> {
-        py.import("io")?.getattr("BufferedIOBase")?.extract()
+        let obj = py.import("io")?.getattr("BufferedIOBase")?;
+        let ty = obj.extract::<Py<PyType>>().map_err(PyErr::from)?;
+        Ok(ty)
     }
 
     /// Write an archive entry given by its `EntryName` to @dest, which can be:
@@ -984,21 +999,36 @@ impl MLAReader {
         chunk_size: usize,
     ) -> Result<(), WrappedError> {
         let mut inner = self.inner.lock().expect("Mutex poisoned");
-        let archive_entry = match &mut inner.0 {
+        let mut archive_entry = match &mut inner.0 {
             ExplicitReader::FileReader(reader) => reader.get_entry(key.to_rust_entry_name())?,
         };
-
-        if let Ok(dest) = dest.downcast::<PyString>() {
-            let mut output = std::fs::File::create(dest.to_string())?;
-            io::copy(&mut archive_entry.unwrap().data, &mut output)?;
+        if let Ok(dest) = dest.cast::<PyString>() {
+            if let Some(ref mut ae) = archive_entry {
+                let mut output = std::fs::File::create(dest.to_string())?;
+                io::copy(&mut ae.data, &mut output)?;
+            } else {
+                return Err(PyKeyError::new_err(format!(
+                    "EntryNot found (escaped name): {}",
+                    key.raw_content_to_escaped_string()
+                ))
+                .into());
+            }
         } else if dest.is_instance(&py.get_type::<MLAReader>().getattr("_buffered_type")?)? {
-            let src = &mut archive_entry.unwrap().data;
-            let mut buf = std::iter::repeat_n(0, chunk_size).collect::<Vec<_>>();
-            while let Ok(n) = src.read(&mut buf) {
-                if n == 0 {
-                    break;
+            if let Some(ref mut ae) = archive_entry {
+                let src = &mut ae.data;
+                let mut buf = vec![0; chunk_size];
+                while let Ok(n) = src.read(&mut buf) {
+                    if n == 0 {
+                        break;
+                    }
+                    dest.call_method1("write", (&buf[..n],))?;
                 }
-                dest.call_method1("write", (&buf[..n],))?;
+            } else {
+                return Err(PyKeyError::new_err(format!(
+                    "EntryNot found (escaped name): {}",
+                    key.raw_content_to_escaped_string()
+                ))
+                .into());
             }
         } else {
             return Err(PyTypeError::new_err(
@@ -1168,7 +1198,9 @@ impl MLAWriter {
     // Purpose: only one import
     #[classattr]
     fn _buffered_type(py: Python) -> PyResult<Py<PyType>> {
-        py.import("io")?.getattr("BufferedIOBase")?.extract()
+        let obj = py.import("io")?.getattr("BufferedIOBase")?;
+        let ty = obj.extract::<Py<PyType>>().map_err(PyErr::from)?;
+        Ok(ty)
     }
 
     /// Add an entry named by @src `EntryName` to an archive from @src, which can be:
@@ -1198,7 +1230,7 @@ impl MLAWriter {
         match inner.0.as_mut() {
             Some(writer) => match writer.as_mut() {
                 ExplicitWriter::FileWriter(writer) => {
-                    if let Ok(src) = src.downcast::<PyString>() {
+                    if let Ok(src) = src.cast::<PyString>() {
                         let mut input = std::fs::File::open(src.to_string())?;
                         writer.add_entry(
                             key.to_rust_entry_name(),
