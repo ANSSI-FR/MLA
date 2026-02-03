@@ -7,7 +7,7 @@ Python bindings for the MLA (Multi-Layer Archive) format, enabling secure, compr
 Install from PyPI:
 
 ```sh
-pipx install mla-archive
+pip install mla-archive
 ```
 
 Or build from source:
