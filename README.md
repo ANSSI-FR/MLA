@@ -142,6 +142,7 @@ You should read [API documentation](https://github.com/ANSSI-FR/MLA#api-usage) a
 
 * MLA does not provide any guarantee against side channel attacks. However, if you spot problems in this regard, please contact us and we will assess whether we will fix it.
 * The security and maintenance level of the MLA Python bindings is explicitely not guaranteed.
+* A security assessment was done on MLA 2.0.0-beta, documenting low-severity issues that should have been fixed since then (see [issue #465](https://github.com/ANSSI-FR/MLA/issues/465)). The report is available in `doc/20260130-mla-security-assessment.pdf`.
 
 ## FAQ
 
