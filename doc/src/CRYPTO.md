@@ -193,7 +193,7 @@ If the decryption is a success, returns $ss_{recipients}$. Otherwise, returns an
     - An existing formal analysis [^hpkeanalysis]
     - Easier code and security auditing, thanks to the use of known bricks
     - Availability of test vectors in the RFC, making the implementation more reliable
-- To the knowledge of the author, no HPKE algorithm has been standardized for quantum hybridation, hence the custom algorithm
+- To the knowledge of the author, no HPKE algorithm has been standardized for quantum hybridization, hence the custom algorithm
 - FIPS 203 is used as, at the time of writing:
     - It is the only KEM algorithm standardized by the NIST [^nist]
     - It is in line with the French suggestions [^frsuggest] for PQ cryptography
