@@ -11,8 +11,8 @@ https://crates.io/crates/mlar)
 
 MLA is an archive file format with the following features:
 
-* Support for traditional and post-quantum encryption hybridation with asymmetric keys (HPKE with AES256-GCM and a KEM based on an hybridation of X25519 and post-quantum ML-KEM 1024)
-* Support for traditional and post-quantum signing hybridation
+* Support for traditional and post-quantum encryption hybridization with asymmetric keys (HPKE with AES256-GCM and a KEM based on an hybridization of X25519 and post-quantum ML-KEM 1024)
+* Support for traditional and post-quantum signing hybridization
 * Support for compression (based on [`rust-brotli`](https://github.com/dropbox/rust-brotli/))
 * Streamable archive creation:
   * An archive can be built even over a data-diode
