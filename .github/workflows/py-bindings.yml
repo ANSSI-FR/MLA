@@ -3,12 +3,14 @@
 #    maturin generate-ci github --pytest -m bindings/python/Cargo.toml
 #
 # Using maturin v1.7.1
-name: Py-bindings
+name: Bindings Python
 
 on:
   push:
     branches:
       - main
+    tags:
+      - "mla-bindings-py-v*"
   pull_request:
 
 permissions:
@@ -20,17 +22,17 @@ jobs:
     strategy:
       matrix:
         platform:
-          - runner: ubuntu-latest
+          - runner: ubuntu-24.04
             target: x86_64
-          - runner: ubuntu-latest
+          - runner: ubuntu-24.04
             target: x86
-          - runner: ubuntu-latest
+          - runner: ubuntu-24.04
             target: aarch64
-          - runner: ubuntu-latest
+          - runner: ubuntu-24.04
             target: armv7
-          - runner: ubuntu-latest
+          - runner: ubuntu-24.04
             target: s390x
-          - runner: ubuntu-latest
+          - runner: ubuntu-24.04
             target: ppc64le
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -78,12 +80,43 @@ jobs:
           mypy bindings/python/tests/test_mla.py
           mypy bindings/python/tests/test_examples.py
 
+  musllinux:
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      matrix:
+        platform:
+          - runner: ubuntu-24.04
+            target: x86_64
+          - runner: ubuntu-24.04
+            target: x86
+          - runner: ubuntu-24.04
+            target: aarch64
+          - runner: ubuntu-24.04
+            target: armv7
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+        with:
+          python-version: 3.11
+      - name: Build wheels
+        uses: PyO3/maturin-action@ea5bac0f1ccd0ab11c805e2b804bfcb65dac2eab
+        with:
+          target: ${{ matrix.platform.target }}
+          args: --release --out dist --find-interpreter --manifest-path bindings/python/Cargo.toml
+          sccache: true
+          manylinux: musllinux_1_2
+      - name: Upload wheels
+        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5.0
+        with:
+          name: wheels-musllinux-${{ matrix.platform.target }}
+          path: dist
+
   windows:
     runs-on: ${{ matrix.platform.runner }}
     strategy:
       matrix:
         platform:
-          - runner: windows-latest
+          - runner: windows-2025
             target: x64
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -137,7 +170,7 @@ jobs:
       matrix:
         platform:
           # no x86_64 targets as latest macos versions now default to aarch64, x86_64 is not available
-          - runner: macos-latest
+          - runner: macos-15
             target: aarch64
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -181,7 +214,7 @@ jobs:
           mypy bindings/python/tests/test_mla.py
           mypy bindings/python/tests/test_examples.py
   sdist:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Build sdist
@@ -194,3 +227,32 @@ jobs:
         with:
           name: wheels-sdist
           path: dist
+
+  release:
+    name: Release python bindings
+    runs-on: ubuntu-24.04
+    if: ${{ startsWith(github.ref, 'refs/tags/mla-bindings-py-v') }}
+    environment:
+      name: pypi
+      url: https://pypi.org/p/mla-archive
+    needs: [linux, musllinux, windows, macos, sdist]
+    permissions:
+      # Use to sign the release artifacts
+      id-token: write
+      # Used to upload release artifacts
+      contents: write
+      # Used to generate artifact attestation
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+      - name: Move artifacts to dist
+        run: |
+          rm -rf dist
+          mkdir dist
+          mv wheels-*/* dist
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
+        with:
+          subject-path: dist/
+      - name: publish
+        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # v1.13.0
