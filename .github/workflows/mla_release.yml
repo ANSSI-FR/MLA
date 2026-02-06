@@ -104,15 +104,6 @@ jobs:
 
     steps:
     - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-    - uses: actions-rs/toolchain@b2417cde72dcf67f306c0ae8e0828a81bf0b189f # v1.0.6
-      if: matrix.container == null
-      with:
-        # Pin Rust toolchain for releases to a known-good previous stable release
-        # for increased stability and security.
-        # Rust does not provide an "old-stable" channel, so we explicitly specify the version (including its patch level).
-        toolchain: 1.92.0
-        # For non-release builds, use 'stable'.
-        # toolchain: stable
     - uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce # v2.0.0
       if: matrix.msvc_platform
     - name: Set target if any
@@ -142,15 +133,12 @@ jobs:
       if: matrix.container != null
       run: cargo build ${{ matrix.cargo_arg }} --manifest-path=bindings/C/Cargo.toml --target=${{ matrix.target }}
     - name: Build static library (outside container)
-      uses: actions-rs/cargo@ae10961054e4aa8b4aa7dffede299aaf087aa33b # v1.0.1
       if: matrix.container == null
       env:
         # RUSTC_BOOTSTRAP=1 allows use of -Z build-std on stable toolchain
         # Required because win7 targets aren't officially supported in stable
         RUSTC_BOOTSTRAP: "${{ contains(matrix.target, 'win7') && '1' || '' }}"
-      with:
-        command: build
-        args: ${{ matrix.cargo_arg }} --manifest-path=bindings/C/Cargo.toml --target=${{ matrix.target }}
+      run: cargo build ${{ matrix.cargo_arg }} --manifest-path=bindings/C/Cargo.toml --target=${{ matrix.target }}
     - name: Upload resulting 'mla'
       uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5.0
       with:
