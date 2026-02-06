@@ -3,7 +3,7 @@
 #    maturin generate-ci github --pytest -m bindings/python/Cargo.toml
 #
 # Using maturin v1.7.1
-name: Py-bindings
+name: Bindings Python
 
 on:
   push:
@@ -77,6 +77,37 @@ jobs:
           mypy bindings/python/examples/write.py
           mypy bindings/python/tests/test_mla.py
           mypy bindings/python/tests/test_examples.py
+
+  musllinux:
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      matrix:
+        platform:
+          - runner: ubuntu-latest
+            target: x86_64
+          - runner: ubuntu-latest
+            target: x86
+          - runner: ubuntu-latest
+            target: aarch64
+          - runner: ubuntu-latest
+            target: armv7
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+        with:
+          python-version: 3.11
+      - name: Build wheels
+        uses: PyO3/maturin-action@ea5bac0f1ccd0ab11c805e2b804bfcb65dac2eab
+        with:
+          target: ${{ matrix.platform.target }}
+          args: --release --out dist --find-interpreter --manifest-path bindings/python/Cargo.toml
+          sccache: true
+          manylinux: musllinux_1_2
+      - name: Upload wheels
+        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5.0
+        with:
+          name: wheels-musllinux-${{ matrix.platform.target }}
+          path: dist
 
   windows:
     runs-on: ${{ matrix.platform.runner }}
