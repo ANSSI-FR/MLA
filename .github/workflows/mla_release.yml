@@ -19,7 +19,7 @@ jobs:
         build: [linux-x86_64, windows-i686, windows-x86_64, windows-i686-debug, windows-x86_64-debug]
         include:
           - build: linux-x86_64
-            os: ubuntu-latest
+            os: ubuntu-24.04
             # use a pinned Rust toolchain via a Linux container for reproducible builds
             container: rust@sha256:f58923369ba295ae1f60bc49d03f2c955a5c93a0b7d49acfb2b2a65bebaf350d # v1.92.0 ("old-stable" cf. below)
             target: x86_64-unknown-linux-musl
@@ -27,7 +27,7 @@ jobs:
             path: |
               ./target/x86_64-unknown-linux-musl/release/libmla.a
           - build: windows-i686
-            os: windows-latest
+            os: windows-2025
             # not available: set container value to null
             container: null
             target: i686-pc-windows-msvc
@@ -39,7 +39,7 @@ jobs:
               ./target/i686-pc-windows-msvc/release/mla.dll.lib
               ./target/i686-pc-windows-msvc/release/mla.pdb
           - build: windows-x86_64
-            os: windows-latest
+            os: windows-2025
             # not available: set container value to null
             container: null
             target: x86_64-pc-windows-msvc
@@ -51,7 +51,7 @@ jobs:
               ./target/x86_64-pc-windows-msvc/release/mla.dll.lib
               ./target/x86_64-pc-windows-msvc/release/mla.pdb
           - build: windows-i686-debug
-            os: windows-latest
+            os: windows-2025
             # not available: set container value to null
             container: null
             target: i686-pc-windows-msvc
@@ -63,7 +63,7 @@ jobs:
               ./target/i686-pc-windows-msvc/debug/mla.dll.lib
               ./target/i686-pc-windows-msvc/debug/mla.pdb
           - build: windows-x86_64-debug
-            os: windows-latest
+            os: windows-2025
             # not available: set container value to null
             container: null
             target: x86_64-pc-windows-msvc
@@ -75,7 +75,7 @@ jobs:
               ./target/x86_64-pc-windows-msvc/debug/mla.dll.lib
               ./target/x86_64-pc-windows-msvc/debug/mla.pdb
           - build: windows7-i686 # Win7-compatible build using tier 3 target
-            os: windows-latest
+            os: windows-2025
             # not available: set container value to null
             container: null
             target: i686-win7-windows-msvc
@@ -87,7 +87,7 @@ jobs:
               ./target/i686-win7-windows-msvc/release/mla.dll.lib
               ./target/i686-win7-windows-msvc/release/mla.pdb
           - build: windows7-x86_64 # Win7-compatible build using tier 3 target
-            os: windows-latest
+            os: windows-2025
             # not available: set container value to null
             container: null
             target: x86_64-win7-windows-msvc
@@ -104,15 +104,6 @@ jobs:
 
     steps:
     - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-    - uses: actions-rs/toolchain@b2417cde72dcf67f306c0ae8e0828a81bf0b189f # v1.0.6
-      if: matrix.container == null
-      with:
-        # Pin Rust toolchain for releases to a known-good previous stable release
-        # for increased stability and security.
-        # Rust does not provide an "old-stable" channel, so we explicitly specify the version (including its patch level).
-        toolchain: 1.92.0
-        # For non-release builds, use 'stable'.
-        # toolchain: stable
     - uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce # v2.0.0
       if: matrix.msvc_platform
     - name: Set target if any
@@ -142,15 +133,12 @@ jobs:
       if: matrix.container != null
       run: cargo build ${{ matrix.cargo_arg }} --manifest-path=bindings/C/Cargo.toml --target=${{ matrix.target }}
     - name: Build static library (outside container)
-      uses: actions-rs/cargo@ae10961054e4aa8b4aa7dffede299aaf087aa33b # v1.0.1
       if: matrix.container == null
       env:
         # RUSTC_BOOTSTRAP=1 allows use of -Z build-std on stable toolchain
         # Required because win7 targets aren't officially supported in stable
         RUSTC_BOOTSTRAP: "${{ contains(matrix.target, 'win7') && '1' || '' }}"
-      with:
-        command: build
-        args: ${{ matrix.cargo_arg }} --manifest-path=bindings/C/Cargo.toml --target=${{ matrix.target }}
+      run: cargo build ${{ matrix.cargo_arg }} --manifest-path=bindings/C/Cargo.toml --target=${{ matrix.target }}
     - name: Upload resulting 'mla'
       uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5.0
       with:
@@ -159,11 +147,16 @@ jobs:
 
   release:
     permissions:
+      # Used to generate artifact attestation
+      attestations: write
+      # Used to upload release artifacts
       contents: write
+      # Use to sign the release artifacts
+      id-token: write
     # From https://github.com/cloudflare/wrangler/blob/master/.github/workflows/release.yml
     name: GitHub Release
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Query version number
         id: get_version
@@ -173,11 +166,6 @@ jobs:
           echo "version=${GITHUB_REF:15}" >> $GITHUB_OUTPUT
       - name: Checkout code
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - name: Get Changelog Entry
-        id: changelog_reader
-        uses: mindsers/changelog-reader-action@32aa5b4c155d76c94e4ec883a223c947b2f02656 # v2.2.3
-        with:
-          path: ./mla/CHANGELOG.md
       - name: Create Release
         id: create_release
         uses: actions/create-release@0cb9c9b65d5d1901c1f53e5e66eaf4afd303e70e # v1.1.4
@@ -186,9 +174,19 @@ jobs:
         with:
           tag_name: mla-${{ steps.get_version.outputs.VERSION }}
           release_name: mla-${{ steps.get_version.outputs.VERSION }}
-          body: ${{ steps.changelog_reader.outputs.changes }}
           draft: true
-
+          body: |
+            Verification of assets
+            
+            This release assets are built by GitHub Runners and are attested so ( https://docs.github.com/en/actions/concepts/security/artifact-attestations ).
+            
+            To verify the provenance and transparency of assets you download, you can run `gh attestation verify --repo ANSSI-FR/MLA <file-path>` where `<file-path>` is the file path to the downloaded asset.
+            
+            To do this without a GitHub account, you can first download the trusted root with `gh attestation trusted-root > ./trusted-root.jsonl`, download the attestation at https://github.com/ANSSI-FR/MLA/attestations to `./attestation.json` and run `gh attestation verify --repo ANSSI-FR/MLA --bundle ./attestation.json --custom-trusted-root ./trusted-root.jsonl <file-path>`.
+            
+            Changelog
+            
+            https://github.com/ANSSI-FR/MLA/blob/mla-${{ steps.get_version.outputs.VERSION }}/mla/CHANGELOG.md
       - name: Download linux-x86_64 artifact
         uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
@@ -331,3 +329,34 @@ jobs:
           asset_content_type: application/octet-stream
           asset_name: mla.hpp
 
+      - name: Attest artifacts
+        uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
+        with:
+          subject-path: |
+            ./mla-linux-x86_64/libmla.a
+            ./windows-i686.zip
+            ./windows-x86_64.zip
+            ./windows-i686-debug.zip
+            ./windows-x86_64-debug.zip
+            ./windows7-i686.zip
+            ./windows7-x86_64.zip
+            ./bindings/C/mla.h
+            ./bindings/C/mla.hpp
+
+  publish:
+    name: Publish mla
+    needs: release
+    runs-on: ubuntu-24.04
+    container: rust@sha256:f58923369ba295ae1f60bc49d03f2c955a5c93a0b7d49acfb2b2a65bebaf350d # v1.92.0 : Pin to known-good previous stable release for increased stability and security
+    environment:
+      name: cratesio
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: rust-lang/crates-io-auth-action@b7e9a28eded4986ec6b1fa40eeee8f8f165559ec
+        id: auth
+      - name: Publish to crates.io
+        run: cargo publish --package mla
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
