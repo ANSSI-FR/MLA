@@ -19,29 +19,29 @@ jobs:
         build: [linux, macos, windows]
         include:
           - build: linux
-            os: ubuntu-latest
+            os: ubuntu-24.04
             # use a pinned Rust toolchain via a Linux container for reproducible builds
             container: rust@sha256:f58923369ba295ae1f60bc49d03f2c955a5c93a0b7d49acfb2b2a65bebaf350d # v1.92.0 ("old-stable" cf. below)
             target: x86_64-unknown-linux-musl
             cargo_build: --target x86_64-unknown-linux-musl
           - build: macos
-            os: macos-latest
+            os: macos-15
             # not available: set container value to null
             container: null
           - build: windows
-            os: windows-latest
+            os: windows-2025
             # not available: set container value to null
             container: null
             extension: .exe
           - build: windows7-i686 # Win7-compatible build using tier 3 target
-            os: windows-latest
+            os: windows-2025
             # not available: set container value to null
             container: null
             target: i686-win7-windows-msvc
             cargo_build: --target i686-win7-windows-msvc -Z build-std # Build std from source, needed for tier 3 target
             extension: .exe
           - build: windows7-x86_64 # Win7-compatible build using tier 3 target
-            os: windows-latest
+            os: windows-2025
             # not available: set container value to null
             container: null
             target: x86_64-win7-windows-msvc
@@ -103,7 +103,7 @@ jobs:
     # From https://github.com/cloudflare/wrangler/blob/master/.github/workflows/release.yml
     name: GitHub Release
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Query version number
         id: get_version
@@ -227,7 +227,7 @@ jobs:
   publish:
     name: Publish mlar
     needs: release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     container: rust@sha256:f58923369ba295ae1f60bc49d03f2c955a5c93a0b7d49acfb2b2a65bebaf350d # v1.92.0 : Pin to known-good previous stable release for increased stability and security
     environment:
       name: cratesio
