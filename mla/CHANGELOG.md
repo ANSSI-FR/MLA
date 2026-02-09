@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased [2.0.0] - 2026-02-FIXME
+
+### Added/Changed since 1.3
+
+- MLA2 is now the default; it is **incompatible** with MLA1. MLA1 enters **low maintenance mode**
+- Hybrid traditional/post-quantum encryption using **X25519 + ML-KEM1024**
+- Archive signing using hybrid traditional/post-quantum signatures
+- Switched to **Rust 2024 edition**
+- Key commitment support for AES-GCM
+- New archive format, enabling improved cryptographic and performance characteristics
+- Cryptographic layer reworked to **protect against truncation attacks**
+- Redesigned API for improved **simplicity, safety, and stability over time**
+- Support for **authenticated truncated archive reading**
+- Support for **seeking inside archive entries**
+- Comprehensive documentation overhaul
+- Published the **MLA Book**, a comprehensive guide and reference for MLA usage and concepts
+- Introduced `mlar-upgrader`: a tool to **upgrade MLA1 archives to MLA2 format**
+- Bumped dependencies as part of pre-alpha maintenance: `brotli`, `clap`, `rand`, and others via Dependabot (April 2025)
+- GitHub Actions workflows updated to **use pinned versions** for CI security
+- Minor documentation corrections and CI improvements merged ahead of alpha release
+- Added support for a shared-secret decryption advanced use case
+
+### Fixed since 1.3
+
+- Fixed incomplete recovery for truncated archives (#226)
+
+### Added/Changed since 2.0.0-beta
+
+- Added a migration guide ( doc/src/MIGRATION.md )
+- Improved trust thanks to MLA security assessment (#465)
+- Improved release transparency thanks to GitHub artifact attestation and reproducible builds
+
+### Fixed since 2.0.0-beta
+
+- Fixed incomplete memory zeroization (#465)
+
 ## [2.0.0-beta] – 2025-12-20
 
 ### Added / Changed
