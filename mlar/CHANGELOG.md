@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased [2.0.0] - 2026-02-FIXME
 
-### Added/Changed since 1.3
+### Added/Changed since 1.3.0
 
 - MLA2 is now the default; it is **incompatible** with MLA1. MLA1 enters **low maintenance mode**
 - Hybrid traditional/post-quantum encryption using **X25519 + ML-KEM1024**
@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Introduced `mlar-upgrader`: a tool to **upgrade MLA1 archives to MLA2 format**
 - Added support for a shared-secret decryption advanced use case
 
-### Fixed since 1.3
+### Fixed since 1.3.0
 
 - Limit dependencies by linking statically MSVC builds for Windows
 - Fixed inappropriate default privileges on private key files
@@ -31,7 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a migration guide ( doc/src/MIGRATION.md )
 - Improved trust thanks to MLA security assessment (#465)
 - Improved release transparency thanks to GitHub artifact attestation and reproducible builds
-- Replace -l option with less error prone --unencrypted --unsigned and --uncompressed
+- Replace `-l` option with less error prone `--unencrypted` `--unsigned` and `--uncompressed`
 
 ### Fixed since 2.0.0-beta
 
