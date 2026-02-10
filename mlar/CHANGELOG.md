@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased [2.0.0] - 2026-02-FIXME
+
+### Added/Changed since 1.3.0
+
+- MLA2 is now the default; it is **incompatible** with MLA1. MLA1 enters **low maintenance mode**
+- Hybrid traditional/post-quantum encryption using **X25519 + ML-KEM1024**
+- Archive signing using hybrid traditional/post-quantum signatures
+- New archive format, enabling improved cryptographic and performance characteristics
+- Cryptographic layer reworked to **protect against truncation attacks**
+- Redesigned CLI for improved **simplicity, safety, and semver compatibility**
+- Support for **authenticated truncated archive reading**
+- Create archive from **stdin** input
+- **Mark-of-the-Web (MotW)** propagation support
+- Introduced `mlar-upgrader`: a tool to **upgrade MLA1 archives to MLA2 format**
+- Added support for a shared-secret decryption advanced use case
+
+### Fixed since 1.3.0
+
+- Limit dependencies by linking statically MSVC builds for Windows
+- Fixed inappropriate default privileges on private key files
+
+### Added/Changed since 2.0.0-beta
+
+- Added a migration guide ( doc/src/MIGRATION.md )
+- Improved trust thanks to MLA security assessment (#465)
+- Improved release transparency thanks to GitHub artifact attestation and reproducible builds
+- Replace `-l` option with less error prone `--unencrypted` `--unsigned` and `--uncompressed`
+
+### Fixed since 2.0.0-beta
+
+- Fixed inappropriate default privileges on private key files
+
 ## [2.0.0-beta] – 2025-12-20
 
 ### Added / Changed
