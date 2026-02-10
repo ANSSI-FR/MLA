@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased [2.0.0] - 2026-02-FIXME
 
-### Added/Changed since 1.3
+### Added/Changed since 1.3.0
 
 - MLA2 is now the default; it is **incompatible** with MLA1. MLA1 enters **low maintenance mode**
 - Hybrid traditional/post-quantum encryption using **X25519 + ML-KEM1024**
@@ -27,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Minor documentation corrections and CI improvements merged ahead of alpha release
 - Added support for a shared-secret decryption advanced use case
 
-### Fixed since 1.3
+### Fixed since 1.3.0
 
 - Fixed incomplete recovery for truncated archives (#226)
 
