@@ -7,8 +7,54 @@ Relation between the MLA library version and the file format version:
 | 2.X         | 2                     |
 | 1.X         | 1                     |
 
-This document introduces the MLA file format in its current version, 2.
+This document is the formal, complete specification for MLA file format version 2. If you want a gentle, progressive introduction first, read this short overview to build intuition before diving into the full details below.
 For a more comprehensive introduction of the ideas behind it, please refer to [README.md](INDEX.html).
+
+## High-level summary
+
+- What an MLA file is: a layered, streamable archive format designed for recoverability, optional compression, hybrid encryption/signatures, and seekable reads even when compressed or encrypted.
+- Key properties: streaming creation, chunked compression, chunked authenticated encryption, explicit layer ordering for security, and a tail-based footer to make seeking and truncated-recovery possible.
+
+Simple diagram (conceptual, top &rarr; inner):
+
+```
+File: [Header][Transformed archive bytes...][Footer]
+
+Transformed archive bytes (outermost first):
+	[Signature layer?]
+	[Encryption layer?]
+	[Compression layer?]
+	[Position layer]  <-- records logical offsets into the entries stream
+	[Entries stream]  <-- EntryStart / EntryContentChunk / EndOfEntry / EndOfArchiveData
+
+Entries stream (logical view):
+	[EntryStart name,id] [EntryContentChunk id, data] [EntryContentChunk id, data] [EndOfEntry id] ... [EntriesIndex (optional)]
+
+Notes: '?' indicates optional layers. Layer order is security-sensitive: signature above encryption above compression.
+```
+
+## Layer-by-layer intuition
+
+- Header & Footer: The file begins with a small header (magic + format version + header options) and ends with footer options and a footer magic. The footer contains tail-encoded metadata that allows reading structural information from the end of the file.
+- Entries layer: The core logical stream of files (entries) is a sequence of blocks (EntryStart, EntryContentChunk, EndOfEntry, EndOfArchiveData). This is where file names, interleaved content chunks, and per-entry hashes live.
+- Position layer: Wraps the entries stream to maintain byte positions (logical offsets) so readers and index builders can locate blocks efficiently.
+- Compression layer (optional): Splits the inner bytes into fixed-size chunks (4 MiB), compresses each chunk (Brotli), and records compressed sizes in a footer (SizesInfo) so random access to compressed chunks is feasible.
+- Encryption layer (optional): Performs chunked AES-GCM encryption of inner bytes with per-recipient encapsulated keys and a global secret; chunks carry explicit sequence numbers and tags. The final encrypted block must decrypt to a `FINALBLOCK` marker for truncation protection.
+- Signature layer (optional): Covers the bytes from the MLA header up through the inner layer; it contains one or more signature blobs (possibly using different signature methods). A reader must verify at least one valid signature per required method (when signature verification is requested).
+
+## How to read this file progressively
+
+1. Check header magic and format version to ensure compatibility.
+2. If present and you require signature verification, validate the signature layer before trusting other metadata.
+3. Locate and read footer tail lengths from the file end to obtain layer footer structures (e.g., compression sizes, entries index).
+4. Use the Position and Entries index (if present) to seek directly to entry blocks; otherwise scan the entries stream to find EntryStart/EntryContentChunk sequences and reconstruct file contents.
+5. When encountering the compression or encryption layers, process them chunk-by-chunk using their recorded sizes and GCM tags—this enables seeking and truncated-recovery without reading the entire outer file.
+
+## Relationship to the formal specification below
+
+The remainder of this document is the authoritative, byte-level specification (types, tag values, TLV encodings and exact footer encodings). The overview above is intended to help readers form a mental model before consuming the low-level details.
+
+---
 
 ## Types and their serialization format
 
