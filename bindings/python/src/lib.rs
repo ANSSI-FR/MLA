@@ -396,7 +396,7 @@ struct PublicKeysInner {
     keys: Vec<MLAPublicKey>,
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 struct PublicKeys {
     inner: Mutex<PublicKeysInner>,
 }
@@ -471,7 +471,7 @@ struct PrivateKeysInner {
     keys: Vec<MLAPrivateKey>,
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 struct PrivateKeys {
     inner: Mutex<PrivateKeysInner>,
 }
