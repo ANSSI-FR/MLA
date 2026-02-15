@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased [0.6.0] - 2026-02-FIXME
 
 - Link to README documentation added
-- Updated dependencies (mla 2.0.0, PyO3 0.27)
+- Updated dependencies (mla 2.0.0, PyO3 0.28.1)
 
 ## [0.5.1] – 2026-01-26
 
