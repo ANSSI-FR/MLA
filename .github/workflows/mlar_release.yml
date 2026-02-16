@@ -133,7 +133,7 @@ jobs:
             
             Changelog
             
-            https://github.com/ANSSI-FR/MLA/blob/mlar-${{ steps.get_version.outputs.VERSION }}/mlar/CHANGELOG.md
+            https://github.com/ANSSI-FR/MLA/blob/mlar-v${{ steps.get_version.outputs.VERSION }}/mlar/CHANGELOG.md
       - name: Download Linux artifact
         uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
