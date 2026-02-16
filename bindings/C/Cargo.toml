@@ -1,6 +1,6 @@
 [package]
 name = "mla-bindings-c"
-version = "2.0.0-rc"
+version = "2.0.0"
 authors = ["ANSSI <opensource@ssi.gouv.fr>"]
 edition = "2024"
 
@@ -9,7 +9,7 @@ name = "mla"
 crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
-mla = { path = "../../mla", version = "2.0.0-rc2" }
+mla = { path = "../../mla", version = "2.0.0" }
 
 [lints]
 workspace = true
