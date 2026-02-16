@@ -186,7 +186,7 @@ jobs:
             
             Changelog
             
-            https://github.com/ANSSI-FR/MLA/blob/mla-${{ steps.get_version.outputs.VERSION }}/mla/CHANGELOG.md
+            https://github.com/ANSSI-FR/MLA/blob/mla-v${{ steps.get_version.outputs.VERSION }}/mla/CHANGELOG.md
       - name: Download linux-x86_64 artifact
         uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
@@ -308,7 +308,6 @@ jobs:
           asset_content_type: application/zip
           asset_name: libmla-windows7-x86_64-${{ steps.get_version.outputs.VERSION }}.zip
 
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Release C Header file
         uses: actions/upload-release-asset@e8f9f06c4b078e705bd2ea027f0926603fc9b4d5 # v1.0.2
         env:
