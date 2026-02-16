@@ -13,9 +13,9 @@ For a more comprehensive introduction of the ideas behind it, please refer to [R
 ## High-level summary
 
 - What an MLA file is: a layered, streamable archive format designed for recoverability, optional compression, hybrid encryption/signatures, and seekable reads even when compressed or encrypted.
-- Key properties: streaming creation, chunked compression, chunked authenticated encryption, explicit layer ordering for security, and a tail-based footer to make seeking and truncated-recovery possible.
+- Key properties: streaming creation, chunked compression, chunked authenticated encryption, explicit layer ordering for security, and a tail-based footer to make seeking possible.
 
-Simple diagram (conceptual, top &rarr; inner):
+Simple diagram (conceptual, outer-to-inner):
 
 ```
 File: [Header][Transformed archive bytes...][Footer]
@@ -24,7 +24,6 @@ Transformed archive bytes (outermost first):
 	[Signature layer?]
 	[Encryption layer?]
 	[Compression layer?]
-	[Position layer]  <-- records logical offsets into the entries stream
 	[Entries stream]  <-- EntryStart / EntryContentChunk / EndOfEntry / EndOfArchiveData
 
 Entries stream (logical view):
@@ -33,37 +32,28 @@ Entries stream (logical view):
 Notes: '?' indicates optional layers. Layer order is security-sensitive: signature above encryption above compression.
 ```
 
-## Layer-by-layer intuition
+### Layer-by-layer intuition
 
 - Header & Footer: The file begins with a small header (magic + format version + header options) and ends with footer options and a footer magic. The footer contains tail-encoded metadata that allows reading structural information from the end of the file.
-- Entries layer: The core logical stream of files (entries) is a sequence of blocks (EntryStart, EntryContentChunk, EndOfEntry, EndOfArchiveData). This is where file names, interleaved content chunks, and per-entry hashes live.
-- Position layer: Wraps the entries stream to maintain byte positions (logical offsets) so readers and index builders can locate blocks efficiently.
+- Entries stream: The core logical stream of files (entries) is a sequence of blocks (EntryStart, EntryContentChunk, EndOfEntry, EndOfArchiveData). This is where file names, interleaved content chunks, and per-entry hashes live.
 - Compression layer (optional): Splits the inner bytes into fixed-size chunks (4 MiB), compresses each chunk (Brotli), and records compressed sizes in a footer (SizesInfo) so random access to compressed chunks is feasible.
-- Encryption layer (optional): Performs chunked AES-GCM encryption of inner bytes with per-recipient encapsulated keys and a global secret; chunks carry explicit sequence numbers and tags. The final encrypted block must decrypt to a `FINALBLOCK` marker for truncation protection.
-- Signature layer (optional): Covers the bytes from the MLA header up through the inner layer; it contains one or more signature blobs (possibly using different signature methods). A reader must verify at least one valid signature per required method (when signature verification is requested).
+- Encryption layer (optional): Performs chunked AES-GCM encryption of inner bytes with per-recipient encapsulated keys which encrypts a shared secret; chunks carry explicit sequence numbers and tags. The final encrypted block must decrypt to a `FINALBLOCK` marker for truncation protection.
+- Signature layer (optional): Covers all bytes from the MLA header up through the inner layer; it supports two signatures kinds: traditional and post-quantum. Signature blobs are generated for the covered data. Readers must verify at least one valid signature of each kind (when signature verification is requested).
 
-## How to read this file progressively
-
-1. Check header magic and format version to ensure compatibility.
-2. If present and you require signature verification, validate the signature layer before trusting other metadata.
-3. Locate and read footer tail lengths from the file end to obtain layer footer structures (e.g., compression sizes, entries index).
-4. Use the Position and Entries index (if present) to seek directly to entry blocks; otherwise scan the entries stream to find EntryStart/EntryContentChunk sequences and reconstruct file contents.
-5. When encountering the compression or encryption layers, process them chunk-by-chunk using their recorded sizes and GCM tags—this enables seeking and truncated-recovery without reading the entire outer file.
-
-## Relationship to the formal specification below
+### Relationship to the formal specification below
 
 The remainder of this document is the authoritative, byte-level specification (types, tag values, TLV encodings and exact footer encodings). The overview above is intended to help readers form a mental model before consuming the low-level details.
 
----
+## Specification
 
-## Types and their serialization format
+### Types and their serialization format
 
 * Integers are unsigned and serialized as bytes in little endian. They are called u64 for 64 bits integers, u32 for 32 bits ones, u16 for 16 bits ones and u8 for 8 bits ones. Serialization length in bytes are: 8 for u64, 4 for u32, 2 for u16 and 1 for u8.
 * `Vec<T>` is a sequence of elements of type `T`. It is serialized with its length in number of elements (not necessarily bytes) as a u64 and the sequence of serialized elements of type `T`.
 * `Opts` represents MLA options. It is serialized with a tag of value 0 as a u8 if no option is present. Otherwise it is serialized with a tag of value 1 as u8 followed by an `optslen` u64 and a sequence of `TLVOpt`. This sequence of `TLVOpt` is of `optslen` size in bytes. Multiple fields in this file format are of type `Opts` for future proofing reasons, but no option is defined at the moment. For future proofing, implementers of this file format version must still handle the tag of value 1 and read `optslen` bytes even if not using their values. Thus, if an option is specified in the future, pre-dating implementations will be able to work with new archives containing the optional values. A `TLVOpt` is a u32 `OptType` followed by a `Vec<u8>` whose interpretation depends on the `OptType` value. `OptType` values from `0x80000000` to `0xFFFFFFFF` are reserved and must not defined by third parties. For interoperability reasons, third parties willing to define new options must contact `MLA` maintainers to register an `OptType` value in the `0x00000000-0x7FFFFFFF` range.
 * `Tail<T>` is a `T` followed by its `tail_length` length in bytes as a u64. This enables extracting the `T` when reading from the end. Note that a `Tail<Vec<T>>` contains two lengths which may differ in units and always differ in values as `Tail`'s length includes `Vec`'s serialization of its own length. For example, serialization of a `Tail<Vec<u16>>` containing 0 and 1, leads to `02 00 00 00 00 00 00 00 00 00 01 00 0c 00 00 00 00 00 00 00`. As a second example, serialization of `Tail<Vec<u8>>` containing 0 and 1, leads to `02 00 00 00 00 00 00 00 00 01 0a 00 00 00 00 00 00 00`.
 
-## MLA Header
+### MLA Header
 
 * An MLA file begins with the `mla_header_magic` ASCII magic: "MLAFAAAA".
 * `mla_header_magic` is followed by the `format_version` format version number as a u32.
@@ -72,9 +62,9 @@ The remainder of this document is the authoritative, byte-level specification (t
 * `archive_content` is followed by an `footer_options` field of type `Tail<Opts>` to enable determining `archive_content`'s end when reading from the end of the MLA file.
 * `footer_options` is followed by the `footer_magic` ASCII magic "EMLAAAAA", terminating the archive.
 
-`archive_content` consists of a serialized MLA entries layer documented below, transformed with zero or more layers, documented below too. A layer consists of a u64 layer magic followed by its data. Layer order plays an important security role, so the signature layer has to be above the encryption layer which has to be above the compression layer. This must be enforced by writers and readers. Readers should ensure users explicitly choose if they allow an archive without signature or without encryption.
+`archive_content` consists of a serialized MLA entries stream documented below, transformed with zero or more layers, documented below too. A layer consists of a u64 layer magic followed by its data. Layer order plays an important security role, so the signature layer has to be above the encryption layer which has to be above the compression layer. This must be enforced by writers and readers. Readers should ensure users explicitly choose if they allow an archive without signature or without encryption.
 
-## Signature layer
+### Signature layer
 
 * The layer `signature_layer_magic` ASCII magic is "SIGMLAAA".
 * `signature_layer_magic` is followed by an `signature_header_options` of type `Opts`.
@@ -84,7 +74,7 @@ The remainder of this document is the authoritative, byte-level specification (t
 
 `signature_data` is a `Vec<u8>` whose content bytes consist of a sequence of `SignatureDataWHdr`. A `SignatureDataWHdr` is a `signature_method_id` u16, followed by a `signature_data` sequence of bytes depending of the tag value. For the moment, there are two valid `signature_method_id`: 0 and 1. 0 maps to `MLAEd25519SigMethod`, 1 maps to `MLAMLDSA87SigMethod`. These methods are described in `doc/CRYPTO.md`. Their input starts and includes `mla_header_magic`, up to and including `sig_inner_layer`.  In the current version, for the signature layer to be considered verified, the reader must verify that at least one `SignatureDataWHdr` of each `signature_method_id` is verified.
 
-## Encryption layer
+### Encryption layer
 
 The layer `encryption_layer_magic` ASCII magic is "ENCMLAAA".
 `encryption_layer_magic` is followed by `encryption_header_options` of type `Opts`.
@@ -108,7 +98,7 @@ A `PerRecipientEncapsulatedKey` is an `mlkem1024_encapsulated_s` field followed 
 
 To protect from a truncation attack, before using an archive, it must be checked that the `tag` of the `M0FinalEncryptedChunk` is correct and that its decrypted `encrypted_content` is the ASCII `FINALBLOCK`.
 
-## Compression layer
+### Compression layer
 
 The layer `compression_layer_magic` ASCII magic is "COMLAAAA".
 `compression_layer_magic` if followed by `compression_header_options` of type `Opts`.
@@ -122,7 +112,7 @@ The inner layer, is split in `4 * 1024 * 1024`-bytes chunks, except for the last
 
 The compression layer footer information can be retrieved by first reading the value of `sizes_info.tail_length` at the end of the layer, then reading the preceding `sizes_info.tail_length`-bytes.
 
-## MLA entries layer
+### MLA entries stream
 
 The layer `entries_layer_magic` ASCII magic is "MLAENAAA".
 `entries_layer_magic` is followed by `entries_header_options` of type `Opts`.
@@ -146,9 +136,9 @@ If the `ArchiveEntryBlockType` is `EndOfArchiveData`, it is followed by nothing.
 
 `EntriesIndex` is 0x00 byte in case of an archive not storing any index. Otherwise, it is a 0x01 byte followed by a `Vec<EntryNameInfoMapElt>`. An `EntryNameInfoMapElt` is an `EntryName` followed by an `entry_blocks_info` which is a `Vec<EntryBlockInfo>` explained after. For reproducibility, the `EntriesIndex` `Vec` is sorted by entry name (lexicographically by bytes values) before being serialized.
 
-`EntryBlockInfo` has two fields: `block_offset` and `block_size`. The `block_offset` field is a u64 indicating at which offset from the beginning of the MLA entries layer an `ArchiveEntryBlock` can be found for the given `EntryName`. The `block_size` field is a u64 indicating the size in bytes of the block content (0 except for `EntryContentChunk`). If it is an EntryContentChunk with `entry_content_data` containing 1 byte, `block_size` is 1. All `EntryBlockInfo`s for each entry are recorded in `entry_blocks_info` and they are so in ascending order of offset.
+`EntryBlockInfo` has two fields: `block_offset` and `block_size`. The `block_offset` field is a u64 indicating at which offset from the beginning of the MLA entries stream an `ArchiveEntryBlock` can be found for the given `EntryName`. The `block_size` field is a u64 indicating the size in bytes of the block content (0 except for `EntryContentChunk`). If it is an EntryContentChunk with `entry_content_data` containing 1 byte, `block_size` is 1. All `EntryBlockInfo`s for each entry are recorded in `entry_blocks_info` and they are so in ascending order of offset.
 
-### Explanations
+#### Explanations
 
 An archive entry `entry_i` in the archive always starts with an `EntryStart`, giving its name and unique ID i.
 
