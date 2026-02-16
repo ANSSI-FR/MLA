@@ -1,6 +1,6 @@
 [package]
 name = "pymla"
-version = "0.6.0-rc"
+version = "0.6.0"
 edition = "2024"
 authors = ["ANSSI <opensource@ssi.gouv.fr>"]
 license = "LGPL-3.0-only"
@@ -39,4 +39,4 @@ too-many-lines = "allow"
 
 [dependencies]
 pyo3 = "0.28"
-mla = { version = "2.0.0-rc2", features = ["send"], path = "../../mla"}
+mla = { version = "2.0.0", features = ["send"], path = "../../mla"}
