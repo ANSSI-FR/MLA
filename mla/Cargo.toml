@@ -1,6 +1,6 @@
 [package]
 name = "mla"
-version = "2.0.0-rc"
+version = "2.0.0-rc2"
 authors = ["ANSSI <opensource@ssi.gouv.fr>"]
 edition = "2024"
 license = "LGPL-3.0-only"

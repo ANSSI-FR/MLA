@@ -9,7 +9,7 @@ name = "mla"
 crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
-mla = { path = "../../mla", version = "2.0.0-rc" }
+mla = { path = "../../mla", version = "2.0.0-rc2" }
 
 [lints]
 workspace = true
