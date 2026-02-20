@@ -232,7 +232,3 @@ As described in the [aes crate documentation](https://docs.rs/aes/0.8.4/aes/inde
 # Contributing
 
 We appreciate your help! To contribute, please read our [contributing instructions](.github/CONTRIBUTING.md).
-
-### French Cybersecurity Agency (ANSSI)
-
-*This projet is managed by [ANSSI](https://cyber.gouv.fr/). To find out more, you can go to the [page](https://cyber.gouv.fr/enjeux-technologiques/open-source/) (in French) dedicated to the ANSSI open source strategy. You can also click on the badges above to learn more about their meaning*
