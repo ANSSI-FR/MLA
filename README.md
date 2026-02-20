@@ -12,7 +12,7 @@ https://crates.io/crates/mlar)
 
 <img src="https://www.sgdsn.gouv.fr/files/styles/ds_image_paragraphe/public/files/Notre_Organisation/logo_anssi.png" alt="ANSSI logo" width="30%">
 
-## French Cybersecurity Agency (ANSSI)
+### French Cybersecurity Agency (ANSSI)
 
 ![badge_repo](https://img.shields.io/badge/ANSSI--FR-MLA-white)
 [![category_badge_internal](https://img.shields.io/badge/category-internal-%23d08fce)](https://github.com/ANSSI-FR#types-de-projets)
@@ -20,8 +20,8 @@ https://crates.io/crates/mlar)
 
 *This projet is managed by [ANSSI](https://cyber.gouv.fr/). To find out more, you can visit the [page](https://cyber.gouv.fr/enjeux-technologiques/open-source/) (in French) dedicated to ANSSI’s open-source strategy. You can also click on the badges above to learn more about their meaning.*
 
-Introduction
-------------
+# Introduction
+
 MLA is an archive file format with the following features:
 
 * Support for traditional and post-quantum encryption hybridization with asymmetric keys (HPKE with AES256-GCM and a KEM based on an hybridization of X25519 and post-quantum ML-KEM 1024)
