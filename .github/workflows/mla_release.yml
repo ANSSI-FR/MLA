@@ -103,7 +103,7 @@ jobs:
     container: ${{matrix.container}}
 
     steps:
-    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
     - uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce # v2.0.0
       if: matrix.msvc_platform
     - name: Set target if any
@@ -117,7 +117,7 @@ jobs:
     - name: Cache build-std artifacts (only for win7)
       # Only apply caching to Win7 tier-3 targets that require build-std
       if: contains(matrix.target, 'win7')
-      uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+      uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
       with:
         # Cache the parts of target/ that contain compiled std artifacts for the given target
         path: |
@@ -140,7 +140,7 @@ jobs:
         RUSTC_BOOTSTRAP: "${{ contains(matrix.target, 'win7') && '1' || '' }}"
       run: cargo build ${{ matrix.cargo_arg }} --manifest-path=bindings/C/Cargo.toml --target=${{ matrix.target }}
     - name: Upload resulting 'mla'
-      uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5.0
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
       with:
         name: mla-${{ matrix.build }}
         path: ${{ matrix.path }}
@@ -165,7 +165,7 @@ jobs:
           echo "using version tag ${GITHUB_REF:15}"
           echo "version=${GITHUB_REF:15}" >> $GITHUB_OUTPUT
       - name: Checkout code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Create Release
         id: create_release
         uses: actions/create-release@0cb9c9b65d5d1901c1f53e5e66eaf4afd303e70e # v1.1.4
@@ -188,43 +188,43 @@ jobs:
             
             https://github.com/ANSSI-FR/MLA/blob/mla-v${{ steps.get_version.outputs.VERSION }}/mla/CHANGELOG.md
       - name: Download linux-x86_64 artifact
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
         with:
           name: mla-linux-x86_64
           path: mla-linux-x86_64
 
       - name: Download windows-i686 artifact
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
         with:
           name: mla-windows-i686
           path: mla-windows-i686
 
       - name: Download windows-x86_64 artifact
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
         with:
           name: mla-windows-x86_64
           path: mla-windows-x86_64
 
       - name: Download windows-i686-debug artifact
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
         with:
           name: mla-windows-i686-debug
           path: mla-windows-i686-debug
 
       - name: Download windows-x86_64-debug artifact
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
         with:
           name: mla-windows-x86_64-debug
           path: mla-windows-x86_64-debug
 
       - name: Download windows7-i686 artifact
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
         with:
           name: mla-windows7-i686
           path: mla-windows7-i686
 
       - name: Download windows7-x86_64 artifact
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
         with:
           name: mla-windows7-x86_64
           path: mla-windows7-x86_64
@@ -329,7 +329,7 @@ jobs:
           asset_name: mla.hpp
 
       - name: Attest artifacts
-        uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
         with:
           subject-path: |
             ./mla-linux-x86_64/libmla.a
@@ -352,7 +352,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: rust-lang/crates-io-auth-action@b7e9a28eded4986ec6b1fa40eeee8f8f165559ec
         id: auth
       - name: Publish to crates.io
