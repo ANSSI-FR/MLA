@@ -2,10 +2,10 @@
 
 Relation between the MLA library version and the file format version:
 
-| MLA Version | Supported file format |
-|-------------|-----------------------|
-| 2.X         | 2                     |
-| 1.X         | 1                     |
+| MLA Version | Supported file format |	Key file format |
+|-------------|-----------------------|-----------------|
+| 2.X         | 2                     | 1				|
+| 1.X         | 1                     |	N/A				|
 
 This document is the formal, complete specification for MLA file format version 2. If you want a gentle, progressive introduction first, read this short overview to build intuition before diving into the full details below.
 For a more comprehensive introduction of the ideas behind it, please refer to [README.md](INDEX.html).
