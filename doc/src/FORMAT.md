@@ -112,6 +112,14 @@ The inner layer, is split in `4 * 1024 * 1024`-bytes chunks, except for the last
 
 The compression layer footer information can be retrieved by first reading the value of `sizes_info.tail_length` at the end of the layer, then reading the preceding `sizes_info.tail_length`-bytes.
 
+#### Why Brotli?
+
+We use Brotli for the compression layer because it offers a very good trade-off between compression ratio and CPU cost, is widely adopted, and has mature open-source implementations. Choosing a single, well-known algorithm reduces interoperability and maintenance costs.
+
+Note on `Opts`: the compression layer still exposes `compression_header_options` and `compression_footer_options` of type `Opts`. `Opts` is the TLV-style options mechanism used throughout the format for future-proofing (for example to carry algorithm parameters or other non-breaking additions). However, the current format does not include a compression *algorithm identifier* — readers and writers assume Brotli. In other words, there is a TLV options mechanism available for parameters, but there is no compression-algorithm agility (no generic compression algorithm enum/selector) in this version of the format.
+
+If multiple compression algorithms are needed, the format can be extended to include an explicit compression algorithm identifier (and per-algorithm options) while preserving backwards compatibility via the existing `Opts` mechanism.
+
 ### MLA entries stream
 
 The layer `entries_layer_magic` ASCII magic is "MLAENAAA".
