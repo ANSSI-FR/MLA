@@ -112,6 +112,12 @@ The inner layer, is split in `4 * 1024 * 1024`-bytes chunks, except for the last
 
 The compression layer footer information can be retrieved by first reading the value of `sizes_info.tail_length` at the end of the layer, then reading the preceding `sizes_info.tail_length`-bytes.
 
+#### Why Brotli?
+
+Brotli is used for the compression layer as it offers a very good trade-off between compression ratio and CPU cost, is widely adopted, and has mature open-source implementations. Choosing a single, well-known algorithm reduces interoperability and maintenance costs.
+
+If another compression algorithm is desired, data can be compressed by third-party means and put in MLA entries with Brotli compression layer disabled (e.g. compress files then use `mlar create --uncompressed` or use a compressor implementing `Read` with `ArchiveWriter` API). If another compression algorithm was to be integrated at the format level in the future, a new version of the format would be needed.
+
 ### MLA entries stream
 
 The layer `entries_layer_magic` ASCII magic is "MLAENAAA".
