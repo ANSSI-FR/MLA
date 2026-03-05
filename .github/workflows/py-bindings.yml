@@ -58,9 +58,13 @@ jobs:
           set -e
           python3 -m venv .venv
           source .venv/bin/activate
-          pip install mla-archive --find-links dist --force-reinstall
-          echo "pytest==pytest==9.0.2 --hash=sha256:711ffd45bf766d5264d487b917733b453d917afd2b0ad65223959f59089f875b" > requirements.txt #https://pypi.org/pypi/pytest/9.0.2/json"
-          pip install -r requirements.txt --require-hashes
+          MLA_WHEEL=$(find dist -name "mla_archive*.whl" | head -1)
+          MLA_HASH=$(sha256sum "$MLA_WHEEL" | cut -d' ' -f1)
+          cat > requirements.txt << EOF
+          mla-archive @ file://$MLA_WHEEL --hash=sha256:$MLA_HASH
+          pytest==9.0.2 --hash=sha256:711ffd45bf766d5264d487b917733b453d917afd2b0ad65223959f59089f875b
+          EOF #pytest hash from https://pypi.org/pypi/pytest/9.0.2/json
+          pip install -r requirements.txt --require-hashes --find-links dist --force-reinstall
           cd bindings/python && pytest
       - name: mypy stubtest and type checking
         if: ${{ startsWith(matrix.platform.target, 'x86_64') }}
@@ -144,9 +148,13 @@ jobs:
           set -e
           python3 -m venv .venv
           source .venv/Scripts/activate
-          pip install mla-archive --find-links dist --force-reinstall
-          echo "pytest==pytest==9.0.2 --hash=sha256:711ffd45bf766d5264d487b917733b453d917afd2b0ad65223959f59089f875b" > requirements.txt #https://pypi.org/pypi/pytest/9.0.2/json"
-          pip install -r requirements.txt --require-hashes
+          MLA_WHEEL=$(find dist -name "mla_archive*.whl" | head -1)
+          MLA_HASH=$(sha256sum "$MLA_WHEEL" | cut -d' ' -f1)
+          cat > requirements.txt << EOF
+          mla-archive @ file://$MLA_WHEEL --hash=sha256:$MLA_HASH
+          pytest==9.0.2 --hash=sha256:711ffd45bf766d5264d487b917733b453d917afd2b0ad65223959f59089f875b
+          EOF #pytest hash from https://pypi.org/pypi/pytest/9.0.2/json
+          pip install -r requirements.txt --require-hashes --find-links dist --force-reinstall
           cd bindings/python && pytest
       - name: mypy stubtest and type checking
         if: ${{ !startsWith(matrix.platform.target, 'aarch64') }}
@@ -197,9 +205,13 @@ jobs:
           set -e
           python3 -m venv .venv
           source .venv/bin/activate
-          pip install mla-archive --find-links dist --force-reinstall
-          echo "pytest==pytest==9.0.2 --hash=sha256:711ffd45bf766d5264d487b917733b453d917afd2b0ad65223959f59089f875b" > requirements.txt #https://pypi.org/pypi/pytest/9.0.2/json"
-          pip install -r requirements.txt --require-hashes
+          MLA_WHEEL=$(find dist -name "mla_archive*.whl" | head -1)
+          MLA_HASH=$(sha256sum "$MLA_WHEEL" | cut -d' ' -f1)
+          cat > requirements.txt << EOF
+          mla-archive @ file://$MLA_WHEEL --hash=sha256:$MLA_HASH
+          pytest==9.0.2 --hash=sha256:711ffd45bf766d5264d487b917733b453d917afd2b0ad65223959f59089f875b
+          EOF #pytest hash from https://pypi.org/pypi/pytest/9.0.2/json
+          pip install -r requirements.txt --require-hashes --find-links dist --force-reinstall
           cd bindings/python && pytest
       - name: mypy stubtest and type checking
         shell: bash
