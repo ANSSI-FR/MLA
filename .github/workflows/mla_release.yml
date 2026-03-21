@@ -117,7 +117,7 @@ jobs:
     - name: Cache build-std artifacts (only for win7)
       # Only apply caching to Win7 tier-3 targets that require build-std
       if: contains(matrix.target, 'win7')
-      uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
       with:
         # Cache the parts of target/ that contain compiled std artifacts for the given target
         path: |
@@ -188,43 +188,43 @@ jobs:
             
             https://github.com/ANSSI-FR/MLA/blob/mla-v${{ steps.get_version.outputs.VERSION }}/mla/CHANGELOG.md
       - name: Download linux-x86_64 artifact
-        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: mla-linux-x86_64
           path: mla-linux-x86_64
 
       - name: Download windows-i686 artifact
-        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: mla-windows-i686
           path: mla-windows-i686
 
       - name: Download windows-x86_64 artifact
-        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: mla-windows-x86_64
           path: mla-windows-x86_64
 
       - name: Download windows-i686-debug artifact
-        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: mla-windows-i686-debug
           path: mla-windows-i686-debug
 
       - name: Download windows-x86_64-debug artifact
-        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: mla-windows-x86_64-debug
           path: mla-windows-x86_64-debug
 
       - name: Download windows7-i686 artifact
-        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: mla-windows7-i686
           path: mla-windows7-i686
 
       - name: Download windows7-x86_64 artifact
-        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: mla-windows7-x86_64
           path: mla-windows7-x86_64
