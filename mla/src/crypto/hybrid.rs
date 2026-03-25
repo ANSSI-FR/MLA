@@ -106,7 +106,7 @@ fn combine(
     // Make the first shared-secret uniformly random
     let (uniformly_random_ss1, _hkdf) = Hkdf::<Sha512>::extract(None, shared_secret1);
 
-    // As uniformly_random_ss1 is uniformly random, HKDF-Extract act as a Dual-PRF
+    // As uniformly_random_ss1 is uniformly random, HKDF acts as a Dual-PRF
     let hkdf = Hkdf::<Sha512>::new(
         Some(&uniformly_random_ss1),
         // Combine with the second shared secret
