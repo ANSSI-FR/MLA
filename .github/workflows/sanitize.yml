@@ -16,15 +16,12 @@ jobs:
   bindings-headers-sync:
     # Assert .h and .hpp bindings files are the ones generated
     runs-on: ubuntu-24.04
+    container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1 : pin to known-good previous stable release for increased stability and security
+
     steps:
     - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-    - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
-      with:
-        toolchain: stable
-    - uses: actions-rs/cargo@844f36862e911db73fe0815f00a4a2602c279505 # v1.0.3
-      with:
-        command: install
-        args: cbindgen
+    - name: Install cbindgen
+      run: cargo install cbindgen
     - name: Test C header
       working-directory: bindings/C
       run: cbindgen --config cbindgen_c.toml | diff - mla.h
@@ -42,8 +39,12 @@ jobs:
             path: mla
           - changelog: mlar
             path: mlar
-
+          - changelog: bindings-c
+            path: bindings/C
+          - changelog: bindings-python
+            path: bindings/python
     runs-on: ubuntu-24.04
+
     steps:
     - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
     - name: Get ${{ matrix.changelog }} Changelog Entry
