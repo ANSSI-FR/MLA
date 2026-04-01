@@ -55,10 +55,14 @@ jobs:
         validation_depth: 10
         path: ${{ matrix.path }}/CHANGELOG.md
     - name: Information
+      env:
+          CL_VERSION: ${{ steps.changelog_reader.outputs.version }}
+          CL_STATUS: ${{ steps.changelog_reader.outputs.status }}
+          CL_CHANGES: ${{ steps.changelog_reader.outputs.changes }}
       run: |
-          echo -e "\e[1mVersion\e[0m ${{ steps.changelog_reader.outputs.version }}"
-          echo -e "\e[1mStatus\e[0m ${{ steps.changelog_reader.outputs.status }}"
+          echo -en "\e[1mVersion\e[0m"
+          echo "${CL_VERSION}"
+          echo -e "\e[1mStatus\e[0m"
+          echo "${CL_STATUS}"
           echo -en "\e[1mBody\e[0m"
-          cat << 'EOF'
-          ${{ steps.changelog_reader.outputs.changes }}
-          EOF
+          echo "${CL_CHANGES}"
