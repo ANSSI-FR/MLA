@@ -123,7 +123,7 @@ jobs:
         toolchain: stable
         default: true
         target: ${{ matrix.target }}
-    - uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce # v2.0.0
+    - uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3.0.0
     - name: Compile C/CPP bindings test program for Windows
       working-directory: bindings/C/tests/windows-msvc/
       run: msbuild mla-bindings-test.sln /p:Platform=${{ matrix.msvc_platform }} /p:Configuration=${{ matrix.version }}
