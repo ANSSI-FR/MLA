@@ -10,6 +10,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-24.04
+    container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1 : pin to known-good previous stable release for increased stability and security
     permissions:
       contents: read
 
@@ -17,26 +18,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
-        with:
-          # Pin Rust toolchain for releases to a known-good previous stable release (1.91.1)
-          # for increased stability and security.
-          # Rust does not provide an "old-stable" channel, so we explicitly specify the version (including its patch level, e.g. 1.91.1).
-          toolchain: 1.91.1
-          # For non-release builds, use 'stable'.
-          # toolchain: stable
-
       - name: Install mdbook
-        uses: actions-rs/cargo@844f36862e911db73fe0815f00a4a2602c279505 # v1.0.3
-        with:
-          command: install
-          args: mdbook mdbook-katex --locked
+        run: cargo install mdbook mdbook-katex --locked
 
       - name: Install mdbook-katex
-        uses: actions-rs/cargo@844f36862e911db73fe0815f00a4a2602c279505 # v1.0.3
-        with:
-          command: install
-          args: --git https://github.com/lzanini/mdbook-katex --rev 5bb959bb61945e863f5b9d28425bb201d4054994 mdbook-katex --locked
+        run: cargo install --git https://github.com/lzanini/mdbook-katex --rev 5bb959bb61945e863f5b9d28425bb201d4054994 mdbook-katex --locked
 
       # GitHub Flavored Markdown's ```math blocks are not supported by GitHub Pages,
       # but KaTeX requires $$ math delimiters. This step converts ```math blocks to $$ blocks.

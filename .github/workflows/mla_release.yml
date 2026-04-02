@@ -21,7 +21,7 @@ jobs:
           - build: linux-x86_64
             os: ubuntu-24.04
             # use a pinned Rust toolchain via a Linux container for reproducible builds
-            container: rust@sha256:f58923369ba295ae1f60bc49d03f2c955a5c93a0b7d49acfb2b2a65bebaf350d # v1.92.0 ("old-stable" cf. below)
+            container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1 : pin to known-good previous stable release for increased stability and security
             target: x86_64-unknown-linux-musl
             cargo_arg: --release
             path: |
@@ -157,6 +157,7 @@ jobs:
     name: GitHub Release
     needs: build
     runs-on: ubuntu-24.04
+
     steps:
       - name: Query version number
         id: get_version
@@ -346,14 +347,15 @@ jobs:
     name: Publish mla
     needs: release
     runs-on: ubuntu-24.04
-    container: rust@sha256:f58923369ba295ae1f60bc49d03f2c955a5c93a0b7d49acfb2b2a65bebaf350d # v1.92.0 : Pin to known-good previous stable release for increased stability and security
+    container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1 : pin to known-good previous stable release for increased stability and security
     environment:
       name: cratesio
     permissions:
       id-token: write
+
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: rust-lang/crates-io-auth-action@bbd81622f20ce9e2dd9622e3218b975523e45bbe
+      - uses: rust-lang/crates-io-auth-action@bbd81622f20ce9e2dd9622e3218b975523e45bbe # v1.0.4
         id: auth
       - name: Publish to crates.io
         run: cargo publish --package mla
