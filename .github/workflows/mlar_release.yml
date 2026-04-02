@@ -21,7 +21,7 @@ jobs:
           - build: linux
             os: ubuntu-24.04
             # use a pinned Rust toolchain via a Linux container for reproducible builds
-            container: rust@sha256:f58923369ba295ae1f60bc49d03f2c955a5c93a0b7d49acfb2b2a65bebaf350d # v1.92.0 ("old-stable" cf. below)
+            container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1 : pin to known-good previous stable release for increased stability and security
             target: x86_64-unknown-linux-musl
             cargo_build: --target x86_64-unknown-linux-musl
           - build: macos
@@ -64,7 +64,7 @@ jobs:
     - name: Cache build-std artifacts (only for win7)
       # Only apply caching to Win7 tier-3 targets that require build-std
       if: contains(matrix.target, 'win7')
-      uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
       with:
         # Cache the parts of target/ that contain compiled std artifacts for the given target
         path: |
@@ -104,6 +104,7 @@ jobs:
     name: GitHub Release
     needs: build
     runs-on: ubuntu-24.04
+
     steps:
       - name: Query version number
         id: get_version
@@ -135,31 +136,31 @@ jobs:
             
             https://github.com/ANSSI-FR/MLA/blob/mlar-v${{ steps.get_version.outputs.VERSION }}/mlar/CHANGELOG.md
       - name: Download Linux artifact
-        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: mlar-linux
           path: mlar-linux
 
       - name: Download Windows artifact
-        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: mlar-windows
           path: mlar-windows
 
       - name: Download Windows 32-bit Win7 artifact
-        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: mlar-windows7-i686
           path: mlar-windows7-i686
 
       - name: Download Windows 64-bit Win7 artifact
-        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: mlar-windows7-x86_64
           path: mlar-windows7-x86_64
 
       - name: Download MacOS artifact
-        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: mlar-macos
           path: mlar-macos
@@ -228,14 +229,15 @@ jobs:
     name: Publish mlar
     needs: release
     runs-on: ubuntu-24.04
-    container: rust@sha256:f58923369ba295ae1f60bc49d03f2c955a5c93a0b7d49acfb2b2a65bebaf350d # v1.92.0 : Pin to known-good previous stable release for increased stability and security
+    container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1 : pin to known-good previous stable release for increased stability and security
     environment:
       name: cratesio
     permissions:
       id-token: write
+
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: rust-lang/crates-io-auth-action@b7e9a28eded4986ec6b1fa40eeee8f8f165559ec
+      - uses: rust-lang/crates-io-auth-action@bbd81622f20ce9e2dd9622e3218b975523e45bbe # v1.0.4
         id: auth
       - name: Publish to crates.io
         run: cargo publish --package mlar

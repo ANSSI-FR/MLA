@@ -4,6 +4,15 @@ MLA can use cryptography for signature and/or encryption. Thus it needs to opera
 
 The string `||` denotes concatenation.
 
+## Relation to MLA archive format
+
+| MLA Version | Key file format |
+|-------------|-----------------|
+| 2.0         | 1               |
+| 1.X         | N/A             |
+
+For clarity: the key file serialization format is independent from the MLA archive file format version. In the current MLA release (2.0), private and public key files are serialized as `MLA key file format` version 1.
+
 ## Separator
 
 A separator named `Sep` is used in MLA key serialization formats described below. It is usually a `<CR><LF>` where `<CR>` is ASCII carriage return, `<LF>` is ASCII line feed. If one wants a key without newlines, `Sep` with value `__` (two ASCII underscores) is also valid.
