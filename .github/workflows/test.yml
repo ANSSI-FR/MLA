@@ -18,78 +18,102 @@ jobs:
         include:
           - build: linux
             os: ubuntu-24.04
+            container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1 : pin to known-good previous stable release for increased stability and security
           - build: macos
             os: macos-15
+            # not available: set container value to null
+            container: null
           - build: windows
             os: windows-2025
+            # not available: set container value to null
+            container: null
             extension: .exe
           - build: windows7-i686 # Win7-compatible build using tier 3 target
             os: windows-2025
+            # not available: set container value to null
+            container: null
             target: i686-win7-windows-msvc
-            cargo_build: --target i686-win7-windows-msvc -Z build-std # Build std from source, needed for tier 3 target
+            cargo_arg: --target i686-win7-windows-msvc -Z build-std # Build std from source, needed for tier 3 target
             extension: .exe
           - build: windows7-x86_64 # Win7-compatible build using tier 3 target
             os: windows-2025
+            # not available: set container value to null
+            container: null
             target: x86_64-win7-windows-msvc
-            cargo_build: --target x86_64-win7-windows-msvc -Z build-std # Build std from source, needed for tier 3 target
+            cargo_arg: --target x86_64-win7-windows-msvc -Z build-std # Build std from source, needed for tier 3 target
             extension: .exe
 
     runs-on: ${{matrix.os}}
+    container: ${{matrix.container}}
 
     steps:
     - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-    - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+    - name: Set target if any
+      # Skip rustup target add for win7 targets — rustup doesn't support these tier-3 targets
+      if: matrix.target && !contains(matrix.target, 'win7')
+      run: rustup target add ${{ matrix.target }}
+    - name: Install rust-src (only for win7)
+      # For win7 targets, manually build std by installing rust-src
+      if: contains(matrix.target, 'win7')
+      run: rustup component add rust-src
+    - name: Cache build-std artifacts (only for win7)
+      # Only apply caching to Win7 tier-3 targets that require build-std
+      if: contains(matrix.target, 'win7')
+      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
       with:
-        toolchain: stable
+        # Cache the parts of target/ that contain compiled std artifacts for the given target
+        path: |
+          target/${{ matrix.target }}/release/build
+          target/${{ matrix.target }}/release/deps
+          target/${{ matrix.target }}/release/.fingerprint
+        # Unique cache key: includes OS, target, and hash of Cargo.lock
+        key: build-std-${{ runner.os }}-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+        # If there's no exact match, fall back to older caches for the same target
+        restore-keys: |
+          build-std-${{ runner.os }}-${{ matrix.target }}-
     - name: Build
       env:
         RUSTFLAGS: -D warnings
-      uses: actions-rs/cargo@844f36862e911db73fe0815f00a4a2602c279505 # v1.0.3
-      with:
-        command: build
-        args: --release --all --exclude mla-fuzz-afl --verbose
+        # RUSTC_BOOTSTRAP=1 allows use of -Z build-std on stable toolchain
+        # Required because win7 targets aren't officially supported in stable
+        RUSTC_BOOTSTRAP: "${{ contains(matrix.target, 'win7') && '1' || '' }}"
+      run: cargo build --release --all --exclude mla-fuzz-afl --verbose ${{ matrix.cargo_arg }}
     - name: Run tests (Windows)
       # as rustdoc.exe has stack overflows with current tests (likely due to ml-dsa expansion) in mla/lib.rs
       if: matrix.os == 'windows-2025'
-      run: cargo test --all --lib --bins --tests --exclude mla-fuzz-afl --release --verbose
+      env:
+        # RUSTC_BOOTSTRAP=1 allows use of -Z build-std on stable toolchain
+        # Required because win7 targets aren't officially supported in stable
+        RUSTC_BOOTSTRAP: "${{ contains(matrix.target, 'win7') && '1' || '' }}"     
+      run: cargo test --all --lib --bins --tests --exclude mla-fuzz-afl --release --verbose ${{ matrix.cargo_arg }}
     - name: Run tests (Linux/macOS)
-      if: matrix.os != 'windows-2025'
+      if: matrix.os != 'windows-2025'    
       run: cargo test --all --exclude mla-fuzz-afl --release --verbose
-    - name: Upload resulting 'mlar'
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
-      with:
-        name: ${{ matrix.build }}
-        path: ./target/release/mlar${{ matrix.extension }}
 
   long-tests:
     runs-on: ubuntu-24.04
+    container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1 : pin to known-good previous stable release for increased stability and security
 
     steps:
     - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-    - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
-      with:
-        toolchain: stable
     - name: Run long tests
       run: cd mla && cargo test --release -- --ignored
 
   all-features:
     runs-on: ubuntu-24.04
+    container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1 : pin to known-good previous stable release for increased stability and security
 
     steps:
     - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-    - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
-      with:
-        toolchain: stable
     - name: Run long tests
       run: cargo test --all-features --all --exclude mla-fuzz-afl --exclude mla-bindings-c --release
 
   test-bindings-c-cpp-linux:
     runs-on: ubuntu-24.04
+    container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1 : pin to known-good previous stable release for increased stability and security
+
     steps:
     - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-    - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
-      with:
-        toolchain: stable
     - name: Run C bindings tests on Linux
       working-directory: bindings/C/tests/linux-gcc-g++/
       run: make CC=gcc
@@ -116,13 +140,11 @@ jobs:
           - target: x86_64-pc-windows-msvc
             msvc_platform: x64
     runs-on: windows-2025
+
     steps:
     - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-    - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
-      with:
-        toolchain: stable
-        default: true
-        target: ${{ matrix.target }}
+    - name: Set target if any
+      run: rustup target add ${{ matrix.target }}
     - uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3.0.0
     - name: Compile C/CPP bindings test program for Windows
       working-directory: bindings/C/tests/windows-msvc/
@@ -133,20 +155,14 @@ jobs:
 
   afl-build:
     runs-on: ubuntu-24.04
+    container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1 : pin to known-good previous stable release for increased stability and security
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
-        with:
-          toolchain: stable
       - name: Install dependencies
-        run: sudo apt-get install llvm
+        run: apt-get update && apt-get install -y llvm
       - name: Install cargo-afl binary crate
-        uses: actions-rs/install@9da1d2adcfe5e7c16992e8242ca33a56b6d9b101 # v0.1.2
-        with:
-          crate: cargo-afl
-          version: latest
-          use-tool-cache: true
+        run: cargo install cargo-afl
       - name: Test AFL build
         env:
           RUSTFLAGS: -D warnings
@@ -154,21 +170,21 @@ jobs:
 
   fmt:
     runs-on: ubuntu-24.04
+    container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1 : pin to known-good previous stable release for increased stability and security
+
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
-        with:
-          toolchain: stable
-          components: rustfmt
+      - name: Install rustfmt
+        run: rustup component add rustfmt
       - name: Check format
         run: cargo fmt --all -- --check
 
   audit:
     permissions:
-      # allow to write a Check report which blocks PR on failures
-      # cf. https://github.com/actions-rs/audit-check/blob/35b7b53b1e25b55642157ac01b4adceb5b9ebef3/src/reporter.ts#L147
+      # allow to write a Check report which blocks PR on failures cf. https://github.com/rustsec/audit-check#granular-permissions
       checks: write
     runs-on: ubuntu-24.04
+
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Security audit
@@ -180,33 +196,25 @@ jobs:
 
   clippy:
     runs-on: ubuntu-24.04
+    container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1 : pin to known-good previous stable release for increased stability and security
+
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
-        with:
-          toolchain: stable
-          components: clippy
       - name: Install dependencies
-        run: sudo apt-get install llvm
+        run: apt-get update && apt-get install -y llvm
       - name: Install cargo-afl binary crate
-        uses: actions-rs/install@9da1d2adcfe5e7c16992e8242ca33a56b6d9b101 # v0.1.2
-        with:
-          crate: cargo-afl
-          version: latest
-          use-tool-cache: true
-      - uses: actions-rs/cargo@844f36862e911db73fe0815f00a4a2602c279505 # v1.0.3
-        with:
-          command: clippy
-          args: --all-targets -- -D warnings
+        run: cargo install cargo-afl
+      - name: Install clippy
+        run: rustup component add clippy
+      - name: Run clippy
+        run: cargo clippy --all-targets -- -D warnings
 
   publish-dry-run:
-      runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04
+    container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1 : pin to known-good previous stable release for increased stability and security
 
-      steps:
+    steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
-        with:
-          toolchain: stable
       - name: Dry-run publish mla
         run: cd mla && cargo publish --dry-run
       - name: Dry-run publish mlar
