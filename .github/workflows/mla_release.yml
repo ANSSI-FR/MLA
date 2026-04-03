@@ -217,18 +217,22 @@ jobs:
 
       - name: Zip Windows releases
         run: |
-          zip --junk-paths windows-i686-${{ steps.get_version.outputs.VERSION }} mla-windows-i686/mla.dll mla-windows-i686/mla.lib mla-windows-i686/mla.dll.lib mla-windows-i686/mla.pdb
-          zip --junk-paths windows-x86_64-${{ steps.get_version.outputs.VERSION }} mla-windows-x86_64/mla.dll mla-windows-x86_64/mla.lib mla-windows-x86_64/mla.dll.lib mla-windows-x86_64/mla.pdb
-          zip --junk-paths windows-i686-debug-${{ steps.get_version.outputs.VERSION }} mla-windows-i686-debug/mla.dll mla-windows-i686-debug/mla.lib mla-windows-i686-debug/mla.dll.lib mla-windows-i686-debug/mla.pdb
-          zip --junk-paths windows-x86_64-debug-${{ steps.get_version.outputs.VERSION }} mla-windows-x86_64-debug/mla.dll mla-windows-x86_64-debug/mla.lib mla-windows-x86_64-debug/mla.dll.lib mla-windows-x86_64-debug/mla.pdb
-          zip --junk-paths windows7-i686-${{ steps.get_version.outputs.VERSION }} mla-windows7-i686/mla.dll mla-windows7-i686/mla.lib mla-windows7-i686/mla.dll.lib mla-windows7-i686/mla.pdb
-          zip --junk-paths windows7-x86_64-${{ steps.get_version.outputs.VERSION }} mla-windows7-x86_64/mla.dll mla-windows7-x86_64/mla.lib mla-windows7-x86_64/mla.dll.lib mla-windows7-x86_64/mla.pdb
+          zip --junk-paths windows-i686-"${VERSION_OUTPUT}" mla-windows-i686/mla.dll mla-windows-i686/mla.lib mla-windows-i686/mla.dll.lib mla-windows-i686/mla.pdb
+          zip --junk-paths windows-x86_64-"${VERSION_OUTPUT}" mla-windows-x86_64/mla.dll mla-windows-x86_64/mla.lib mla-windows-x86_64/mla.dll.lib mla-windows-x86_64/mla.pdb
+          zip --junk-paths windows-i686-debug-"${VERSION_OUTPUT}" mla-windows-i686-debug/mla.dll mla-windows-i686-debug/mla.lib mla-windows-i686-debug/mla.dll.lib mla-windows-i686-debug/mla.pdb
+          zip --junk-paths windows-x86_64-debug-"${VERSION_OUTPUT}" mla-windows-x86_64-debug/mla.dll mla-windows-x86_64-debug/mla.lib mla-windows-x86_64-debug/mla.dll.lib mla-windows-x86_64-debug/mla.pdb
+          zip --junk-paths windows7-i686-"${VERSION_OUTPUT}" mla-windows7-i686/mla.dll mla-windows7-i686/mla.lib mla-windows7-i686/mla.dll.lib mla-windows7-i686/mla.pdb
+          zip --junk-paths windows7-x86_64-"${VERSION_OUTPUT}" mla-windows7-x86_64/mla.dll mla-windows7-x86_64/mla.lib mla-windows7-x86_64/mla.dll.lib mla-windows7-x86_64/mla.pdb
+        env: 
+          VERSION_OUTPUT: ${{ steps.get_version.outputs.VERSION }}
       - name: Rename Linux artifact
         run: |
           mv mla-linux-x86_64/libmla.a \
-          mla-linux-x86_64/libmla-x86_64-static-${{ steps.get_version.outputs.VERSION }}.a
+          mla-linux-x86_64/libmla-x86_64-static-"${VERSION_OUTPUT}".a
+        env: 
+          VERSION_OUTPUT: ${{ steps.get_version.outputs.VERSION }}
       - name: Create Release and upload artifacts
-        uses: softprops/action-gh-release@c062e08bd532815e2082a85e87e3ef29c3e6d191 # v2.2.1
+        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2.6.1
         with:
           name: mla-${{ steps.get_version.outputs.VERSION }}
           draft: true
@@ -244,34 +248,35 @@ jobs:
             Changelog
             https://github.com/ANSSI-FR/MLA/blob/mla-v${{ steps.get_version.outputs.VERSION }}/mla/CHANGELOG.md
           files: |
-            ./mla-linux-x86_64/libmla-${{ steps.get_version.outputs.VERSION }}.a
-            ./windows-i686-${{ steps.get_version.outputs.VERSION }}.zip
-            ./windows-x86_64-${{ steps.get_version.outputs.VERSION }}.zip
-            ./windows-i686-debug-${{ steps.get_version.outputs.VERSION }}.zip
-            ./windows-x86_64-debug-${{ steps.get_version.outputs.VERSION }}.zip
-            ./windows7-i686-${{ steps.get_version.outputs.VERSION }}.zip
-            ./windows7-x86_64-${{ steps.get_version.outputs.VERSION }}.zip
+            ./windows-i686-"${VERSION_OUTPUT}".zip
+            ./windows-x86_64-"${VERSION_OUTPUT}".zip
+            ./windows-i686-debug-"${VERSION_OUTPUT}".zip
+            ./windows-x86_64-debug-"${VERSION_OUTPUT}".zip
+            ./windows7-i686-"${VERSION_OUTPUT}".zip
+            ./windows7-x86_64-"${VERSION_OUTPUT}".zip
             ./bindings/C/mla.h
             ./bindings/C/mla.hpp
-            ./mla-linux-x86_64/libmla-x86_64-static-${{ steps.get_version.outputs.VERSION }}.a
+            ./mla-linux-x86_64/libmla-x86_64-static-"${VERSION_OUTPUT}".a
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION_OUTPUT: ${{ steps.get_version.outputs.VERSION }}
+
 
       - name: Attest artifacts
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
         with:
           subject-path: |
-            ./mla-linux-x86_64/libmla-${{ steps.get_version.outputs.VERSION }}.a
-            ./windows-i686-${{ steps.get_version.outputs.VERSION }}.zip
-            ./windows-x86_64-${{ steps.get_version.outputs.VERSION }}.zip
-            ./windows-i686-debug-${{ steps.get_version.outputs.VERSION }}.zip
-            ./windows-x86_64-debug-${{ steps.get_version.outputs.VERSION }}.zip
-            ./windows7-i686-${{ steps.get_version.outputs.VERSION }}.zip
-            ./windows7-x86_64-${{ steps.get_version.outputs.VERSION }}.zip
+            ./windows-i686-"${VERSION_OUTPUT}".zip
+            ./windows-x86_64-"${VERSION_OUTPUT}".zip
+            ./windows-i686-debug-"${VERSION_OUTPUT}".zip
+            ./windows-x86_64-debug-"${VERSION_OUTPUT}".zip
+            ./windows7-i686-"${VERSION_OUTPUT}".zip
+            ./windows7-x86_64-"${VERSION_OUTPUT}".zip
             ./bindings/C/mla.h
             ./bindings/C/mla.hpp
-            ./mla-linux-x86_64/libmla-x86_64-static-${{ steps.get_version.outputs.VERSION }}.a
-
+            ./mla-linux-x86_64/libmla-x86_64-static-"${VERSION_OUTPUT}".a
+        env:
+          VERSION_OUTPUT: ${{ steps.get_version.outputs.VERSION }}
+          
   publish:
     name: Publish mla
     needs: release
