@@ -4,6 +4,8 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     groups:
       actions-deps:
         patterns:
@@ -13,6 +15,8 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     groups:
       dev-deps:
         dependency-type: "development"
@@ -23,6 +27,8 @@ updates:
     directory: "/bindings/python"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     groups:
       python-deps:
         patterns:
