@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
-use tokio::sync::RwLock;
+use tokio::sync::{broadcast, RwLock};
 
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
@@ -18,6 +18,7 @@ pub struct TransferEntry {
 #[derive(Clone)]
 pub struct AppState {
     pub transfers: Arc<RwLock<HashMap<String, TransferEntry>>>,
+    pub signal_rooms: Arc<RwLock<HashMap<String, broadcast::Sender<String>>>>,
     pub storage_dir: PathBuf,
     pub max_file_size: u64,
 }
@@ -26,6 +27,7 @@ impl AppState {
     pub fn new(storage_dir: PathBuf, max_file_size: u64) -> Self {
         Self {
             transfers: Arc::new(RwLock::new(HashMap::new())),
+            signal_rooms: Arc::new(RwLock::new(HashMap::new())),
             storage_dir,
             max_file_size,
         }
