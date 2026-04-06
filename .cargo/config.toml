@@ -1,3 +1,7 @@
 # static linking on Windows, avoids the need for a Visual Studio installation
 [target.'cfg(all(windows, target_env = "msvc"))']
 rustflags = ["-C", "target-feature=+crt-static"]
+
+# Increase WASM stack size for post-quantum crypto (ML-KEM/ML-DSA need large stack)
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "link-arg=-zstack-size=8388608"]

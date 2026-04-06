@@ -294,12 +294,27 @@ mod entryname {
             .map(str::as_bytes)
     }
 
+    #[cfg(target_family = "wasm")]
+    fn osstr_to_bytes_os(os_str: &OsStr) -> Result<&[u8], EntryNameError> {
+        os_str
+            .to_str()
+            .ok_or(EntryNameError::InvalidPathComponentContent)
+            .map(str::as_bytes)
+    }
+
     #[cfg(target_family = "unix")]
     #[allow(clippy::unnecessary_wraps)]
     fn to_pathbuf_os(bytes: &[u8]) -> Result<PathBuf, EntryNameError> {
         use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 
         Ok(PathBuf::from(OsStr::from_bytes(bytes)))
+    }
+
+    #[cfg(target_family = "wasm")]
+    fn to_pathbuf_os(bytes: &[u8]) -> Result<PathBuf, EntryNameError> {
+        let s =
+            str::from_utf8(bytes).map_err(|_| EntryNameError::InvalidPathComponentContent)?;
+        Ok(PathBuf::from(s))
     }
 
     #[cfg(target_family = "windows")]
@@ -348,6 +363,14 @@ mod entryname {
     }
 
     #[cfg(target_family = "windows")]
+    fn normal_component_osstr_to_bytes(os_str: &OsStr) -> Result<&[u8], EntryNameError> {
+        match os_str.to_str() {
+            Some(s) => Ok(s.as_bytes()),
+            None => Err(EntryNameError::InvalidPathComponentContent),
+        }
+    }
+
+    #[cfg(target_family = "wasm")]
     fn normal_component_osstr_to_bytes(os_str: &OsStr) -> Result<&[u8], EntryNameError> {
         match os_str.to_str() {
             Some(s) => Ok(s.as_bytes()),
