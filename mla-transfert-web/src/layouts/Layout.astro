@@ -17,9 +17,15 @@ const { title } = Astro.props;
   </head>
   <body class="min-h-screen bg-gray-950 text-gray-100">
     <header class="border-b border-gray-800 px-6 py-4">
-      <div class="mx-auto max-w-4xl flex items-center gap-3">
-        <h1 class="text-xl font-bold text-cyber-500">MLA-Transfert</h1>
-        <span class="text-xs text-gray-500">Chiffrement post-quantique, zero-knowledge</span>
+      <div class="mx-auto max-w-4xl flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <h1 class="text-xl font-bold text-cyber-500">MLA-Transfert</h1>
+          <span class="text-xs text-gray-500">Chiffrement post-quantique, zero-knowledge</span>
+        </div>
+        <div class="flex items-center gap-4">
+          <img src="/logo_anssi.webp" alt="ANSSI" class="h-8" />
+          <img src="/RD_KODETIS-noir.png" alt="Kodetis" class="h-8 invert" />
+        </div>
       </div>
     </header>
     <main class="mx-auto max-w-4xl px-6 py-10">
