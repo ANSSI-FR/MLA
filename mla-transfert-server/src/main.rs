@@ -1,7 +1,9 @@
 mod config;
+mod relay;
 mod state;
 
-use axum::{Router, routing::get};
+use axum::routing::{get, post};
+use axum::Router;
 use tower_http::cors::CorsLayer;
 use tracing_subscriber::EnvFilter;
 
@@ -28,6 +30,9 @@ async fn main() {
 
     let app = Router::new()
         .route("/api/health", get(health))
+        .route("/api/upload", post(relay::upload))
+        .route("/api/download/{id}", get(relay::download))
+        .route("/api/info/{id}", get(relay::info))
         .layer(CorsLayer::permissive())
         .with_state(state);
 

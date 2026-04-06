@@ -6,6 +6,7 @@ use std::time::{Duration, SystemTime};
 use tokio::sync::RwLock;
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct TransferEntry {
     pub id: String,
     pub filename: String,
