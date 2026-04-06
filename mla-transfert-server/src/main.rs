@@ -1,6 +1,7 @@
 mod config;
 mod purge;
 mod relay;
+mod signaling;
 mod state;
 
 use axum::routing::{get, post};
@@ -36,6 +37,7 @@ async fn main() {
         .route("/api/upload", post(relay::upload))
         .route("/api/download/{id}", get(relay::download))
         .route("/api/info/{id}", get(relay::info))
+        .route("/api/signal/{room}", get(signaling::signal))
         .layer(CorsLayer::permissive())
         .with_state(state);
 
