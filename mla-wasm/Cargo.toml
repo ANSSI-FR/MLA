@@ -6,6 +6,9 @@ license = "LGPL-3.0-only"
 description = "WebAssembly bindings for the MLA archive library"
 publish = false
 
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
+
 [lib]
 crate-type = ["cdylib", "rlib"]
 
