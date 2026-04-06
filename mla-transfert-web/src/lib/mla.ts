@@ -10,7 +10,7 @@ let initialized = false;
 
 export async function initMla(): Promise<void> {
   if (!initialized) {
-    await init();
+    await init({ module_or_path: '/mla_wasm_bg.wasm' });
     initialized = true;
   }
 }
