@@ -33,6 +33,17 @@ export default function SendForm() {
     ((mode === 'simple' && password.length >= 8) ||
       (mode === 'advanced' && senderPrivKey !== null && receiverPubKey !== null));
 
+  const handleReset = () => {
+    setFiles([]);
+    setPassword('');
+    setSenderPrivKey(null);
+    setReceiverPubKey(null);
+    setProgress(0);
+    setStatus('idle');
+    setShareLink('');
+    setError('');
+  };
+
   const handleSubmit = async () => {
     try {
       setStatus('encrypting');
@@ -130,10 +141,27 @@ export default function SendForm() {
       )}
 
       {status === 'done' && shareLink && (
-        <ShareLink link={shareLink} />
+        <>
+          <ShareLink link={shareLink} />
+          <button
+            onClick={handleReset}
+            className="w-full py-3 rounded-lg font-medium transition-colors bg-gray-800 text-gray-200 hover:bg-gray-700"
+          >
+            Nouveau transfert
+          </button>
+        </>
       )}
 
-      {status !== 'done' && (
+      {status === 'error' && (
+        <button
+          onClick={handleReset}
+          className="w-full py-3 rounded-lg font-medium transition-colors bg-gray-800 text-gray-200 hover:bg-gray-700"
+        >
+          Recommencer
+        </button>
+      )}
+
+      {status !== 'done' && status !== 'error' && (
         <button
           onClick={handleSubmit}
           disabled={!canSubmit || status === 'encrypting' || status === 'uploading'}
