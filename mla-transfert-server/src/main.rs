@@ -1,4 +1,5 @@
 mod config;
+mod purge;
 mod relay;
 mod state;
 
@@ -27,6 +28,8 @@ async fn main() {
         .expect("Failed to create storage directory");
 
     let state = AppState::new(config.storage_dir, config.max_file_size);
+
+    purge::spawn_purge_task(state.clone());
 
     let app = Router::new()
         .route("/api/health", get(health))
