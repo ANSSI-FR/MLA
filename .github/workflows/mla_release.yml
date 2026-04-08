@@ -138,6 +138,7 @@ jobs:
           # If there's no exact match, fall back to older caches for the same target
           restore-keys: |
             build-std-${{ runner.os }}-${{ matrix.target }}-
+          lookup-only: true
       - name: Build static library (inside container)
         if: matrix.container != null
         run: cargo build ${{ matrix.cargo_arg }} --manifest-path=bindings/C/Cargo.toml --target=${{ matrix.target }}
