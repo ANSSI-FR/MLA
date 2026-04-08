@@ -78,6 +78,7 @@ jobs:
         # If there's no exact match, fall back to older caches for the same target
         restore-keys: |
           build-std-${{ runner.os }}-${{ matrix.target }}-
+        lookup-only: true
     - name: Build (inside container)
       if: matrix.container != null
       run: cargo build --release --all-features --package mlar --verbose ${{ matrix.cargo_build }}
