@@ -26,11 +26,10 @@ jobs:
         with:
           persist-credentials: false    
       - name: Get PR base branch name
-        run: |
-          branchName=$(curl -s https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.issue.number }} | python3 -c "import sys, json; print(json.load(sys.stdin)['base']['ref'])")
-          echo "branchName=$branchName" >> $GITHUB_ENV
+        run: echo "branchName=${Get_PR_base_branch_name}" >> $GITHUB_ENV
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          Get_PR_base_branch_name: ${{ github.event.pull_request.base.ref }}
       - name: Compares PR branch to target
         uses: boa-dev/criterion-compare-action@adfd3a94634fe2041ce5613eb7df09d247555b87 # v3.2.4
         with:
