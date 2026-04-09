@@ -255,7 +255,7 @@ jobs:
             ./bindings/C/mla.hpp
             ./mla-linux-x86_64/libmla-x86_64-static-"${VERSION_OUTPUT}".a)
             for files in "${files_to_sign[@]}"; do
-            echo "Signing $zip..."
+            echo "Signing $files ..."
             cosign sign-blob \
               --yes \
               --output-signature "$files.sig" \
