@@ -26,7 +26,7 @@ jobs:
         with:
           persist-credentials: false    
       - name: Get PR base branch name
-        run: echo "branchName=${Get_PR_base_branch_name}" >> $GITHUB_ENV
+        run: echo "branchName=${Get_PR_base_branch_name}" >> $"GITHUB_ENV"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           Get_PR_base_branch_name: ${{ github.event.pull_request.base.ref }}
