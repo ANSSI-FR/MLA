@@ -15,7 +15,7 @@ export default function ReceiveSection({ transferId }: ReceiveSectionProps) {
         <h2 className="text-4xl font-bold tracking-tight">
           Fichier <span className="text-gradient">sécurisé</span> reçu
         </h2>
-        <p className="text-gray-400 max-w-sm mx-auto leading-relaxed">
+        <p className="max-w-sm mx-auto leading-relaxed" style={{ color: 'var(--text-2)' }}>
           Entrez le mot de passe ou importez vos clés pour déchiffrer.
         </p>
         <TransferMeta transferId={transferId} onExpired={() => setExpired(true)} />

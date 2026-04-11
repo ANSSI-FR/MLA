@@ -11,7 +11,6 @@ function formatSize(bytes: number): string {
   return `${(bytes / 1024).toFixed(1)} Ko`;
 }
 
-/** Détermine le type de clé depuis l'extension du fichier */
 function keyTypeLabel(filename: string): string {
   if (filename.endsWith('.mlapriv')) return 'Clé privée';
   if (filename.endsWith('.mlapub')) return 'Clé publique';
@@ -33,16 +32,18 @@ export default function KeyImporter({ label, accept, onKeyLoaded }: KeyImporterP
 
   return (
     <div className="space-y-2">
-      <span className="text-sm text-gray-400">{label}</span>
+      <span className="text-sm" style={{ color: 'var(--text-2)' }}>{label}</span>
 
       {loaded ? (
-        /* État : clé chargée */
-        <div className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-green-800/60 bg-green-950/20">
+        <div
+          className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border"
+          style={{ background: 'var(--success-bg)', borderColor: 'rgba(26,110,60,0.3)' }}
+        >
           <div className="flex items-center gap-2 min-w-0">
-            {/* Shield checkmark */}
             <svg
               aria-hidden="true"
-              className="w-4 h-4 flex-shrink-0 text-green-500"
+              className="w-4 h-4 flex-shrink-0"
+              style={{ color: 'var(--success)' }}
               fill="none"
               stroke="currentColor"
               strokeWidth={2}
@@ -55,17 +56,19 @@ export default function KeyImporter({ label, accept, onKeyLoaded }: KeyImporterP
               />
             </svg>
             <div className="min-w-0">
-              <p className="text-sm text-green-400 font-medium truncate">{loaded.name}</p>
-              <p className="text-xs text-gray-500">
+              <p className="text-sm font-medium truncate" style={{ color: 'var(--success)' }}>{loaded.name}</p>
+              <p className="text-xs" style={{ color: 'var(--text-3)' }}>
                 {keyTypeLabel(loaded.name)} · {formatSize(loaded.size)}
               </p>
             </div>
           </div>
 
-          {/* Bouton changer */}
           <label
             htmlFor={inputId}
-            className="flex-shrink-0 text-xs text-gray-500 hover:text-gray-300 cursor-pointer transition-colors underline underline-offset-2"
+            className="flex-shrink-0 text-xs cursor-pointer underline underline-offset-2 transition-colors"
+            style={{ color: 'var(--text-3)' }}
+            onMouseOver={(e) => (e.currentTarget.style.color = 'var(--text-2)')}
+            onMouseOut={(e) => (e.currentTarget.style.color = 'var(--text-3)')}
           >
             Changer
           </label>
@@ -78,14 +81,17 @@ export default function KeyImporter({ label, accept, onKeyLoaded }: KeyImporterP
           />
         </div>
       ) : (
-        /* État : aucune clé */
         <label
           htmlFor={inputId}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-gray-700 hover:border-gray-500 cursor-pointer transition-colors"
+          className="flex items-center gap-3 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors"
+          style={{ borderColor: 'var(--border-hi)', background: 'var(--bg-surface)' }}
+          onMouseOver={(e) => (e.currentTarget.style.borderColor = 'var(--accent)')}
+          onMouseOut={(e) => (e.currentTarget.style.borderColor = 'var(--border-hi)')}
         >
           <svg
             aria-hidden="true"
-            className="w-4 h-4 flex-shrink-0 text-gray-600"
+            className="w-4 h-4 flex-shrink-0"
+            style={{ color: 'var(--text-3)' }}
             fill="none"
             stroke="currentColor"
             strokeWidth={1.5}
@@ -97,7 +103,7 @@ export default function KeyImporter({ label, accept, onKeyLoaded }: KeyImporterP
               d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z"
             />
           </svg>
-          <span className="text-sm text-gray-500">Choisir un fichier {accept}</span>
+          <span className="text-sm" style={{ color: 'var(--text-3)' }}>Choisir un fichier {accept}</span>
           <input
             id={inputId}
             type="file"

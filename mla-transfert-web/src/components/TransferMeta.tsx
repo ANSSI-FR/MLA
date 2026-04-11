@@ -42,12 +42,13 @@ export default function TransferMeta({ transferId, onExpired }: TransferMetaProp
   if (loading) {
     return (
       <div
-        className="flex gap-6 justify-center text-sm text-gray-500 animate-pulse"
+        className="flex gap-6 justify-center text-sm animate-pulse"
+        style={{ color: 'var(--text-3)' }}
         aria-busy="true"
         aria-label="Chargement des informations du transfert"
       >
-        <span className="bg-gray-700 rounded h-4 w-24 inline-block" />
-        <span className="bg-gray-700 rounded h-4 w-32 inline-block" />
+        <span className="rounded h-4 w-24 inline-block" style={{ background: 'var(--bg-surface)' }} />
+        <span className="rounded h-4 w-32 inline-block" style={{ background: 'var(--bg-surface)' }} />
       </div>
     );
   }
@@ -56,7 +57,12 @@ export default function TransferMeta({ transferId, onExpired }: TransferMetaProp
     return (
       <div
         role="alert"
-        className="text-center px-4 py-3 rounded-lg bg-red-900/40 border border-red-700 text-red-300 text-sm"
+        className="text-center px-4 py-3 rounded-lg text-sm border"
+        style={{
+          background: 'rgba(247,108,108,0.08)',
+          borderColor: 'rgba(247,108,108,0.3)',
+          color: 'var(--coral)',
+        }}
       >
         Ce transfert a expiré ou n'existe pas.
       </div>
@@ -66,12 +72,12 @@ export default function TransferMeta({ transferId, onExpired }: TransferMetaProp
   if (!info) return null;
 
   return (
-    <dl className="flex gap-6 justify-center text-sm text-gray-400">
+    <dl className="flex gap-6 justify-center text-sm" style={{ color: 'var(--text-2)' }}>
       <div className="flex items-center gap-2">
-        {/* Archive icon */}
         <svg
           aria-hidden="true"
-          className="w-4 h-4 text-gray-500"
+          className="w-4 h-4"
+          style={{ color: 'var(--text-3)' }}
           fill="none"
           stroke="currentColor"
           strokeWidth={1.5}
@@ -88,10 +94,10 @@ export default function TransferMeta({ transferId, onExpired }: TransferMetaProp
       </div>
 
       <div className="flex items-center gap-2">
-        {/* Clock icon */}
         <svg
           aria-hidden="true"
-          className="w-4 h-4 text-gray-500"
+          className="w-4 h-4"
+          style={{ color: 'var(--text-3)' }}
           fill="none"
           stroke="currentColor"
           strokeWidth={1.5}
