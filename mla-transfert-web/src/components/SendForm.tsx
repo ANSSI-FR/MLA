@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import FileDropZone from './FileDropZone';
 import ModeSelector from './ModeSelector';
 import PasswordInput from './PasswordInput';
@@ -13,12 +13,9 @@ import {
 } from '../lib/mla';
 import { uploadFile } from '../lib/api';
 
-type TransferMode = 'relay' | 'p2p';
-
 export default function SendForm() {
   const [files, setFiles] = useState<File[]>([]);
   const [mode, setMode] = useState<'simple' | 'advanced'>('simple');
-  const [transferMode, setTransferMode] = useState<TransferMode>('relay');
   const [password, setPassword] = useState('');
   const [senderPrivKey, setSenderPrivKey] = useState<Uint8Array | null>(null);
   const [receiverPubKey, setReceiverPubKey] = useState<Uint8Array | null>(null);
@@ -30,8 +27,17 @@ export default function SendForm() {
 
   const canSubmit =
     files.length > 0 &&
-    ((mode === 'simple' && password.length >= 8) ||
+    ((mode === 'simple' && password.length >= 12) ||
       (mode === 'advanced' && senderPrivKey !== null && receiverPubKey !== null));
+
+  // Auto-copie le lien dès qu'il est disponible
+  useEffect(() => {
+    if (status === 'done' && shareLink) {
+      navigator.clipboard.writeText(shareLink).catch(() => {
+        // Silencieux : l'utilisateur peut copier manuellement
+      });
+    }
+  }, [status, shareLink]);
 
   const handleReset = () => {
     setFiles([]);
@@ -44,7 +50,15 @@ export default function SendForm() {
     setError('');
   };
 
+  const MAX_FILE_SIZE = 100 * 1024 * 1024;
+
   const handleSubmit = async () => {
+    const oversized = files.find((f) => f.size > MAX_FILE_SIZE);
+    if (oversized) {
+      setError(`"${oversized.name}" dépasse la limite de 100 Mo`);
+      return;
+    }
+
     try {
       setStatus('encrypting');
       setProgress(10);
@@ -82,7 +96,7 @@ export default function SendForm() {
 
   return (
     <div className="space-y-6 max-w-xl mx-auto">
-      <FileDropZone files={files} onFilesSelected={setFiles} />
+      <FileDropZone files={files} onFilesSelected={setFiles} maxSizeBytes={100 * 1024 * 1024} />
 
       <ModeSelector mode={mode} onModeChange={setMode} />
 
@@ -90,7 +104,7 @@ export default function SendForm() {
         <PasswordInput
           value={password}
           onChange={setPassword}
-          placeholder="Mot de passe (min. 8 caracteres)"
+          placeholder="Mot de passe (min. 12 caractères)"
         />
       ) : (
         <div className="space-y-4">
@@ -108,26 +122,15 @@ export default function SendForm() {
         </div>
       )}
 
-      <div className="flex gap-4">
-        <select
-          value={expiresHours}
-          onChange={(e) => setExpiresHours(Number(e.target.value))}
-          className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 text-sm"
-        >
-          <option value={1}>1 heure</option>
-          <option value={24}>24 heures</option>
-          <option value={168}>7 jours</option>
-        </select>
-
-        <select
-          value={transferMode}
-          onChange={(e) => setTransferMode(e.target.value as TransferMode)}
-          className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 text-sm"
-        >
-          <option value="relay">Relais serveur</option>
-          <option value="p2p">P2P (WebRTC)</option>
-        </select>
-      </div>
+      <select
+        value={expiresHours}
+        onChange={(e) => setExpiresHours(Number(e.target.value))}
+        className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 text-sm"
+      >
+        <option value={1}>1 heure</option>
+        <option value={24}>24 heures</option>
+        <option value={168}>7 jours</option>
+      </select>
 
       {status !== 'idle' && status !== 'done' && status !== 'error' && (
         <TransferProgress
@@ -142,7 +145,7 @@ export default function SendForm() {
 
       {status === 'done' && shareLink && (
         <>
-          <ShareLink link={shareLink} />
+          <ShareLink link={shareLink} autoCopied />
           <button
             onClick={handleReset}
             className="w-full py-3 rounded-lg font-medium transition-colors bg-gray-800 text-gray-200 hover:bg-gray-700"

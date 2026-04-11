@@ -5,6 +5,14 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
 use serde::Serialize;
+use serde_json::json;
+
+/// Helper : retourne toujours une erreur JSON `{"error": "..."}`.
+fn json_err(status: StatusCode, msg: impl Into<String>) -> (StatusCode, Json<serde_json::Value>) {
+    (status, Json(json!({ "error": msg.into() })))
+}
+
+type JsonError = (StatusCode, Json<serde_json::Value>);
 
 use crate::state::AppState;
 
@@ -27,37 +35,33 @@ pub struct InfoResponse {
 pub async fn upload(
     State(state): State<AppState>,
     mut multipart: Multipart,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, JsonError> {
     let mut file_data: Option<(String, Vec<u8>)> = None;
     let mut expires_hours: u64 = 24;
 
     while let Some(field) = multipart
         .next_field()
         .await
-        .map_err(|e| (StatusCode::BAD_REQUEST, format!("multipart error: {e}")))?
+        .map_err(|e| json_err(StatusCode::BAD_REQUEST, format!("multipart error: {e}")))?
     {
         let name = field.name().unwrap_or_default().to_owned();
         match name.as_str() {
             "file" => {
-                let filename = field
-                    .file_name()
-                    .unwrap_or("upload")
-                    .to_owned();
+                let filename = field.file_name().unwrap_or("upload").to_owned();
                 let data = field
                     .bytes()
                     .await
-                    .map_err(|e| (StatusCode::BAD_REQUEST, format!("read error: {e}")))?;
+                    .map_err(|e| json_err(StatusCode::BAD_REQUEST, format!("read error: {e}")))?;
                 file_data = Some((filename, data.to_vec()));
             }
             "expires_hours" => {
                 let text = field
                     .text()
                     .await
-                    .map_err(|e| (StatusCode::BAD_REQUEST, format!("read error: {e}")))?;
+                    .map_err(|e| json_err(StatusCode::BAD_REQUEST, format!("read error: {e}")))?;
                 expires_hours = match text.trim() {
                     "1" => 1,
                     "168" => 168,
-                    // Default to 24 hours for "24" or any unrecognized value
                     _ => 24,
                 };
             }
@@ -66,16 +70,13 @@ pub async fn upload(
     }
 
     let (filename, data) = file_data
-        .ok_or_else(|| (StatusCode::BAD_REQUEST, "missing file field".to_owned()))?;
+        .ok_or_else(|| json_err(StatusCode::BAD_REQUEST, "missing file field"))?;
 
-    let data_len =
-        u64::try_from(data.len()).map_err(|_| (StatusCode::BAD_REQUEST, "file too large".to_owned()))?;
+    let data_len = u64::try_from(data.len())
+        .map_err(|_| json_err(StatusCode::BAD_REQUEST, "file too large"))?;
 
     if data_len > state.max_file_size {
-        return Err((
-            StatusCode::PAYLOAD_TOO_LARGE,
-            "file exceeds maximum size".to_owned(),
-        ));
+        return Err(json_err(StatusCode::PAYLOAD_TOO_LARGE, "file exceeds maximum size"));
     }
 
     let id = uuid::Uuid::new_v4().to_string();
@@ -83,7 +84,7 @@ pub async fn upload(
 
     tokio::fs::write(&path, &data)
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("write error: {e}")))?;
+        .map_err(|e| json_err(StatusCode::INTERNAL_SERVER_ERROR, format!("write error: {e}")))?;
 
     let now = SystemTime::now();
     let entry = crate::state::TransferEntry {
