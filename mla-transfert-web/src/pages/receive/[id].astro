@@ -1,6 +1,6 @@
 ---
 import Layout from '../../layouts/Layout.astro';
-import ReceiveForm from '../../components/ReceiveForm';
+import ReceiveSection from '../../components/ReceiveSection';
 
 export function getStaticPaths() {
   return [];
@@ -9,10 +9,6 @@ export function getStaticPaths() {
 const { id } = Astro.params;
 ---
 
-<Layout title="MLA-Transfert - Reception">
-  <div class="text-center mb-10">
-    <h2 class="text-3xl font-bold mb-4">Vous avez recu un fichier securise</h2>
-    <p class="text-gray-400">Entrez le mot de passe ou importez vos cles pour dechiffrer.</p>
-  </div>
-  <ReceiveForm client:load transferId={id!} />
+<Layout title="MLA-Transfert - Réception">
+  <ReceiveSection client:load transferId={id!} />
 </Layout>

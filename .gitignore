@@ -3,10 +3,13 @@
 debug/
 debugs/
 target/
-
+.nova-tracer/
 # pycache for py-bindings
 __pycache__/
+toto.md
 
 # mdbook
 index.html
 doc/book/mla-wasm/pkg/
+*.mlapub
+*.mlapriv

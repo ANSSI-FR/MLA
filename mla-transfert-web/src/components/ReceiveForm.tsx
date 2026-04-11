@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import ModeSelector from './ModeSelector';
 import PasswordInput from './PasswordInput';
 import KeyImporter from './KeyImporter';
@@ -21,11 +21,12 @@ export default function ReceiveForm({ transferId }: ReceiveFormProps) {
   const [senderPubKey, setSenderPubKey] = useState<Uint8Array | null>(null);
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState<'idle' | 'downloading' | 'decrypting' | 'done' | 'error'>('idle');
+  const decryptTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [error, setError] = useState('');
   const [decryptedFiles, setDecryptedFiles] = useState<FileEntry[]>([]);
 
   const canSubmit =
-    (mode === 'simple' && password.length >= 8) ||
+    (mode === 'simple' && password.length >= 12) ||
     (mode === 'advanced' && receiverPrivKey !== null && senderPubKey !== null);
 
   const handleDecrypt = async () => {
@@ -39,6 +40,11 @@ export default function ReceiveForm({ transferId }: ReceiveFormProps) {
       setProgress(50);
       setStatus('decrypting');
 
+      // Animation fluide pendant le déchiffrement (opération synchrone WASM)
+      decryptTimerRef.current = setInterval(() => {
+        setProgress((prev) => (prev < 90 ? prev + 2 : prev));
+      }, 80);
+
       let files: FileEntry[];
       if (mode === 'simple') {
         files = await decryptWithPassword(mlaData, password);
@@ -46,10 +52,13 @@ export default function ReceiveForm({ transferId }: ReceiveFormProps) {
         files = await decryptWithKeys(mlaData, receiverPrivKey!, senderPubKey!);
       }
 
+      if (decryptTimerRef.current) clearInterval(decryptTimerRef.current);
+
       setDecryptedFiles(files);
       setProgress(100);
       setStatus('done');
     } catch (err) {
+      if (decryptTimerRef.current) clearInterval(decryptTimerRef.current);
       setError(err instanceof Error ? err.message : 'Erreur de dechiffrement');
       setStatus('error');
     }
