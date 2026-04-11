@@ -19,13 +19,13 @@ const { title } = Astro.props;
 
     <!-- Ambient background glow -->
     <div class="fixed inset-0 pointer-events-none" aria-hidden="true">
-      <div class="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-cyber-950/40 rounded-full blur-[120px]"></div>
+      <div class="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] rounded-full blur-[120px]" style="background:rgba(36,48,94,0.35)"></div>
     </div>
 
     <!-- Header -->
     <header class="sticky top-0 z-50 border-b border-white/[0.06] bg-gray-950/80 backdrop-blur-md">
       <!-- Accent line -->
-      <div class="h-px w-full bg-gradient-to-r from-transparent via-cyber-700/60 to-transparent"></div>
+      <div class="h-px w-full" style="background:linear-gradient(90deg,transparent,#24305e,#005687,#24305e,transparent)"></div>
 
       <div class="mx-auto max-w-4xl px-6 py-4 flex items-center justify-between">
         <div class="flex items-center gap-3">
