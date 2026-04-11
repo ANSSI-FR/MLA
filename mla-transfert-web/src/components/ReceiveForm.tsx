@@ -106,20 +106,37 @@ export default function ReceiveForm({ transferId }: ReceiveFormProps) {
         />
       )}
 
-      {error && <p className="text-red-500 text-sm">{error}</p>}
+      {error && (
+        <p className="text-red-400 text-sm flex items-center gap-2 animate-fade-in" role="alert">
+          <svg aria-hidden="true" className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+          </svg>
+          {error}
+        </p>
+      )}
 
       {status === 'done' && (
-        <div className="space-y-2">
-          <p className="text-green-500 text-sm font-medium">Dechiffrement reussi !</p>
+        <div className="space-y-3 animate-slide-up">
+          <p className="text-green-400 text-sm font-medium flex items-center gap-2">
+            <svg aria-hidden="true" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Déchiffrement réussi
+          </p>
           {decryptedFiles.map((file, i) => (
             <button
               key={i}
               onClick={() => downloadDecryptedFile(file)}
-              className="w-full text-left px-4 py-3 bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors"
+              className="card-hover w-full text-left px-4 py-3 flex items-center justify-between gap-3"
             >
-              <span className="text-gray-200">{file.name}</span>
-              <span className="text-gray-500 text-sm ml-2">
-                ({(file.data.length / 1024).toFixed(1)} Ko)
+              <div className="flex items-center gap-2.5 min-w-0">
+                <svg aria-hidden="true" className="w-4 h-4 text-cyber-500 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                </svg>
+                <span className="text-gray-200 text-sm truncate">{file.name}</span>
+              </div>
+              <span className="text-xs text-gray-500 font-mono flex-shrink-0">
+                {(file.data.length / 1024).toFixed(1)} Ko
               </span>
             </button>
           ))}
@@ -130,9 +147,9 @@ export default function ReceiveForm({ transferId }: ReceiveFormProps) {
         <button
           onClick={handleDecrypt}
           disabled={!canSubmit || status === 'downloading' || status === 'decrypting'}
-          className="w-full py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-cyber-700 text-white hover:bg-cyber-500"
+          className="btn-primary"
         >
-          Dechiffrer et telecharger
+          {status === 'downloading' ? 'Téléchargement…' : status === 'decrypting' ? 'Déchiffrement…' : 'Déchiffrer et télécharger'}
         </button>
       )}
     </div>

@@ -10,15 +10,22 @@ export default function ReceiveSection({ transferId }: ReceiveSectionProps) {
   const [expired, setExpired] = useState(false);
 
   return (
-    <>
-      <div className="text-center mb-8">
-        <h2 className="text-3xl font-bold mb-3">Vous avez reçu un fichier sécurisé</h2>
-        <p className="text-gray-400 mb-4">
+    <div className="animate-slide-up space-y-8">
+      <div className="text-center space-y-3">
+        <h2 className="text-4xl font-bold tracking-tight">
+          Fichier <span className="text-gradient">sécurisé</span> reçu
+        </h2>
+        <p className="text-gray-400 max-w-sm mx-auto leading-relaxed">
           Entrez le mot de passe ou importez vos clés pour déchiffrer.
         </p>
         <TransferMeta transferId={transferId} onExpired={() => setExpired(true)} />
       </div>
-      {!expired && <ReceiveForm transferId={transferId} />}
-    </>
+
+      {!expired && (
+        <div className="card p-8">
+          <ReceiveForm transferId={transferId} />
+        </div>
+      )}
+    </div>
   );
 }

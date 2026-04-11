@@ -5,15 +5,24 @@ interface TransferProgressProps {
 
 export default function TransferProgress({ progress, label }: TransferProgressProps) {
   return (
-    <div>
-      <div className="flex justify-between text-sm text-gray-400 mb-1">
-        <span>{label}</span>
-        <span>{Math.round(progress)}%</span>
+    <div className="space-y-2 animate-fade-in">
+      <div className="flex justify-between items-center">
+        <span className="text-sm text-gray-400 flex items-center gap-2">
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-cyber-400 animate-pulse" />
+          {label}
+        </span>
+        <span className="text-sm font-mono text-cyber-400 tabular-nums">
+          {Math.round(progress)}%
+        </span>
       </div>
-      <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
+      <div className="progress-track">
         <div
-          className="h-full bg-cyber-500 transition-all duration-300"
+          className="progress-fill"
           style={{ width: `${progress}%` }}
+          role="progressbar"
+          aria-valuenow={Math.round(progress)}
+          aria-valuemin={0}
+          aria-valuemax={100}
         />
       </div>
     </div>
