@@ -4,7 +4,11 @@
 
 @layer base {
   :root {
-    --cyber-rgb: 6 182 212;
+    --kds-primary:   36 48 94;    /* #24305e */
+    --kds-secondary: 0 86 135;    /* #005687 */
+    --kds-yellow:    248 233 161; /* #f8e9a1 */
+    --kds-red:       247 108 108; /* #f76c6c */
+    --kds-blue:      168 208 230; /* #a8d0e6 */
   }
 
   html {
