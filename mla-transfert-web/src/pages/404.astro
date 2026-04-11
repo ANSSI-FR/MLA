@@ -4,10 +4,14 @@ import Layout from '../layouts/Layout.astro';
 
 <Layout title="MLA-Transfert - Lien invalide ou expiré">
   <div class="flex flex-col items-center justify-center min-h-[60vh] text-center gap-6">
-    <div class="flex items-center justify-center w-16 h-16 rounded-full bg-red-900/40 border border-red-700">
+    <div
+      class="flex items-center justify-center w-16 h-16 rounded-full border"
+      style="background:rgba(247,108,108,0.08);border-color:rgba(247,108,108,0.3)"
+    >
       <svg
         aria-hidden="true"
-        class="w-8 h-8 text-red-400"
+        class="w-8 h-8"
+        style="color:var(--coral)"
         fill="none"
         stroke="currentColor"
         stroke-width="1.5"
@@ -22,8 +26,8 @@ import Layout from '../layouts/Layout.astro';
     </div>
 
     <div class="flex flex-col gap-2">
-      <h2 class="text-3xl font-bold text-gray-100">Lien invalide ou expiré</h2>
-      <p class="text-gray-400 max-w-md">
+      <h2 class="text-3xl font-bold" style="color:var(--text-1)">Lien invalide ou expiré</h2>
+      <p class="max-w-md" style="color:var(--text-2)">
         Ce fichier n'existe plus ou le lien est incorrect. Les transferts expirent automatiquement
         après un certain délai pour protéger vos données.
       </p>
@@ -31,7 +35,10 @@ import Layout from '../layouts/Layout.astro';
 
     <a
       href="/"
-      class="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-cyber-700 hover:bg-cyber-600 text-white font-medium transition-colors"
+      class="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-white font-medium transition-colors"
+      style="background:#24305e"
+      onmouseover="this.style.background='#005687'"
+      onmouseout="this.style.background='#24305e'"
     >
       <svg
         aria-hidden="true"

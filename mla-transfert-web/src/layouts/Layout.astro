@@ -2,71 +2,127 @@
 interface Props {
   title: string;
 }
-
 const { title } = Astro.props;
 ---
 
 <!doctype html>
-<html lang="fr" class="dark">
+<html lang="fr">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Transfert de fichiers chiffré avec cryptographie post-quantique MLA — zero-knowledge" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>{title}</title>
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
   </head>
-  <body class="min-h-screen bg-gray-950 text-gray-100">
-
-    <!-- Ambient background glow -->
-    <div class="fixed inset-0 pointer-events-none" aria-hidden="true">
-      <div class="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] rounded-full blur-[120px]" style="background:rgba(36,48,94,0.35)"></div>
-    </div>
+  <body>
 
     <!-- Header -->
-    <header class="sticky top-0 z-50 border-b border-white/[0.06] bg-gray-950/80 backdrop-blur-md">
-      <!-- Accent line -->
-      <div class="h-px w-full" style="background:linear-gradient(90deg,transparent,#24305e,#005687,#24305e,transparent)"></div>
+    <header
+      style="
+        position: sticky; top: 0; z-index: 50;
+        background: var(--bg-card);
+        border-bottom: 1px solid var(--border);
+        box-shadow: 0 1px 8px rgba(36,48,94,0.06);
+      "
+    >
+      <!-- Top accent line -->
+      <div style="height:3px;background:linear-gradient(90deg,#24305e,#005687,#a8d0e6)"></div>
 
-      <div class="mx-auto max-w-4xl px-6 py-4 flex items-center justify-between">
-        <div class="flex items-center gap-3">
-          <a href="/" class="flex items-center gap-2 group">
-            <span class="text-lg font-bold text-gradient group-hover:opacity-90 transition-opacity">
-              MLA-Transfert
-            </span>
+      <div style="max-width:64rem;margin:0 auto;padding:0 1.5rem;height:60px;display:flex;align-items:center;justify-content:space-between;">
+
+        <div style="display:flex;align-items:center;gap:12px;">
+          <a
+            href="/"
+            style="
+              font-family:'Syne',sans-serif;
+              font-size:1.125rem;
+              font-weight:700;
+              color:#24305e;
+              text-decoration:none;
+              letter-spacing:-0.01em;
+            "
+          >
+            MLA-Transfert
           </a>
-          <span class="hidden sm:inline-flex badge-cyber">
-            <span class="w-1.5 h-1.5 rounded-full bg-cyber-400 animate-pulse"></span>
+          <span class="badge">
+            <span style="width:6px;height:6px;border-radius:50%;background:#005687;display:inline-block;"></span>
             post-quantique
           </span>
         </div>
 
-        <nav class="flex items-center gap-5">
+        <nav style="display:flex;align-items:center;gap:20px;">
+          <!-- Dark mode toggle -->
+          <button
+            id="theme-toggle"
+            title="Basculer le thème"
+            style="
+              background:var(--bg-surface);
+              border:1px solid var(--border);
+              border-radius:8px;
+              width:34px;height:34px;
+              display:flex;align-items:center;justify-content:center;
+              cursor:pointer;color:var(--text-2);
+              transition:all 0.15s;
+            "
+          >
+            <svg id="icon-sun" class="hidden dark:block" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.22 4.22l1.42 1.42m12.72 12.72 1.42 1.42M2 12h2m16 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+            </svg>
+            <svg id="icon-moon" class="block dark:hidden" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+            </svg>
+          </button>
+
           <a
             href="/help"
-            class="text-sm text-gray-400 hover:text-gray-100 transition-colors duration-150"
+            style="font-size:0.875rem;font-weight:500;color:var(--text-2);text-decoration:none;transition:color 0.15s;"
+            onmouseover="this.style.color='var(--text-1)'"
+            onmouseout="this.style.color='var(--text-2)'"
           >
             Aide
           </a>
-          <div class="flex items-center gap-3 pl-5 border-l border-white/[0.06]">
-            <img src="/logo_anssi.webp" alt="ANSSI" class="h-7 opacity-80 hover:opacity-100 transition-opacity" />
-            <img src="/RD_KODETIS-noir.png" alt="Kodetis" class="h-7 invert opacity-70 hover:opacity-90 transition-opacity" />
+
+          <div style="display:flex;align-items:center;gap:12px;padding-left:16px;border-left:1px solid var(--border);">
+            <img src="/logo_anssi.webp" alt="ANSSI" style="height:28px;opacity:0.8;" />
+            <img src="/RD_KODETIS-noir.png" alt="Kodetis" style="height:28px;" class="dark:invert" />
           </div>
         </nav>
+
       </div>
     </header>
 
     <!-- Main -->
-    <main class="relative mx-auto max-w-4xl px-6 py-12">
+    <main style="max-width:64rem;margin:0 auto;padding:3rem 1.5rem;">
       <slot />
     </main>
 
     <!-- Footer -->
-    <footer class="mt-auto border-t border-white/[0.04] py-6">
-      <div class="mx-auto max-w-4xl px-6 flex items-center justify-between text-xs text-gray-600">
-        <span>Chiffrement client-side · Zero-knowledge · Données jamais vues par le serveur</span>
-        <a href="/help#faq" class="hover:text-gray-400 transition-colors">FAQ</a>
-      </div>
+    <footer style="border-top:1px solid var(--border);margin-top:4rem;padding:1.5rem;text-align:center;">
+      <p style="font-size:0.75rem;color:var(--text-3);">
+        Chiffrement client-side · Zero-knowledge · Données jamais vues par le serveur ·
+        <a href="/help#faq" style="color:var(--text-2);text-decoration:none;">FAQ</a>
+      </p>
     </footer>
+
+    <!-- Theme toggle script -->
+    <script is:inline>
+      const html = document.documentElement;
+      const toggle = document.getElementById('theme-toggle');
+      const saved = localStorage.getItem('theme');
+      if (saved === 'dark') html.classList.add('dark');
+
+      toggle.addEventListener('click', () => {
+        html.classList.toggle('dark');
+        localStorage.setItem('theme', html.classList.contains('dark') ? 'dark' : 'light');
+      });
+    </script>
 
   </body>
 </html>
