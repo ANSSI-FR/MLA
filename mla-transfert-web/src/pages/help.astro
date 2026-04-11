@@ -1,0 +1,185 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="MLA-Transfert — Aide">
+  <div class="max-w-2xl mx-auto space-y-12">
+
+    <!-- Header -->
+    <div>
+      <h2 class="text-3xl font-bold text-cyber-500 mb-2">Centre d'aide</h2>
+      <p class="text-gray-400">
+        MLA-Transfert permet d'envoyer des fichiers chiffrés de bout en bout.
+        Le serveur ne voit jamais vos fichiers en clair — tout le chiffrement
+        s'effectue dans votre navigateur.
+      </p>
+    </div>
+
+    <!-- Comment ça marche -->
+    <section class="space-y-6">
+      <h3 class="text-xl font-semibold text-gray-100">Comment ça marche</h3>
+
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-2">
+          <div class="text-cyber-500 font-semibold text-sm uppercase tracking-wide">Expéditeur</div>
+          <ol class="text-gray-300 text-sm space-y-1 list-decimal list-inside">
+            <li>Sélectionner un ou plusieurs fichiers</li>
+            <li>Choisir un mode : mot de passe ou clés MLA</li>
+            <li>Définir la durée d'expiration</li>
+            <li>Cliquer sur <span class="text-cyber-400">Chiffrer et envoyer</span></li>
+            <li>Copier le lien généré et le transmettre au destinataire</li>
+          </ol>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-2">
+          <div class="text-cyber-500 font-semibold text-sm uppercase tracking-wide">Destinataire</div>
+          <ol class="text-gray-300 text-sm space-y-1 list-decimal list-inside">
+            <li>Ouvrir le lien reçu</li>
+            <li>Saisir le mot de passe (ou importer sa clé privée)</li>
+            <li>Cliquer sur <span class="text-cyber-400">Déchiffrer et télécharger</span></li>
+            <li>Télécharger les fichiers déchiffrés</li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <!-- Modes -->
+    <section class="space-y-4">
+      <h3 class="text-xl font-semibold text-gray-100">Modes de chiffrement</h3>
+      <div class="space-y-3">
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+          <div class="font-medium text-gray-100 mb-1">Mode simple — Mot de passe</div>
+          <p class="text-gray-400 text-sm">
+            L'expéditeur et le destinataire partagent un même mot de passe (minimum 12 caractères).
+            Idéal pour un usage ponctuel entre deux personnes qui peuvent se transmettre le mot
+            de passe par un canal sécurisé (message chiffré, appel téléphonique…).
+          </p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+          <div class="font-medium text-gray-100 mb-1">Mode avancé — Clés MLA</div>
+          <p class="text-gray-400 text-sm">
+            Chaque utilisateur dispose d'une paire de clés asymétriques (clé privée
+            <code class="text-cyber-400">.mlapriv</code> + clé publique
+            <code class="text-cyber-400">.mlapub</code>). L'expéditeur chiffre avec la clé
+            publique du destinataire et signe avec sa propre clé privée. Authentification
+            garantie, aucun secret partagé à transmettre.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="space-y-4" id="faq">
+      <h3 class="text-xl font-semibold text-gray-100">Questions fréquentes</h3>
+
+      <div class="space-y-3" id="faq-list">
+
+        <details class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden group">
+          <summary class="flex items-center justify-between px-5 py-4 cursor-pointer text-gray-100 font-medium select-none list-none">
+            Le serveur peut-il lire mes fichiers ?
+            <span class="text-gray-500 group-open:rotate-180 transition-transform">↓</span>
+          </summary>
+          <p class="px-5 pb-4 text-gray-400 text-sm">
+            Non. Le chiffrement s'effectue intégralement dans votre navigateur avant tout envoi.
+            Le serveur ne reçoit que des données chiffrées opaques — il n'a accès ni au mot de
+            passe, ni aux clés, ni au contenu en clair. C'est ce qu'on appelle une architecture
+            <strong class="text-gray-300">zero-knowledge</strong>.
+          </p>
+        </details>
+
+        <details class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden group">
+          <summary class="flex items-center justify-between px-5 py-4 cursor-pointer text-gray-100 font-medium select-none list-none">
+            Quelle est la taille maximale des fichiers ?
+            <span class="text-gray-500 group-open:rotate-180 transition-transform">↓</span>
+          </summary>
+          <p class="px-5 pb-4 text-gray-400 text-sm">
+            La limite est de <strong class="text-gray-300">100 Mo par transfert</strong>.
+            Vous pouvez inclure plusieurs fichiers dans un même transfert tant que la taille
+            totale ne dépasse pas cette limite.
+          </p>
+        </details>
+
+        <details class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden group">
+          <summary class="flex items-center justify-between px-5 py-4 cursor-pointer text-gray-100 font-medium select-none list-none">
+            Combien de temps le lien reste-t-il valide ?
+            <span class="text-gray-500 group-open:rotate-180 transition-transform">↓</span>
+          </summary>
+          <p class="px-5 pb-4 text-gray-400 text-sm">
+            Vous choisissez la durée à l'envoi : <strong class="text-gray-300">1 heure</strong>,
+            <strong class="text-gray-300">24 heures</strong> ou
+            <strong class="text-gray-300">7 jours</strong>. Passé ce délai, les fichiers sont
+            supprimés automatiquement du serveur et le lien devient invalide.
+          </p>
+        </details>
+
+        <details class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden group">
+          <summary class="flex items-center justify-between px-5 py-4 cursor-pointer text-gray-100 font-medium select-none list-none">
+            Le lien a expiré, que faire ?
+            <span class="text-gray-500 group-open:rotate-180 transition-transform">↓</span>
+          </summary>
+          <p class="px-5 pb-4 text-gray-400 text-sm">
+            Une fois expiré, les fichiers sont définitivement supprimés et ne peuvent pas être
+            récupérés. L'expéditeur doit effectuer un nouveau transfert.
+          </p>
+        </details>
+
+        <details class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden group">
+          <summary class="flex items-center justify-between px-5 py-4 cursor-pointer text-gray-100 font-medium select-none list-none">
+            Comment générer une paire de clés MLA ?
+            <span class="text-gray-500 group-open:rotate-180 transition-transform">↓</span>
+          </summary>
+          <p class="px-5 pb-4 text-gray-400 text-sm">
+            Sur la page d'envoi, en mode avancé, cliquez sur
+            <strong class="text-gray-300">Générer une paire de clés</strong>. Deux fichiers
+            seront téléchargés : votre clé privée (<code class="text-cyber-400">.mlapriv</code>)
+            à conserver secrète, et votre clé publique (<code class="text-cyber-400">.mlapub</code>)
+            à partager avec vos correspondants. Ne transmettez jamais votre clé privée.
+          </p>
+        </details>
+
+        <details class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden group">
+          <summary class="flex items-center justify-between px-5 py-4 cursor-pointer text-gray-100 font-medium select-none list-none">
+            Quelle cryptographie est utilisée ?
+            <span class="text-gray-500 group-open:rotate-180 transition-transform">↓</span>
+          </summary>
+          <p class="px-5 pb-4 text-gray-400 text-sm">
+            MLA-Transfert repose sur le format d'archive
+            <strong class="text-gray-300">MLA</strong> développé par l'ANSSI, qui utilise une
+            cryptographie hybride post-quantique :
+          </p>
+          <ul class="px-5 pb-4 text-gray-400 text-sm space-y-1 list-disc list-inside">
+            <li>Chiffrement : <strong class="text-gray-300">X25519 + ML-KEM 1024</strong> (résistant aux ordinateurs quantiques)</li>
+            <li>Signature : <strong class="text-gray-300">Ed25519 + ML-DSA 87</strong></li>
+            <li>Symétrique : <strong class="text-gray-300">AES-256-GCM</strong></li>
+            <li>KDF (mode mot de passe) : <strong class="text-gray-300">Argon2id</strong></li>
+          </ul>
+        </details>
+
+        <details class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden group">
+          <summary class="flex items-center justify-between px-5 py-4 cursor-pointer text-gray-100 font-medium select-none list-none">
+            Le lien de partage est-il secret ?
+            <span class="text-gray-500 group-open:rotate-180 transition-transform">↓</span>
+          </summary>
+          <p class="px-5 pb-4 text-gray-400 text-sm">
+            Le lien identifie le transfert sur le serveur mais ne contient pas de clé de
+            déchiffrement. Sans le mot de passe ou la clé privée correspondante, les fichiers
+            restent inaccessibles même avec le lien. Transmettez le lien et le secret par des
+            canaux distincts pour une sécurité maximale.
+          </p>
+        </details>
+
+      </div>
+    </section>
+
+    <!-- Lien retour -->
+    <div>
+      <a href="/" class="inline-flex items-center gap-2 text-cyber-400 hover:text-cyber-300 text-sm transition-colors">
+        ← Retour à l'accueil
+      </a>
+    </div>
+
+  </div>
+</Layout>
+
+<style>
+  details > summary::-webkit-details-marker { display: none; }
+</style>

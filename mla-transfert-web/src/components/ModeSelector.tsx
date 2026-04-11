@@ -5,26 +5,22 @@ interface ModeSelectorProps {
 
 export default function ModeSelector({ mode, onModeChange }: ModeSelectorProps) {
   return (
-    <div className="flex rounded-lg overflow-hidden border border-gray-700">
+    <div className="mode-toggle" role="group" aria-label="Mode de chiffrement">
       <button
+        type="button"
         onClick={() => onModeChange('simple')}
-        className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
-          mode === 'simple'
-            ? 'bg-cyber-700 text-white'
-            : 'bg-gray-800 text-gray-400 hover:text-gray-200'
-        }`}
+        className={`mode-toggle-btn ${mode === 'simple' ? 'mode-toggle-btn-active' : 'mode-toggle-btn-inactive'}`}
+        aria-pressed={mode === 'simple'}
       >
         Mot de passe
       </button>
       <button
+        type="button"
         onClick={() => onModeChange('advanced')}
-        className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
-          mode === 'advanced'
-            ? 'bg-cyber-700 text-white'
-            : 'bg-gray-800 text-gray-400 hover:text-gray-200'
-        }`}
+        className={`mode-toggle-btn ${mode === 'advanced' ? 'mode-toggle-btn-active' : 'mode-toggle-btn-inactive'}`}
+        aria-pressed={mode === 'advanced'}
       >
-        Cles MLA
+        Clés MLA
       </button>
     </div>
   );

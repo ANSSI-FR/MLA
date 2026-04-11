@@ -122,15 +122,18 @@ export default function SendForm() {
         </div>
       )}
 
-      <select
-        value={expiresHours}
-        onChange={(e) => setExpiresHours(Number(e.target.value))}
-        className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 text-sm"
-      >
-        <option value={1}>1 heure</option>
-        <option value={24}>24 heures</option>
-        <option value={168}>7 jours</option>
-      </select>
+      <div>
+        <label className="section-label block mb-2">Expiration</label>
+        <select
+          value={expiresHours}
+          onChange={(e) => setExpiresHours(Number(e.target.value))}
+          className="input-field text-sm"
+        >
+          <option value={1}>1 heure</option>
+          <option value={24}>24 heures</option>
+          <option value={168}>7 jours</option>
+        </select>
+      </div>
 
       {status !== 'idle' && status !== 'done' && status !== 'error' && (
         <TransferProgress
@@ -140,26 +143,25 @@ export default function SendForm() {
       )}
 
       {error && (
-        <p className="text-red-500 text-sm">{error}</p>
+        <p className="text-red-400 text-sm flex items-center gap-2 animate-fade-in" role="alert">
+          <svg aria-hidden="true" className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+          </svg>
+          {error}
+        </p>
       )}
 
       {status === 'done' && shareLink && (
         <>
           <ShareLink link={shareLink} autoCopied />
-          <button
-            onClick={handleReset}
-            className="w-full py-3 rounded-lg font-medium transition-colors bg-gray-800 text-gray-200 hover:bg-gray-700"
-          >
+          <button onClick={handleReset} className="btn-secondary">
             Nouveau transfert
           </button>
         </>
       )}
 
       {status === 'error' && (
-        <button
-          onClick={handleReset}
-          className="w-full py-3 rounded-lg font-medium transition-colors bg-gray-800 text-gray-200 hover:bg-gray-700"
-        >
+        <button onClick={handleReset} className="btn-secondary">
           Recommencer
         </button>
       )}
@@ -168,9 +170,9 @@ export default function SendForm() {
         <button
           onClick={handleSubmit}
           disabled={!canSubmit || status === 'encrypting' || status === 'uploading'}
-          className="w-full py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-cyber-700 text-white hover:bg-cyber-500"
+          className="btn-primary"
         >
-          Chiffrer et envoyer
+          {status === 'encrypting' ? 'Chiffrement…' : status === 'uploading' ? 'Envoi…' : 'Chiffrer et envoyer'}
         </button>
       )}
     </div>

@@ -1,3 +1,125 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    --cyber-rgb: 6 182 212;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply antialiased bg-gray-950 text-gray-100;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar        { width: 5px; }
+  ::-webkit-scrollbar-track  { @apply bg-gray-950; }
+  ::-webkit-scrollbar-thumb  { @apply bg-gray-700 rounded-full; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-gray-600; }
+
+  /* Focus ring global */
+  :focus-visible {
+    @apply outline-none ring-2 ring-cyber-500/70 ring-offset-2 ring-offset-gray-950;
+  }
+
+  /* Supprime le marqueur natif des <details> */
+  details > summary { list-style: none; }
+  details > summary::-webkit-details-marker { display: none; }
+}
+
+@layer components {
+  /* --- Cards --- */
+  .card {
+    @apply rounded-2xl border border-white/[0.06] bg-white/[0.03] backdrop-blur-sm shadow-card;
+  }
+  .card-hover {
+    @apply card transition-all duration-200
+           hover:border-white/10 hover:bg-white/[0.05] hover:shadow-glow-xs;
+  }
+
+  /* --- Buttons --- */
+  .btn-primary {
+    @apply relative w-full py-3 px-6 rounded-xl font-semibold text-white
+           bg-gradient-to-r from-cyber-700 to-cyber-600
+           hover:from-cyber-600 hover:to-cyber-500
+           shadow-glow-xs hover:shadow-glow-sm
+           transition-all duration-200
+           disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:from-cyber-900 disabled:to-cyber-900;
+  }
+  .btn-secondary {
+    @apply w-full py-3 px-6 rounded-xl font-medium
+           bg-gray-800/80 text-gray-300
+           hover:bg-gray-700/80 hover:text-white
+           border border-white/[0.06] hover:border-white/10
+           transition-all duration-200;
+  }
+
+  /* --- Inputs --- */
+  .input-field {
+    @apply w-full px-4 py-3 rounded-xl
+           bg-gray-900/80 border border-white/[0.08]
+           text-gray-100 placeholder-gray-600
+           focus:border-cyber-600 focus:ring-1 focus:ring-cyber-600/50
+           transition-colors duration-200;
+  }
+
+  /* --- Labels / badges --- */
+  .section-label {
+    @apply text-[11px] font-semibold uppercase tracking-widest text-gray-500;
+  }
+  .badge-cyber {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full
+           bg-cyber-950/60 border border-cyber-800/50
+           text-cyber-400 text-xs font-medium;
+  }
+
+  /* --- Progress bar --- */
+  .progress-track {
+    @apply h-1.5 w-full rounded-full bg-gray-800/80 overflow-hidden;
+  }
+  .progress-fill {
+    @apply h-full rounded-full
+           bg-gradient-to-r from-cyber-700 via-cyber-500 to-cyber-400
+           shadow-glow-xs transition-all duration-500 ease-out;
+  }
+
+  /* --- Drop zone --- */
+  .drop-zone {
+    @apply rounded-2xl border-2 border-dashed border-gray-700/60
+           bg-gray-900/30 backdrop-blur-sm
+           transition-all duration-200
+           hover:border-cyber-700/60 hover:bg-cyber-950/10;
+  }
+  .drop-zone-active {
+    @apply border-cyber-500/70 bg-cyber-950/20 shadow-glow-sm;
+  }
+
+  /* --- Mode toggle --- */
+  .mode-toggle {
+    @apply relative flex rounded-xl p-1 bg-gray-900/60 border border-white/[0.06];
+  }
+  .mode-toggle-btn {
+    @apply relative flex-1 py-2 px-4 text-sm font-medium rounded-lg
+           transition-all duration-200 z-10;
+  }
+  .mode-toggle-btn-active {
+    @apply bg-cyber-700/80 text-white shadow-glow-xs;
+  }
+  .mode-toggle-btn-inactive {
+    @apply text-gray-400 hover:text-gray-200;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-gradient-to-r from-cyber-400 to-cyber-300 bg-clip-text text-transparent;
+  }
+  .border-gradient {
+    border-image: linear-gradient(135deg, theme('colors.cyber.700'), transparent) 1;
+  }
+}
