@@ -65,13 +65,35 @@ export default function ReceiveForm({ transferId }: ReceiveFormProps) {
   };
 
   const downloadDecryptedFile = (file: FileEntry) => {
-    const blob = new Blob([file.data]);
+    const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+    const mimeMap: Record<string, string> = {
+      pdf: 'application/pdf',
+      png: 'image/png',
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      gif: 'image/gif',
+      webp: 'image/webp',
+      svg: 'image/svg+xml',
+      txt: 'text/plain',
+      md: 'text/markdown',
+      json: 'application/json',
+      zip: 'application/zip',
+      gz: 'application/gzip',
+      mp4: 'video/mp4',
+      mp3: 'audio/mpeg',
+      docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    };
+    const mime = mimeMap[ext] ?? 'application/octet-stream';
+    const blob = new Blob([file.data], { type: mime });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
     link.download = file.name;
+    document.body.appendChild(link);
     link.click();
-    URL.revokeObjectURL(url);
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   return (

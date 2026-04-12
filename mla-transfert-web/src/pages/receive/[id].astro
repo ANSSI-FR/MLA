@@ -1,10 +1,8 @@
 ---
+export const prerender = false;
+
 import Layout from '../../layouts/Layout.astro';
 import ReceiveSection from '../../components/ReceiveSection';
-
-export function getStaticPaths() {
-  return [];
-}
 
 const { id } = Astro.params;
 ---

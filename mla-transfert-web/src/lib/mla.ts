@@ -44,8 +44,11 @@ export async function decryptWithPassword(
   password: string,
 ): Promise<FileEntry[]> {
   await initMla();
-  const entries: [string, Uint8Array][] = decrypt_with_password(mlaData, password);
-  return entries.map(([name, data]) => ({ name, data }));
+  // serde_wasm_bindgen sérialise Vec<u8> en Array<number> JS, pas en Uint8Array.
+  // La conversion explicite est obligatoire sinon new Blob([data]) corrompt le fichier
+  // en stringifiant l'array ("72,101,108,...").
+  const entries = decrypt_with_password(mlaData, password) as [string, number[]][];
+  return entries.map(([name, data]) => ({ name, data: new Uint8Array(data) }));
 }
 
 export async function encryptWithKeys(
@@ -65,10 +68,10 @@ export async function decryptWithKeys(
   senderPublicKey: Uint8Array,
 ): Promise<FileEntry[]> {
   await initMla();
-  const entries: [string, Uint8Array][] = decrypt_with_keys(
+  const entries = decrypt_with_keys(
     mlaData,
     receiverPrivateKey,
     senderPublicKey,
-  );
-  return entries.map(([name, data]) => ({ name, data }));
+  ) as [string, number[]][];
+  return entries.map(([name, data]) => ({ name, data: new Uint8Array(data) }));
 }
