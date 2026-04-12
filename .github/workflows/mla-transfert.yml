@@ -1,0 +1,198 @@
+name: MLA-Transfert CI
+
+permissions: {}
+
+on:
+  push:
+    branches: [ main, feat/mla-wasm ]
+    paths:
+      - 'mla-wasm/**'
+      - 'mla-transfert-server/**'
+      - 'mla-transfert-web/**'
+      - '.github/workflows/mla-transfert.yml'
+  pull_request:
+    paths:
+      - 'mla-wasm/**'
+      - 'mla-transfert-server/**'
+      - 'mla-transfert-web/**'
+      - '.github/workflows/mla-transfert.yml'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ── Build & test WASM ─────────────────────────────────────────────────────────
+  build-wasm:
+    name: Build mla-wasm
+    runs-on: ubuntu-24.04
+    container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Cache Rust build
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/
+          key: wasm-${{ hashFiles('mla-wasm/Cargo.toml', 'Cargo.lock') }}
+          restore-keys: wasm-
+
+      - name: Build WASM package
+        run: wasm-pack build mla-wasm --target web --out-dir pkg
+
+      - name: Verify TypeScript bindings generated
+        run: |
+          test -f mla-wasm/pkg/mla_wasm.d.ts
+          grep -q "generate_keypair" mla-wasm/pkg/mla_wasm.d.ts
+          grep -q "encrypt_with_password" mla-wasm/pkg/mla_wasm.d.ts
+          grep -q "decrypt_with_password" mla-wasm/pkg/mla_wasm.d.ts
+          grep -q "encrypt_with_keys" mla-wasm/pkg/mla_wasm.d.ts
+          grep -q "decrypt_with_keys" mla-wasm/pkg/mla_wasm.d.ts
+
+      - name: Upload WASM artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: mla-wasm-pkg
+          path: mla-wasm/pkg/
+          retention-days: 7
+
+  # ── Test serveur Rust ─────────────────────────────────────────────────────────
+  test-server:
+    name: Test mla-transfert-server
+    runs-on: ubuntu-24.04
+    container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Cache Rust build
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/
+          key: server-${{ hashFiles('mla-transfert-server/Cargo.toml', 'Cargo.lock') }}
+          restore-keys: server-
+
+      - name: Run tests
+        env:
+          RUSTFLAGS: -D warnings
+        run: cargo test -p mla-transfert-server --release
+
+  # ── Lint (clippy + fmt) ───────────────────────────────────────────────────────
+  lint-transfert:
+    name: Lint mla-transfert crates
+    runs-on: ubuntu-24.04
+    container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install clippy & rustfmt
+        run: rustup component add clippy rustfmt
+
+      - name: Install wasm-pack (needed for clippy on mla-wasm)
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Clippy — server
+        run: cargo clippy -p mla-transfert-server -- -D warnings
+
+      - name: Clippy — mla-wasm (native target)
+        run: cargo clippy -p mla-wasm -- -D warnings
+
+      - name: Format check
+        run: cargo fmt -p mla-transfert-server -p mla-wasm -- --check
+
+  # ── Build frontend ────────────────────────────────────────────────────────────
+  build-web:
+    name: Build mla-transfert-web
+    runs-on: ubuntu-24.04
+    needs: build-wasm
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e # v4.3.0
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: mla-transfert-web/package-lock.json
+
+      - name: Download WASM artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: mla-wasm-pkg
+          path: mla-wasm/pkg/
+
+      - name: Copy WASM binary to public
+        run: cp mla-wasm/pkg/mla_wasm_bg.wasm mla-transfert-web/public/
+
+      - name: Install dependencies
+        working-directory: mla-transfert-web
+        run: npm ci
+
+      - name: Build
+        working-directory: mla-transfert-web
+        env:
+          # PUBLIC_API_URL doit être défini en secret/variable dans les settings GitHub
+          # pour pointer vers le serveur de prod (ex: https://transfert.kodetis.re)
+          PUBLIC_API_URL: ${{ vars.PUBLIC_API_URL }}
+        run: npm run build
+
+      - name: Upload web artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: mla-transfert-web-dist
+          path: mla-transfert-web/dist/
+          retention-days: 7
+
+  # ── Docker image (main uniquement) ────────────────────────────────────────────
+  docker:
+    name: Build Docker image
+    runs-on: ubuntu-24.04
+    needs: [ test-server, lint-transfert ]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@b5730508522e5204c3f3e4f80f8e941c1ef0e14a # v3.10.0
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@902fa8ec7d6ecbea8a63cd2bb1cff68b02fa48a9 # v5.7.0
+        with:
+          images: ghcr.io/${{ github.repository }}/mla-transfert-server
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest
+
+      - name: Build and push
+        uses: docker/build-push-action@14487ce63c7a62a4a324b0bfb37086795e31c6c1 # v6.16.0
+        with:
+          context: .
+          file: mla-transfert-server/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -1,0 +1,138 @@
+---
+import '../styles/global.css';
+
+interface Props {
+  title: string;
+}
+const { title } = Astro.props;
+---
+
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Transfert de fichiers chiffré avec cryptographie post-quantique MLA — zero-knowledge" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <title>{title}</title>
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Roboto:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+
+    <!-- Header -->
+    <header
+      style="
+        position: sticky; top: 0; z-index: 50;
+        background: var(--bg-card);
+        border-bottom: 1px solid var(--border);
+        box-shadow: 0 1px 8px rgba(36,48,94,0.06);
+      "
+    >
+      <!-- Top accent line -->
+      <div style="height:3px;background:linear-gradient(90deg,#24305e,#005687,#a8d0e6)"></div>
+
+      <div style="max-width:64rem;margin:0 auto;padding:0 1.5rem;height:60px;display:flex;align-items:center;justify-content:space-between;">
+
+        <a href="/" style="display:flex;align-items:center;text-decoration:none;">
+          <img src="/RD_KODETIS-noir.png" alt="Kodetis Recherche & Développement" style="height:44px;" class="dark:invert" />
+        </a>
+
+        <nav style="display:flex;align-items:center;gap:20px;">
+          <!-- Dark mode toggle -->
+          <button
+            id="theme-toggle"
+            title="Basculer le thème"
+            style="
+              background:var(--bg-surface);
+              border:1px solid var(--border);
+              border-radius:8px;
+              width:34px;height:34px;
+              display:flex;align-items:center;justify-content:center;
+              cursor:pointer;color:var(--text-2);
+              transition:all 0.15s;
+            "
+          >
+            <svg id="icon-sun" class="hidden dark:block" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.22 4.22l1.42 1.42m12.72 12.72 1.42 1.42M2 12h2m16 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+            </svg>
+            <svg id="icon-moon" class="block dark:hidden" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+            </svg>
+          </button>
+
+          <a
+            href="/help"
+            style="font-size:0.875rem;font-weight:500;color:var(--text-2);text-decoration:none;transition:color 0.15s;"
+            onmouseover="this.style.color='var(--text-1)'"
+            onmouseout="this.style.color='var(--text-2)'"
+          >
+            Aide
+          </a>
+
+        </nav>
+
+      </div>
+    </header>
+
+    <!-- Main -->
+    <main style="max-width:64rem;margin:0 auto;padding:3rem 1.5rem;">
+      <slot />
+    </main>
+
+    <!-- Footer -->
+    <footer style="border-top:1px solid var(--border);margin-top:4rem;padding:2rem 1.5rem;">
+      <div style="max-width:64rem;margin:0 auto;display:flex;flex-direction:column;align-items:center;gap:1rem;">
+
+        <!-- ANSSI fork mention -->
+        <div style="display:flex;align-items:center;gap:10px;">
+          <img src="/logo_anssi.webp" alt="ANSSI" style="height:48px;" />
+          <span style="font-size:0.8125rem;color:var(--text-3);">
+            Fork du projet
+            <a
+              href="https://github.com/ANSSI-FR/MLA/"
+              target="_blank"
+              rel="noopener noreferrer"
+              style="color:var(--accent);text-decoration:none;font-weight:500;"
+              onmouseover="this.style.textDecoration='underline'"
+              onmouseout="this.style.textDecoration='none'"
+            >github.com/ANSSI-FR/MLA</a>
+            de l'ANSSI
+          </span>
+        </div>
+
+        <!-- Built by -->
+        <a href="https://kodetis.re" target="_blank" rel="noopener noreferrer" style="display:flex;align-items:center;gap:10px;text-decoration:none;">
+          <span style="font-size:0.75rem;color:var(--text-3);">Built by</span>
+          <img src="/Logo_KODETIS.png" alt="Kodetis" style="height:22px;" class="dark:invert" />
+        </a>
+
+        <!-- Links -->
+        <p style="font-size:0.75rem;color:var(--text-3);">
+          <a href="/help#faq" style="color:var(--text-2);text-decoration:none;">FAQ</a> ·
+          <a href="/about" style="color:var(--text-2);text-decoration:none;">À propos</a>
+        </p>
+
+      </div>
+    </footer>
+
+    <!-- Theme toggle script -->
+    <script is:inline>
+      const html = document.documentElement;
+      const toggle = document.getElementById('theme-toggle');
+      const saved = localStorage.getItem('theme');
+      if (saved === 'dark') html.classList.add('dark');
+
+      toggle.addEventListener('click', () => {
+        html.classList.toggle('dark');
+        localStorage.setItem('theme', html.classList.contains('dark') ? 'dark' : 'light');
+      });
+    </script>
+
+  </body>
+</html>

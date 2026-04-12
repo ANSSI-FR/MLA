@@ -1,0 +1,12 @@
+---
+export const prerender = false;
+
+import Layout from '../../layouts/Layout.astro';
+import ReceiveSection from '../../components/ReceiveSection';
+
+const { id } = Astro.params;
+---
+
+<Layout title="MLA-Transfert - Réception">
+  <ReceiveSection client:load transferId={id!} />
+</Layout>

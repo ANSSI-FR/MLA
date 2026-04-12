@@ -1,0 +1,21 @@
+[package]
+name = "mla-transfert-server"
+version = "0.1.0"
+edition = "2024"
+license = "LGPL-3.0-only"
+description = "Zero-knowledge relay server for MLA-Transfert"
+publish = false
+
+[dependencies]
+axum = { version = "0.8", features = ["ws", "multipart"] }
+tokio = { version = "1", features = ["full"] }
+tower-http = { version = "0.6", features = ["cors"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+futures-util = "0.3"
+
+[lints]
+workspace = true

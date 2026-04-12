@@ -1,0 +1,25 @@
+---
+import Layout from '../layouts/Layout.astro';
+import SendForm from '../components/SendForm';
+---
+
+<Layout title="MLA-Transfert — Envoi sécurisé">
+  <div class="animate-slide-up space-y-10">
+
+    <!-- Hero -->
+    <div class="text-center space-y-4">
+      <h2 class="text-4xl font-bold tracking-tight">
+        <span style="color:var(--coral)">Partagez ce que vous ne pouvez pas vous permettre d'exposer.</span>
+      </h2>
+      <p class="max-w-lg mx-auto leading-relaxed" style="color:var(--text-2)">
+        Le serveur ne voit jamais vos données — c'est une garantie cryptographique, pas une promesse marketing.
+      </p>
+    </div>
+
+    <!-- Form card -->
+    <div class="card p-8 animate-slide-up" style="animation-delay:0.05s">
+      <SendForm client:load />
+    </div>
+
+  </div>
+</Layout>

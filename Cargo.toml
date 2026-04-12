@@ -5,6 +5,8 @@ members = [
     "mlar",
     "mlar/mlar-upgrader",
     "bindings/C",
+    "mla-wasm",
+    "mla-transfert-server",
 ]
 resolver = "3"
 
