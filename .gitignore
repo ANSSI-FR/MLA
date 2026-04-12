@@ -11,6 +11,7 @@ toto.md
 # mdbook
 index.html
 doc/book/mla-wasm/pkg/
+docs/*
 *.mlapub
 *.mlapriv
 todo.md

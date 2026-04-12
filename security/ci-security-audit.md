@@ -229,13 +229,6 @@
 
 ---
 
-### [LOW] CI3 — Pas de scan secrets (gitleaks)
-- **Location :** pipeline CI
-- **Description :** Aucun secret scanning. Une clé API commitée par erreur ne serait pas détectée.
-- **Fix :** Step `gitleaks_scan()` dans Dagger + hook pre-commit local.
-
----
-
 ## Points positifs — inchangés
 
 - **Argon2id** correctement paramétré (m=64 MiB, t=3, p=4) — ANSSI/OWASP conforme
@@ -265,7 +258,6 @@
 
 **Priorité 3 (hardening)**
 - [ ] **L5** — STUN configurable (`PUBLIC_STUN_URL`) + option self-hosted coturn
-- [ ] **CI3** — Step gitleaks dans CI + hook pre-commit
 
 ---
 
