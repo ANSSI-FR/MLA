@@ -6,9 +6,8 @@ Steps:
   3. rust_test     — cargo test (mla-wasm + mla-transfert-server)
   4. rust_audit    — cargo audit (CVE scan Rust deps)
   5. wasm_build    — wasm-pack build mla-wasm
-  6. web_install   — npm ci (mla-transfert-web)
-  7. web_build     — astro build
-  8. npm_audit     — npm audit (CVE scan Node deps)
+  6. web_build     — npm ci + astro build (wasm pkg injected)
+  7. npm_audit     — npm audit --audit-level=high
 
 Run everything:  dagger call ci --src .
 Run one step:    dagger call rust-fmt --src .
@@ -17,16 +16,13 @@ Run one step:    dagger call rust-fmt --src .
 import dagger
 from dagger import dag, function, object_type
 
-# Rust toolchain image — matches hardened Kodetis CI image convention
 RUST_IMAGE = "rust:1-slim-bookworm"
-# wasm-pack needs a slightly fuller environment
 WASM_IMAGE = "rust:1-slim-bookworm"
-# Node for the Astro frontend
 NODE_IMAGE = "node:22-slim"
 
 
 def rust_base(src: dagger.Directory) -> dagger.Container:
-    """Shared Rust container: source mounted, cargo cache warm."""
+    """Shared Rust container: source mounted, Cargo cache warm."""
     return (
         dag.container()
         .from_(RUST_IMAGE)
@@ -48,6 +44,40 @@ def rust_base(src: dagger.Directory) -> dagger.Container:
 
 @object_type
 class Mla:
+
+    # ------------------------------------------------------------------ #
+    # Internal helper — returns the built pkg/ dir (lazy, not async)      #
+    # ------------------------------------------------------------------ #
+    def _wasm_pkg(self, src: dagger.Directory) -> dagger.Directory:
+        """Build mla-wasm with wasm-pack and return the pkg/ output directory.
+
+        This is a lazy Dagger pipeline — no build happens until the Directory
+        is actually consumed (e.g. mounted into a Node container for npm ci).
+        """
+        return (
+            dag.container()
+            .from_(WASM_IMAGE)
+            .with_exec(["apt-get", "update", "-qq"])
+            .with_exec(
+                [
+                    "apt-get", "install", "-y", "--no-install-recommends",
+                    "curl", "pkg-config", "libssl-dev",
+                ]
+            )
+            .with_exec(
+                [
+                    "sh", "-c",
+                    "curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh",
+                ]
+            )
+            .with_exec(["rustup", "target", "add", "wasm32-unknown-unknown"])
+            .with_mounted_cache("/root/.cargo/registry", dag.cache_volume("cargo-registry"))
+            .with_mounted_cache("/root/.cargo/git", dag.cache_volume("cargo-git"))
+            .with_mounted_directory("/src", src)
+            .with_workdir("/src/mla-wasm")
+            .with_exec(["wasm-pack", "build", "--target", "web", "--release"])
+            .directory("/src/mla-wasm/pkg")
+        )
 
     # ------------------------------------------------------------------ #
     # Step 1 — cargo fmt                                                   #
@@ -115,63 +145,27 @@ class Mla:
         )
 
     # ------------------------------------------------------------------ #
-    # Step 5 — wasm-pack build                                             #
+    # Step 5 — wasm-pack build (public step, returns log output)          #
     # ------------------------------------------------------------------ #
     @function
     async def wasm_build(self, src: dagger.Directory) -> str:
         """Compile mla-wasm to WebAssembly with wasm-pack."""
-        return await (
-            dag.container()
-            .from_(WASM_IMAGE)
-            .with_exec(["apt-get", "update", "-qq"])
-            .with_exec(
-                [
-                    "apt-get", "install", "-y", "--no-install-recommends",
-                    "curl", "pkg-config", "libssl-dev",
-                ]
-            )
-            .with_exec(
-                [
-                    "sh", "-c",
-                    "curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh",
-                ]
-            )
-            .with_exec(["rustup", "target", "add", "wasm32-unknown-unknown"])
-            .with_mounted_cache("/root/.cargo/registry", dag.cache_volume("cargo-registry"))
-            .with_mounted_cache("/root/.cargo/git", dag.cache_volume("cargo-git"))
-            .with_mounted_directory("/src", src)
-            .with_workdir("/src/mla-wasm")
-            .with_exec(["wasm-pack", "build", "--target", "web", "--release"])
-            .stdout()
-        )
+        entries = await self._wasm_pkg(src).entries()
+        return "pkg/ built successfully: " + ", ".join(entries)
 
     # ------------------------------------------------------------------ #
-    # Step 6 — npm ci                                                      #
-    # ------------------------------------------------------------------ #
-    @function
-    async def web_install(self, src: dagger.Directory) -> str:
-        """Install frontend dependencies with npm ci."""
-        return await (
-            dag.container()
-            .from_(NODE_IMAGE)
-            .with_mounted_cache("/root/.npm", dag.cache_volume("npm-cache"))
-            .with_mounted_directory("/src", src)
-            .with_workdir("/src/mla-transfert-web")
-            .with_exec(["npm", "ci"])
-            .stdout()
-        )
-
-    # ------------------------------------------------------------------ #
-    # Step 7 — astro build                                                 #
+    # Step 6 — npm ci + astro build                                        #
     # ------------------------------------------------------------------ #
     @function
     async def web_build(self, src: dagger.Directory) -> str:
-        """Build the Astro frontend."""
+        """Build the Astro frontend (wasm compiled first, then npm ci + astro build)."""
+        wasm_pkg = self._wasm_pkg(src)
         return await (
             dag.container()
             .from_(NODE_IMAGE)
             .with_mounted_cache("/root/.npm", dag.cache_volume("npm-cache"))
             .with_mounted_directory("/src", src)
+            .with_mounted_directory("/src/mla-wasm/pkg", wasm_pkg)
             .with_workdir("/src/mla-transfert-web")
             .with_exec(["npm", "ci"])
             .with_exec(["npm", "run", "build"])
@@ -179,16 +173,18 @@ class Mla:
         )
 
     # ------------------------------------------------------------------ #
-    # Step 8 — npm audit                                                   #
+    # Step 7 — npm audit                                                   #
     # ------------------------------------------------------------------ #
     @function
     async def npm_audit(self, src: dagger.Directory) -> str:
-        """Scan Node dependencies for known CVEs with npm audit."""
+        """Scan Node dependencies for known CVEs (high+critical only)."""
+        wasm_pkg = self._wasm_pkg(src)
         return await (
             dag.container()
             .from_(NODE_IMAGE)
             .with_mounted_cache("/root/.npm", dag.cache_volume("npm-cache"))
             .with_mounted_directory("/src", src)
+            .with_mounted_directory("/src/mla-wasm/pkg", wasm_pkg)
             .with_workdir("/src/mla-transfert-web")
             .with_exec(["npm", "ci"])
             .with_exec(["npm", "audit", "--audit-level=high"])
@@ -219,7 +215,6 @@ class Mla:
                 results.append(f"[PASS] {name}\n{out}")
             except Exception as exc:  # noqa: BLE001
                 results.append(f"[FAIL] {name}\n{exc}")
-                # Stop on first failure for fast feedback
                 break
 
         return "\n\n".join(results)
