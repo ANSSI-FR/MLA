@@ -51,8 +51,7 @@ fn encrypt_with_password_impl(
 
     // Générer un salt aléatoire unique pour ce transfert
     let mut salt = [0u8; SALT_LEN];
-    getrandom::getrandom(&mut salt)
-        .map_err(|e| JsValue::from_str(&format!("RNG error: {e}")))?;
+    getrandom::getrandom(&mut salt).map_err(|e| JsValue::from_str(&format!("RNG error: {e}")))?;
 
     let (priv_key, pub_key) =
         derive_keypair_from_password(password, &salt).map_err(JsValue::from)?;
@@ -83,7 +82,7 @@ fn encrypt_with_password_impl(
         .map_err(JsValue::from)?;
 
     // Format de sortie : [salt (16 octets)] || [ciphertext MLA]
-    let mut output = Vec::with_capacity(SALT_LEN + mla_bytes.len());
+    let mut output = Vec::with_capacity(SALT_LEN.saturating_add(mla_bytes.len()));
     output.extend_from_slice(&salt);
     output.extend(mla_bytes);
     Ok(output)

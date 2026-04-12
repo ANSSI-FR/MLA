@@ -1,9 +1,9 @@
 use std::time::SystemTime;
 
+use axum::Json;
 use axum::extract::{Multipart, Path, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use axum::Json;
 use serde::Serialize;
 use serde_json::json;
 
@@ -69,22 +69,28 @@ pub async fn upload(
         }
     }
 
-    let (filename, data) = file_data
-        .ok_or_else(|| json_err(StatusCode::BAD_REQUEST, "missing file field"))?;
+    let (filename, data) =
+        file_data.ok_or_else(|| json_err(StatusCode::BAD_REQUEST, "missing file field"))?;
 
     let data_len = u64::try_from(data.len())
         .map_err(|_| json_err(StatusCode::BAD_REQUEST, "file too large"))?;
 
     if data_len > state.max_file_size {
-        return Err(json_err(StatusCode::PAYLOAD_TOO_LARGE, "file exceeds maximum size"));
+        return Err(json_err(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "file exceeds maximum size",
+        ));
     }
 
     let id = uuid::Uuid::new_v4().to_string();
     let path = state.storage_dir.join(&id);
 
-    tokio::fs::write(&path, &data)
-        .await
-        .map_err(|e| json_err(StatusCode::INTERNAL_SERVER_ERROR, format!("write error: {e}")))?;
+    tokio::fs::write(&path, &data).await.map_err(|e| {
+        json_err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("write error: {e}"),
+        )
+    })?;
 
     let now = SystemTime::now();
     let entry = crate::state::TransferEntry {
