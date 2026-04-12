@@ -39,7 +39,9 @@ async fn main() {
         .route("/api/download/{id}", get(relay::download))
         .route("/api/info/{id}", get(relay::info))
         .route("/api/signal/{room}", get(signaling::signal))
-        .layer(DefaultBodyLimit::max(state.max_file_size.try_into().unwrap_or(usize::MAX)))
+        .layer(DefaultBodyLimit::max(
+            state.max_file_size.try_into().unwrap_or(usize::MAX),
+        ))
         .layer(CorsLayer::permissive())
         .with_state(state);
 

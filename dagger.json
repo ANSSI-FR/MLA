@@ -1,0 +1,8 @@
+{
+  "name": "MLA",
+  "engineVersion": "v0.20.5",
+  "sdk": {
+    "source": "python"
+  },
+  "source": "ci"
+}
