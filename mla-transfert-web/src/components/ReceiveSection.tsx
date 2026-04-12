@@ -13,7 +13,7 @@ export default function ReceiveSection({ transferId }: ReceiveSectionProps) {
     <div className="animate-slide-up space-y-8">
       <div className="text-center space-y-3">
         <h2 className="text-4xl font-bold tracking-tight">
-          Fichier <span className="text-gradient">sécurisé</span> reçu
+          Fichier <span style={{ color: 'var(--coral)' }}>sécurisé</span> reçu
         </h2>
         <p className="max-w-sm mx-auto leading-relaxed" style={{ color: 'var(--text-2)' }}>
           Entrez le mot de passe ou importez vos clés pour déchiffrer.
