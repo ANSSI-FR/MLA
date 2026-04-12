@@ -1,0 +1,15 @@
+# cargo audit configuration
+# https://github.com/rustsec/rustsec/blob/main/cargo-audit/audit.toml.example
+
+[advisories]
+# RUSTSEC-2025-0144 — Timing side-channel in ml-dsa 0.0.4
+# Affects: mla 2.0.0 (ANSSI upstream crate — cannot patch directly)
+# Fix available: upgrade ml-dsa to >=0.1.0-rc.3
+# Waiting on ANSSI-FR/MLA to bump their dependency.
+# Tracked in todo.md § Veille upstream ANSSI-FR/MLA
+# Re-evaluate when ANSSI-FR/MLA cuts a new release.
+ignore = ["RUSTSEC-2025-0144"]
+
+# unmaintained / unsound / yanked warnings come from upstream mla crate deps.
+# They are surfaced as warnings in CI but do NOT fail the build.
+# (cargo audit default: only vulnerabilities cause exit code 1)

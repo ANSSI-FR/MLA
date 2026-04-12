@@ -110,7 +110,7 @@ class Mla:
         return await (
             rust_base(src)
             .with_exec(["cargo", "install", "cargo-audit"])
-            .with_exec(["cargo", "audit"])
+            .with_exec(["cargo", "audit", "--file", "audit.toml"])
             .stdout()
         )
 
