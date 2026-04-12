@@ -14,8 +14,7 @@ impl Default for ServerConfig {
             .unwrap_or(3001);
 
         let storage_dir = std::env::var("STORAGE_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from("./data/uploads"));
+            .map_or_else(|_| PathBuf::from("./data/uploads"), PathBuf::from);
 
         let max_file_size = std::env::var("MAX_FILE_SIZE_BYTES")
             .ok()

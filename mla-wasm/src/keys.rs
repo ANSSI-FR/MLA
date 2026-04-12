@@ -72,7 +72,12 @@ pub fn encrypt_with_keys(
         .iter()
         .map(|val| js_sys::Uint8Array::new(&val).to_vec())
         .collect();
-    encrypt_with_keys_impl(&file_names, &contents, sender_private_key, receiver_public_key)
+    encrypt_with_keys_impl(
+        &file_names,
+        &contents,
+        sender_private_key,
+        receiver_public_key,
+    )
 }
 
 /// Core decryption logic operating on native Rust types.
