@@ -5,9 +5,12 @@ Steps:
   2. rust_clippy   — cargo clippy -D warnings
   3. rust_test     — cargo test (mla-wasm + mla-transfert-server)
   4. rust_audit    — cargo audit (CVE scan Rust deps)
-  5. wasm_build    — wasm-pack build mla-wasm
+  4b. cargo_deny   — cargo deny check (licenses + supply chain)
+  5. wasm_build    — wasm-pack build mla-wasm (via cargo install --locked)
   6. web_build     — npm ci + astro build (wasm pkg injected)
   7. npm_audit     — npm audit --audit-level=high
+  8. sbom          — Syft SBOM (SPDX JSON)
+  9. grype_scan    — Grype CVE scan on SBOM (fail on High+Critical)
 
 Run everything:  dagger call ci --src .
 Run one step:    dagger call rust-fmt --src .
@@ -64,15 +67,10 @@ class Mla:
             .with_exec(
                 [
                     "apt-get", "install", "-y", "--no-install-recommends",
-                    "curl", "pkg-config", "libssl-dev",
+                    "pkg-config", "libssl-dev",
                 ]
             )
-            .with_exec(
-                [
-                    "sh", "-c",
-                    "curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh",
-                ]
-            )
+            .with_exec(["cargo", "install", "wasm-pack", "--locked"])
             .with_exec(["rustup", "target", "add", "wasm32-unknown-unknown"])
             .with_mounted_cache("/root/.cargo/registry", dag.cache_volume("cargo-registry"))
             .with_mounted_cache("/root/.cargo/git", dag.cache_volume("cargo-git"))
@@ -148,6 +146,19 @@ class Mla:
         )
 
     # ------------------------------------------------------------------ #
+    # Step 4b — cargo deny (licenses + supply chain)                       #
+    # ------------------------------------------------------------------ #
+    @function
+    async def cargo_deny(self, src: dagger.Directory) -> str:
+        """Check Rust dependencies for banned licenses and supply-chain advisories."""
+        return await (
+            rust_base(src)
+            .with_exec(["cargo", "install", "cargo-deny", "--locked"])
+            .with_exec(["cargo", "deny", "check"])
+            .stdout()
+        )
+
+    # ------------------------------------------------------------------ #
     # Step 5 — wasm-pack build (public step, returns log output)          #
     # ------------------------------------------------------------------ #
     @function
@@ -207,7 +218,7 @@ class Mla:
             .with_workdir("/src")
             .with_exec(
                 [
-                    "syft", "dir:/src",
+                    "/syft", "dir:/src",
                     "--output", "spdx-json=/tmp/sbom.spdx.json",
                     "--output", "table",
                     "--exclude", "**/target/**",
@@ -232,7 +243,7 @@ class Mla:
             .with_workdir("/src")
             .with_exec(
                 [
-                    "syft", "dir:/src",
+                    "/syft", "dir:/src",
                     "--output", "spdx-json=/tmp/sbom.spdx.json",
                     "--exclude", "**/target/**",
                     "--exclude", "**/node_modules/**",
@@ -242,13 +253,22 @@ class Mla:
             )
             .file("/tmp/sbom.spdx.json")
         )
+
+        # Cache the Grype vulnerability DB between runs to avoid re-downloading.
+        # GRYPE_DB_CACHE_DIR points into the mounted cache volume.
+        grype_db_cache = dag.cache_volume("grype-db")
+
         return await (
             dag.container()
             .from_(GRYPE_IMAGE)
+            .with_mounted_cache("/grype-db", grype_db_cache)
+            .with_env_variable("GRYPE_DB_CACHE_DIR", "/grype-db")
+            # Force IPv4 — Dagger containers may lack IPv6 routing (macOS / Docker Desktop)
+            .with_env_variable("GODEBUG", "netdns=go")
             .with_mounted_file("/sbom.spdx.json", sbom_file)
             .with_exec(
                 [
-                    "grype", "sbom:/sbom.spdx.json",
+                    "/grype", "sbom:/sbom.spdx.json",
                     "--fail-on", "high",
                     "--output", "table",
                 ]
@@ -261,7 +281,7 @@ class Mla:
     # ------------------------------------------------------------------ #
     @function
     async def ci(self, src: dagger.Directory) -> str:
-        """Run the full CI pipeline: fmt → clippy → test → audit → wasm → web → npm audit → sbom → grype."""
+        """Run the full CI pipeline: fmt → clippy → test → audit → deny → wasm → web → npm audit → sbom → grype."""
         results: list[str] = []
 
         steps = [
@@ -269,6 +289,7 @@ class Mla:
             ("clippy",     self.rust_clippy(src)),
             ("test",       self.rust_test(src)),
             ("rust-audit", self.rust_audit(src)),
+            ("cargo-deny", self.cargo_deny(src)),
             ("wasm-build", self.wasm_build(src)),
             ("web-build",  self.web_build(src)),
             ("npm-audit",  self.npm_audit(src)),

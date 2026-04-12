@@ -1,0 +1,47 @@
+# cargo-deny configuration
+# https://embarkstudios.github.io/cargo-deny/
+
+[advisories]
+# Advisories already tracked in audit.toml — cargo-audit handles them.
+# cargo-deny provides a second opinion and catches yanked crates.
+ignore = [
+    # RUSTSEC-2025-0144 — Timing side-channel in ml-dsa 0.0.4
+    # Upstream ANSSI dependency — cannot patch directly.
+    "RUSTSEC-2025-0144",
+]
+
+[licenses]
+# Only allow permissive and weak-copyleft licenses compatible with LGPL-3.0.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-DFS-2016",
+    "CC0-1.0",
+    "MPL-2.0",          # weak copyleft — acceptable
+    "LGPL-3.0-only",    # our own crates
+    "LGPL-3.0-or-later",
+]
+# Fail on GPL-only crates (would force whole project to GPL).
+deny = [
+    "GPL-2.0",
+    "GPL-3.0",
+    "AGPL-3.0",
+]
+# Allow crates that have no license but are known safe.
+exceptions = []
+
+[bans]
+# Fail on multiple versions of the same crate — keeps the dependency graph clean.
+multiple-versions = "warn"
+# Deny known-problematic crates.
+deny = []
+
+[sources]
+# Only allow crates from crates.io and our own path dependencies.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
