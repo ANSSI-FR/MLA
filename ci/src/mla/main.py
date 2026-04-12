@@ -19,6 +19,9 @@ from dagger import dag, function, object_type
 RUST_IMAGE = "rust:1-slim-bookworm"
 WASM_IMAGE = "rust:1-slim-bookworm"
 NODE_IMAGE = "node:22-slim"
+# Anchore tools — Syft (SBOM) + Grype (CVE scan)
+ANCHORE_IMAGE = "anchore/syft:latest"
+GRYPE_IMAGE = "anchore/grype:latest"
 
 
 def rust_base(src: dagger.Directory) -> dagger.Container:
@@ -192,11 +195,73 @@ class Mla:
         )
 
     # ------------------------------------------------------------------ #
+    # Step 8 — Syft SBOM generation                                        #
+    # ------------------------------------------------------------------ #
+    @function
+    async def sbom(self, src: dagger.Directory) -> str:
+        """Generate a Software Bill of Materials (SBOM) with Syft in SPDX JSON format."""
+        return await (
+            dag.container()
+            .from_(ANCHORE_IMAGE)
+            .with_mounted_directory("/src", src)
+            .with_workdir("/src")
+            .with_exec(
+                [
+                    "syft", "dir:/src",
+                    "--output", "spdx-json=/tmp/sbom.spdx.json",
+                    "--output", "table",
+                    "--exclude", "**/target/**",
+                    "--exclude", "**/node_modules/**",
+                    "--exclude", "**/.git/**",
+                ]
+            )
+            .stdout()
+        )
+
+    # ------------------------------------------------------------------ #
+    # Step 9 — Grype CVE scan on SBOM                                      #
+    # ------------------------------------------------------------------ #
+    @function
+    async def grype_scan(self, src: dagger.Directory) -> str:
+        """Scan the project with Grype for known CVEs (fail on High+Critical)."""
+        # Generate SBOM first, then feed to Grype — avoids re-scanning filesystem
+        sbom_file = (
+            dag.container()
+            .from_(ANCHORE_IMAGE)
+            .with_mounted_directory("/src", src)
+            .with_workdir("/src")
+            .with_exec(
+                [
+                    "syft", "dir:/src",
+                    "--output", "spdx-json=/tmp/sbom.spdx.json",
+                    "--exclude", "**/target/**",
+                    "--exclude", "**/node_modules/**",
+                    "--exclude", "**/.git/**",
+                    "--quiet",
+                ]
+            )
+            .file("/tmp/sbom.spdx.json")
+        )
+        return await (
+            dag.container()
+            .from_(GRYPE_IMAGE)
+            .with_mounted_file("/sbom.spdx.json", sbom_file)
+            .with_exec(
+                [
+                    "grype", "sbom:/sbom.spdx.json",
+                    "--fail-on", "high",
+                    "--output", "table",
+                ]
+            )
+            .stdout()
+        )
+
+    # ------------------------------------------------------------------ #
     # Full pipeline                                                         #
     # ------------------------------------------------------------------ #
     @function
     async def ci(self, src: dagger.Directory) -> str:
-        """Run the full CI pipeline: fmt → clippy → test → audit → wasm → web → npm audit."""
+        """Run the full CI pipeline: fmt → clippy → test → audit → wasm → web → npm audit → sbom → grype."""
         results: list[str] = []
 
         steps = [
@@ -207,6 +272,8 @@ class Mla:
             ("wasm-build", self.wasm_build(src)),
             ("web-build",  self.web_build(src)),
             ("npm-audit",  self.npm_audit(src)),
+            ("sbom",       self.sbom(src)),
+            ("grype",      self.grype_scan(src)),
         ]
 
         for name, coro in steps:

@@ -70,7 +70,7 @@ Aucun outil (gitleaks, trufflehog, git-secrets) ne scanne le dépôt pour détec
 `_wasm_pkg()` et le job GitHub Actions `build-wasm` installent wasm-pack via `curl ... | sh` sans vérification de checksum ni d'intégrité. Vecteur d'attaque supply chain si le CDN est compromis.
 
 **CI-CRIT-3 : Scan d'image Docker absent**
-Le job `docker` build et push l'image vers GHCR sans scan Trivy/Grype. Des vulnérabilités dans `debian:trixie-slim` ou les dépendances système transitent en production sans détection.
+Le job `docker` build et push l'image vers GHCR sans scan Grype + Syft. Des vulnérabilités dans `debian:trixie-slim` ou les dépendances système transitent en production sans détection.
 
 ### High (à corriger dans le sprint)
 
@@ -229,33 +229,41 @@ unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 ```
 
-### 3. Scan image Docker (Trivy) — CRITIQUE
+### 3. Scan image Docker (Grype + Syft) — CRITIQUE
 
 ```python
 @function
 async def docker_scan(self, src: dagger.Directory) -> str:
-    """Build the server Docker image and scan it with Trivy for CVEs."""
-    image = (
-        dag.container()
-        .build(
-            context=src,
-            dockerfile="mla-transfert-server/Dockerfile",
-        )
+    """Build server Docker image, generate SBOM with Syft, scan CVEs with Grype."""
+    # Build the server image
+    server_image = dag.container().build(
+        context=src,
+        dockerfile="mla-transfert-server/Dockerfile",
     )
-    # Export image as tar for Trivy
-    image_tar = await image.as_tarball()
+    # Export as OCI tar for Syft
+    image_tar = server_image.as_tarball()
 
-    return await (
+    # Step 1: Syft → SBOM
+    sbom_file = (
         dag.container()
-        .from_("aquasec/trivy:0.61.0")
+        .from_("anchore/syft:latest")
         .with_mounted_file("/image.tar", image_tar)
         .with_exec([
-            "trivy", "image",
-            "--input", "/image.tar",
-            "--exit-code", "1",
-            "--severity", "HIGH,CRITICAL",
-            "--format", "table",
-            "--no-progress",
+            "syft", "oci-archive:/image.tar",
+            "--output", "spdx-json=/tmp/sbom.spdx.json",
+            "--quiet",
+        ])
+        .file("/tmp/sbom.spdx.json")
+    )
+    # Step 2: Grype → CVE scan on SBOM (fail on High+Critical)
+    return await (
+        dag.container()
+        .from_("anchore/grype:latest")
+        .with_mounted_file("/sbom.spdx.json", sbom_file)
+        .with_exec([
+            "grype", "sbom:/sbom.spdx.json",
+            "--fail-on", "high",
+            "--output", "table",
         ])
         .stdout()
     )
@@ -565,7 +573,7 @@ data/
 - [ ] Implémenter `secrets_scan()` dans le pipeline Dagger
 - [ ] Implémenter `web_security_headers_check()` — force la correction du finding H2 (CORS) et H3 (headers)
 - [ ] Implémenter `dockerfile_lint()` avec hadolint
-- [ ] Implémenter `docker_scan()` avec Trivy après le build Docker
+- [ ] Implémenter `docker_scan()` avec Grype après le build Docker
 - [ ] Ajouter step SBOM CycloneDX et upload comme artefact GitHub Actions
 
 **Sprint 3 (amélioration continue) :**
@@ -583,7 +591,7 @@ data/
 | Outil | Image / Version recommandée | Note |
 |-------|---------------------------|------|
 | gitleaks | `zricethezav/gitleaks:v8.24.3` | Pinner par SHA en prod |
-| Trivy | `aquasec/trivy:0.61.0` | |
+| Grype | `anchore/grype:latest` | |
 | hadolint | `hadolint/hadolint:v2.12.0-alpine` | |
 | cargo-deny | `0.16.x` via `cargo install --locked` | |
 | cargo-cyclonedx | `0.5.x` via `cargo install --locked` | |
