@@ -1,16 +1,18 @@
 """MLA-Share CI pipeline — security-first.
 
 Steps:
-  1. rust_fmt      — cargo fmt --check
-  2. rust_clippy   — cargo clippy -D warnings
-  3. rust_test     — cargo test (mla-wasm + mla-transfert-server)
-  4. rust_audit    — cargo audit (CVE scan Rust deps)
-  4b. cargo_deny   — cargo deny check (licenses + supply chain)
-  5. wasm_build    — wasm-pack build mla-wasm (via cargo install --locked)
-  6. web_build     — npm ci + astro build (wasm pkg injected)
-  7. npm_audit     — npm audit --audit-level=high
-  8. sbom          — Syft SBOM (SPDX JSON)
-  9. grype_scan    — Grype CVE scan on SBOM (fail on High+Critical)
+  1.  rust_fmt      — cargo fmt --check
+  2.  rust_clippy   — cargo clippy -D warnings
+  3.  rust_test     — cargo test (mla-wasm + mla-transfert-server)
+  4.  rust_audit    — cargo audit (CVE scan Rust deps)
+  4b. cargo_deny    — cargo deny check (licenses + supply chain)
+  5.  wasm_build    — wasm-pack build mla-wasm (pinned 0.13.1, --locked)
+  6.  web_build     — npm ci + astro build (wasm pkg injected)
+  7.  npm_audit     — npm audit --audit-level=high
+  8.  sbom          — Syft SBOM (SPDX JSON)
+  9.  grype_scan    — Grype CVE scan on SBOM (fail on High+Critical)
+  10. docker_scan   — Build server image, Syft+Grype scan (fail on High+Critical)
+  11. sbom_sign     — Sign SBOM with cosign (keyless Sigstore OIDC)
 
 Run everything:  dagger call ci --src .
 Run one step:    dagger call rust-fmt --src .
@@ -25,6 +27,10 @@ NODE_IMAGE = "node:22-slim"
 # Anchore tools — Syft (SBOM) + Grype (CVE scan)
 ANCHORE_IMAGE = "anchore/syft:latest"
 GRYPE_IMAGE = "anchore/grype:latest"
+# Cosign — SBOM attestation signing
+COSIGN_IMAGE = "gcr.io/projectsigstore/cosign:latest"
+# wasm-pack pinned version (CI1 fix — no more curl|sh)
+WASM_PACK_VERSION = "0.13.1"
 
 
 def rust_base(src: dagger.Directory) -> dagger.Container:
@@ -70,7 +76,7 @@ class Mla:
                     "pkg-config", "libssl-dev",
                 ]
             )
-            .with_exec(["cargo", "install", "wasm-pack", "--locked"])
+            .with_exec(["cargo", "install", "wasm-pack", "--locked", "--version", "0.13.1"])
             .with_exec(["rustup", "target", "add", "wasm32-unknown-unknown"])
             .with_mounted_cache("/root/.cargo/registry", dag.cache_volume("cargo-registry"))
             .with_mounted_cache("/root/.cargo/git", dag.cache_volume("cargo-git"))
@@ -277,24 +283,116 @@ class Mla:
         )
 
     # ------------------------------------------------------------------ #
+    # Step 10 — Docker image CVE scan (server image)                       #
+    # ------------------------------------------------------------------ #
+    @function
+    async def docker_scan(self, src: dagger.Directory) -> str:
+        """Build the mla-transfert-server Docker image and scan it with Syft + Grype."""
+        # Build the production image from its Dockerfile.
+        server_image = dag.container().build(
+            context=src.directory("mla-transfert-server"),
+            dockerfile="Dockerfile",
+        )
+
+        # Generate an SBOM for the image filesystem.
+        sbom_file = (
+            dag.container()
+            .from_(ANCHORE_IMAGE)
+            .with_mounted_directory("/img", server_image.rootfs())
+            .with_exec(
+                [
+                    "/syft", "dir:/img",
+                    "--output", "spdx-json=/tmp/docker-sbom.spdx.json",
+                    "--quiet",
+                ]
+            )
+            .file("/tmp/docker-sbom.spdx.json")
+        )
+
+        grype_db_cache = dag.cache_volume("grype-db")
+
+        return await (
+            dag.container()
+            .from_(GRYPE_IMAGE)
+            .with_mounted_cache("/grype-db", grype_db_cache)
+            .with_env_variable("GRYPE_DB_CACHE_DIR", "/grype-db")
+            .with_env_variable("GODEBUG", "netdns=go")
+            .with_mounted_file("/docker-sbom.spdx.json", sbom_file)
+            .with_exec(
+                [
+                    "/grype", "sbom:/docker-sbom.spdx.json",
+                    "--fail-on", "high",
+                    "--output", "table",
+                ]
+            )
+            .stdout()
+        )
+
+    # ------------------------------------------------------------------ #
+    # Step 11 — Sign SBOM with cosign (keyless / OIDC)                    #
+    # ------------------------------------------------------------------ #
+    @function
+    async def sbom_sign(self, src: dagger.Directory) -> str:
+        """Generate the project SBOM and sign it with cosign (keyless Sigstore OIDC).
+
+        Requires SIGSTORE_OIDC_ISSUER / SIGSTORE_OIDC_TOKEN env vars when running
+        outside of CI (in CI the OIDC ambient credential is picked up automatically).
+        The signed SBOM is written to /tmp/sbom.spdx.json.sig as a detached signature.
+        """
+        sbom_file = (
+            dag.container()
+            .from_(ANCHORE_IMAGE)
+            .with_mounted_directory("/src", src)
+            .with_workdir("/src")
+            .with_exec(
+                [
+                    "/syft", "dir:/src",
+                    "--output", "spdx-json=/tmp/sbom.spdx.json",
+                    "--exclude", "**/target/**",
+                    "--exclude", "**/node_modules/**",
+                    "--exclude", "**/.git/**",
+                    "--quiet",
+                ]
+            )
+            .file("/tmp/sbom.spdx.json")
+        )
+
+        return await (
+            dag.container()
+            .from_(COSIGN_IMAGE)
+            .with_mounted_file("/sbom.spdx.json", sbom_file)
+            .with_exec(
+                [
+                    "cosign", "sign-blob",
+                    "--yes",                        # non-interactive
+                    "--output-signature", "/tmp/sbom.spdx.json.sig",
+                    "/sbom.spdx.json",
+                ]
+            )
+            .stdout()
+        )
+
+    # ------------------------------------------------------------------ #
     # Full pipeline                                                         #
     # ------------------------------------------------------------------ #
     @function
     async def ci(self, src: dagger.Directory) -> str:
-        """Run the full CI pipeline: fmt → clippy → test → audit → deny → wasm → web → npm audit → sbom → grype."""
+        """Run the full CI pipeline: fmt → clippy → test → audit → deny → wasm → web → npm audit → sbom → grype → docker-scan → sbom-sign."""
         results: list[str] = []
 
         steps = [
-            ("fmt",        self.rust_fmt(src)),
-            ("clippy",     self.rust_clippy(src)),
-            ("test",       self.rust_test(src)),
-            ("rust-audit", self.rust_audit(src)),
-            ("cargo-deny", self.cargo_deny(src)),
-            ("wasm-build", self.wasm_build(src)),
-            ("web-build",  self.web_build(src)),
-            ("npm-audit",  self.npm_audit(src)),
-            ("sbom",       self.sbom(src)),
-            ("grype",      self.grype_scan(src)),
+            ("fmt",         self.rust_fmt(src)),
+            ("clippy",      self.rust_clippy(src)),
+            ("test",        self.rust_test(src)),
+            ("rust-audit",  self.rust_audit(src)),
+            ("cargo-deny",  self.cargo_deny(src)),
+            ("wasm-build",  self.wasm_build(src)),
+            ("web-build",   self.web_build(src)),
+            ("npm-audit",   self.npm_audit(src)),
+            ("sbom",        self.sbom(src)),
+            ("grype",       self.grype_scan(src)),
+            ("docker-scan", self.docker_scan(src)),
+            ("sbom-sign",   self.sbom_sign(src)),
         ]
 
         for name, coro in steps:

@@ -89,7 +89,7 @@ export default function SendForm() {
       setStatus('done');
       const base = (import.meta.env.PUBLIC_BASE_URL as string | undefined)
         ?.replace(/\/$/, '') ?? window.location.origin;
-      setShareLink(`${base}/receive/${result.id}`);
+      setShareLink(`${base}/receive/${result.id}?rt=${encodeURIComponent(result.room_token)}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur inconnue');
       setStatus('error');

@@ -1,13 +1,19 @@
 use std::time::{Duration, SystemTime};
 
 use axum::extract::ws::{Message, WebSocket};
-use axum::extract::{Path, State, WebSocketUpgrade};
+use axum::extract::{Path, Query, State, WebSocketUpgrade};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use futures_util::{SinkExt, StreamExt};
+use serde::Deserialize;
 use tokio::sync::broadcast;
 
 use crate::state::AppState;
+
+#[derive(Deserialize)]
+pub struct RoomTokenQuery {
+    rt: Option<String>,
+}
 
 /// Maximum number of simultaneous participants per room (sender + receiver).
 const MAX_ROOM_PARTICIPANTS: usize = 2;
@@ -20,7 +26,28 @@ pub async fn signal(
     ws: WebSocketUpgrade,
     State(state): State<AppState>,
     Path(room): Path<String>,
+    Query(query): Query<RoomTokenQuery>,
 ) -> Response {
+    // Validate room token against the stored transfer entry.
+    // The token is generated at upload time and embedded in the share link
+    // (?rt=<token>). Without a valid token the WebSocket upgrade is rejected,
+    // preventing unauthenticated peers from joining a signaling room.
+    {
+        let transfers = state.transfers.read().await;
+        match transfers.get(&room) {
+            Some(entry) => {
+                let provided = query.rt.as_deref().unwrap_or("");
+                if provided != entry.room_token {
+                    return (StatusCode::UNAUTHORIZED, "invalid room token").into_response();
+                }
+            }
+            None => {
+                // Transfer unknown — reject early rather than creating an orphan room.
+                return (StatusCode::NOT_FOUND, "transfer not found").into_response();
+            }
+        }
+    }
+
     let now = SystemTime::now();
 
     // Check capacity and TTL before upgrading — avoids wasting the connection.

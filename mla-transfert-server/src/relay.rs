@@ -47,6 +47,7 @@ use crate::state::AppState;
 pub struct UploadResponse {
     id: String,
     expires_in_hours: u64,
+    room_token: String,
 }
 
 #[derive(Serialize)]
@@ -116,6 +117,7 @@ pub async fn upload(
     let data_len = data.len() as u64;
 
     let id = uuid::Uuid::new_v4().to_string();
+    let room_token = uuid::Uuid::new_v4().to_string();
     let path = state.storage_dir.join(&id);
 
     tokio::fs::write(&path, &data).await.map_err(|e| {
@@ -134,6 +136,7 @@ pub async fn upload(
             .checked_add(AppState::expiration_duration(expires_hours))
             .unwrap_or(now),
         created_at: now,
+        room_token: room_token.clone(),
     };
 
     state.transfers.write().await.insert(id.clone(), entry);
@@ -141,6 +144,7 @@ pub async fn upload(
     Ok(Json(UploadResponse {
         id,
         expires_in_hours: expires_hours,
+        room_token,
     }))
 }
 

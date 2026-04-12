@@ -1,9 +1,9 @@
 const SIGNAL_BASE = import.meta.env.PUBLIC_API_URL ?? 'http://localhost:3001';
 const STUN_URL = (import.meta.env.PUBLIC_STUN_URL as string | undefined) ?? 'stun:stun.nextcloud.com:443';
 
-function getSignalUrl(room: string): string {
+function getSignalUrl(room: string, token: string): string {
   const base = SIGNAL_BASE.replace(/^http/, 'ws');
-  return `${base}/api/signal/${room}`;
+  return `${base}/api/signal/${room}?rt=${encodeURIComponent(token)}`;
 }
 
 interface PeerMessage {
@@ -13,11 +13,12 @@ interface PeerMessage {
 
 export async function sendViaPeer(
   room: string,
+  token: string,
   encryptedData: Uint8Array,
   onProgress: (pct: number) => void,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(getSignalUrl(room));
+    const ws = new WebSocket(getSignalUrl(room, token));
     const pc = new RTCPeerConnection({
       iceServers: [{ urls: STUN_URL }],
     });
@@ -79,10 +80,11 @@ export async function sendViaPeer(
 
 export async function receiveViaPeer(
   room: string,
+  token: string,
   onProgress: (pct: number) => void,
 ): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(getSignalUrl(room));
+    const ws = new WebSocket(getSignalUrl(room, token));
     const pc = new RTCPeerConnection({
       iceServers: [{ urls: STUN_URL }],
     });

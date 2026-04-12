@@ -16,6 +16,9 @@ pub struct TransferEntry {
     pub size: u64,
     pub expires_at: SystemTime,
     pub created_at: SystemTime,
+    /// Short-lived token authorising WebSocket upgrade for P2P signaling.
+    /// Embedded in the share link (?rt=<token>) and validated before WS upgrade.
+    pub room_token: String,
 }
 
 #[derive(Clone)]
