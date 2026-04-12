@@ -49,12 +49,8 @@ fn test_encrypt_decrypt_password_roundtrip() {
 
     let file_contents = make_js_file_contents(&[file_data]);
 
-    let encrypted = encrypt_with_password(
-        vec![file_name.to_string()],
-        file_contents,
-        password,
-    )
-    .expect("encryption should succeed");
+    let encrypted = encrypt_with_password(vec![file_name.to_string()], file_contents, password)
+        .expect("encryption should succeed");
 
     assert!(!encrypted.is_empty(), "encrypted data should not be empty");
     assert_ne!(
@@ -63,8 +59,7 @@ fn test_encrypt_decrypt_password_roundtrip() {
         "encrypted should differ from plaintext"
     );
 
-    let decrypted =
-        decrypt_with_password(&encrypted, password).expect("decryption should succeed");
+    let decrypted = decrypt_with_password(&encrypted, password).expect("decryption should succeed");
 
     let entries: Vec<(String, Vec<u8>)> = serde_wasm_bindgen::from_value(decrypted)
         .expect("should deserialize to Vec<(String, Vec<u8>)>");
@@ -107,12 +102,8 @@ fn test_encrypt_decrypt_keys_roundtrip() {
 
     assert!(!encrypted.is_empty(), "encrypted data should not be empty");
 
-    let decrypted = decrypt_with_keys(
-        &encrypted,
-        &receiver.private_key(),
-        &sender.public_key(),
-    )
-    .expect("decryption should succeed");
+    let decrypted = decrypt_with_keys(&encrypted, &receiver.private_key(), &sender.public_key())
+        .expect("decryption should succeed");
 
     let entries: Vec<(String, Vec<u8>)> = serde_wasm_bindgen::from_value(decrypted)
         .expect("should deserialize to Vec<(String, Vec<u8>)>");
@@ -138,11 +129,7 @@ fn test_wrong_key_fails_decryption() {
     .unwrap();
 
     // Try to decrypt with receiver B's private key -- should fail
-    let result = decrypt_with_keys(
-        &encrypted,
-        &receiver_b.private_key(),
-        &sender.public_key(),
-    );
+    let result = decrypt_with_keys(&encrypted, &receiver_b.private_key(), &sender.public_key());
     assert!(result.is_err(), "wrong receiver key should fail decryption");
 }
 
@@ -164,12 +151,8 @@ fn test_multiple_files() {
     )
     .expect("encryption should succeed");
 
-    let decrypted = decrypt_with_keys(
-        &encrypted,
-        &receiver.private_key(),
-        &sender.public_key(),
-    )
-    .expect("decryption should succeed");
+    let decrypted = decrypt_with_keys(&encrypted, &receiver.private_key(), &sender.public_key())
+        .expect("decryption should succeed");
 
     let entries: Vec<(String, Vec<u8>)> = serde_wasm_bindgen::from_value(decrypted)
         .expect("should deserialize to Vec<(String, Vec<u8>)>");
