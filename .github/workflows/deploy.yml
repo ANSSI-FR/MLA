@@ -1,0 +1,63 @@
+name: Build & Deploy to Cloudflare Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Rust + wasm-pack ───────────────────────────────────────────────
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Rust
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            mla-wasm/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('mla-wasm/Cargo.lock') }}
+
+      - name: Install wasm-pack (pinned)
+        run: cargo install wasm-pack --locked --version 0.13.1
+
+      - name: Build mla-wasm
+        working-directory: mla-wasm
+        run: wasm-pack build --target web --release
+
+      # ── Node + Astro ───────────────────────────────────────────────────
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mla-transfert-web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: mla-transfert-web
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: mla-transfert-web
+        env:
+          PUBLIC_API_URL: https://mla-share.kodetis.cloud
+        run: npm run build
+
+      # ── Deploy ─────────────────────────────────────────────────────────
+      - name: Deploy to Cloudflare Pages
+        working-directory: mla-transfert-web
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler pages deploy dist --project-name mla-transfert-web --branch main

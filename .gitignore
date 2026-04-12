@@ -10,6 +10,7 @@ __pycache__/
 # mdbook
 index.html
 doc/book/mla-wasm/pkg/
+mla-wasm/pkg/
 .vscode/
 # docs locaux (plans, notes)
 docs/*
