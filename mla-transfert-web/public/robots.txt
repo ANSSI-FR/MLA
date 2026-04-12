@@ -1,0 +1,12 @@
+User-agent: *
+
+# Liens de transfert — privés par nature, ne jamais indexer
+Disallow: /receive/
+
+# API interne
+Disallow: /api/
+
+# Autoriser les pages publiques
+Allow: /$
+Allow: /about
+Allow: /help

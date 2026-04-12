@@ -8,11 +8,13 @@ export const onRequest = defineMiddleware((_ctx, next) => {
         'Content-Security-Policy',
         [
           "default-src 'self'",
-          "script-src 'self' 'wasm-unsafe-eval'",   // requis pour WASM
-          "style-src 'self' 'unsafe-inline'",        // Tailwind inline styles
+          // unsafe-inline requis : Astro génère des scripts inline pour l'hydration React
+          // wasm-unsafe-eval requis pour MLA WASM
+          "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://static.cloudflareinsights.com",
+          "style-src 'self' 'unsafe-inline'",
           "img-src 'self' data:",
-          "connect-src 'self' wss:",                 // WebSocket signaling
-          "font-src 'self'",
+          "connect-src 'self' wss: https://cloudflareinsights.com",
+          "font-src 'self' data:",
           "object-src 'none'",
           "frame-ancestors 'none'",
           "base-uri 'self'",
