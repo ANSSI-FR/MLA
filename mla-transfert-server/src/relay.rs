@@ -12,6 +12,33 @@ fn json_err(status: StatusCode, msg: impl Into<String>) -> (StatusCode, Json<ser
     (status, Json(json!({ "error": msg.into() })))
 }
 
+/// Strip path traversal components and keep only safe characters.
+/// Allows alphanumerics, spaces, dots, hyphens and underscores; max 255 bytes.
+fn sanitize_filename(raw: &str) -> String {
+    // Take the last path component only (strips directory traversal).
+    let name = raw
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or("upload");
+
+    let clean: String = name
+        .chars()
+        .filter(|c| c.is_alphanumeric() || matches!(c, '.' | '-' | '_' | ' '))
+        .collect();
+
+    let trimmed = clean.trim();
+    if trimmed.is_empty() || trimmed == "." || trimmed == ".." {
+        return "upload".to_string();
+    }
+
+    // Limit to 255 UTF-8 bytes (filesystem limit on most systems).
+    let mut result = trimmed.to_string();
+    while result.len() > 255 {
+        result.pop();
+    }
+    result
+}
+
 type JsonError = (StatusCode, Json<serde_json::Value>);
 
 use crate::state::AppState;
@@ -39,7 +66,7 @@ pub async fn upload(
     let mut file_data: Option<(String, Vec<u8>)> = None;
     let mut expires_hours: u64 = 24;
 
-    while let Some(field) = multipart
+    while let Some(mut field) = multipart
         .next_field()
         .await
         .map_err(|e| json_err(StatusCode::BAD_REQUEST, format!("multipart error: {e}")))?
@@ -47,12 +74,24 @@ pub async fn upload(
         let name = field.name().unwrap_or_default().to_owned();
         match name.as_str() {
             "file" => {
-                let filename = field.file_name().unwrap_or("upload").to_owned();
-                let data = field
-                    .bytes()
+                let filename = sanitize_filename(field.file_name().unwrap_or("upload"));
+                // Stream chunk-by-chunk so we can enforce the size limit
+                // incrementally rather than buffering the whole body first.
+                let mut data: Vec<u8> = Vec::new();
+                while let Some(chunk) = field
+                    .chunk()
                     .await
-                    .map_err(|e| json_err(StatusCode::BAD_REQUEST, format!("read error: {e}")))?;
-                file_data = Some((filename, data.to_vec()));
+                    .map_err(|e| json_err(StatusCode::BAD_REQUEST, format!("read error: {e}")))?
+                {
+                    data.extend_from_slice(&chunk);
+                    if u64::try_from(data.len()).unwrap_or(u64::MAX) > state.max_file_size {
+                        return Err(json_err(
+                            StatusCode::PAYLOAD_TOO_LARGE,
+                            "file exceeds maximum size",
+                        ));
+                    }
+                }
+                file_data = Some((filename, data));
             }
             "expires_hours" => {
                 let text = field
@@ -72,15 +111,9 @@ pub async fn upload(
     let (filename, data) =
         file_data.ok_or_else(|| json_err(StatusCode::BAD_REQUEST, "missing file field"))?;
 
-    let data_len = u64::try_from(data.len())
-        .map_err(|_| json_err(StatusCode::BAD_REQUEST, "file too large"))?;
-
-    if data_len > state.max_file_size {
-        return Err(json_err(
-            StatusCode::PAYLOAD_TOO_LARGE,
-            "file exceeds maximum size",
-        ));
-    }
+    // Size was already checked incrementally during streaming; this conversion
+    // is safe since data.len() <= max_file_size which fits in u64.
+    let data_len = data.len() as u64;
 
     let id = uuid::Uuid::new_v4().to_string();
     let path = state.storage_dir.join(&id);

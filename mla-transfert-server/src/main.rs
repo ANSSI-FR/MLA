@@ -4,10 +4,16 @@ mod relay;
 mod signaling;
 mod state;
 
+use std::net::SocketAddr;
+use std::sync::Arc;
+
 use axum::Router;
 use axum::extract::DefaultBodyLimit;
 use axum::routing::{get, post};
 use axum::http::{HeaderValue, Method};
+use tower_governor::GovernorLayer;
+use tower_governor::governor::GovernorConfigBuilder;
+use tower_governor::key_extractor::SmartIpKeyExtractor;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tracing_subscriber::EnvFilter;
 
@@ -34,6 +40,18 @@ async fn main() {
 
     purge::spawn_purge_task(state.clone());
 
+    // Rate limiter: 20 req/s refill, burst of 40 — protects against floods
+    // while staying transparent for normal interactive use.
+    let governor_conf = Arc::new(
+        GovernorConfigBuilder::default()
+            .per_second(20)
+            .burst_size(40)
+            .use_headers()
+            .key_extractor(SmartIpKeyExtractor)
+            .finish()
+            .expect("valid governor config"),
+    );
+
     let allowed_origin = std::env::var("ALLOWED_ORIGIN")
         .unwrap_or_else(|_| "http://localhost:4321".to_string());
     let cors = CorsLayer::new()
@@ -54,6 +72,7 @@ async fn main() {
             state.max_file_size.try_into().unwrap_or(usize::MAX),
         ))
         .layer(cors)
+        .layer(GovernorLayer { config: governor_conf })
         .with_state(state);
 
     let addr = format!("0.0.0.0:{}", config.port);
@@ -62,5 +81,10 @@ async fn main() {
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
         .expect("Failed to bind");
-    axum::serve(listener, app).await.expect("Server error");
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await
+    .expect("Server error");
 }
