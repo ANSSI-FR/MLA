@@ -1,4 +1,4 @@
-# Guide utilisateur — MLA-Transfert
+# Guide utilisateur — MLA-Share
 
 MLA-Transfert est un service de transfert de fichiers chiffré de bout en bout.
 Vos fichiers sont chiffrés **dans votre navigateur** avant d'être envoyés — le serveur
@@ -116,5 +116,5 @@ Tout navigateur moderne supportant WebAssembly : Firefox, Chrome, Edge, Safari.
 
 ---
 
-*MLA-Transfert utilise la bibliothèque MLA développée par l'ANSSI.*
+*MLA-Share utilise la bibliothèque MLA développée par l'ANSSI.*
 *Implémentation Kodetis — [Aide en ligne](/help)*

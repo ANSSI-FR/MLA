@@ -49,7 +49,7 @@
     @apply antialiased;
     background-color: var(--bg);
     color: var(--text-1);
-    font-family: 'Roboto', system-ui, sans-serif;
+    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
     transition: background-color 0.2s, color 0.2s;
   }
 
@@ -104,7 +104,7 @@
     width: 100%;
     padding: 12px 24px;
     border-radius: 12px;
-    font-family: 'Roboto', sans-serif;
+    font-family: system-ui, sans-serif;
     font-weight: 600;
     font-size: 0.9375rem;
     color: #ffffff;
@@ -135,7 +135,7 @@
     width: 100%;
     padding: 12px 24px;
     border-radius: 12px;
-    font-family: 'Roboto', sans-serif;
+    font-family: system-ui, sans-serif;
     font-weight: 500;
     font-size: 0.9375rem;
     color: var(--text-2);
@@ -159,7 +159,7 @@
     background-color: var(--bg-input);
     color: var(--text-1);
     font-size: 0.9375rem;
-    font-family: 'Roboto', sans-serif;
+    font-family: system-ui, sans-serif;
     transition: border-color 0.15s, box-shadow 0.15s;
     outline: none;
   }
@@ -217,7 +217,7 @@
     border-radius: 9px;
     font-size: 0.875rem;
     font-weight: 500;
-    font-family: 'Roboto', sans-serif;
+    font-family: system-ui, sans-serif;
     border: none;
     cursor: pointer;
     transition: all 0.2s ease;

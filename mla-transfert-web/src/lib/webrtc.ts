@@ -1,8 +1,9 @@
 const SIGNAL_BASE = import.meta.env.PUBLIC_API_URL ?? 'http://localhost:3001';
+const STUN_URL = (import.meta.env.PUBLIC_STUN_URL as string | undefined) ?? 'stun:stun.nextcloud.com:443';
 
-function getSignalUrl(room: string): string {
+function getSignalUrl(room: string, token: string): string {
   const base = SIGNAL_BASE.replace(/^http/, 'ws');
-  return `${base}/api/signal/${room}`;
+  return `${base}/api/signal/${room}?rt=${encodeURIComponent(token)}`;
 }
 
 interface PeerMessage {
@@ -12,13 +13,14 @@ interface PeerMessage {
 
 export async function sendViaPeer(
   room: string,
+  token: string,
   encryptedData: Uint8Array,
   onProgress: (pct: number) => void,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(getSignalUrl(room));
+    const ws = new WebSocket(getSignalUrl(room, token));
     const pc = new RTCPeerConnection({
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+      iceServers: [{ urls: STUN_URL }],
     });
 
     const channel = pc.createDataChannel('transfer', { ordered: true });
@@ -53,11 +55,13 @@ export async function sendViaPeer(
     };
 
     ws.onmessage = async (event) => {
-      const msg: PeerMessage = JSON.parse(event.data);
-      if (msg.type === 'answer') {
-        await pc.setRemoteDescription(msg.data as RTCSessionDescriptionInit);
+      let msg: PeerMessage;
+      try { msg = JSON.parse(event.data as string); } catch { return; }
+      if (!msg?.type || !msg?.data) return;
+      if (msg.type === 'answer' && typeof (msg.data as RTCSessionDescriptionInit).type === 'string') {
+        await pc.setRemoteDescription(new RTCSessionDescription(msg.data as RTCSessionDescriptionInit));
       } else if (msg.type === 'candidate') {
-        await pc.addIceCandidate(msg.data as RTCIceCandidateInit);
+        await pc.addIceCandidate(new RTCIceCandidate(msg.data as RTCIceCandidateInit));
       }
     };
 
@@ -76,12 +80,13 @@ export async function sendViaPeer(
 
 export async function receiveViaPeer(
   room: string,
+  token: string,
   onProgress: (pct: number) => void,
 ): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(getSignalUrl(room));
+    const ws = new WebSocket(getSignalUrl(room, token));
     const pc = new RTCPeerConnection({
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+      iceServers: [{ urls: STUN_URL }],
     });
 
     const chunks: Uint8Array[] = [];
@@ -114,14 +119,16 @@ export async function receiveViaPeer(
     };
 
     ws.onmessage = async (event) => {
-      const msg: PeerMessage = JSON.parse(event.data);
-      if (msg.type === 'offer') {
-        await pc.setRemoteDescription(msg.data as RTCSessionDescriptionInit);
+      let msg: PeerMessage;
+      try { msg = JSON.parse(event.data as string); } catch { return; }
+      if (!msg?.type || !msg?.data) return;
+      if (msg.type === 'offer' && typeof (msg.data as RTCSessionDescriptionInit).type === 'string') {
+        await pc.setRemoteDescription(new RTCSessionDescription(msg.data as RTCSessionDescriptionInit));
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         ws.send(JSON.stringify({ type: 'answer', data: answer }));
       } else if (msg.type === 'candidate') {
-        await pc.addIceCandidate(msg.data as RTCIceCandidateInit);
+        await pc.addIceCandidate(new RTCIceCandidate(msg.data as RTCIceCandidateInit));
       }
     };
 

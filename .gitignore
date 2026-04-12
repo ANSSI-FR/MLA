@@ -6,11 +6,23 @@ target/
 .nova-tracer/
 # pycache for py-bindings
 __pycache__/
-toto.md
 
 # mdbook
 index.html
 doc/book/mla-wasm/pkg/
+.vscode/
+# docs locaux (plans, notes)
+docs/*
+
+# données runtime et uploads
+data/
+mla-transfert-server/data/
+mla-transfert-web/data/
+
+# archives MLA (clés et fichiers chiffrés)
 *.mlapub
 *.mlapriv
+*.mla
+
+# notes locales
 todo.md

@@ -5,6 +5,9 @@ use std::time::{Duration, SystemTime};
 
 use tokio::sync::{RwLock, broadcast};
 
+/// A signal room: broadcast channel + creation timestamp for TTL enforcement.
+pub type RoomEntry = (broadcast::Sender<String>, SystemTime);
+
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub struct TransferEntry {
@@ -13,12 +16,15 @@ pub struct TransferEntry {
     pub size: u64,
     pub expires_at: SystemTime,
     pub created_at: SystemTime,
+    /// Short-lived token authorising WebSocket upgrade for P2P signaling.
+    /// Embedded in the share link (?rt=<token>) and validated before WS upgrade.
+    pub room_token: String,
 }
 
 #[derive(Clone)]
 pub struct AppState {
     pub transfers: Arc<RwLock<HashMap<String, TransferEntry>>>,
-    pub signal_rooms: Arc<RwLock<HashMap<String, broadcast::Sender<String>>>>,
+    pub signal_rooms: Arc<RwLock<HashMap<String, RoomEntry>>>,
     pub storage_dir: PathBuf,
     pub max_file_size: u64,
 }

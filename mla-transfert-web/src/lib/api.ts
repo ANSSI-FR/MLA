@@ -59,6 +59,7 @@ async function withRetry<T>(
 export interface UploadResponse {
   id: string;
   expires_in_hours: number;
+  room_token: string;
 }
 
 export interface TransferInfo {

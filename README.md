@@ -157,6 +157,84 @@ You should read [API documentation](https://github.com/ANSSI-FR/MLA#api-usage) a
 * The security and maintenance level of the MLA Python bindings is explicitely not guaranteed.
 * A security assessment was done on MLA 2.0.0-beta, documenting low-severity issues that should have been fixed since then (see [issue #465](https://github.com/ANSSI-FR/MLA/issues/465)). The report is available in `doc/20260130-mla-security-assessment.pdf`.
 
+---
+
+# MLA-Share — Kodetis Implementation
+
+[Kodetis](https://kodetis.re) builds and maintains **MLA-Share**, a full-stack secure file transfer platform on top of the ANSSI MLA library.
+
+## Stack
+
+| Component | Technology | Role |
+|-----------|-----------|------|
+| `mla-wasm` | Rust → WebAssembly (wasm-pack) | MLA encrypt/decrypt in the browser |
+| `mla-transfert-server` | Rust / Axum | Relay server — stores ciphertext, WebRTC signaling |
+| `mla-transfert-web` | Astro + React 19 + TailwindCSS | Zero-knowledge web UI |
+| CI | Dagger (Python SDK) | Security-first pipeline — fmt, clippy, test, audit, build |
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                        Browser                          │
+│  ┌───────────────┐   WASM    ┌──────────────────────┐   │
+│  │  mla-wasm     │◄─────────►│  mla-transfert-web   │   │
+│  │  (Rust/WASM)  │  encrypt  │  (Astro + React)     │   │
+│  └───────────────┘  decrypt  └──────────┬───────────┘   │
+└─────────────────────────────────────────┼───────────────┘
+                                          │ HTTPS / WSS
+                         ┌────────────────▼────────────────┐
+                         │     mla-transfert-server         │
+                         │     (Rust / Axum)                │
+                         │                                  │
+                         │  POST /api/upload   (ciphertext) │
+                         │  GET  /api/download/:id          │
+                         │  GET  /api/info/:id              │
+                         │  WS   /api/signal/:room  (P2P)   │
+                         └──────────────────────────────────┘
+```
+
+**Zero-knowledge by design** — the server stores only the MLA ciphertext. Keys and passwords never leave the browser.
+
+## Transfer modes
+
+| Mode | Use case | Authentication |
+|------|----------|---------------|
+| Password (Argon2id) | Quick share, shared secret via separate channel | None |
+| MLA keys (X25519 + ML-KEM 1024) | Admin ↔ partner, authority handoff | Ed25519 + ML-DSA 87 signature |
+| P2P WebRTC | Direct peer-to-peer, no server relay | Same as above |
+
+## Guides
+
+- [Guide utilisateur web](mla-transfert-web/GUIDE_UTILISATEUR.md) — envoyer et recevoir via le navigateur
+- [Guide CLI](GUIDE_CLI.md) — `mlar` pour les transferts en ligne de commande et les gros fichiers
+- [CI Dagger](ci/README.md) — pipeline de sécurité, étapes, exécution locale
+
+## Quick start — local dev
+
+```bash
+# Build WASM + server + web
+./build.sh
+
+# Start server
+cd mla-transfert-server && cargo run
+
+# Start web (separate terminal)
+cd mla-transfert-web && npm run dev
+
+# Run CI pipeline
+dagger call ci --src .
+```
+
+## Environment variables — server
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `3001` | Listening port |
+| `STORAGE_DIR` | `./data/uploads` | Upload storage directory |
+| `MAX_FILE_SIZE_BYTES` | `2147483648` | Max file size (2 GB) |
+| `ALLOWED_ORIGIN` | `*` | CORS allowed origin (restrict in production) |
+
 ## FAQ
 
 **Is `MLAArchiveWriter` `Send`?**
