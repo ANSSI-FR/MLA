@@ -1,4 +1,6 @@
 ---
+import '../styles/global.css';
+
 interface Props {
   title: string;
 }
@@ -11,13 +13,13 @@ const { title } = Astro.props;
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Transfert de fichiers chiffré avec cryptographie post-quantique MLA — zero-knowledge" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <title>{title}</title>
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Roboto:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
       rel="stylesheet"
     />
   </head>
@@ -37,25 +39,9 @@ const { title } = Astro.props;
 
       <div style="max-width:64rem;margin:0 auto;padding:0 1.5rem;height:60px;display:flex;align-items:center;justify-content:space-between;">
 
-        <div style="display:flex;align-items:center;gap:12px;">
-          <a
-            href="/"
-            style="
-              font-family:'Syne',sans-serif;
-              font-size:1.125rem;
-              font-weight:700;
-              color:#24305e;
-              text-decoration:none;
-              letter-spacing:-0.01em;
-            "
-          >
-            MLA-Transfert
-          </a>
-          <span class="badge">
-            <span style="width:6px;height:6px;border-radius:50%;background:#005687;display:inline-block;"></span>
-            post-quantique
-          </span>
-        </div>
+        <a href="/" style="display:flex;align-items:center;text-decoration:none;">
+          <img src="/RD_KODETIS-noir.png" alt="Kodetis Recherche & Développement" style="height:44px;" class="dark:invert" />
+        </a>
 
         <nav style="display:flex;align-items:center;gap:20px;">
           <!-- Dark mode toggle -->
@@ -89,10 +75,6 @@ const { title } = Astro.props;
             Aide
           </a>
 
-          <div style="display:flex;align-items:center;gap:12px;padding-left:16px;border-left:1px solid var(--border);">
-            <img src="/logo_anssi.webp" alt="ANSSI" style="height:28px;opacity:0.8;" />
-            <img src="/RD_KODETIS-noir.png" alt="Kodetis" style="height:28px;" class="dark:invert" />
-          </div>
         </nav>
 
       </div>
@@ -104,11 +86,39 @@ const { title } = Astro.props;
     </main>
 
     <!-- Footer -->
-    <footer style="border-top:1px solid var(--border);margin-top:4rem;padding:1.5rem;text-align:center;">
-      <p style="font-size:0.75rem;color:var(--text-3);">
-        Chiffrement client-side · Zero-knowledge · Données jamais vues par le serveur ·
-        <a href="/help#faq" style="color:var(--text-2);text-decoration:none;">FAQ</a>
-      </p>
+    <footer style="border-top:1px solid var(--border);margin-top:4rem;padding:2rem 1.5rem;">
+      <div style="max-width:64rem;margin:0 auto;display:flex;flex-direction:column;align-items:center;gap:1rem;">
+
+        <!-- ANSSI fork mention -->
+        <div style="display:flex;align-items:center;gap:10px;">
+          <img src="/logo_anssi.webp" alt="ANSSI" style="height:48px;" />
+          <span style="font-size:0.8125rem;color:var(--text-3);">
+            Fork du projet
+            <a
+              href="https://github.com/ANSSI-FR/MLA/"
+              target="_blank"
+              rel="noopener noreferrer"
+              style="color:var(--accent);text-decoration:none;font-weight:500;"
+              onmouseover="this.style.textDecoration='underline'"
+              onmouseout="this.style.textDecoration='none'"
+            >github.com/ANSSI-FR/MLA</a>
+            de l'ANSSI
+          </span>
+        </div>
+
+        <!-- Built by -->
+        <a href="https://kodetis.re" target="_blank" rel="noopener noreferrer" style="display:flex;align-items:center;gap:10px;text-decoration:none;">
+          <span style="font-size:0.75rem;color:var(--text-3);">Built by</span>
+          <img src="/Logo_KODETIS.png" alt="Kodetis" style="height:22px;" class="dark:invert" />
+        </a>
+
+        <!-- Links -->
+        <p style="font-size:0.75rem;color:var(--text-3);">
+          <a href="/help#faq" style="color:var(--text-2);text-decoration:none;">FAQ</a> ·
+          <a href="/about" style="color:var(--text-2);text-decoration:none;">À propos</a>
+        </p>
+
+      </div>
     </footer>
 
     <!-- Theme toggle script -->

@@ -1,0 +1,202 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="À propos — MLA-Transfert">
+  <div class="max-w-2xl mx-auto space-y-12">
+
+    <!-- Header -->
+    <div class="space-y-3">
+      <h2 class="text-3xl font-bold" style="color:var(--text-1)">À propos de MLA-Transfert</h2>
+      <p class="text-lg leading-relaxed" style="color:var(--text-2)">
+        Un fork open source du format <strong style="color:var(--text-1)">MLA</strong> de l'ANSSI,
+        packagé en application web prête à l'emploi. Code auditable, zéro boîte noire.
+      </p>
+    </div>
+
+    <!-- C'est quoi MLA -->
+    <section class="space-y-4">
+      <h3 class="text-xl font-semibold" style="color:var(--text-1)">Le format MLA</h3>
+      <div class="card p-6 space-y-3">
+        <p class="text-sm leading-relaxed" style="color:var(--text-2)">
+          <strong style="color:var(--text-1)">MLA (Multi-Layer Archive)</strong> est un format d'archive
+          chiffrée développé par l'<strong style="color:var(--text-1)">ANSSI</strong> (Agence Nationale de la
+          Sécurité des Systèmes d'Information). Il est conçu pour résister aux ordinateurs quantiques grâce
+          à une cryptographie hybride combinant des algorithmes classiques et post-quantiques.
+        </p>
+        <p class="text-sm leading-relaxed" style="color:var(--text-2)">
+          MLA-Transfert est un fork de ce projet, packagé sous forme d'application web
+          prête à l'emploi pour faciliter son adoption en entreprise.
+        </p>
+        <a
+          href="https://github.com/ANSSI-FR/MLA/"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="inline-flex items-center gap-2 text-sm font-medium transition-colors"
+          style="color:var(--accent)"
+          onmouseover="this.style.color='var(--accent-dark)'"
+          onmouseout="this.style.color='var(--accent)'"
+        >
+          <svg aria-hidden="true" class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
+          </svg>
+          github.com/ANSSI-FR/MLA
+        </a>
+      </div>
+    </section>
+
+    <!-- Cryptographie post-quantique -->
+    <section class="space-y-4">
+      <h3 class="text-xl font-semibold" style="color:var(--text-1)">Pourquoi le post-quantique maintenant ?</h3>
+
+      <!-- HNDL -->
+      <div class="card p-5 space-y-2" style="border-left:3px solid var(--coral)">
+        <div class="font-medium" style="color:var(--text-1)">La menace : « Harvest Now, Decrypt Later »</div>
+        <p class="text-sm leading-relaxed" style="color:var(--text-2)">
+          Des acteurs malveillants collectent <em>dès aujourd'hui</em> des communications chiffrées,
+          en anticipant de les déchiffrer quand les ordinateurs quantiques seront disponibles (horizon
+          estimé : <strong style="color:var(--text-1)">10 à 20 ans</strong>). Les données à longue durée
+          de vie — dossiers médicaux, secrets industriels, données RH — sont particulièrement exposées.
+          La migration vers la cryptographie post-quantique doit commencer maintenant.
+        </p>
+      </div>
+
+      <!-- Hybridation -->
+      <div class="card p-5 space-y-2">
+        <div class="font-medium" style="color:var(--text-1)">L'hybridation : aucune régression possible</div>
+        <p class="text-sm leading-relaxed" style="color:var(--text-2)">
+          MLA ne remplace pas les algorithmes classiques — il les <strong style="color:var(--text-1)">combine</strong>
+          avec des algorithmes post-quantiques (principe recommandé par l'ANSSI et le NIST).
+          Si l'un des deux composants est un jour compromis, l'autre maintient la sécurité.
+        </p>
+      </div>
+
+      <!-- Tableau des algorithmes -->
+      <div class="card overflow-hidden">
+        <div class="px-5 py-3" style="border-bottom:1px solid var(--border);background:var(--bg-surface)">
+          <span class="section-label">Algorithmes utilisés dans MLA</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr style="background:var(--bg-surface);border-bottom:1px solid var(--border)">
+                <th class="text-left px-4 py-2 font-semibold" style="color:var(--text-1)">Rôle</th>
+                <th class="text-left px-4 py-2 font-semibold" style="color:var(--text-1)">Classique</th>
+                <th class="text-left px-4 py-2 font-semibold" style="color:var(--text-1)">Post-quantique (NIST)</th>
+                <th class="text-left px-4 py-2 font-semibold" style="color:var(--text-1)">Standard</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom:1px solid var(--border)">
+                <td class="px-4 py-3 font-medium" style="color:var(--text-1)">Échange de clés</td>
+                <td class="px-4 py-3 font-mono text-xs" style="color:var(--text-2)">X25519 (ECDH)</td>
+                <td class="px-4 py-3 font-mono text-xs" style="color:var(--accent)">ML-KEM 1024</td>
+                <td class="px-4 py-3 text-xs" style="color:var(--text-3)">FIPS 203 (CRYSTALS-Kyber)</td>
+              </tr>
+              <tr style="border-bottom:1px solid var(--border)">
+                <td class="px-4 py-3 font-medium" style="color:var(--text-1)">Signature</td>
+                <td class="px-4 py-3 font-mono text-xs" style="color:var(--text-2)">Ed25519</td>
+                <td class="px-4 py-3 font-mono text-xs" style="color:var(--accent)">ML-DSA 87</td>
+                <td class="px-4 py-3 text-xs" style="color:var(--text-3)">FIPS 204 (CRYSTALS-Dilithium)</td>
+              </tr>
+              <tr style="border-bottom:1px solid var(--border)">
+                <td class="px-4 py-3 font-medium" style="color:var(--text-1)">Chiffrement symétrique</td>
+                <td class="px-4 py-3 font-mono text-xs" style="color:var(--text-2)">AES-256-GCM</td>
+                <td class="px-4 py-3 text-xs" style="color:var(--success)">déjà résistant</td>
+                <td class="px-4 py-3 text-xs" style="color:var(--text-3)">128 bits sécurité PQ</td>
+              </tr>
+              <tr>
+                <td class="px-4 py-3 font-medium" style="color:var(--text-1)">KDF (mot de passe)</td>
+                <td class="px-4 py-3 font-mono text-xs" style="color:var(--text-2)">Argon2id</td>
+                <td class="px-4 py-3 text-xs" style="color:var(--success)">déjà résistant</td>
+                <td class="px-4 py-3 text-xs" style="color:var(--text-3)">Mémoire-dur, anti brute-force</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="px-5 py-3 text-xs" style="border-top:1px solid var(--border);color:var(--text-3);background:var(--bg-surface)">
+          ML-KEM et ML-DSA normalisés par le NIST en août 2024 (FIPS 203, 204). Famille mathématique : réseaux euclidiens — complexité exponentielle même pour un ordinateur quantique.
+        </div>
+      </div>
+    </section>
+
+    <!-- Cas d'usage -->
+    <section class="space-y-4">
+      <h3 class="text-xl font-semibold" style="color:var(--text-1)">Pour qui ?</h3>
+      <div class="grid gap-3 sm:grid-cols-2">
+
+        <div class="card p-5 space-y-1.5">
+          <div class="font-medium" style="color:var(--text-1)">Santé &amp; HDS</div>
+          <p class="text-sm" style="color:var(--text-2)">
+            Dossiers patients, comptes-rendus, données biométriques — sans passer par une messagerie non sécurisée.
+          </p>
+        </div>
+
+        <div class="card p-5 space-y-1.5">
+          <div class="font-medium" style="color:var(--text-1)">Juridique &amp; notariat</div>
+          <p class="text-sm" style="color:var(--text-2)">
+            Actes, contrats, pièces sensibles. Chiffrement prouvable, expiration automatique, aucune copie persistante.
+          </p>
+        </div>
+
+        <div class="card p-5 space-y-1.5">
+          <div class="font-medium" style="color:var(--text-1)">Collectivités &amp; secteur public</div>
+          <p class="text-sm" style="color:var(--text-2)">
+            Remplacement souverain de WeTransfer et Google Drive. Hébergeable on-premise, conforme NIS2.
+          </p>
+        </div>
+
+        <div class="card p-5 space-y-1.5">
+          <div class="font-medium" style="color:var(--text-1)">Équipes IT &amp; sécurité</div>
+          <p class="text-sm" style="color:var(--text-2)">
+            Credentials, certificats, clés API. Mode clés MLA pour une authentification forte sans secret partagé.
+          </p>
+        </div>
+
+        <div class="card p-5 space-y-1.5">
+          <div class="font-medium" style="color:var(--text-1)">Relations partenaires</div>
+          <p class="text-sm" style="color:var(--text-2)">
+            Documents confidentiels avec prestataires ou auditeurs. Le lien expire, les fichiers disparaissent.
+          </p>
+        </div>
+
+        <div class="card p-5 space-y-1.5">
+          <div class="font-medium" style="color:var(--text-1)">RH &amp; direction</div>
+          <p class="text-sm" style="color:var(--text-2)">
+            Bulletins de salaire, données de recrutement, documents disciplinaires — RGPD-compliant sans infrastructure dédiée.
+          </p>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- Réalisé par -->
+    <section class="space-y-3">
+      <h3 class="text-xl font-semibold" style="color:var(--text-1)">Réalisé par</h3>
+      <div class="card p-5 flex items-center gap-5">
+        <a href="https://kodetis.re" target="_blank" rel="noopener noreferrer" class="flex-shrink-0">
+          <img src="/Logo_KODETIS.png" alt="Kodetis" style="height:32px" class="dark:invert" />
+        </a>
+        <p class="text-sm" style="color:var(--text-2)">
+          MLA-Transfert est développé par <a href="https://kodetis.re" target="_blank" rel="noopener noreferrer" style="color:var(--accent);font-weight:600;text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">Kodetis</a>,
+          cabinet de cybersécurité basé à La Réunion, spécialisé dans les architectures
+          souveraines, la conformité NIS2 et la cryptographie appliquée.
+        </p>
+      </div>
+    </section>
+
+    <!-- Retour -->
+    <div>
+      <a
+        href="/"
+        class="inline-flex items-center gap-2 text-sm font-medium transition-colors"
+        style="color:var(--accent)"
+        onmouseover="this.style.color='var(--accent-dark)'"
+        onmouseout="this.style.color='var(--accent)'"
+      >
+        ← Retour à l'accueil
+      </a>
+    </div>
+
+  </div>
+</Layout>

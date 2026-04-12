@@ -27,19 +27,27 @@ export default function KeyGenerator() {
   };
 
   return (
-    <div className="border border-gray-700 rounded-lg p-4">
-      <p className="text-sm text-gray-400 mb-3">
-        Pas encore de cles ? Generez une paire de cles MLA.
+    <div
+      className="rounded-lg p-4 space-y-3"
+      style={{ border: '1px solid var(--border)', background: 'var(--bg-surface)' }}
+    >
+      <p className="text-sm" style={{ color: 'var(--text-2)' }}>
+        Pas encore de clés ? Générez une paire de clés MLA.
       </p>
       <button
+        type="button"
         onClick={handleGenerate}
-        className="px-4 py-2 rounded-lg bg-gray-800 text-gray-200 hover:bg-gray-700 transition-colors text-sm"
+        className="btn-secondary"
+        style={{ width: 'auto', padding: '8px 16px', fontSize: '0.875rem' }}
       >
-        Generer mes cles
+        Générer mes clés
       </button>
       {generated && (
-        <p className="text-xs text-green-500 mt-2">
-          Cles generees et telechargees. Gardez votre .mlapriv en lieu sur !
+        <p className="text-xs flex items-center gap-1.5 animate-fade-in" style={{ color: 'var(--success)' }}>
+          <svg aria-hidden="true" className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+          </svg>
+          Clés générées et téléchargées. Gardez votre .mlapriv en lieu sûr !
         </p>
       )}
     </div>

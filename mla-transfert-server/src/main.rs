@@ -4,6 +4,7 @@ mod relay;
 mod signaling;
 mod state;
 
+use axum::extract::DefaultBodyLimit;
 use axum::routing::{get, post};
 use axum::Router;
 use tower_http::cors::CorsLayer;
@@ -38,6 +39,7 @@ async fn main() {
         .route("/api/download/{id}", get(relay::download))
         .route("/api/info/{id}", get(relay::info))
         .route("/api/signal/{room}", get(signaling::signal))
+        .layer(DefaultBodyLimit::max(state.max_file_size as usize))
         .layer(CorsLayer::permissive())
         .with_state(state);
 

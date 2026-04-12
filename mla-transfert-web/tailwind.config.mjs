@@ -36,8 +36,8 @@ export default {
         'glow':    '0 0 32px rgba(0,86,135,0.35)',
       },
       fontFamily: {
-        display: ['"Syne"', 'sans-serif'],
-        sans:    ['"IBM Plex Sans"', 'system-ui', 'sans-serif'],
+        display: ['"Montserrat"', 'sans-serif'],
+        sans:    ['"Roboto"', 'system-ui', 'sans-serif'],
         mono:    ['"JetBrains Mono"', 'monospace'],
       },
       animation: {
