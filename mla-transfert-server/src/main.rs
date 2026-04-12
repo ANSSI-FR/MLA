@@ -13,7 +13,7 @@ use axum::routing::{get, post};
 use axum::http::{HeaderValue, Method};
 use tower_governor::GovernorLayer;
 use tower_governor::governor::GovernorConfigBuilder;
-use tower_governor::key_extractor::SmartIpKeyExtractor;
+use tower_governor::key_extractor::PeerIpKeyExtractor;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tracing_subscriber::EnvFilter;
 
@@ -47,7 +47,7 @@ async fn main() {
             .per_second(20)
             .burst_size(40)
             .use_headers()
-            .key_extractor(SmartIpKeyExtractor)
+            .key_extractor(PeerIpKeyExtractor)
             .finish()
             .expect("valid governor config"),
     );

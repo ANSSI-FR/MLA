@@ -69,7 +69,7 @@ fn encrypt_with_password_impl(
 
     for (name, data) in file_names.iter().zip(file_contents.iter()) {
         let entry_name = EntryName::from_path(name)
-            .map_err(|e| JsValue::from_str(&format!("Invalid entry name: {e:?}")))?;
+            .map_err(|_| JsValue::from_str("Decryption failed"))?;
         archive
             .add_entry(entry_name, data.len() as u64, &data[..])
             .map_err(WasmMlaError::from)
@@ -114,9 +114,7 @@ fn decrypt_with_password_impl(
 ) -> Result<Vec<(String, Vec<u8>)>, JsValue> {
     // Lire le salt depuis les 16 premiers octets
     if mla_data.len() < SALT_LEN {
-        return Err(JsValue::from_str(
-            "Données invalides : trop courtes pour contenir un salt",
-        ));
+        return Err(JsValue::from_str("Decryption failed"));
     }
     let (salt, ciphertext) = mla_data.split_at(SALT_LEN);
 
@@ -148,7 +146,7 @@ fn decrypt_with_password_impl(
             .get_entry(entry_name)
             .map_err(WasmMlaError::from)
             .map_err(JsValue::from)?
-            .ok_or_else(|| JsValue::from_str(&format!("Entry not found: {display_name}")))?;
+            .ok_or_else(|| JsValue::from_str("Decryption failed"))?;
         let mut data = Vec::new();
         std::io::Read::read_to_end(&mut entry.data, &mut data)
             .map_err(WasmMlaError::from)
