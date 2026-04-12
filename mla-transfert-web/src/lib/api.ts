@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.PUBLIC_API_URL ?? 'http://localhost:3001';
+const API_BASE = import.meta.env.PUBLIC_API_URL ?? 'http://localhost:8787';
 
 async function extractError(response: Response, fallback: string): Promise<string> {
   const text = await response.text();
