@@ -78,7 +78,7 @@ export default function PasswordInput({ value, onChange, placeholder }: Password
           placeholder={placeholder ?? 'Mot de passe'}
           className="input-field"
           style={{ paddingRight: '5rem' }}
-          autoComplete="current-password"
+          autoComplete="new-password"
         />
 
         {/* Bouton générer */}
