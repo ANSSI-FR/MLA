@@ -312,8 +312,7 @@ mod entryname {
 
     #[cfg(target_family = "wasm")]
     fn to_pathbuf_os(bytes: &[u8]) -> Result<PathBuf, EntryNameError> {
-        let s =
-            str::from_utf8(bytes).map_err(|_| EntryNameError::InvalidPathComponentContent)?;
+        let s = str::from_utf8(bytes).map_err(|_| EntryNameError::InvalidPathComponentContent)?;
         Ok(PathBuf::from(s))
     }
 
