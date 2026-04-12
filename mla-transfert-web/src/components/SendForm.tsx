@@ -87,7 +87,9 @@ export default function SendForm() {
 
       setProgress(100);
       setStatus('done');
-      setShareLink(`${window.location.origin}/receive/${result.id}`);
+      const base = (import.meta.env.PUBLIC_BASE_URL as string | undefined)
+        ?.replace(/\/$/, '') ?? window.location.origin;
+      setShareLink(`${base}/receive/${result.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur inconnue');
       setStatus('error');

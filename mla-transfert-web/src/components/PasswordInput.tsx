@@ -9,6 +9,20 @@ interface PasswordInputProps {
 // Génère un mot de passe cryptographiquement sûr
 // Source d'aléa : crypto.getRandomValues() (CSPRNG navigateur — jamais Math.random())
 // Entropie : ~119 bits pour 20 chars sur un alphabet de 74 symboles
+
+// Uniform random integer in [0, max) using rejection sampling.
+// Discards values in the incomplete last group so every output has equal
+// probability — eliminates modulo bias regardless of alphabet size.
+function randBelow(max: number): number {
+  // Values ≥ threshold are in a complete group of `max`; reject the rest.
+  const threshold = (0x100000000 % max) >>> 0;
+  const buf = new Uint32Array(1);
+  for (;;) {
+    crypto.getRandomValues(buf);
+    if ((buf[0] >>> 0) >= threshold) return (buf[0] >>> 0) % max;
+  }
+}
+
 function generatePassword(length = 20): string {
   const upper   = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
   const lower   = 'abcdefghijklmnopqrstuvwxyz';
@@ -16,23 +30,18 @@ function generatePassword(length = 20): string {
   const special = '!@#$%^&*-_=+?';
   const all = upper + lower + digits + special;
 
-  // Tirage des caractères (length + 4 slots pour garantir les 4 catégories)
-  const rand = new Uint32Array(length + 4);
-  crypto.getRandomValues(rand);
-
+  // Guarantee one character from each category, then fill the rest.
   const chars: string[] = [
-    upper[rand[0]   % upper.length],
-    lower[rand[1]   % lower.length],
-    digits[rand[2]  % digits.length],
-    special[rand[3] % special.length],
-    ...Array.from({ length: length - 4 }, (_, i) => all[rand[4 + i] % all.length]),
+    upper[randBelow(upper.length)],
+    lower[randBelow(lower.length)],
+    digits[randBelow(digits.length)],
+    special[randBelow(special.length)],
+    ...Array.from({ length: length - 4 }, () => all[randBelow(all.length)]),
   ];
 
-  // Fisher-Yates shuffle avec un tableau d'aléa dédié (indépendant du tirage)
-  const shuffle = new Uint32Array(length);
-  crypto.getRandomValues(shuffle);
+  // Fisher-Yates shuffle — each swap index drawn with rejection sampling.
   for (let i = chars.length - 1; i > 0; i--) {
-    const j = shuffle[i] % (i + 1);   // j ∈ [0, i] — pas de biais de modulo significatif
+    const j = randBelow(i + 1);
     [chars[i], chars[j]] = [chars[j], chars[i]];
   }
 

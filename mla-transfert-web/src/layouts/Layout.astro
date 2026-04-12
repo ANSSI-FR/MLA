@@ -16,13 +16,7 @@ const { title } = Astro.props;
     <meta name="description" content="Transfert de fichiers chiffré avec cryptographie post-quantique MLA — zero-knowledge" />
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <title>{title}</title>
-    <!-- Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Roboto:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
-      rel="stylesheet"
-    />
+    <!-- Fonts: system stack only — no external requests (privacy + perf) -->
   </head>
   <body>
 
