@@ -12,8 +12,8 @@ index.html
 doc/book/mla-wasm/pkg/
 mla-wasm/pkg/
 .vscode/
-# docs locaux (plans, notes)
-docs/*
+# docs locaux (plans, notes brouillons)
+docs/plans/
 
 # données runtime et uploads
 data/
