@@ -45,26 +45,94 @@ import Layout from '../layouts/Layout.astro';
     <!-- Modes -->
     <section class="space-y-4">
       <h3 class="text-xl font-semibold" style="color:var(--text-1)">Modes de chiffrement</h3>
-      <div class="space-y-3">
-        <div class="card p-5">
-          <div class="font-medium mb-1" style="color:var(--text-1)">Mode simple — Mot de passe</div>
-          <p class="text-sm" style="color:var(--text-2)">
-            L'expéditeur et le destinataire partagent un même mot de passe (minimum 12 caractères).
-            Idéal pour un usage ponctuel entre deux personnes qui peuvent se transmettre le mot
-            de passe par un canal sécurisé (message chiffré, appel téléphonique…).
+
+      <div class="grid gap-4 sm:grid-cols-2">
+
+        <!-- Mode mot de passe -->
+        <div class="card p-5 space-y-4">
+          <div class="flex items-center justify-between">
+            <span class="text-base font-semibold" style="color:var(--text-1)">Mot de passe</span>
+            <span class="section-label px-2 py-0.5 rounded-full text-xs font-medium"
+                  style="background:var(--bg-surface);color:var(--accent)">Simple</span>
+          </div>
+
+          <p class="text-sm leading-relaxed" style="color:var(--text-2)">
+            L'expéditeur choisit un mot de passe (minimum 12 caractères) et le communique au
+            destinataire par un canal séparé — appel, message chiffré…
           </p>
+
+          <ul class="text-sm space-y-1.5" style="color:var(--text-2)">
+            <li class="flex items-start gap-2">
+              <span style="color:var(--success);flex-shrink:0">✓</span>
+              Aucune clé à gérer
+            </li>
+            <li class="flex items-start gap-2">
+              <span style="color:var(--success);flex-shrink:0">✓</span>
+              Idéal pour un échange ponctuel
+            </li>
+            <li class="flex items-start gap-2">
+              <span style="color:var(--coral);flex-shrink:0">✗</span>
+              Nécessite de partager le mot de passe hors-bande
+            </li>
+            <li class="flex items-start gap-2">
+              <span style="color:var(--coral);flex-shrink:0">✗</span>
+              Pas d'authentification de l'expéditeur
+            </li>
+          </ul>
+
+          <div class="text-xs px-3 py-2 rounded-lg" style="background:var(--bg-surface);color:var(--text-3)">
+            <span style="color:var(--text-2);font-weight:500">Idéal pour :</span>
+            envoi rapide à un collègue, partage ponctuel
+          </div>
         </div>
-        <div class="card p-5">
-          <div class="font-medium mb-1" style="color:var(--text-1)">Mode avancé — Clés MLA</div>
-          <p class="text-sm" style="color:var(--text-2)">
-            Chaque utilisateur dispose d'une paire de clés asymétriques (clé privée
-            <code style="color:var(--accent);font-family:'JetBrains Mono',monospace;font-size:0.85em">.mlapriv</code> + clé publique
-            <code style="color:var(--accent);font-family:'JetBrains Mono',monospace;font-size:0.85em">.mlapub</code>). L'expéditeur chiffre avec la clé
-            publique du destinataire et signe avec sa propre clé privée. Authentification
-            garantie, aucun secret partagé à transmettre.
+
+        <!-- Mode clés MLA -->
+        <div class="card p-5 space-y-4" style="border-color:var(--border-hi)">
+          <div class="flex items-center justify-between">
+            <span class="text-base font-semibold" style="color:var(--text-1)">Clés MLA</span>
+            <span class="section-label px-2 py-0.5 rounded-full text-xs font-medium"
+                  style="background:var(--accent);color:#fff">Avancé</span>
+          </div>
+
+          <p class="text-sm leading-relaxed" style="color:var(--text-2)">
+            Chiffrement asymétrique par paire de clés : clé publique
+            <code style="color:var(--accent);font-size:0.82em">.mlapub</code> (à partager) et clé privée
+            <code style="color:var(--accent);font-size:0.82em">.mlapriv</code> (à garder secrète).
+            Aucun secret à transmettre.
           </p>
+
+          <ul class="text-sm space-y-1.5" style="color:var(--text-2)">
+            <li class="flex items-start gap-2">
+              <span style="color:var(--success);flex-shrink:0">✓</span>
+              Aucun secret partagé à transmettre
+            </li>
+            <li class="flex items-start gap-2">
+              <span style="color:var(--success);flex-shrink:0">✓</span>
+              Authentification garantie (signature Ed25519)
+            </li>
+            <li class="flex items-start gap-2">
+              <span style="color:var(--success);flex-shrink:0">✓</span>
+              Post-quantique hybride (ML-KEM 1024)
+            </li>
+            <li class="flex items-start gap-2">
+              <span style="color:var(--coral);flex-shrink:0">✗</span>
+              Nécessite de générer et conserver ses clés
+            </li>
+          </ul>
+
+          <div class="text-xs px-3 py-2 rounded-lg" style="background:var(--bg-surface);color:var(--text-3)">
+            <span style="color:var(--text-2);font-weight:500">Idéal pour :</span>
+            échanges récurrents, données sensibles, correspondants de confiance
+          </div>
         </div>
+
       </div>
+
+      <!-- Note comparative -->
+      <p class="text-xs text-center" style="color:var(--text-3)">
+        Dans les deux modes, le chiffrement s'effectue intégralement dans votre navigateur —
+        le serveur ne voit jamais les données en clair.
+      </p>
     </section>
 
     <!-- FAQ -->
