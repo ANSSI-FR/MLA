@@ -40,9 +40,9 @@ export default function ShareLink({ link, autoCopied = false }: ShareLinkProps) 
           onClick={handleCopy}
           aria-label={copied ? 'Lien copié' : 'Copier le lien'}
           className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-white text-sm font-medium transition-all focus-visible:outline focus-visible:outline-2"
-          style={{ background: '#24305e' }}
-          onMouseOver={(e) => (e.currentTarget.style.background = '#005687')}
-          onMouseOut={(e) => (e.currentTarget.style.background = '#24305e')}
+          style={{ background: 'var(--accent-dark)' }}
+          onMouseOver={(e) => (e.currentTarget.style.background = 'var(--accent)')}
+          onMouseOut={(e) => (e.currentTarget.style.background = 'var(--accent-dark)')}
         >
           {copied ? (
             <>

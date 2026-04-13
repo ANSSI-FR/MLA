@@ -36,9 +36,8 @@ export default {
         'glow':    '0 0 32px rgba(0,86,135,0.35)',
       },
       fontFamily: {
-        display: ['"Montserrat"', 'sans-serif'],
-        sans:    ['"Roboto"', 'system-ui', 'sans-serif'],
-        mono:    ['"JetBrains Mono"', 'monospace'],
+        sans: ['system-ui', '-apple-system', '"Segoe UI"', 'sans-serif'],
+        mono: ['ui-monospace', '"SFMono-Regular"', 'monospace'],
       },
       animation: {
         'slide-up':   'slide-up 0.35s cubic-bezier(0.16,1,0.3,1) both',

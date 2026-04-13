@@ -57,8 +57,8 @@ function getStrength(password: string): {
   const len = password.length;
   if (len === 0)  return { label: '',          barColor: 'var(--border)',  barWidth: '0%',   textColor: 'var(--text-3)' };
   if (len < 8)    return { label: 'Faible',    barColor: 'var(--coral)',   barWidth: '25%',  textColor: 'var(--coral)' };
-  if (len < 12)   return { label: 'Moyen',     barColor: '#f8e9a1',        barWidth: '50%',  textColor: '#b8a840' };
-  if (len < 16)   return { label: 'Fort',      barColor: '#4ade80',        barWidth: '75%',  textColor: '#1a6e3c' };
+  if (len < 12)   return { label: 'Moyen',     barColor: 'var(--warn-bar)',  barWidth: '50%',  textColor: 'var(--warn)' };
+  if (len < 16)   return { label: 'Fort',      barColor: '#4ade80',          barWidth: '75%',  textColor: 'var(--success)' };
   return           { label: 'Excellent',  barColor: 'var(--accent)',  barWidth: '100%', textColor: 'var(--accent)' };
 }
 

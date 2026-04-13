@@ -21,6 +21,8 @@
     --coral:        #f76c6c;
     --success:      #1a6e3c;
     --success-bg:   #edf7f1;
+    --warn:         #b8a840;
+    --warn-bar:     #f0d840;
   }
 
   .dark {
@@ -39,6 +41,8 @@
     --coral:        #f76c6c;
     --success:      #4ade80;
     --success-bg:   rgba(74,222,128,0.08);
+    --warn:         #f8e9a1;
+    --warn-bar:     #f8e9a1;
   }
 
   html { scroll-behavior: smooth; }
