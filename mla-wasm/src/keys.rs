@@ -41,8 +41,8 @@ fn encrypt_with_keys_impl(
         .map_err(JsValue::from)?;
 
     for (name, data) in file_names.iter().zip(file_contents.iter()) {
-        let entry_name = EntryName::from_path(name)
-            .map_err(|_| JsValue::from_str("Decryption failed"))?;
+        let entry_name =
+            EntryName::from_path(name).map_err(|_| JsValue::from_str("Decryption failed"))?;
         archive
             .add_entry(entry_name, data.len() as u64, &data[..])
             .map_err(WasmMlaError::from)

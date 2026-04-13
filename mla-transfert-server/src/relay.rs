@@ -16,10 +16,7 @@ fn json_err(status: StatusCode, msg: impl Into<String>) -> (StatusCode, Json<ser
 /// Allows alphanumerics, spaces, dots, hyphens and underscores; max 255 bytes.
 fn sanitize_filename(raw: &str) -> String {
     // Take the last path component only (strips directory traversal).
-    let name = raw
-        .rsplit(['/', '\\'])
-        .next()
-        .unwrap_or("upload");
+    let name = raw.rsplit(['/', '\\']).next().unwrap_or("upload");
 
     let clean: String = name
         .chars()

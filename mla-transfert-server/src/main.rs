@@ -9,8 +9,8 @@ use std::sync::Arc;
 
 use axum::Router;
 use axum::extract::DefaultBodyLimit;
-use axum::routing::{get, post};
 use axum::http::{HeaderValue, Method};
+use axum::routing::{get, post};
 use tower_governor::GovernorLayer;
 use tower_governor::governor::GovernorConfigBuilder;
 use tower_governor::key_extractor::PeerIpKeyExtractor;
@@ -52,8 +52,8 @@ async fn main() {
             .expect("valid governor config"),
     );
 
-    let allowed_origin = std::env::var("ALLOWED_ORIGIN")
-        .unwrap_or_else(|_| "http://localhost:4321".to_string());
+    let allowed_origin =
+        std::env::var("ALLOWED_ORIGIN").unwrap_or_else(|_| "http://localhost:4321".to_string());
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::exact(
             HeaderValue::from_str(&allowed_origin)
@@ -72,7 +72,9 @@ async fn main() {
             state.max_file_size.try_into().unwrap_or(usize::MAX),
         ))
         .layer(cors)
-        .layer(GovernorLayer { config: governor_conf })
+        .layer(GovernorLayer {
+            config: governor_conf,
+        })
         .with_state(state);
 
     let addr = format!("0.0.0.0:{}", config.port);
