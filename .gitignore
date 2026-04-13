@@ -27,7 +27,8 @@ mla-transfert-web/data/
 
 # notes locales
 todo.md
-
+docs/*
+docs/
 # infra Cloudflare (worker + config — ne pas exposer dans le repo public)
 mla-transfert-worker/
 wrangler.toml
