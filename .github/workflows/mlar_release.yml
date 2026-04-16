@@ -64,7 +64,7 @@ jobs:
     - name: Cache build-std artifacts (only for win7)
       # Only apply caching to Win7 tier-3 targets that require build-std
       if: contains(matrix.target, 'win7')
-      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         # Cache the parts of target/ that contain compiled std artifacts for the given target
         path: |
@@ -87,7 +87,7 @@ jobs:
         RUSTC_BOOTSTRAP: "${{ contains(matrix.target, 'win7') && '1' || '' }}"
       run: cargo build --release --all-features --package mlar --verbose ${{ matrix.cargo_build }}
     - name: Upload resulting 'mlar'
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: mlar-${{ matrix.build }}
         path: ./target/${{ matrix.target }}/release/mlar${{ matrix.extension }}
