@@ -37,6 +37,6 @@ workspace = true
 assert_cmd = "2.1"
 assert_fs = "1.1"
 permutate = "0.3"
-rand = "0.10"
+rand = "0.8"
 rand_chacha = "0.10"
 winapi = { version = "0.3", features = ["winbase"] }
