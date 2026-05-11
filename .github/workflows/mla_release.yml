@@ -177,17 +177,38 @@ jobs:
           release_name: mla-${{ steps.get_version.outputs.VERSION }}
           draft: true
           body: |
-            Verification of assets
+            ## Verification of assets
             
-            This release assets are built by GitHub Runners and are attested so ( https://docs.github.com/en/actions/concepts/security/artifact-attestations ).
+            This release's assets are built by GitHub Runners and are attested using [SLSA provenance](https://slsa.dev/spec/v1.0/provenance) (https://docs.github.com/en/actions/concepts/security/artifact-attestations).
             
-            To verify the provenance and transparency of assets you download, you can run `gh attestation verify --repo ANSSI-FR/MLA <file-path>` where `<file-path>` is the file path to the downloaded asset.
-            
-            To do this without a GitHub account, you can do it directly with https://github.com/sigstore/cosign. First, download the attestation from https://github.com/ANSSI-FR/MLA/attestations to `attestation.json`. Then run `cosign verify-blob-attestation --bundle attestation.json --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' --certificate-identity 'https://github.com/ANSSI-FR/MLA/.github/workflows/mla_release.yml@refs/tags/mla-${{ steps.get_version.outputs.VERSION }}' <asset-path>` where `<asset-path>` is the file path to the downloaded asset you want to attest.
+            The attestation is generated from the GitHub workflow that built the release artifacts, and is cryptographically signed and logged by GitHub and Sigstore. You can verify it using a GitHub account or directly with [cosign](https://github.com/sigstore/cosign), as described below:
+
+            ### With a GitHub account
+            You can run:
+
+            ```bash
+            gh attestation verify --repo ANSSI-FR/MLA <asset-path>
+            ```
+
+            where `<asset-path>` is the file path to the downloaded asset.
+
+            ### Without a GitHub account
+            You can do it directly with [cosign](https://github.com/sigstore/cosign). First, download the attestation from https://github.com/ANSSI-FR/MLA/attestations to `attestation.json` (and not the one in the release). Then run :
+
+            ```bash
+            cosign verify-blob-attestation \
+              --bundle attestation.json \
+              --type https://slsa.dev/provenance/v1 \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              --certificate-identity https://github.com/ANSSI-FR/MLA/.github/workflows/mla_release.yml@refs/tags/mla-${{ steps.get_version.outputs.VERSION }} \
+              <asset-path>
+            ```
+
+            where `<asset-path>` is the file path to the downloaded asset.
             
             Changelog
             
-            https://github.com/ANSSI-FR/MLA/blob/mla-v${{ steps.get_version.outputs.VERSION }}/mla/CHANGELOG.md
+            https://github.com/ANSSI-FR/MLA/blob/mla-${{ steps.get_version.outputs.VERSION }}/mla/CHANGELOG.md
       - name: Download linux-x86_64 artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
