@@ -183,7 +183,7 @@ jobs:
             
             To verify the provenance and transparency of assets you download, you can run `gh attestation verify --repo ANSSI-FR/MLA <file-path>` where `<file-path>` is the file path to the downloaded asset.
             
-            To do this without a GitHub account, you can first download the trusted root with `gh attestation trusted-root > ./trusted-root.jsonl`, download the attestation at https://github.com/ANSSI-FR/MLA/attestations to `./attestation.json` and run `gh attestation verify --repo ANSSI-FR/MLA --bundle ./attestation.json --custom-trusted-root ./trusted-root.jsonl <file-path>`.
+            To do this without a GitHub account, you can do it directly with https://github.com/sigstore/cosign. First, download the attestation from https://github.com/ANSSI-FR/MLA/attestations to `attestation.json`. Then run `cosign verify-blob-attestation --bundle attestation.json --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' --certificate-identity 'https://github.com/ANSSI-FR/MLA/.github/workflows/mla_release.yml@refs/tags/mla-${{ steps.get_version.outputs.VERSION }}' <asset-path>` where `<asset-path>` is the file path to the downloaded asset you want to attest.
             
             Changelog
             
