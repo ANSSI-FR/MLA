@@ -1,3 +1,12 @@
-# static linking on Windows, avoids the need for a Visual Studio installation
 [target.'cfg(all(windows, target_env = "msvc"))']
-rustflags = ["-C", "target-feature=+crt-static"]
+rustflags = [
+    # Static linking on Windows (avoids requiring Visual Studio)
+    "-C", "target-feature=+crt-static",
+    # Temporarily increase stack size to 8 MiB to prevent stack overflows during ML-DSA key deserialization.
+    # Related:
+    # - Issue: https://github.com/RustCrypto/signatures/issues/1024 (Windows stack overflow with ML-DSA)
+    # - Fixed upstream by: https://github.com/RustCrypto/signatures/pull/1261 (reduces stack usage by 207kb for ML-DSA-87)
+    # TODO: remove once MLA adopts the 0.1.0 stable ml-dsa version (with stack fixes)
+    # Additional context: https://github.com/RustCrypto/KEMs/pull/310 (heap offloading added for ml-kem `alloc` feature, enabled by default)
+    "-C", "link-arg=/STACK:8388608",
+]
