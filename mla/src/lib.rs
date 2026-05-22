@@ -1020,6 +1020,10 @@ fn read_mla_entries_header_skip_magic(mut src: impl Read) -> Result<(), Error> {
     Ok(())
 }
 
+/// Returned by `ArchiveReader::get_entry`. It is the readable type underneath `ArchiveEntryDataReader`.
+/// `LayerReader` is an internal private trait
+pub type BoxedLayerReader<'b, R> = Box<dyn 'b + LayerReader<'b, R>>;
+
 impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
     /// Create an `ArchiveReader`.
     pub fn from_config(
@@ -1183,10 +1187,10 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
     /// If no entry is found with given `name`, returns `Ok(None)`.
     /// If found, return `Ok(Some(e))` where e is an `ArchiveEntry`, letting you read its content and size.
     /// Returns an `Err` on error...
-    pub fn get_entry(
-        &mut self,
+    pub fn get_entry<'a>(
+        &'a mut self,
         name: EntryName,
-    ) -> Result<Option<ArchiveEntry<'_, impl InnerReaderTrait>>, Error> {
+    ) -> Result<Option<ArchiveEntry<'a, BoxedLayerReader<'b, R>>>, Error> {
         if let Some(ArchiveFooter { entries_info }) = &self.metadata {
             // Get file relative information
             let Some(file_info) = entries_info.get(&name) else {
@@ -1199,8 +1203,8 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
             }
 
             // Instantiate the file representation
-            let reader = ArchiveEntryDataReader::new(&mut self.src, &file_info.offsets_and_sizes)?;
-            Ok(Some(ArchiveEntry { name, data: reader }))
+            let data = ArchiveEntryDataReader::new(&mut self.src, &file_info.offsets_and_sizes)?;
+            Ok(Some(ArchiveEntry { name, data }))
         } else {
             Err(Error::MissingMetadata)
         }
