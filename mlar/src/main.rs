@@ -1378,7 +1378,7 @@ fn to_tar(matches: &ArgMatches) -> Result<(), MlarError> {
                 let escaped = entry_name
                     .to_pathbuf_escaped_string()
                     .map_err(|_| MlarError::EntryNameEscapeFailed)?;
-                eprintln!("[ERROR] Failed to find entry \"{escaped}\" indexed in metadata",);
+                eprintln!("[ERROR] Failed to find entry \"{escaped}\" indexed in metadata");
                 return Err(MlarError::EntryNotFound);
             }
             Ok(Some(entry)) => entry,
@@ -1387,7 +1387,7 @@ fn to_tar(matches: &ArgMatches) -> Result<(), MlarError> {
             let escaped = entry_name
                 .to_pathbuf_escaped_string()
                 .map_err(|_| MlarError::EntryNameEscapeFailed)?;
-            eprintln!("[ERROR] Unable to add entry \"{escaped}\" to tarball ({err:?})",);
+            eprintln!("[ERROR] Unable to add entry \"{escaped}\" to tarball ({err:?})");
             return Err(err);
         }
     }
