@@ -15,11 +15,11 @@ For clarity: the key file serialization format is independent from the MLA archi
 
 ## Separator
 
-A separator named `Sep` is used in MLA key serialization formats described below. It is usually a `<CR><LF>` where `<CR>` is ASCII carriage return, `<LF>` is ASCII line feed. If one wants a key without newlines, `Sep` with value `__` (two ASCII underscores) is also valid.
+A separator named `Sep` is used in MLA key serialization formats described below. Valid values for `Sep` are `<CR><LF>`, `<CR>`, `<LF>`, or `__` (two ASCII underscores), where `<CR>` is ASCII carriage return and `<LF>` is ASCII line feed.
 
 ## Private key file format
 
-A private key file is an ASCII file, which may use `mlapriv` as file extension. The file (or whatever serialization medium) content is `PrivFormatHeader||Sep||PrivEncHdr||B64Priv4Enc||Sep||PrivSigHdr||B64Priv4Sig||Sep||B64PrivOpts||Sep||PrivFormatFooter||Sep`, where `PrivFormatHeader`, `PrivEncHdr`, `B64Priv4Enc`, `PrivSigHdr`, `B64Priv4Sig`, `B64PrivOpts` and `PrivFormatFooter` are described below.
+A private key file is an ASCII file, which may use `mlapriv` as file extension. The file (or whatever serialization medium) content is `PrivFormatHeader||Sep||PrivEncHdr||B64Priv4Enc||Sep||PrivSigHdr||B64Priv4Sig||Sep||B64PrivOpts||Sep||PrivFormatFooter||Sep`, where `PrivFormatHeader`, `PrivEncHdr`, `B64Priv4Enc`, `PrivSigHdr`, `B64Priv4Sig`, `B64PrivOpts` and `PrivFormatFooter` are described below and the last `Sep` is optional.
 
 * `PrivFormatHeader` is the ASCII string `DO NOT SEND THIS TO ANYONE - MLA PRIVATE KEY FILE V1`.
 * `PrivEncHdr` is the ASCII string `MLA PRIVATE DECRYPTION KEY ` (note the trailing space).
@@ -41,7 +41,7 @@ For `PrivEncOpts` and `PrivSigOpts`, refer to below generic explanation for `Key
 
 ## Public key file format
 
-A public key file is an ASCII file, which may use `mlapub` as file extension. The file (or whatever serialization medium) content is `PubFormatHeader||Sep||PubEncHdr||B64Pub4Enc||Sep||PubSigHdr||B64Pub4Sig||Sep||B64PubOpts||Sep||PubFormatFooter||Sep` where `PubFormatHeader`, `PubEncHdr`, `B64Pub4Enc`, `PubSigHdr`, `B64Pub4Sig`, `B64PubOpts` and `PubFormatFooter` are described below.
+A public key file is an ASCII file, which may use `mlapub` as file extension. The file (or whatever serialization medium) content is `PubFormatHeader||Sep||PubEncHdr||B64Pub4Enc||Sep||PubSigHdr||B64Pub4Sig||Sep||B64PubOpts||Sep||PubFormatFooter||Sep` where `PubFormatHeader`, `PubEncHdr`, `B64Pub4Enc`, `PubSigHdr`, `B64Pub4Sig`, `B64PubOpts` and `PubFormatFooter` are described below and the last `Sep` is optional.
 
 * `PubFormatHeader` is the ASCII string `MLA PUBLIC KEY FILE V1`.
 * `PubEncHdr` is the ASCII string `MLA PUBLIC ENCRYPTION KEY " (note the trailing space).

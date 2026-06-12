@@ -87,32 +87,40 @@ fn zeroizeable_read_to_end(mut src: impl Read) -> Result<Vec<u8>, Error> {
 #[allow(clippy::needless_range_loop)]
 fn split_in_five_parts_without_buffering(content: &[u8]) -> Result<[&[u8]; 5], Error> {
     fn split_separator(content: &[u8]) -> Result<(&[u8], &[u8]), Error> {
-        let mut carriage_return_index = 0;
-        for i in 0..content.len() {
-            if content[i] == b'\r' || content[i] == b'_' {
-                carriage_return_index = i;
-                break;
-            }
-        }
-        if carriage_return_index == 0 {
+        let idx = content
+            .iter()
+            .position(|&b| b == b'\r' || b == b'\n' || b == b'_')
+            .ok_or(Error::DeserializationError)?;
+
+        if idx == 0 {
             return Err(Error::DeserializationError);
         }
-        let (part, rest) = content.split_at(carriage_return_index);
-        if rest.len() < 2
-            || (rest[0] != b'\r' && rest[0] != b'_')
-            || (rest[0] == b'\r' && rest[1] != b'\n')
-            || (rest[0] == b'_' && rest[1] != b'_')
-        {
-            return Err(Error::DeserializationError);
+
+        let (part, rest) = content.split_at(idx);
+
+        if rest.starts_with(b"\r\n") || rest.starts_with(b"__") {
+            Ok((part, &rest[2..]))
+        } else if rest.starts_with(b"\r") || rest.starts_with(b"\n") {
+            Ok((part, &rest[1..]))
+        } else {
+            Err(Error::DeserializationError)
         }
-        let rest = &rest[2..];
-        Ok((part, rest))
     }
     let (first_part, rest) = split_separator(content)?;
     let (second_part, rest) = split_separator(rest)?;
     let (third_part, rest) = split_separator(rest)?;
     let (fourth_part, rest) = split_separator(rest)?;
-    let (fifth_part, rest) = split_separator(rest)?;
+
+    let (fifth_part, rest) = match split_separator(rest) {
+        Ok(res) => res,
+        Err(Error::DeserializationError) => {
+            if rest.is_empty() {
+                return Err(Error::DeserializationError);
+            }
+            (rest, &[][..])
+        }
+        Err(e) => return Err(e),
+    };
     if !rest.is_empty() {
         return Err(Error::DeserializationError);
     }
@@ -1057,5 +1065,55 @@ mod tests {
         let mut cursor = Cursor::new(&input[..]);
         let result = MLAPrivateKey::deserialize_private_key(&mut cursor);
         assert!(matches!(result, Err(Error::DeserializationError)));
+    }
+
+    #[test]
+    fn test_split_in_five_parts() {
+        let parts = [b"p1", b"p2", b"p3", b"p4", b"p5"];
+
+        // Case 1: CRLF separators, with trailing
+        assert_eq!(
+            split_in_five_parts_without_buffering(b"p1\r\np2\r\np3\r\np4\r\np5\r\n").unwrap(),
+            parts
+        );
+
+        // Case 2: CRLF separators, without trailing
+        assert_eq!(
+            split_in_five_parts_without_buffering(b"p1\r\np2\r\np3\r\np4\r\np5").unwrap(),
+            parts
+        );
+
+        // Case 3: LF separators, with trailing
+        assert_eq!(
+            split_in_five_parts_without_buffering(b"p1\np2\np3\np4\np5\n").unwrap(),
+            parts
+        );
+
+        // Case 4: CR separators, without trailing
+        assert_eq!(
+            split_in_five_parts_without_buffering(b"p1\rp2\rp3\rp4\rp5").unwrap(),
+            parts
+        );
+
+        // Case 5: Underscore separators, with trailing
+        assert_eq!(
+            split_in_five_parts_without_buffering(b"p1__p2__p3__p4__p5__").unwrap(),
+            parts
+        );
+
+        // Case 6: Mixed separators, without trailing
+        assert_eq!(
+            split_in_five_parts_without_buffering(b"p1\r\np2\np3\rp4__p5").unwrap(),
+            parts
+        );
+
+        // Case 7: Too few parts
+        assert!(split_in_five_parts_without_buffering(b"p1\np2\np3\np4").is_err());
+
+        // Case 8: Too many parts
+        assert!(split_in_five_parts_without_buffering(b"p1\np2\np3\np4\np5\np6").is_err());
+
+        // Case 9: Invalid separator (single underscore)
+        assert!(split_in_five_parts_without_buffering(b"p1_p2\np3\np4\np5").is_err());
     }
 }
