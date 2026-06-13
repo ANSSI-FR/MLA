@@ -7,7 +7,11 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-enum MLAStatus {
+enum MLAStatus
+#if __STDC_VERSION__ >= 202311L
+  : uint64_t
+#endif // __STDC_VERSION__ >= 202311L
+ {
   MLA_STATUS_SUCCESS = 0,
   MLA_STATUS_IO_ERROR = 65536,
   MLA_STATUS_WRONG_MAGIC = 131072,
@@ -53,7 +57,11 @@ enum MLAStatus {
   MLA_STATUS_OTHER = 2555904,
   MLA_STATUS_MLA_KEY_PARSER_ERROR = 15859712,
 };
+#if __STDC_VERSION__ >= 202311L
+typedef enum MLAStatus MLAStatus;
+#else
 typedef uint64_t MLAStatus;
+#endif // __STDC_VERSION__ >= 202311L
 
 typedef void *MLAWriterConfigHandle;
 
