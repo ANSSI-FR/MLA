@@ -47,7 +47,7 @@ jobs:
     container: ${{matrix.container}}
 
     steps:
-    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+    - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
     - name: Set target if any
       # Skip rustup target add for win7 targets — rustup doesn't support these tier-3 targets
       if: matrix.target && !contains(matrix.target, 'win7')
@@ -95,7 +95,7 @@ jobs:
     container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1 : pin to known-good previous stable release for increased stability and security
 
     steps:
-    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+    - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
     - name: Run long tests
       run: cd mla && cargo test --release -- --ignored
 
@@ -104,7 +104,7 @@ jobs:
     container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1 : pin to known-good previous stable release for increased stability and security
 
     steps:
-    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+    - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
     - name: Run long tests
       run: cargo test --all-features --all --exclude mla-fuzz-afl --exclude mla-bindings-c --release
 
@@ -113,7 +113,7 @@ jobs:
     container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1 : pin to known-good previous stable release for increased stability and security
 
     steps:
-    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+    - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
     - name: Run C bindings tests on Linux
       working-directory: bindings/C/tests/linux-gcc-g++/
       run: make CC=gcc
@@ -142,7 +142,7 @@ jobs:
     runs-on: windows-2025
 
     steps:
-    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+    - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
     - name: Set target if any
       run: rustup target add ${{ matrix.target }}
     - uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3.0.0
@@ -158,7 +158,7 @@ jobs:
     container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1 : pin to known-good previous stable release for increased stability and security
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - name: Install dependencies
         run: apt-get update && apt-get install -y llvm
       - name: Install cargo-afl binary crate
@@ -173,7 +173,7 @@ jobs:
     container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1 : pin to known-good previous stable release for increased stability and security
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - name: Install rustfmt
         run: rustup component add rustfmt
       - name: Check format
@@ -186,7 +186,7 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - name: Security audit
         uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998 # v2.0.0
         with:
@@ -199,7 +199,7 @@ jobs:
     container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1 : pin to known-good previous stable release for increased stability and security
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - name: Install dependencies
         run: apt-get update && apt-get install -y llvm
       - name: Install cargo-afl binary crate
@@ -214,7 +214,7 @@ jobs:
     container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1 : pin to known-good previous stable release for increased stability and security
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - name: Dry-run publish mla
         run: cd mla && cargo publish --dry-run
       - name: Dry-run publish mlar
