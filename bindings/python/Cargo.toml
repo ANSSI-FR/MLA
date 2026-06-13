@@ -38,5 +38,5 @@ must_use_candidate = "allow"
 too-many-lines = "allow"
 
 [dependencies]
-pyo3 = "0.28"
+pyo3 = "0.29"
 mla = { version = "2.0.0", features = ["send"], path = "../../mla"}
