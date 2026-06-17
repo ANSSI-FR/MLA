@@ -2390,3 +2390,41 @@ fn test_archive_with_missing_file_skips_and_succeeds() {
         "Missing file should not appear in archive list"
     );
 }
+
+#[test]
+fn test_keygen_public_from_private() {
+    let output_dir = TempDir::new().unwrap();
+    let base_path = output_dir.path().join("testkey");
+    let priv_path = base_path.with_extension("mlapriv");
+    let pub_path = base_path.with_extension("mlapub");
+
+    // 1. Generate keypair
+    #[allow(deprecated)]
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("keygen").arg(&base_path);
+    cmd.assert().success();
+
+    // Verify both files exist
+    assert!(priv_path.exists());
+    assert!(pub_path.exists());
+
+    // Read original pub key
+    let original_pub_key = fs::read(&pub_path).unwrap();
+
+    // 2. Derive pub key from priv key
+    let derived_base_path = output_dir.path().join("derived");
+    let derived_pub_path = derived_base_path.with_extension("mlapub");
+
+    #[allow(deprecated)]
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("keygen")
+        .arg("--public-from-private")
+        .arg(&priv_path)
+        .arg(&derived_base_path);
+    cmd.assert().success();
+
+    // 3. Compare
+    assert!(derived_pub_path.exists());
+    let derived_pub_key = fs::read(&derived_pub_path).unwrap();
+    assert_eq!(original_pub_key, derived_pub_key);
+}
