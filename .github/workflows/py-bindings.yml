@@ -25,8 +25,6 @@ jobs:
           - runner: ubuntu-26.04
             target: x86_64
           - runner: ubuntu-26.04
-            target: x86
-          - runner: ubuntu-26.04
             target: aarch64
           - runner: ubuntu-26.04
             target: armv7
@@ -88,8 +86,6 @@ jobs:
         platform:
           - runner: ubuntu-26.04
             target: x86_64
-          - runner: ubuntu-26.04
-            target: x86
           - runner: ubuntu-26.04
             target: aarch64
           - runner: ubuntu-26.04
