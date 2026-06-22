@@ -17,26 +17,26 @@ jobs:
         build: [linux, macos, windows]
         include:
           - build: linux
-            os: ubuntu-24.04
+            os: ubuntu-26.04
             container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1 : pin to known-good previous stable release for increased stability and security
           - build: macos
-            os: macos-15
+            os: macos-26
             # not available: set container value to null
             container: null
           - build: windows
-            os: windows-2025
+            os: windows-2025-vs2026
             # not available: set container value to null
             container: null
             extension: .exe
           - build: windows7-i686 # Win7-compatible build using tier 3 target
-            os: windows-2025
+            os: windows-2025-vs2026
             # not available: set container value to null
             container: null
             target: i686-win7-windows-msvc
             cargo_arg: --target i686-win7-windows-msvc -Z build-std # Build std from source, needed for tier 3 target
             extension: .exe
           - build: windows7-x86_64 # Win7-compatible build using tier 3 target
-            os: windows-2025
+            os: windows-2025-vs2026
             # not available: set container value to null
             container: null
             target: x86_64-win7-windows-msvc
@@ -80,18 +80,18 @@ jobs:
       run: cargo build --release --all --exclude mla-fuzz-afl --verbose ${{ matrix.cargo_arg }}
     - name: Run tests (Windows)
       # as rustdoc.exe has stack overflows with current tests (likely due to ml-dsa expansion) in mla/lib.rs
-      if: matrix.os == 'windows-2025'
+      if: matrix.os == 'windows-2025-vs2026'
       env:
         # RUSTC_BOOTSTRAP=1 allows use of -Z build-std on stable toolchain
         # Required because win7 targets aren't officially supported in stable
         RUSTC_BOOTSTRAP: "${{ contains(matrix.target, 'win7') && '1' || '' }}"     
       run: cargo test --all --lib --bins --tests --exclude mla-fuzz-afl --release --verbose ${{ matrix.cargo_arg }}
     - name: Run tests (Linux/macOS)
-      if: matrix.os != 'windows-2025'    
+      if: matrix.os != 'windows-2025-vs2026'    
       run: cargo test --all --exclude mla-fuzz-afl --release --verbose
 
   long-tests:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1 : pin to known-good previous stable release for increased stability and security
 
     steps:
@@ -100,7 +100,7 @@ jobs:
       run: cd mla && cargo test --release -- --ignored
 
   all-features:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1 : pin to known-good previous stable release for increased stability and security
 
     steps:
@@ -109,7 +109,7 @@ jobs:
       run: cargo test --all-features --all --exclude mla-fuzz-afl --exclude mla-bindings-c --release
 
   test-bindings-c-cpp-linux:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1 : pin to known-good previous stable release for increased stability and security
 
     steps:
@@ -139,7 +139,7 @@ jobs:
             msvc_platform: Win32
           - target: x86_64-pc-windows-msvc
             msvc_platform: x64
-    runs-on: windows-2025
+    runs-on: windows-2025-vs2026
 
     steps:
     - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -154,7 +154,7 @@ jobs:
       run: ./${{ matrix.msvc_platform }}/${{ matrix.version }}/mla-bindings-test.exe
 
   afl-build:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1 : pin to known-good previous stable release for increased stability and security
 
     steps:
@@ -169,7 +169,7 @@ jobs:
         run: cargo afl build
 
   fmt:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1 : pin to known-good previous stable release for increased stability and security
 
     steps:
@@ -183,7 +183,7 @@ jobs:
     permissions:
       # allow to write a Check report which blocks PR on failures cf. https://github.com/rustsec/audit-check#granular-permissions
       checks: write
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
 
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -195,7 +195,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
   clippy:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1 : pin to known-good previous stable release for increased stability and security
 
     steps:
@@ -210,7 +210,7 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
 
   publish-dry-run:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1 : pin to known-good previous stable release for increased stability and security
 
     steps:
