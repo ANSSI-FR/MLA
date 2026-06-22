@@ -1,6 +1,6 @@
 [package]
 name = "mla-fuzz-afl"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["ANSSI <opensource@ssi.gouv.fr>"]
 edition = "2024"
 

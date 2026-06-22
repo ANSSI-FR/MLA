@@ -5,9 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased [2.1.0] - 2026-06-23
+
+### Added / Changed
+
+- Add `MLADecryptionPrivateKey::to_encryption_public_key` and `MLASigningPrivateKey::to_signature_verification_public_key` methods to derive public keys from private keys
+- Relax key format: accept all styles of newlines and make them optional at the end
+- Convert `ArchiveReader::get_entry` return type to a named type
+- Improved releases signature verification
+- Documentation: note about HKDF acting as a dual-prf during hybridization
+- Documentation: explain brotli choice and compression agility
+- Documentation: add link between MLA format and MLA key format
+
+### Fixed
+
+- Fix opaque type handling
+- Windows: temporarily increase stack size to 8 MiB for windows-msvc builds
+
 ## [2.0.0] - 2026-02-16
 
-### Added/Changed since 1.3.0
+### Added / Changed since 1.3.0
 
 - MLA2 is now the default; it is **incompatible** with MLA1. MLA1 enters **low maintenance mode**
 - Hybrid traditional/post-quantum encryption using **X25519 + ML-KEM1024**
@@ -31,7 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fixed incomplete recovery for truncated archives (#226)
 
-### Added/Changed since 2.0.0-beta
+### Added / Changed since 2.0.0-beta
 
 - Added a migration guide ( doc/src/MIGRATION.md )
 - Improved trust thanks to MLA security assessment (#465)
