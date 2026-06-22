@@ -10,7 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added / Changed
 
 - Updated dependencies (mla 2.1.0, PyO3)
-- Fix: align .pyi stubs with positional-only parameters for mypy 1.20
+- Dropped Linux x86 wheel support
+- Fixed .pyi stubs to match positional-only parameters for mypy 1.20
 
 ## [0.6.0] - 2026-02-16
 
