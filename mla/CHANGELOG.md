@@ -10,8 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added/Changed since 1.3.0
 
 - MLA2 is now the default; it is **incompatible** with MLA1. MLA1 enters **low maintenance mode**
-- Hybrid traditional/post-quantum encryption using **X25519 + ML-KEM1024**
-- Archive signing using hybrid traditional/post-quantum signatures
+- Hybrid classic/post-quantum encryption using **X25519 + ML-KEM1024**
+- Archive signing using hybrid classic/post-quantum signatures
 - Switched to **Rust 2024 edition**
 - Key commitment support for AES-GCM
 - New archive format, enabling improved cryptographic and performance characteristics
@@ -80,8 +80,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added/Changed
 
 - MLA2 is now the default; it is **incompatible** with MLA1. MLA1 enters **low maintenance mode**
-- Hybrid traditional/post-quantum encryption using **X25519 + ML-KEM1024**
-- Archive signing using hybrid traditional/post-quantum signatures
+- Hybrid classic/post-quantum encryption using **X25519 + ML-KEM1024**
+- Archive signing using hybrid classic/post-quantum signatures
 - Switched to **Rust 2024 edition**
 - Key commitment support for AES-GCM
 - New archive format, enabling improved cryptographic and performance characteristics
