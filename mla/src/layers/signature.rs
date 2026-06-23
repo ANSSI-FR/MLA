@@ -228,13 +228,13 @@ impl<'a, R: 'a + InnerReaderTrait> SignatureLayerReader<'a, R> {
                     .iter()
                     .filter(|sig| key.verify(signed_hash.clone(), sig))
                     .collect::<Vec<_>>();
-                let traditional_signature_verified = verified_signatures
+                let classic_signature_verified = verified_signatures
                     .iter()
                     .any(|sig| matches!(sig, MLASignature::MLAEd25519(_)));
                 let post_quantum_signature_verified = verified_signatures
                     .iter()
                     .any(|sig| matches!(sig, MLASignature::MLAMlDsa87(_)));
-                if traditional_signature_verified && post_quantum_signature_verified {
+                if classic_signature_verified && post_quantum_signature_verified {
                     keys_ref_with_valid_signatures.push(key);
                 }
             }
