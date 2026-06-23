@@ -1,13 +1,13 @@
 [package]
 name = "mlar-upgrader"
-version = "2.1.0-rc"
+version = "2.1.0"
 edition = "2024"
 
 [dependencies]
 clap = { version = "4.6", features = ["wrap_help"] }
 curve25519-parser = { version = "0.4" }
 mla_v1 = { version = "1", registry = "crates-io", package = "mla" }
-mla = { path = "../../mla", version = "2.1.0-rc" }
+mla = { path = "../../mla", version = "2.1.0" }
 
 [lints]
 workspace = true
