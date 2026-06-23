@@ -2,20 +2,47 @@ from typing import Optional, Union, Any, BinaryIO, List, Dict, final
 import os
 
 __all__ = [
-    "EntryName", "FileMetadata", "MLAWriter", "MLAReader",
-    "WriterConfig", "ReaderConfig", "SignatureConfig",
-    "PublicKeys", "PrivateKeys", "DEFAULT_COMPRESSION_LEVEL",
+    "EntryName",
+    "FileMetadata",
+    "MLAWriter",
+    "MLAReader",
+    "WriterConfig",
+    "ReaderConfig",
+    "SignatureConfig",
+    "PublicKeys",
+    "PrivateKeys",
+    "DEFAULT_COMPRESSION_LEVEL",
     # Exceptions
-    "MLAError", "WrongMagic", "UnsupportedVersion", "InvalidKeyFormat",
-    "WrongBlockSubFileType", "UTF8ConversionError", "EntryNameTooLong",
-    "WrongArchiveWriterState", "WrongReaderState", "WrongWriterState",
-    "RandError", "PrivateKeyNeeded", "DeserializationError", "SerializationError",
-    "MissingMetadata", "BadAPIArgument", "EndOfStream", "ConfigError",
-    "DuplicateEntryName", "AuthenticatedDecryptionWrongTag", "HKDFInvalidKeyLength",
-    "HPKEError", "InvalidLastTag", "WrongEndMagic", "NoValidSignatureFound",
+    "MLAError",
+    "WrongMagic",
+    "UnsupportedVersion",
+    "InvalidKeyFormat",
+    "WrongBlockSubFileType",
+    "UTF8ConversionError",
+    "EntryNameTooLong",
+    "WrongArchiveWriterState",
+    "WrongReaderState",
+    "WrongWriterState",
+    "RandError",
+    "PrivateKeyNeeded",
+    "DeserializationError",
+    "SerializationError",
+    "MissingMetadata",
+    "BadAPIArgument",
+    "EndOfStream",
+    "ConfigError",
+    "DuplicateEntryName",
+    "AuthenticatedDecryptionWrongTag",
+    "HKDFInvalidKeyLength",
+    "HPKEError",
+    "InvalidLastTag",
+    "WrongEndMagic",
+    "NoValidSignatureFound",
     "SignatureVerificationAskedButNoSignatureLayerFound",
-    "MissingEndOfEncryptedInnerLayerMagic", "TruncatedTag", "UnknownTagPosition",
-    "MLAOther"
+    "MissingEndOfEncryptedInnerLayerMagic",
+    "TruncatedTag",
+    "UnknownTagPosition",
+    "MLAOther",
 ]
 
 @final
@@ -47,9 +74,16 @@ class MLAWriter:
     def __setitem__(self, key: EntryName, value: bytes, /) -> None: ...
     def finalize(self) -> None: ...
     _buffered_type: Any
-    def add_entry_from(self, key: EntryName, src: Union[str, BinaryIO], chunk_size: int = 4194304) -> None: ...
+    def add_entry_from(
+        self, key: EntryName, src: Union[str, BinaryIO], chunk_size: int = 4194304
+    ) -> None: ...
     def __enter__(self) -> "MLAWriter": ...
-    def __exit__(self, exc_type: Optional[type] = ..., _exc_value: Optional[BaseException] = ..., _traceback: Optional[Any] = ...) -> bool: ...
+    def __exit__(
+        self,
+        exc_type: Optional[type] = ...,
+        _exc_value: Optional[BaseException] = ...,
+        _traceback: Optional[Any] = ...,
+    ) -> bool: ...
 
 @final
 class MLAReader:
@@ -59,30 +93,51 @@ class MLAReader:
     def __contains__(self, key: EntryName, /) -> bool: ...
     def __len__(self) -> int: ...
     def keys(self) -> List[EntryName]: ...
-    def list_entries(self, include_size: bool = False, include_hash: bool = False) -> Union[List[EntryName], Dict[EntryName, FileMetadata]]: ...
-    def write_entry_to(self, key: EntryName, dest: Union[str, BinaryIO], chunk_size: int = 4194304) -> None: ...
+    def list_entries(
+        self, include_size: bool = False, include_hash: bool = False
+    ) -> Union[List[EntryName], Dict[EntryName, FileMetadata]]: ...
+    def write_entry_to(
+        self, key: EntryName, dest: Union[str, BinaryIO], chunk_size: int = 4194304
+    ) -> None: ...
     def __enter__(self) -> "MLAReader": ...
-    def __exit__(self, _exc_type: Optional[type] = ..., _exc_value: Optional[BaseException] = ..., _traceback: Optional[Any] = ...) -> bool: ...
+    def __exit__(
+        self,
+        _exc_type: Optional[type] = ...,
+        _exc_value: Optional[BaseException] = ...,
+        _traceback: Optional[Any] = ...,
+    ) -> bool: ...
 
 @final
 class WriterConfig:
-    def __new__(cls, private_keys: "PrivateKeys", public_keys: "PublicKeys") -> "WriterConfig": ...
+    def __new__(
+        cls, private_keys: "PrivateKeys", public_keys: "PublicKeys"
+    ) -> "WriterConfig": ...
     @classmethod
     def without_encryption_without_signature(cls) -> "WriterConfig": ...
     @classmethod
-    def with_encryption_without_signature(cls, public_keys: "PublicKeys") -> "WriterConfig": ...
+    def with_encryption_without_signature(
+        cls, public_keys: "PublicKeys"
+    ) -> "WriterConfig": ...
     @classmethod
-    def without_encryption_with_signature(cls, private_keys: "PrivateKeys") -> "WriterConfig": ...
+    def without_encryption_with_signature(
+        cls, private_keys: "PrivateKeys"
+    ) -> "WriterConfig": ...
     def with_compression_level(self, compression_level: int) -> "WriterConfig": ...
     def without_compression(self) -> "WriterConfig": ...
 
 @final
 class ReaderConfig:
-    def __new__(cls, private_keys: Optional["PrivateKeys"], signature_config: "SignatureConfig") -> "ReaderConfig": ...
+    def __new__(
+        cls, private_keys: Optional["PrivateKeys"], signature_config: "SignatureConfig"
+    ) -> "ReaderConfig": ...
     @classmethod
-    def without_encryption(cls, signature_config: "SignatureConfig") -> "ReaderConfig": ...
+    def without_encryption(
+        cls, signature_config: "SignatureConfig"
+    ) -> "ReaderConfig": ...
     @classmethod
-    def with_private_keys_accept_unencrypted(cls, private_keys: "PrivateKeys", signature_config: "SignatureConfig") -> "ReaderConfig": ...
+    def with_private_keys_accept_unencrypted(
+        cls, private_keys: "PrivateKeys", signature_config: "SignatureConfig"
+    ) -> "ReaderConfig": ...
 
 @final
 class SignatureConfig:

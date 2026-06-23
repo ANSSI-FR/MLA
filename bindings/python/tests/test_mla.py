@@ -8,7 +8,6 @@ from typing import Any, Dict, Type
 import mla
 from mla import MLAReader, MLAWriter, EntryName
 
-
 # Test data
 FILES: Dict[EntryName, bytes] = {
     EntryName("entry1"): b"DATA1",
@@ -150,14 +149,12 @@ def test_list_entries(basic_archive: str) -> None:
     size_hash_entries = archive.list_entries(include_size=True, include_hash=True)
     if isinstance(size_hash_entries, dict):
         size_hash_items = [
-            (name, info.size, info.hash)
-            for name, info in size_hash_entries.items()
+            (name, info.size, info.hash) for name, info in size_hash_entries.items()
         ]
     else:
         size_hash_items = [(name, 0, b"") for name in size_hash_entries]
     expected_size_hash_items = [
-        (name, len(data), hashlib.sha256(data).digest())
-        for name, data in FILES.items()
+        (name, len(data), hashlib.sha256(data).digest()) for name, data in FILES.items()
     ]
     assert sorted(size_hash_items) == sorted(expected_size_hash_items)
 
