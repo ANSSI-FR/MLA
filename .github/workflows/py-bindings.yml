@@ -57,7 +57,7 @@ jobs:
           set -e
           python3 -m venv .venv
           source .venv/bin/activate
-          pip install mla-archive --find-links dist --force-reinstall
+          pip install --no-index --force-reinstall --find-links dist mla-archive
           pip install pytest
           cd bindings/python && pytest
       - name: mypy stubtest and type checking
@@ -67,6 +67,7 @@ jobs:
           set -e
           python3 -m venv .venv
           source .venv/bin/activate
+          pip install --no-index --force-reinstall --find-links dist mla-archive
           pip install mypy
           # it searchs for mla.mla but we can't have a module with the same name as the package
           # so we use mla.pyi instead of mla/__init__.pyi
@@ -141,7 +142,7 @@ jobs:
           set -e
           python3 -m venv .venv
           source .venv/Scripts/activate
-          pip install mla-archive --find-links dist --force-reinstall
+          pip install --no-index --force-reinstall --find-links dist mla-archive
           pip install pytest
           cd bindings/python && pytest
       - name: mypy stubtest and type checking
@@ -151,6 +152,7 @@ jobs:
           set -e
           python3 -m venv .venv
           source .venv/Scripts/activate
+          pip install --no-index --force-reinstall --find-links dist mla-archive
           pip install mypy
           # it searchs for mla.mla but we can't have a module with the same name as the package
           # so we use mla.pyi instead of mla/__init__.pyi
@@ -193,7 +195,7 @@ jobs:
           set -e
           python3 -m venv .venv
           source .venv/bin/activate
-          pip install mla-archive --find-links dist --force-reinstall
+          pip install --no-index --force-reinstall --find-links dist mla-archive
           pip install pytest
           cd bindings/python && pytest
       - name: mypy stubtest and type checking
@@ -202,6 +204,7 @@ jobs:
           set -e
           python3 -m venv .venv
           source .venv/bin/activate
+          pip install --no-index --force-reinstall --find-links dist mla-archive
           pip install mypy
           # it searchs for mla.mla but we can't have a module with the same name as the package
           # so we use mla.pyi instead of mla/__init__.pyi
