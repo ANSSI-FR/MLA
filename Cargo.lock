@@ -1104,7 +1104,7 @@ dependencies = [
 
 [[package]]
 name = "mla"
-version = "2.1.0-rc"
+version = "2.1.0"
 dependencies = [
  "aead",
  "aes",
@@ -1135,9 +1135,9 @@ dependencies = [
 
 [[package]]
 name = "mla-bindings-c"
-version = "2.1.0-rc"
+version = "2.1.0"
 dependencies = [
- "mla 2.1.0-rc",
+ "mla 2.1.0",
 ]
 
 [[package]]
@@ -1145,12 +1145,12 @@ name = "mla-fuzz-afl"
 version = "0.2.1"
 dependencies = [
  "afl",
- "mla 2.1.0-rc",
+ "mla 2.1.0",
 ]
 
 [[package]]
 name = "mlar"
-version = "2.1.0-rc"
+version = "2.1.0"
 dependencies = [
  "assert_cmd",
  "assert_fs",
@@ -1158,7 +1158,7 @@ dependencies = [
  "clru",
  "glob",
  "hex",
- "mla 2.1.0-rc",
+ "mla 2.1.0",
  "permutate",
  "rand 0.10.1",
  "rand_chacha 0.10.0",
@@ -1172,13 +1172,13 @@ dependencies = [
 
 [[package]]
 name = "mlar-upgrader"
-version = "2.1.0-rc"
+version = "2.1.0"
 dependencies = [
  "assert_cmd",
  "clap",
  "curve25519-parser",
  "mla 1.4.0",
- "mla 2.1.0-rc",
+ "mla 2.1.0",
 ]
 
 [[package]]

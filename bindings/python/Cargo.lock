@@ -416,7 +416,7 @@ dependencies = [
 
 [[package]]
 name = "mla"
-version = "2.1.0-rc"
+version = "2.1.0"
 dependencies = [
  "aes",
  "bitflags",
@@ -509,7 +509,7 @@ dependencies = [
 
 [[package]]
 name = "pymla"
-version = "0.6.2-rc"
+version = "0.6.2"
 dependencies = [
  "mla",
  "pyo3",
