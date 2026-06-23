@@ -1470,10 +1470,53 @@ fn convert(matches: &ArgMatches) -> Result<(), MlarError> {
     Ok(())
 }
 
+fn public_from_private(matches: &ArgMatches) -> Result<(), MlarError> {
+    // Get the input path from input argument
+    let input_path = matches.get_one::<PathBuf>("input").ok_or_else(|| {
+        MlarError::Other("[ERROR] keygen public-from-private requires an input path (private key file or prefix)".into())
+    })?;
+
+    // Determine the actual private key path
+    // If input_path ends with .mlapriv, use it as-is
+    // Otherwise, try input_path.mlapriv
+    let priv_key_path = if input_path.to_string_lossy().ends_with(".mlapriv") {
+        input_path.clone()
+    } else {
+        input_path.with_extension("mlapriv")
+    };
+
+    // Determine output path
+    let output_pub_path = if let Some(output_path) = matches.get_one::<PathBuf>("output") {
+        output_path.clone()
+    } else {
+        // Derive output path from input (replace .mlapriv with .mlapub, or add .mlapub)
+        input_path.with_extension("mlapub")
+    };
+
+    let mut private_file = File::open(priv_key_path)?;
+    let private_key = MLAPrivateKey::deserialize_private_key(&mut private_file)
+        .map_err(|_| MlarError::Mla(Error::InvalidKeyFormat))?;
+
+    let (priv_dec, priv_sig) = private_key.get_private_keys();
+
+    let pub_enc = priv_dec.to_encryption_public_key();
+    let pub_sig = priv_sig.to_signature_verification_public_key();
+
+    let pub_key = MLAPublicKey::from_encryption_and_signature_verification_keys(pub_enc, pub_sig);
+
+    let mut output_file = File::create_new(&output_pub_path)?;
+    pub_key
+        .serialize_public_key(&mut output_file)
+        .map_err(|_| MlarError::Other("[ERROR] Failed to write the public key".into()))?;
+
+    Ok(())
+}
+
 #[allow(clippy::unnecessary_wraps)]
 fn keygen(matches: &ArgMatches) -> Result<(), MlarError> {
-    // Safe to use unwrap() because of the requirement
-    let output_base = matches.get_one::<PathBuf>("output-prefix").unwrap();
+    let output_base = matches
+        .get_one::<PathBuf>("output-prefix")
+        .ok_or_else(|| MlarError::Other("Missing output-prefix".into()))?;
 
     let mut output_pub = File::create_new(output_base.with_extension("mlapub"))
         .expect("[ERROR] Unable to create the public file");
@@ -1893,15 +1936,14 @@ fn app() -> clap::Command {
         )
         .subcommand(
             Command::new("keygen")
-                .about(
-                    "Generate a public/private MLA keypair",
-                )
+                .about("Generate a public/private MLA keypair")
                 .arg(
                     Arg::new("output-prefix")
                         .help("Output prefix for the keys. The private key will be in {output-prefix}.mlapriv and the public key will be in {output-prefix}.mlapub")
                         .num_args(1)
+                        .default_value("key")
                         .value_parser(value_parser!(PathBuf))
-                        .required(true)
+                        .required(false)
                 )
                 .arg(
                     Arg::new("seed")
@@ -1910,6 +1952,26 @@ fn app() -> clap::Command {
                         .short('s')
                         .num_args(1)
                         .value_parser(value_parser!(String))
+                )
+                .subcommand(
+                    Command::new("public-from-private")
+                        .about("Generate public key from private key")
+                        .arg(
+                            Arg::new("input")
+                                .help("Input private key file or prefix (e.g. 'key.mlapriv' or 'key' will read key.mlapriv)")
+                                .num_args(1)
+                                .value_parser(value_parser!(PathBuf))
+                                .required(true)
+                        )
+                        .arg(
+                            Arg::new("output")
+                                .help("Output public key file (.mlapub). If omitted, the path is derived from the input filename")
+                                .short('o')
+                                .long("output")
+                                .num_args(1)
+                                .value_parser(value_parser!(PathBuf))
+                                .required(false)
+                        )
                 )
         )
         .subcommand(
@@ -2017,7 +2079,11 @@ fn main() -> Result<(), MlarError> {
     } else if let Some(matches) = matches.subcommand_matches("convert") {
         convert(matches)
     } else if let Some(matches) = matches.subcommand_matches("keygen") {
-        keygen(matches)
+        if let Some(matches) = matches.subcommand_matches("public-from-private") {
+            public_from_private(matches)
+        } else {
+            keygen(matches)
+        }
     } else if let Some(matches) = matches.subcommand_matches("keyderive") {
         keyderive(matches)
     } else if let Some(matches) = matches.subcommand_matches("info") {

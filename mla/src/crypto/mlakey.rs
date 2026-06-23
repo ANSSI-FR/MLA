@@ -242,6 +242,13 @@ impl MLADecryptionPrivateKey {
         dst.write_all(b"\r\n")?;
         Ok(())
     }
+
+    pub fn to_encryption_public_key(&self) -> MLAEncryptionPublicKey {
+        MLAEncryptionPublicKey {
+            public_key_ecc: PublicKey::from(&self.private_key_ecc),
+            public_key_ml: self.private_key_seed_ml.to_pubkey(),
+        }
+    }
 }
 
 /// Represents a 32-bytes xi seed as described in FIPS 204 algorithm 6.
@@ -398,6 +405,14 @@ impl MLASigningPrivateKey {
         encoded.zeroize();
         dst.write_all(b"\r\n")?;
         Ok(())
+    }
+
+    pub fn to_signature_verification_public_key(&self) -> MLASignatureVerificationPublicKey {
+        MLASignatureVerificationPublicKey {
+            public_key_ed25519: self.private_key_ed25519.verifying_key(),
+            public_key_mldsa87: self.private_key_seed_mldsa.to_signing_verification_key(),
+            opts: KeyOpts,
+        }
     }
 }
 

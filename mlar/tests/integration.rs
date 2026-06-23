@@ -2390,3 +2390,91 @@ fn test_archive_with_missing_file_skips_and_succeeds() {
         "Missing file should not appear in archive list"
     );
 }
+
+#[test]
+fn test_keygen_public_from_private() {
+    let output_dir = TempDir::new().unwrap();
+    let key_prefix = output_dir.path().join("testkey");
+    let priv_path = key_prefix.with_extension("mlapriv");
+    let pub_path = key_prefix.with_extension("mlapub");
+
+    // 1. Generate keypair
+    #[allow(deprecated)]
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("keygen").arg(&key_prefix);
+    cmd.assert().success();
+    assert!(priv_path.exists());
+    assert!(pub_path.exists());
+
+    let original_pub_key = fs::read(&pub_path).unwrap();
+
+    // 2. Test: mlar keygen testkey.mlapriv public-from-private
+    let derived_dir1 = TempDir::new().unwrap();
+    let priv_copy1 = derived_dir1.path().join("testkey.mlapriv");
+    fs::copy(&priv_path, &priv_copy1).unwrap();
+    let derived_pub1 = derived_dir1.path().join("testkey.mlapub");
+
+    #[allow(deprecated)]
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("keygen")
+        .arg("public-from-private")
+        .arg(&priv_copy1);
+    cmd.assert().success();
+    assert!(derived_pub1.exists());
+    let derived_pub_key1 = fs::read(&derived_pub1).unwrap();
+    assert_eq!(original_pub_key, derived_pub_key1);
+
+    // 3. Test: mlar keygen public-from-private testkey
+    let derived_dir2 = TempDir::new().unwrap();
+    let priv_copy2 = derived_dir2.path().join("testkey.mlapriv");
+    fs::copy(&priv_path, &priv_copy2).unwrap();
+    let derived_pub2 = derived_dir2.path().join("testkey.mlapub");
+
+    #[allow(deprecated)]
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("keygen").arg("public-from-private").arg("testkey");
+    cmd.current_dir(derived_dir2.path());
+    cmd.assert().success();
+    assert!(derived_pub2.exists());
+    let derived_pub_key2 = fs::read(&derived_pub2).unwrap();
+    assert_eq!(original_pub_key, derived_pub_key2);
+
+    // 4. Test: mlar keygen public-from-private -o b.mlapub testkey
+    let derived_dir3 = TempDir::new().unwrap();
+    let priv_copy3 = derived_dir3.path().join("testkey.mlapriv");
+    fs::copy(&priv_path, &priv_copy3).unwrap();
+    let custom_pub = derived_dir3.path().join("b.mlapub");
+
+    #[allow(deprecated)]
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("keygen")
+        .arg("public-from-private")
+        .arg("-o")
+        .arg(&custom_pub)
+        .arg("testkey");
+    cmd.current_dir(derived_dir3.path());
+    cmd.assert().success();
+    assert!(custom_pub.exists());
+    let derived_pub_key3 = fs::read(&custom_pub).unwrap();
+    assert_eq!(original_pub_key, derived_pub_key3);
+
+    // 5. Test no overwrite: mlar keygen public-from-private testkey.mlapriv (should fail as testkey.mlapub already exists in derived_dir1)
+    #[allow(deprecated)]
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("keygen")
+        .arg("public-from-private")
+        .arg(&priv_copy1);
+    cmd.current_dir(derived_dir1.path());
+    cmd.assert().failure();
+
+    // 6. Test no overwrite with -o: mlar keygen public-from-private -o b.mlapub testkey (should fail as b.mlapub already exists)
+    #[allow(deprecated)]
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("keygen")
+        .arg("public-from-private")
+        .arg("-o")
+        .arg(&custom_pub)
+        .arg("testkey");
+    cmd.current_dir(derived_dir3.path());
+    cmd.assert().failure();
+}
