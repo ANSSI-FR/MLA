@@ -38,7 +38,7 @@ Notes: '?' indicates optional layers. Layer order is security-sensitive: signatu
 - Entries stream: The core logical stream of files (entries) is a sequence of blocks (EntryStart, EntryContentChunk, EndOfEntry, EndOfArchiveData). This is where file names, interleaved content chunks, and per-entry hashes live.
 - Compression layer (optional): Splits the inner bytes into fixed-size chunks (4 MiB), compresses each chunk (Brotli), and records compressed sizes in a footer (SizesInfo) so random access to compressed chunks is feasible.
 - Encryption layer (optional): Performs chunked AES-GCM encryption of inner bytes with per-recipient encapsulated keys which encrypts a shared secret; chunks carry explicit sequence numbers and tags. The final encrypted block must decrypt to a `FINALBLOCK` marker for truncation protection.
-- Signature layer (optional): Covers all bytes from the MLA header up through the inner layer; it supports two signatures kinds: classic and post-quantum. Signature blobs are generated for the covered data. Readers must verify at least one valid signature of each kind (when signature verification is requested).
+- Signature layer (optional): Covers all bytes from the MLA header up through the inner layer; it supports two signatures kinds: traditional and post-quantum. Signature blobs are generated for the covered data. Readers must verify at least one valid signature of each kind (when signature verification is requested).
 
 ### Relationship to the formal specification below
 

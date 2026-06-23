@@ -10,7 +10,7 @@ Keys used for encryption and signature are generated and used separately.
 
 As described in `FORMAT.md` an archive can be signed. Implementation must ensure users explicitly choose if signature is made and verified.
 
-A PQ/C key consists of a pair of a post-quantum key and a classic key. An archive is considered correctly signed for a PQ/C key if and only if it is correctly signed for its post-quantum part AND its classic part.
+A PQ/T key consists of a pair of a post-quantum key and a traditional key. An archive is considered correctly signed for a PQ/T key if and only if it is correctly signed for its post-quantum part AND its traditional part.
 
 Two signature methods are available and must be used together. Signature method input is called `m`. The SHA-512 hash `h` of `m` may be computed in a first step.
 
@@ -18,7 +18,7 @@ For method `MLAEd25519SigMethod`, `signature_data` is the Ed25519 signature (as 
 
 For method `MLAMLDSA87SigMethod`, `signature_data` is the ML-DSA-87 signature (as described in FIPS 204 [^fips204], not HashML-DSA) of `h` with the ASCII `MLAMLDSA87SigMethod` as context. Signature verification and key generation are done as described in FIPS 204. Key storage is described in `KEY_FORMAT.md`.
 
-An archive can be signed with multiple signing keys. If a user provides a set of PQ/C keys for signature verification, implementations should give a way for the user to know if archive is correctly signed for at least one key. Implementations may give a way for users to know if archive is correctly signed for all keys. Users must explicitly know if they are validating against at least one or all keys. Implementations may also give a way for users to know which PQ/C keys correspond to valid signatures or their number.
+An archive can be signed with multiple signing keys. If a user provides a set of PQ/T keys for signature verification, implementations should give a way for the user to know if archive is correctly signed for at least one key. Implementations may give a way for users to know if archive is correctly signed for all keys. Users must explicitly know if they are validating against at least one or all keys. Implementations may also give a way for users to know which PQ/T keys correspond to valid signatures or their number.
 
 ### Encryption high-level overview
 
@@ -344,7 +344,7 @@ final\_chunk& = \textrm{Encrypt}_{AES\ 256\ GCM}(\\
 The resulting layer is composed of:
 
 - header: $ct_{recipients}$
-- data: $keycommit \ .\ enc_0 \dots enc_n \ .$ $final\_chunk$
+- data: $keycommit \ .\ enc_0\ . \dots\ enc_n \ .$ $final\_chunk$
 
 Special care must be taken not to reuse a sequence number in implementations as this would be catastrophic given GCM properties. For $n$ chunks of data:
 * sequence 0: key commitment
@@ -469,10 +469,10 @@ MLA relies on several external cryptographic libraries for its primitives. Below
     - **Documentation:** Well documented and widely used in the Rust ecosystem.
     - **Note:** GCM mode is re-implemented in MLA for chunked/partial decryption.
 
-#### Classical Signature
+#### Traditional Signature
 
 - **ed25519-dalek**
-    - **Role:** Ed25519 signatures (RFC 8032) for the classic part of hybrid signatures.
+    - **Role:** Ed25519 signatures (RFC 8032) for the traditional part of hybrid signatures.
     - **Review** [^reviewqb].
     - **Documentation:** Well documented, widely used, and considered production-grade.
 
@@ -487,7 +487,7 @@ MLA relies on several external cryptographic libraries for its primitives. Below
 #### Hybrid Signature Logic
 
 - **Custom implementation in MLA (`hybrid_signature.rs`, `mlakey.rs`)**
-    - **Role:** Combines Ed25519 and ML-DSA-87 for hybrid PQ/C signatures.
+    - **Role:** Combines Ed25519 and ML-DSA-87 for hybrid PQ/T signatures.
     - **Review:** No third-party audit. Covered by internal tests and verified against official test vectors.
 
 #### Asymmetric Encryption (Hybrid KEM)
@@ -534,7 +534,7 @@ MLA relies on several external cryptographic libraries for its primitives. Below
 
 - Elliptic curve cryptography (Curve25519/X25519) is used over RSA due to the lack of ready-for-production Rust-based RSA libraries, the availability of audited Curve25519 libraries, and its widespread use and security properties ([SafeCurves](https://safecurves.cr.yp.to/), [Trail of Bits arguments](https://blog.trailofbits.com/2019/07/08/fuck-rsa/)).
 - AES-GCM is chosen for authenticated encryption due to its common use, hardware acceleration support (e.g., AES-NI), and avoidance of a class of attacks.
-- MLA’s hybrid approach (combining classic and post-quantum primitives) limits the impact of potential flaws in less mature or unaudited libraries (e.g., MLKEM, ML-DSA).
+- MLA’s hybrid approach (combining traditional and post-quantum primitives) limits the impact of potential flaws in less mature or unaudited libraries (e.g., MLKEM, ML-DSA).
 - MLA includes regression tests and test vectors for all critical cryptographic operations.
 - Custom cryptographic logic (e.g., hybrid KEM, hybrid signature, chunked AES-GCM) is described in this document and tested against standards.
 
