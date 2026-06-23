@@ -9,7 +9,9 @@ def main() -> None:
     with mla.MLAReader("example.mla", config) as archive:
         for name in archive.keys():
             # name is of type EntryName
-            print(f"{name.raw_content_to_escaped_string()}: {archive[name].decode('utf-8')}")
+            print(
+                f"{name.raw_content_to_escaped_string()}: {archive[name].decode('utf-8')}"
+            )
 
 
 if __name__ == "__main__":

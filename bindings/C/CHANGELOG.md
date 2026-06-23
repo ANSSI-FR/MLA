@@ -5,14 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased [2.1.0] - 2026-06-23
+
+### Added / Changed
+
+- Update headers to match MLA 2.1.0 changes
+
 ## [2.0.0] - 2026-02-16
 
-### Added/Changed since 1.2.0
+### Added / Changed since 1.2.0
 
 - Redesigned APIs and CLI for improved **simplicity, safety, and semver compatibility**
 - Improve documentation, usage, examples and tests
 
-### Added/Changed since 2.0.0-beta
+### Added / Changed since 2.0.0-beta
 
 - Reformatted README
 
