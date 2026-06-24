@@ -1,0 +1,23 @@
+[package]
+name = "mla-oss-fuzz"
+version = "0.1.0"
+authors = ["ANSSI <opensource@ssi.gouv.fr>"]
+edition = "2024"
+
+[dependencies]
+libfuzzer-sys = "0.4"
+mla = { path = "../mla" }
+mla-fuzz = { path = "../mla-fuzz" }
+
+[[bin]]
+name = "mla_fuzz"
+path = "fuzz_targets/mla_fuzz.rs"
+
+[package.metadata]
+cargo-fuzz = true
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+strip = true
