@@ -1,0 +1,36 @@
+[package]
+name = "mla-oss-fuzz"
+version = "0.1.0"
+authors = ["ANSSI <opensource@ssi.gouv.fr>"]
+edition = "2024"
+
+[dependencies]
+libfuzzer-sys = "0.4"
+mla = { path = "../mla" }
+mla-fuzz = { path = "../mla-fuzz" }
+
+[[bin]]
+name = "mla_fuzz"
+path = "fuzz_targets/mla_fuzz.rs"
+
+[package.metadata]
+cargo-fuzz = true
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+strip = true
+
+# Custom profile for fuzzing - inherits from release but disables stripping.
+# Stripping symbols breaks ASan detection in OSS-Fuzz check_build,
+# as the sanitizer runtime needs to access certain symbols.
+#
+# NOTE: This profile must also be defined in the workspace root Cargo.toml because:
+# - When building as part of the workspace, cargo uses profiles from the root.
+# - When building via "cargo build --manifest-path fuzz/Cargo.toml", cargo treats
+#   this as a standalone package and needs the profile defined here.
+# Defining it in both locations ensures compatibility with all build methods.
+[profile.fuzzing]
+inherits = "release"
+strip = false

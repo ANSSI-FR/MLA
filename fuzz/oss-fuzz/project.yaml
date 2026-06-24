@@ -1,0 +1,8 @@
+homepage: "https://github.com/ANSSI-FR/MLA"
+main_repo: "https://github.com/ANSSI-FR/MLA"
+primary_contact: "opensource@ssi.gouv.fr"
+sanitizers:
+  - address
+fuzzing_engines:
+  - libfuzzer
+language: rust
