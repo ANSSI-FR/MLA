@@ -18,6 +18,7 @@ use mla::helpers::shared_secret::{MLADecryptionMetadata, MLADecryptionSharedSecr
 use mla::helpers::{StreamWriter, linear_extract, mla_percent_escape, mla_percent_unescape};
 use mla::{ArchiveReader, ArchiveWriter, TruncatedArchiveReader, entry::ArchiveEntry};
 use privkey::create_private_key;
+use serde::Serialize;
 use sha2::{Digest, Sha512};
 use std::collections::{HashMap, HashSet};
 use std::error;
@@ -88,6 +89,12 @@ impl From<io::Error> for MlarError {
 impl From<mla::errors::ConfigError> for MlarError {
     fn from(error: mla::errors::ConfigError) -> Self {
         MlarError::Config(error)
+    }
+}
+
+impl From<serde_json::Error> for MlarError {
+    fn from(error: serde_json::Error) -> Self {
+        MlarError::Other(format!("JSON error: {error}"))
     }
 }
 
@@ -1585,20 +1592,50 @@ fn keyderive(matches: &ArgMatches) -> Result<(), MlarError> {
     Ok(())
 }
 
+// Struct for JSON output
+#[derive(Serialize)]
+struct ArchiveInfoOutput {
+    format_version: u32,
+    encryption: bool,
+    signature: bool,
+    compression: bool,
+    file_size: u64,
+}
+
 fn info(matches: &ArgMatches) -> Result<(), MlarError> {
-    // Safe to use unwrap() because the option is required()
     let mla_file = matches.get_one::<PathBuf>("input").unwrap();
-    let mut src = File::open(mla_file)?;
+    let file_size = fs::metadata(mla_file)?.len();
+    let json_output = matches.get_flag("json");
 
-    let info = mla::info::read_info(&mut src)?;
+    let mut src_basic = File::open(mla_file)?;
+    let info = mla::info::read_info(&mut src_basic)?;
+    let format_version = info.get_format_version();
+    let signature_enabled = info.is_signature_enabled();
+    let encryption_enabled = info.is_encryption_enabled();
+    let compression_enabled = info.is_compression_enabled();
 
-    let encryption = info.is_encryption_enabled();
-    let signature = info.is_signature_enabled();
-
-    // Format Version
-    println!("Format version: {}", info.get_format_version());
-    println!("Encryption: {encryption}");
-    println!("Signature: {signature}");
+    // Output in JSON or text format
+    if json_output {
+        let output = ArchiveInfoOutput {
+            format_version,
+            encryption: encryption_enabled,
+            signature: signature_enabled,
+            compression: compression_enabled,
+            file_size,
+        };
+        println!("{}", serde_json::to_string_pretty(&output)?);
+    } else {
+        println!("Format version: {format_version}");
+        println!("Encryption: {encryption_enabled}");
+        println!("Signature: {signature_enabled}");
+        println!("Compression: {compression_enabled}");
+        println!("File size: {file_size} bytes");
+        if encryption_enabled {
+            println!(
+                "Note: This archive is encrypted. Compression status unknown without decryption keys."
+            );
+        }
+    }
 
     Ok(())
 }
@@ -2007,6 +2044,12 @@ fn app() -> clap::Command {
             Command::new("info")
                 .about("Get info on a MLA Archive")
                 .args(&input_args)
+                .arg(
+                    Arg::new("json")
+                        .long("json")
+                        .action(ArgAction::SetTrue)
+                        .help("Output in JSON format"),
+                )
         )
         .subcommand(
             Command::new("shared-secret")
@@ -2092,7 +2135,7 @@ fn main() -> Result<(), MlarError> {
         handle_shared_secret_command(matches)
     } else {
         let msg = "[ERROR] At least one command is required.";
-        eprintln!("{}", &help);
+        eprintln!("{help}");
         return Err(MlarError::IO(io::Error::other(format!("[ERROR] {msg}"))));
     };
 

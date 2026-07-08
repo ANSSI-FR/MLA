@@ -1782,23 +1782,47 @@ fn test_verbose_info() {
 
     println!("{cmd:?}");
     let assert = cmd.assert();
-    assert.success().stdout(
-        "Format version: 2
-Encryption: true
-Signature: false
-",
+    let binding = assert.success();
+    let output = binding.get_output();
+
+    // Check that output contains expected information
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let lines: Vec<&str> = stdout.lines().collect();
+    assert_eq!(lines[0], "Format version: 2");
+    assert_eq!(lines[1], "Encryption: true");
+    assert_eq!(lines[2], "Signature: false");
+    assert_eq!(lines[3], "Compression: false");
+    assert!(lines[4].starts_with("File size: "));
+    assert_eq!(
+        lines[5],
+        "Note: This archive is encrypted. Compression status unknown without decryption keys."
     );
 
-    // `mlar info -v -i output.mla`
+    // `mlar info --json -i output.mla`
     // cf. https://github.com/rust-lang/rust/issues/148426
     // TODO: check that warning disappears when issue is fixed
     #[allow(deprecated)]
     let mut cmd = Command::cargo_bin(UTIL).unwrap();
-    cmd.arg("info").arg("-v").arg("-i").arg(mlar_file.path());
+    cmd.arg("info")
+        .arg("--json")
+        .arg("-i")
+        .arg(mlar_file.path());
 
     println!("{cmd:?}");
     let assert = cmd.assert();
-    assert.success();
+    let binding = assert.success();
+    let output = binding.get_output();
+
+    // Check that JSON output contains expected fields
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let json_lines: Vec<&str> = stdout.lines().collect();
+    assert_eq!(json_lines[0], "{");
+    assert_eq!(json_lines[1], "  \"format_version\": 2,");
+    assert_eq!(json_lines[2], "  \"encryption\": true,");
+    assert_eq!(json_lines[3], "  \"signature\": false,");
+    assert_eq!(json_lines[4], "  \"compression\": false,");
+    assert!(json_lines[5].starts_with("  \"file_size\": "));
+    assert_eq!(json_lines[6], "}");
 }
 
 #[test]

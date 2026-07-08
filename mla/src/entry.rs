@@ -962,7 +962,7 @@ mod tests {
         match &reader.state {
             ArchiveEntryDataReaderState::InEntryContent(remaining) => {
                 // remaining should be length of content after offset 2
-                assert!(*remaining == 2);
+                assert_eq!(*remaining, 2);
             }
             _ => panic!("Expected InEntryContent state after seek inside content block"),
         }
