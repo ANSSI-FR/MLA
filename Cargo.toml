@@ -45,8 +45,8 @@ lto = true          # Enable Link Time Optimization
 strip = true        # Removes symbols, reducing size
 
 # Custom profile for fuzzing - inherits from release but disables stripping.
-# Stripping symbols breaks ASan detection in OSS-Fuzz check_build,
-# as the sanitizer runtime needs to access certain symbols.
+# Stripping symbols breaks sanitizer idetection (ASan), as the sanitizer 
+# runtime needs to access certain symbols.
 #
 # NOTE: This profile must also be defined in fuzz/Cargo.toml because:
 # - When building via "cargo build --manifest-path fuzz/Cargo.toml", cargo treats

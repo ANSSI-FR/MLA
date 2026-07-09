@@ -48,7 +48,7 @@ This repository contains:
   * [MLA book](https://anssi-fr.github.io/MLA)
 * `bindings` : bindings for other languages
 * `samples` : test assets
-* `mla-fuzz`: a Rust crate for fuzzing code (factored from mla-fuzz-afl)
+* `mla-fuzz`: a Rust crate for fuzzing code
 * `mla-fuzz-afl` : a Rust utility to fuzz `mla` with AFL
 * `fuzz` : OSS-Fuzz targets and configuration
 * `.github`: Continuous Integration needs

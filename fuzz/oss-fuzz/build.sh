@@ -7,7 +7,7 @@
 # wrapper script that intercepts commands and can modify RUSTFLAGS.
 #
 # NOTE ON COVERAGE FLAGS:
-# cargo-fuzz (version 0.13.2 in this image) automatically adds ASAN coverage
+# cargo-fuzz (version 0.13.2 released on 2026-06-10) automatically adds ASAN coverage
 # instrumentation flags (-Cpasses=sancov-module, -Cllvm-args=-sanitizer-coverage-*)
 # when building. These flags cause __sancov_gen_.* symbol conflicts when linking
 # multiple crates together with ASAN (each crate generates its own coverage symbols).
@@ -45,10 +45,6 @@ export CXXFLAGS="$CXXFLAGS -fno-sanitize-coverage"
 export RUSTFLAGS="--cfg fuzzing -Zsanitizer=address -Cdebuginfo=1 -Cforce-frame-pointers"
 
 # Build the fuzzer using the real cargo binary, not the OSS-Fuzz wrapper
-# --manifest-path: Path to the fuzzer's Cargo.toml (in the fuzz subdirectory)
-# --target: Target platform
-# --release: Release mode with optimizations
-# --bins: Build binary targets
 /rust/bin/cargo build --manifest-path fuzz/Cargo.toml --target x86_64-unknown-linux-gnu --release --bins
 
 # Copy the compiled fuzzer binary to the output directory

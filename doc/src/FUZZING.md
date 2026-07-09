@@ -18,7 +18,7 @@ cd mla-fuzz-afl
 mkdir -p in out
 cargo run
 ```
-This will create sample files in in/ directory.
+This will create sample files in `in/` directory.
 
 2. Build and launch AFL:
 ```sh
@@ -27,15 +27,15 @@ cargo afl fuzz -i in -o out target/debug/mla-fuzz-afl
 ```
 
 If you have found crashes, try to replay them with either:
-* Peruvian rabbit mode of AFL: cargo afl run -i - -o out -C ../target/debug/mla-fuzz-afl
-* Direct replay: ../target/debug/mla-fuzz-afl < out/crashes/crash_id
-* Debugging: uncomment the "Replay sample" part of mla-fuzz-afl/src/main.rs, and add dbg!() when it is needed
+* Peruvian rabbit mode of AFL: `cargo afl run -i - -o out -C ../target/debug/mla-fuzz-afl`
+* Direct replay: `../target/debug/mla-fuzz-afl < out/crashes/crash_id`
+* Debugging: uncomment the "Replay sample" part of `mla-fuzz-afl/src/main.rs`, and add `dbg!()` when it is needed
 
-Warning: The stability is quite low, likely due to the process used for the scenario (deserialization from the data provided by AFL) and variability of inner algorithms, such as brotli. Crashes, if any, might not be reproducible or due to the mla-fuzz-afl inner working, which is a bit complex (and therefore likely buggy). One can comment irrelevant parts in mla-fuzz-afl/src/main.rs to ensure a better experience.
+Warning: The stability is quite low, likely due to the process used for the scenario (deserialization from the data provided by AFL) and variability of inner algorithms, such as `brotli`. Crashes, if any, might not be reproducible or due to the `mla-fuzz-afl` inner working, which is a bit complex (and therefore likely buggy). One can comment irrelevant parts in `mla-fuzz-afl/src/main.rs` to ensure a better experience.
 
 ## OSS-Fuzz (libFuzzer) Fuzzing
 
-An OSS-Fuzz-compatible libFuzzer harness is available in fuzz/. The fuzzing logic is shared with the AFL-based fuzzer through the mla-fuzz/ crate.
+An OSS-Fuzz-compatible libFuzzer harness is available in fuzz/. The fuzzing logic is shared with the AFL-based fuzzer through the `mla-fuzz/` crate.
 
 ### OSS-Fuzz Integration
 
@@ -53,8 +53,6 @@ The fuzz target is defined in:
 ```text
 fuzz/fuzz_targets/mla_fuzz.rs
 ```
-
-Note: The OSS-Fuzz integration uses a dedicated branch add-oss-fuzz in the MLA repository which contains the necessary fuzzing infrastructure.
 
 ### Local Testing (Basic)
 
@@ -120,16 +118,16 @@ python3 infra/helper.py run_fuzzer mla mla_fuzz
 
 ### Testing with OSS-Fuzz
 
-To test MLA integration with OSS-Fuzz locally, first clone the OSS-Fuzz repository and the MLA repository with the add-oss-fuzz branch:
+To test MLA integration with OSS-Fuzz locally, first clone the OSS-Fuzz repository:
 
 ```sh
 git clone https://github.com/google/oss-fuzz.git
 cd oss-fuzz
 ```
 
-The MLA project files are already present in the OSS-Fuzz repository at projects/mla/. Ensure they reference the correct branch:
+The MLA project files are already present in the OSS-Fuzz repository at `projects/mla/`. Ensure they reference the correct branch:
 
-- Dockerfile clones from: https://github.com/ANSSI-FR/MLA with branch add-oss-fuzz
+- Dockerfile clones https://github.com/ANSSI-FR/MLA
 - project.yaml defines the project metadata
 - build.sh contains the build script
 
@@ -163,7 +161,7 @@ python3 infra/helper.py run_fuzzer mla mla_fuzz
 
 MLA uses a Rust workspace with multiple crates (`mla`, `mla-fuzz`, `mla-oss-fuzz`, etc.). This structure can cause issues with OSS-Fuzz default configuration because:
 
-1. `cargo-fuzz` 0.13.2 automatically adds ASAN coverage instrumentation flags (`-Cpasses=sancov-module`, `-Cllvm-args=-sanitizer-coverage-*`)
+1. `cargo-fuzz` 0.13.2 (2026-06-10 version) automatically adds ASAN coverage instrumentation flags (`-Cpasses=sancov-module`, `-Cllvm-args=-sanitizer-coverage-*`)
 2. Each crate in the workspace generates its own coverage symbols (`__sancov_gen_.*`)
 3. When linking multiple crates together with ASAN, symbol conflicts occur (undefined reference to `__sancov_gen_.*`)
 
