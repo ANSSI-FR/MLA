@@ -2092,7 +2092,7 @@ fn main() -> Result<(), MlarError> {
         handle_shared_secret_command(matches)
     } else {
         let msg = "[ERROR] At least one command is required.";
-        eprintln!("{}", &help);
+        eprintln!("{help}");
         return Err(MlarError::IO(io::Error::other(format!("[ERROR] {msg}"))));
     };
 

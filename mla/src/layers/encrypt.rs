@@ -1260,7 +1260,7 @@ mod tests {
         let mut output = Vec::new();
         encrypt_r.read_to_end(&mut output).unwrap();
         // Same length expected as no truncation is done and we applied the `clean-truncated` operation in authenticated mode
-        assert!(output.len() == FAKE_FILE.len());
+        assert_eq!(output.len(), FAKE_FILE.len());
         assert_eq!(output[..FAKE_FILE.len()], FAKE_FILE);
     }
 
