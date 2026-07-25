@@ -55,26 +55,20 @@ pub fn read_info<R: Read>(src: &mut R) -> Result<ArchiveInfo, Error> {
         current_magic = read_layer_magic(&mut sig_reader)?;
     }
 
-    // Note: We can't easily skip the encryption layer without parsing it,
-    // so we'll just check if the current magic is compression
-    // TODO: Detect compression in encrypted archives when decryption keys are available
-    // Implementation plan:
-    // 1. Modify read_info signature to accept optional ArchiveReaderConfig with decryption keys
-    // 2. In mlar/src/main.rs info command, add support for private_keys and shared_secret arguments
-    // 3. Build config from provided keys and pass to read_info
-    // 4. In read_info, if config is provided and current_magic is ENCRYPTION_LAYER_MAGIC:
-    //    a. Try to decrypt using ArchiveReader::from_config
-    //    b. If decryption succeeds, read first bytes from decrypted stream
-    //    c. Use read_layer_magic to detect compression in decrypted data
-    //    d. Update compression_enabled accordingly
-    // 5. Handle decryption errors gracefully (don't fail if decryption fails)
-    // 6. Add tests for encrypted+compressed archives with and without keys
-    // Current limitation: Compression status unknown for encrypted archives without decryption
     if current_magic == *ENCRYPTION_LAYER_MAGIC {
         encryption_enabled = true;
-        // Try to peek at the next magic after encryption
         // Since we can't parse the encryption layer without a key,
         // we'll assume no compression after encryption (conservative)
+        // Thus: compression detection in encrypted archives is intentionally not supported.
+        // Rationale:
+        // 1. Principle: Follows https://github.com/ANSSI-FR/MLA/issues/41#issuecomment-760146919 - basic info should work without decryption keys
+        // 2. Architecture: Adding decryption to the info command would significantly complicate
+        //    the code path and error handling
+        // 3. Use case: The info command is designed for quick inspection and scripting,
+        //    where requiring private keys would be impractical
+        //
+        // This is an intentional design limitation, not a missing feature.
+        // The CLI output clearly notifies users when compression status is unknown due to encryption.
     } else if current_magic == *COMPRESSION_LAYER_MAGIC {
         compression_enabled = true;
     }
