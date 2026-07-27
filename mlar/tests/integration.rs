@@ -1584,7 +1584,7 @@ fn test_keygen_seed() {
         .unwrap();
     // Check the SHA256, as private key are ~3KB long
     let hash_testseed = Sha256::digest(&pkey_testseed);
-    assert_eq!(hash_testseed, PRIVATE_KEY_TESTSEED_SHA256.into());
+    assert_eq!(hash_testseed.as_slice(), &PRIVATE_KEY_TESTSEED_SHA256[..]);
     let _ = std::fs::remove_file(&priv_path);
     let _ = std::fs::remove_file(&pub_path);
 
@@ -1604,7 +1604,7 @@ fn test_keygen_seed() {
     // Check the SHA256, as private key are ~3KB long
     let hash_testseed2 = Sha256::digest(&pkey_testseed2);
 
-    assert_eq!(hash_testseed2, PRIVATE_KEY_TESTSEED2_SHA256.into());
+    assert_eq!(hash_testseed2.as_slice(), &PRIVATE_KEY_TESTSEED2_SHA256[..]);
 
     assert_ne!(PRIVATE_KEY_TESTSEED_SHA256, PRIVATE_KEY_TESTSEED2_SHA256);
 }

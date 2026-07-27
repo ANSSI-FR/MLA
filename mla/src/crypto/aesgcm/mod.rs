@@ -4,11 +4,11 @@ use crate::Error;
 
 use aes::Aes256;
 
-use generic_array::{GenericArray, typenum::U16};
 use ghash::{GHash, universal_hash::UniversalHash};
+use hybrid_array::{Array, sizes::U16};
 pub use subtle::ConstantTimeEq;
 
-use ctr::cipher::{BlockEncrypt, KeyInit, KeyIvInit, StreamCipher, StreamCipherSeek};
+use ctr::cipher::{BlockCipherEncrypt, KeyInit, KeyIvInit, StreamCipher, StreamCipherSeek};
 
 type Aes256Ctr = ctr::Ctr128BE<aes::Aes256>;
 
@@ -48,7 +48,7 @@ pub struct AesGcm256 {
 }
 
 /// AES-GCM tags
-pub type Tag = GenericArray<u8, U16>;
+pub type Tag = Array<u8, U16>;
 
 impl AesGcm256 {
     // errors are from mla/src/error.rs
@@ -63,8 +63,8 @@ impl AesGcm256 {
         counter_block[15] = 1;
 
         // Initialize the GHash with a empty ciphered block
-        let mut ghash_key = GenericArray::default();
-        let cipher = Aes256::new(GenericArray::from_slice(key));
+        let mut ghash_key = Array::default();
+        let cipher = Aes256::new(&Array::from(*key));
         cipher.encrypt_block(&mut ghash_key);
 
         // Add the associated data to authenticate
@@ -112,8 +112,9 @@ impl AesGcm256 {
             self.current_block.extend_from_slice(in_block);
             // `current_block` length is now BLOCK_SIZE -> update GHash and
             // clear it
-            self.ghash
-                .update(slice::from_ref(self.current_block.as_slice().into()));
+            self.ghash.update(slice::from_ref(
+                <&Array<u8, U16>>::try_from(self.current_block.as_slice()).unwrap(),
+            ));
             self.current_block.clear();
 
             // Deals with the rest of the data, now aligned on BLOCK_SIZE
@@ -125,8 +126,9 @@ impl AesGcm256 {
         // Interleaved ghash update
         for chunk in &mut chunks {
             self.cipher.apply_keystream(chunk);
-            self.ghash
-                .update(slice::from_ref(GenericArray::from_slice(chunk)));
+            self.ghash.update(slice::from_ref(
+                <&Array<u8, U16>>::try_from(&chunk[..]).unwrap(),
+            ));
         }
 
         // Encrypt and save extra encrypted bytes for further GHash computation
@@ -145,7 +147,7 @@ impl AesGcm256 {
 
         // Compute "len(associated data) || len(bytes encrypted)"
         let buffer_bits = self.bytes_encrypted.checked_mul(8).unwrap();
-        let mut block = GenericArray::default();
+        let mut block = Array::default();
         block[..8].copy_from_slice(&self.associated_data_bits_len.to_be_bytes());
         block[8..].copy_from_slice(&buffer_bits.to_be_bytes());
 
@@ -176,8 +178,9 @@ impl AesGcm256 {
 
         // Interleaved ghash update
         for chunk in &mut chunks {
-            self.ghash
-                .update(slice::from_ref(GenericArray::from_slice(chunk)));
+            self.ghash.update(slice::from_ref(
+                <&Array<u8, U16>>::try_from(&chunk[..]).unwrap(),
+            ));
             self.cipher.apply_keystream(chunk);
         }
 
@@ -189,7 +192,7 @@ impl AesGcm256 {
 
         // Compute "len(associated data) || len(bytes encrypted)"
         let buffer_bits = buffer_len.checked_mul(8).unwrap();
-        let mut block = GenericArray::default();
+        let mut block = Array::default();
         block[..8].copy_from_slice(&self.associated_data_bits_len.to_be_bytes());
         block[8..].copy_from_slice(&buffer_bits.to_be_bytes());
 
@@ -211,13 +214,14 @@ mod tests {
     use super::*;
     use aead::Payload;
     use aes_gcm::{Aes256Gcm, aead::Aead};
+    use hybrid_array::Array;
 
     fn test_against_aesgcm(key: &Key, nonce: &Nonce, associated_data: &[u8], msg: &[u8]) {
         // Full (all at once)
         let extern_cipher = Aes256Gcm::new(key.into());
         let extern_ciphertext = extern_cipher
             .encrypt(
-                &GenericArray::clone_from_slice(nonce),
+                &Array::from(*nonce),
                 Payload {
                     msg,
                     aad: associated_data,
@@ -295,7 +299,7 @@ mod tests {
         let extern_cipher = Aes256Gcm::new(key.into());
         let extern_ciphertext = extern_cipher
             .encrypt(
-                &GenericArray::clone_from_slice(nonce),
+                &Array::from(*nonce),
                 Payload {
                     msg,
                     aad: associated_data,

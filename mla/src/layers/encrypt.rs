@@ -156,7 +156,7 @@ pub(crate) fn get_crypto_rng() -> Result<ChaCha20Rng, Error> {
     // https://docs.rs/rand/0.7.3/rand/trait.SeedableRng.html#method.from_entropy
     //
     // For the same reasons, force at compile time that the Rng implements CryptoRngCore
-    Ok(ChaCha20Rng::from_entropy())
+    ChaCha20Rng::try_from_rng(&mut rand::rngs::SysRng).map_err(|_| Error::RandError)
 }
 
 #[derive(Zeroize, ZeroizeOnDrop)]
@@ -1167,7 +1167,7 @@ mod tests {
     use super::*;
 
     use rand::SeedableRng;
-    use rand::distributions::{Alphanumeric, Distribution};
+    use rand::distr::{Alphanumeric, Distribution};
     use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 
     use crate::crypto::aesgcm::{KEY_SIZE, NONCE_AES_SIZE};
@@ -1260,7 +1260,7 @@ mod tests {
         let mut output = Vec::new();
         encrypt_r.read_to_end(&mut output).unwrap();
         // Same length expected as no truncation is done and we applied the `clean-truncated` operation in authenticated mode
-        assert!(output.len() == FAKE_FILE.len());
+        assert_eq!(output.len(), FAKE_FILE.len());
         assert_eq!(output[..FAKE_FILE.len()], FAKE_FILE);
     }
 

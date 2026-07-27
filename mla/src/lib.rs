@@ -1527,9 +1527,9 @@ pub(crate) mod tests {
 
     use super::*;
     use crypto::hybrid::generate_keypair_from_seed;
-    use rand::distributions::{Distribution, Standard};
-    use rand::{RngCore, SeedableRng};
-    use rand_chacha::ChaChaRng;
+    use rand::distr::{Distribution, StandardUniform};
+    use rand::{Rng as _, SeedableRng};
+    use rand_chacha::ChaCha20Rng;
     #[cfg(feature = "send")]
     use static_assertions;
     #[cfg(feature = "send")]
@@ -2727,8 +2727,8 @@ pub(crate) mod tests {
         const CHUNK_SIZE: usize = 10 * 1024 * 1024; // 10 MB
 
         // Use a deterministic RNG in tests, for reproducibility. DO NOT DO THIS IS IN ANY RELEASED BINARY!
-        let mut rng = ChaChaRng::seed_from_u64(0);
-        let mut rng_data = ChaChaRng::seed_from_u64(0);
+        let mut rng = ChaCha20Rng::seed_from_u64(0);
+        let mut rng_data = ChaCha20Rng::seed_from_u64(0);
 
         let (private_key, public_key) = generate_keypair_from_seed([0; 32]);
         let config = ArchiveWriterConfig::with_encryption_without_signature(&[public_key]).unwrap();
@@ -2742,7 +2742,7 @@ pub(crate) mod tests {
         let mut cur_size = 0;
         while cur_size < MORE_THAN_U32 {
             let size = std::cmp::min(u64::from(rng.next_u32()), MORE_THAN_U32 - cur_size);
-            let data: Vec<u8> = Standard
+            let data: Vec<u8> = StandardUniform
                 .sample_iter(&mut rng_data)
                 .take(usize::try_from(size).expect("Failed to convert size to usize"))
                 .collect();
@@ -2760,7 +2760,7 @@ pub(crate) mod tests {
                 .start_entry(EntryName::from_path(format!("file_{nb_file:}")).unwrap())
                 .unwrap();
             let size = std::cmp::min(u64::from(rng.next_u32()), MAX_SIZE - cur_size);
-            let data: Vec<u8> = Standard
+            let data: Vec<u8> = StandardUniform
                 .sample_iter(&mut rng_data)
                 .take(usize::try_from(size).expect("Failed to convert size to usize"))
                 .collect();
@@ -2794,14 +2794,17 @@ pub(crate) mod tests {
         // Check files content
 
         // Using the same seed than the one used for data creation, we can compare expected content
-        let mut rng_data = ChaChaRng::seed_from_u64(0);
+        let mut rng_data = ChaCha20Rng::seed_from_u64(0);
 
         let mut chunk = vec![0u8; CHUNK_SIZE];
         for file_name in file_names {
             let mut file_stream = mla_read.get_entry(file_name).unwrap().unwrap().data;
             loop {
                 let read = file_stream.read(&mut chunk).unwrap();
-                let expect: Vec<u8> = Standard.sample_iter(&mut rng_data).take(read).collect();
+                let expect: Vec<u8> = StandardUniform
+                    .sample_iter(&mut rng_data)
+                    .take(read)
+                    .collect();
                 assert_eq!(&chunk[..read], expect.as_slice());
                 if read == 0 {
                     break;
