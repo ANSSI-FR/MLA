@@ -2,8 +2,7 @@ use ed25519_dalek::{
     SECRET_KEY_LENGTH, SigningKey as Ed25519SigningKey, VerifyingKey as Ed25519VerifyingKey,
 };
 use hkdf::Hkdf;
-use ml_dsa::ExpandedSigningKey;
-use ml_dsa::{B32, EncodedVerifyingKey, MlDsa87, VerifyingKey};
+use ml_dsa::{B32, EncodedVerifyingKey, ExpandedSigningKey, MlDsa87, VerifyingKey};
 use rand::CryptoRng;
 use rand::SeedableRng as _;
 use rand_chacha::ChaCha20Rng;
