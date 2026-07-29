@@ -214,7 +214,6 @@ mod tests {
     use super::*;
     use aead::Payload;
     use aes_gcm::{Aes256Gcm, aead::Aead};
-    use hybrid_array::Array;
 
     fn test_against_aesgcm(key: &Key, nonce: &Nonce, associated_data: &[u8], msg: &[u8]) {
         // Full (all at once)

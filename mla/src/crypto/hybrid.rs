@@ -432,7 +432,6 @@ mod tests {
     use std::io::Read;
 
     use brotli;
-    use rand::RngExt;
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
     use std::collections::HashSet;
