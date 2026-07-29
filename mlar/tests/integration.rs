@@ -1795,10 +1795,11 @@ fn test_verbose_info() {
     assert!(lines[4].starts_with("File size: "));
     assert_eq!(
         lines[5],
-        "Note: This archive is encrypted. Compression status unknown without decryption keys."
+        "Note: This archive is encrypted. Compression status unknown without decryption."
     );
 
     // `mlar info --json -i output.mla`
+    // Test JSON output only when json-output feature is enabled
     // cf. https://github.com/rust-lang/rust/issues/148426
     // TODO: check that warning disappears when issue is fixed
     #[allow(deprecated)]
@@ -1810,19 +1811,35 @@ fn test_verbose_info() {
 
     println!("{cmd:?}");
     let assert = cmd.assert();
-    let binding = assert.success();
-    let output = binding.get_output();
 
-    // Check that JSON output contains expected fields
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let json_lines: Vec<&str> = stdout.lines().collect();
-    assert_eq!(json_lines[0], "{");
-    assert_eq!(json_lines[1], "  \"format_version\": 2,");
-    assert_eq!(json_lines[2], "  \"encryption\": true,");
-    assert_eq!(json_lines[3], "  \"signature\": false,");
-    assert_eq!(json_lines[4], "  \"compression\": false,");
-    assert!(json_lines[5].starts_with("  \"file_size\": "));
-    assert_eq!(json_lines[6], "}");
+    #[cfg(feature = "json-output")]
+    {
+        let binding = assert.success();
+        let output = binding.get_output();
+
+        // Check that JSON output contains expected fields
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let json_lines: Vec<&str> = stdout.lines().collect();
+        assert_eq!(json_lines[0], "{");
+        assert_eq!(json_lines[1], "  \"format_version\": 2,");
+        assert_eq!(json_lines[2], "  \"encryption\": true,");
+        assert_eq!(json_lines[3], "  \"signature\": false,");
+        assert_eq!(json_lines[4], "  \"compression\": false,");
+        assert!(json_lines[5].starts_with("  \"file_size\": "));
+        assert_eq!(json_lines[6], "}");
+    }
+
+    #[cfg(not(feature = "json-output"))]
+    {
+        // When json-output feature is not enabled, expect an error
+        let assert_result = assert.failure();
+        let output = assert_result.get_output();
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(
+            stderr.trim(),
+            "[ERROR] Command ended with error: Other(\"JSON output is not available. Compile with --features json-output to enable JSON output.\")\nError: Other(\"JSON output is not available. Compile with --features json-output to enable JSON output.\")"
+        );
+    }
 }
 
 #[test]
@@ -2501,4 +2518,64 @@ fn test_keygen_public_from_private() {
         .arg("testkey");
     cmd.current_dir(derived_dir3.path());
     cmd.assert().failure();
+}
+
+#[test]
+fn test_info_json_feature_flag() {
+    let public_key = Path::new("../samples/test_mlakey.mlapub");
+    let mlar_file = NamedTempFile::new("output.mla").unwrap();
+    let testfs = setup();
+
+    // Create a simple archive for testing
+    #[allow(deprecated)]
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("create")
+        .arg("-o")
+        .arg(mlar_file.path())
+        .arg("--unsigned")
+        .arg("-p")
+        .arg(public_key)
+        .arg(testfs.files[0].path());
+
+    println!("{cmd:?}");
+    cmd.assert().success();
+
+    // Test JSON output behavior based on feature flag
+    #[allow(deprecated)]
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("info")
+        .arg("--json")
+        .arg("-i")
+        .arg(mlar_file.path());
+
+    println!("{cmd:?}");
+    let assert = cmd.assert();
+
+    #[cfg(feature = "json-output")]
+    {
+        // When feature is enabled, JSON output should work
+        let assert_result = assert.success();
+        let output = assert_result.get_output();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let json_lines: Vec<&str> = stdout.lines().collect();
+        assert_eq!(json_lines[0], "{");
+        assert_eq!(json_lines[1], "  \"format_version\": 2,");
+        assert_eq!(json_lines[2], "  \"encryption\": true,");
+        assert_eq!(json_lines[3], "  \"signature\": false,");
+        assert_eq!(json_lines[4], "  \"compression\": false,");
+        assert!(json_lines[5].starts_with("  \"file_size\": "));
+        assert_eq!(json_lines[6], "}");
+    }
+
+    #[cfg(not(feature = "json-output"))]
+    {
+        // When feature is disabled, should get a clear error message
+        let assert_result = assert.failure();
+        let output = assert_result.get_output();
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(
+            stderr.trim(),
+            "[ERROR] Command ended with error: Other(\"JSON output is not available. Compile with --features json-output to enable JSON output.\")\nError: Other(\"JSON output is not available. Compile with --features json-output to enable JSON output.\")"
+        );
+    }
 }

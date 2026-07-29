@@ -18,6 +18,7 @@ use mla::helpers::shared_secret::{MLADecryptionMetadata, MLADecryptionSharedSecr
 use mla::helpers::{StreamWriter, linear_extract, mla_percent_escape, mla_percent_unescape};
 use mla::{ArchiveReader, ArchiveWriter, TruncatedArchiveReader, entry::ArchiveEntry};
 use privkey::create_private_key;
+#[cfg(feature = "json-output")]
 use serde::Serialize;
 use sha2::{Digest, Sha512};
 use std::collections::{HashMap, HashSet};
@@ -92,6 +93,7 @@ impl From<mla::errors::ConfigError> for MlarError {
     }
 }
 
+#[cfg(feature = "json-output")]
 impl From<serde_json::Error> for MlarError {
     fn from(error: serde_json::Error) -> Self {
         MlarError::Other(format!("JSON error: {error}"))
@@ -1593,6 +1595,7 @@ fn keyderive(matches: &ArgMatches) -> Result<(), MlarError> {
 }
 
 // Struct for JSON output
+#[cfg(feature = "json-output")]
 #[derive(Serialize)]
 struct ArchiveInfoOutput {
     format_version: u32,
@@ -1615,6 +1618,7 @@ fn info(matches: &ArgMatches) -> Result<(), MlarError> {
     let compression_enabled = info.is_compression_enabled();
 
     // Output in JSON or text format
+    #[cfg(feature = "json-output")]
     if json_output {
         let output = ArchiveInfoOutput {
             format_version,
@@ -1624,17 +1628,27 @@ fn info(matches: &ArgMatches) -> Result<(), MlarError> {
             file_size,
         };
         println!("{}", serde_json::to_string_pretty(&output)?);
-    } else {
-        println!("Format version: {format_version}");
-        println!("Encryption: {encryption_enabled}");
-        println!("Signature: {signature_enabled}");
-        println!("Compression: {compression_enabled}");
-        println!("File size: {file_size} bytes");
-        if encryption_enabled {
-            println!(
-                "Note: This archive is encrypted. Compression status unknown without decryption keys."
-            );
-        }
+        return Ok(());
+    }
+
+    #[cfg(not(feature = "json-output"))]
+    if json_output {
+        return Err(MlarError::Other(
+            "JSON output is not available. Compile with --features json-output to enable JSON output.".to_string(),
+        ));
+    }
+
+    // Default text output
+    println!("Format version: {format_version}");
+    println!("Encryption: {encryption_enabled}");
+    println!("Signature: {signature_enabled}");
+    println!("Compression: {compression_enabled}");
+    println!("File size: {file_size} bytes");
+    if encryption_enabled {
+        println!(
+            "Note: This archive is encrypted. Compression status unknown without decryption.
+           This is an intentional design limitation."
+        );
     }
 
     Ok(())
@@ -2048,7 +2062,7 @@ fn app() -> clap::Command {
                     Arg::new("json")
                         .long("json")
                         .action(ArgAction::SetTrue)
-                        .help("Output in JSON format"),
+                        .help("Output in JSON format (requires json-output feature)"),
                 )
         )
         .subcommand(
