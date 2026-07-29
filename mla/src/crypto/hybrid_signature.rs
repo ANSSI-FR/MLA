@@ -33,7 +33,7 @@ impl MLASigningPrivateKey {
         let finalized_hash = hash_to_sign.finalize();
         let mldsa87_sig = self
             .private_key_seed_mldsa
-            .to_exanded_signing_key()
+            .to_expanded_signing_key()
             .sign_randomized(finalized_hash.as_slice(), MLDSA87_CONTEXT, &mut csprng)
             .map_err(|_| Error::RandError)?;
         Ok(MLAMLDSA87Signature { mldsa87_sig })

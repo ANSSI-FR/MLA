@@ -280,12 +280,12 @@ impl MLDSASeed {
         Self { xi }
     }
 
-    pub(crate) fn to_exanded_signing_key(&self) -> ExpandedSigningKey<MlDsa87> {
+    pub(crate) fn to_expanded_signing_key(&self) -> ExpandedSigningKey<MlDsa87> {
         ExpandedSigningKey::<MlDsa87>::from_seed(&self.xi)
     }
 
     pub(crate) fn to_signing_verification_key(&self) -> VerifyingKey<MlDsa87> {
-        self.to_exanded_signing_key().verifying_key()
+        self.to_expanded_signing_key().verifying_key()
     }
 }
 
