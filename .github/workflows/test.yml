@@ -78,17 +78,12 @@ jobs:
         # Required because win7 targets aren't officially supported in stable
         RUSTC_BOOTSTRAP: "${{ contains(matrix.target, 'win7') && '1' || '' }}"
       run: cargo build --release --all --exclude mla-fuzz-afl --verbose ${{ matrix.cargo_arg }}
-    - name: Run tests (Windows)
-      # as rustdoc.exe has stack overflows with current tests (likely due to ml-dsa expansion) in mla/lib.rs
-      if: matrix.os == 'windows-2025-vs2026'
+    - name: Run tests
       env:
         # RUSTC_BOOTSTRAP=1 allows use of -Z build-std on stable toolchain
         # Required because win7 targets aren't officially supported in stable
-        RUSTC_BOOTSTRAP: "${{ contains(matrix.target, 'win7') && '1' || '' }}"     
-      run: cargo test --all --lib --bins --tests --exclude mla-fuzz-afl --release --verbose ${{ matrix.cargo_arg }}
-    - name: Run tests (Linux/macOS)
-      if: matrix.os != 'windows-2025-vs2026'    
-      run: cargo test --all --exclude mla-fuzz-afl --release --verbose
+        RUSTC_BOOTSTRAP: "${{ contains(matrix.target, 'win7') && '1' || '' }}"
+      run: cargo test --all --exclude mla-fuzz-afl --release --verbose ${{ matrix.cargo_arg }}
 
   long-tests:
     runs-on: ubuntu-26.04
@@ -190,8 +185,6 @@ jobs:
       - name: Security audit
         uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998 # v2.0.0
         with:
-          # As documented in README, we do not care enough for side channel attacks to update to an rc version of ml-dsa. Will update when final ml-dsa version is released.
-          ignore: RUSTSEC-2025-0144
           token: ${{ secrets.GITHUB_TOKEN }}
 
   clippy:
@@ -219,4 +212,4 @@ jobs:
         run: cd mla && cargo publish --dry-run
       - name: Dry-run publish mlar
         run: cd mlar && cargo publish --dry-run
-      
+

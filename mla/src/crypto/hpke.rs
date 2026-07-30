@@ -1,13 +1,16 @@
 /// Implements RFC 9180 for MLA needs
 use hpke::aead::{Aead as HPKEAeadTrait, AesGcm256 as HPKEAesGcm256};
-use hpke::kdf::{HkdfSha512, Kdf as HpkeKdfTrait, LabeledExpand, labeled_extract};
+use hpke::kdf::{HkdfSha512, Kdf as HpkeKdfTrait};
 use hpke::{Deserializable, Serializable};
 use hpke::{Kem as KemTrait, kem::X25519HkdfSha256};
-use rand::{CryptoRng, RngCore};
+use rand::CryptoRng;
 use x25519_dalek::PublicKey as X25519PublicKey;
 
 use crate::crypto::aesgcm::{Key, Nonce};
 use crate::errors::Error;
+
+use hkdf::Hkdf;
+use sha2::Sha512;
 
 type Kem = X25519HkdfSha256;
 type WrappedPublicKey = <Kem as KemTrait>::PublicKey;
@@ -36,11 +39,11 @@ impl DHKEMCiphertext {
 /// Return a shared secret and the corresponding ciphertext
 pub(crate) fn dhkem_encap_from_rng(
     pubkey: &X25519PublicKey,
-    csprng: &mut (impl CryptoRng + RngCore),
+    csprng: &mut impl CryptoRng,
 ) -> Result<(DHKEMSharedSecret, DHKEMCiphertext), Error> {
     let wrapped = WrappedPublicKey::from_bytes(&pubkey.to_bytes()).map_err(|_| Error::HPKEError)?;
     let (shared_secret, ciphertext) =
-        X25519HkdfSha256::encap(&wrapped, None, csprng).map_err(|_| Error::HPKEError)?;
+        X25519HkdfSha256::encap_with_rng(&wrapped, None, csprng).map_err(|_| Error::HPKEError)?;
     Ok((shared_secret, DHKEMCiphertext(ciphertext)))
 }
 
@@ -78,6 +81,42 @@ const HYBRID_KEM_ID: u16 = 0x1020;
 /// Custom KEM ID, not in the RFC 9180
 /// Hybrid Recipient : DHKEM(X25519, HKDF-SHA256) + MLKEM, used internally in the Hybrid KEM to wrap the per-recipient shared secret
 const HYBRID_KEM_RECIPIENT_ID: u16 = 0x1120;
+
+/// RFC 9180 §4: `labeled_extract(salt, suite_id, label, ikm) = Extract(salt, "HPKE-v1" || suite_id || label || ikm)`
+fn labeled_extract(
+    salt: &[u8],
+    suite_id: &[u8],
+    label: &[u8],
+    ikm: &[u8],
+) -> (
+    hybrid_array::Array<u8, hybrid_array::sizes::U64>,
+    Hkdf<Sha512>,
+) {
+    let mut labeled_ikm = Vec::new();
+    labeled_ikm.extend_from_slice(b"HPKE-v1");
+    labeled_ikm.extend_from_slice(suite_id);
+    labeled_ikm.extend_from_slice(label);
+    labeled_ikm.extend_from_slice(ikm);
+    Hkdf::<Sha512>::extract(Some(salt), &labeled_ikm)
+}
+
+/// RFC 9180 §4: `labeled_expand(prk, suite_id, label, info, L) = Expand(prk, "HPKE-v1" || suite_id || label || info, L)`
+fn labeled_expand(
+    kdf: &Hkdf<Sha512>,
+    suite_id: &[u8],
+    label: &[u8],
+    info: &[u8],
+    out: &mut [u8],
+) -> Result<(), Error> {
+    let len_be = u16::try_from(out.len()).unwrap().to_be_bytes();
+    let mut labeled_info = Vec::new();
+    labeled_info.extend_from_slice(&len_be);
+    labeled_info.extend_from_slice(b"HPKE-v1");
+    labeled_info.extend_from_slice(suite_id);
+    labeled_info.extend_from_slice(label);
+    labeled_info.extend_from_slice(info);
+    kdf.expand(&labeled_info, out).map_err(|_| Error::HPKEError)
+}
 
 /// Return the `suite_id` for the Hybrid KEM (RFC 9180 §5.1)
 /// `suite_id = concat(
@@ -119,26 +158,29 @@ fn key_schedule_base(
     let mut base_nonce = Nonce::default();
 
     // No PSK, no Info
-    let (psk_id_hash, _psk_kdf) = labeled_extract::<HpkeKdf>(&[], &suite_id, b"psk_id_hash", b"");
-    let (info_hash, _info_kdf) = labeled_extract::<HpkeKdf>(&[], &suite_id, b"info_hash", info);
+    let (psk_id_hash, _psk_kdf) = labeled_extract(&[], &suite_id, b"psk_id_hash", b"");
+    let (info_hash, _info_kdf) = labeled_extract(&[], &suite_id, b"info_hash", info);
     // Concat HPKE_MODE_BASE and info
     let mut key_schedule_context: Vec<u8> = vec![];
     key_schedule_context.push(HPKE_MODE_BASE);
     key_schedule_context.extend_from_slice(&psk_id_hash);
     key_schedule_context.extend_from_slice(&info_hash);
 
-    let (_prk, secret_kdf) = labeled_extract::<HpkeKdf>(shared_secret, &suite_id, b"secret", b"");
-    secret_kdf
-        .labeled_expand(&suite_id, b"key", &key_schedule_context, &mut key)
-        .map_err(|_| Error::HPKEError)?;
-    secret_kdf
-        .labeled_expand(
-            &suite_id,
-            b"base_nonce",
-            &key_schedule_context,
-            &mut base_nonce,
-        )
-        .map_err(|_| Error::HPKEError)?;
+    let (_prk, secret_kdf) = labeled_extract(shared_secret, &suite_id, b"secret", b"");
+    labeled_expand(
+        &secret_kdf,
+        &suite_id,
+        b"key",
+        &key_schedule_context,
+        &mut key,
+    )?;
+    labeled_expand(
+        &secret_kdf,
+        &suite_id,
+        b"base_nonce",
+        &key_schedule_context,
+        &mut base_nonce,
+    )?;
 
     Ok((key, base_nonce))
 }
@@ -189,7 +231,8 @@ mod tests {
     use super::*;
     use hex_literal::hex;
     use hpke::Serializable;
-    use rand::{CryptoRng, RngCore};
+    use rand::{TryCryptoRng, TryRng};
+    use std::convert::Infallible;
     use x25519_dalek::StaticSecret;
 
     /// Rng used for tests, mocking the `RngCore` and `CryptoRng` trait
@@ -208,30 +251,28 @@ mod tests {
         }
     }
 
-    impl RngCore for MockRng {
-        fn fill_bytes(&mut self, mut dest: &mut [u8]) {
-            io::copy(&mut self.buf, &mut dest).unwrap();
-        }
+    impl TryRng for MockRng {
+        type Error = Infallible;
 
-        fn next_u32(&mut self) -> u32 {
+        fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
             let mut buf = [0u8; 4];
-            self.fill_bytes(&mut buf);
-            u32::from_le_bytes(buf)
+            self.try_fill_bytes(&mut buf)?;
+            Ok(u32::from_le_bytes(buf))
         }
 
-        fn next_u64(&mut self) -> u64 {
+        fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
             let mut buf = [0u8; 8];
-            self.fill_bytes(&mut buf);
-            u64::from_le_bytes(buf)
+            self.try_fill_bytes(&mut buf)?;
+            Ok(u64::from_le_bytes(buf))
         }
 
-        fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand::Error> {
-            self.fill_bytes(dest);
+        fn try_fill_bytes(&mut self, mut dest: &mut [u8]) -> Result<(), Self::Error> {
+            io::copy(&mut self.buf, &mut dest).unwrap();
             Ok(())
         }
     }
 
-    impl CryptoRng for MockRng {}
+    impl TryCryptoRng for MockRng {}
 
     /// RFC 9180 §A.1.1
     const RFC_IKME: [u8; 32] =

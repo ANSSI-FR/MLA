@@ -4,7 +4,7 @@ use ed25519_dalek::{
     SIGNATURE_LENGTH as ED25519_SIGNATURE_LENGTH, Signature as Ed25519Signature, Signer, Verifier,
 };
 use ml_dsa::{EncodedSignature, MlDsa87, Signature};
-use rand_chacha::rand_core::CryptoRngCore;
+use rand::CryptoRng;
 use sha2::{Digest, Sha512};
 
 use crate::{
@@ -28,12 +28,12 @@ impl MLASigningPrivateKey {
     pub(crate) fn sign_mldsa87(
         &self,
         hash_to_sign: Sha512,
-        mut csprng: impl CryptoRngCore,
+        mut csprng: impl CryptoRng,
     ) -> Result<MLAMLDSA87Signature, Error> {
         let finalized_hash = hash_to_sign.finalize();
         let mldsa87_sig = self
             .private_key_seed_mldsa
-            .to_signing_key()
+            .to_expanded_signing_key()
             .sign_randomized(finalized_hash.as_slice(), MLDSA87_CONTEXT, &mut csprng)
             .map_err(|_| Error::RandError)?;
         Ok(MLAMLDSA87Signature { mldsa87_sig })
