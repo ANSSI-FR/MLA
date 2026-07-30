@@ -2,9 +2,11 @@
 members = [
     "mla",
     "mla-fuzz-afl",
+    "mla-fuzz",
     "mlar",
     "mlar/mlar-upgrader",
     "bindings/C",
+    "fuzz",
 ]
 resolver = "3"
 
@@ -41,3 +43,16 @@ codegen-units = 1   # Use minimum codegen units for best size and runtime perfo
 opt-level = 3       # Optimize for maximum runtime performance
 lto = true          # Enable Link Time Optimization
 strip = true        # Removes symbols, reducing size
+
+# Custom profile for fuzzing - inherits from release but disables stripping.
+# Stripping symbols breaks sanitizer idetection (ASan), as the sanitizer 
+# runtime needs to access certain symbols.
+#
+# NOTE: This profile must also be defined in fuzz/Cargo.toml because:
+# - When building via "cargo build --manifest-path fuzz/Cargo.toml", cargo treats
+#   fuzz/Cargo.toml as a standalone package and needs the profile defined there.
+# - When building as part of the workspace, cargo uses profiles from the root.
+# Defining it in both locations ensures compatibility with all build methods.
+[profile.fuzzing]
+inherits = "release"
+strip = false

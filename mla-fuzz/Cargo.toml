@@ -1,13 +1,12 @@
 [package]
-name = "mla-fuzz-afl"
-version = "0.2.1"
+name = "mla-fuzz"
+version = "0.1.0"
 authors = ["ANSSI <opensource@ssi.gouv.fr>"]
 edition = "2024"
+publish = false
 
 [dependencies]
-afl = "0.18"
 mla = { path = "../mla" }
-mla-fuzz = { path = "../mla-fuzz" }
 
 [lints]
 workspace = true

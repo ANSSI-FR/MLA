@@ -77,13 +77,13 @@ jobs:
         # RUSTC_BOOTSTRAP=1 allows use of -Z build-std on stable toolchain
         # Required because win7 targets aren't officially supported in stable
         RUSTC_BOOTSTRAP: "${{ contains(matrix.target, 'win7') && '1' || '' }}"
-      run: cargo build --release --all --exclude mla-fuzz-afl --verbose ${{ matrix.cargo_arg }}
+      run: cargo build --release --all --exclude mla-fuzz-afl --exclude mla-oss-fuzz --verbose ${{ matrix.cargo_arg }}
     - name: Run tests
       env:
         # RUSTC_BOOTSTRAP=1 allows use of -Z build-std on stable toolchain
         # Required because win7 targets aren't officially supported in stable
         RUSTC_BOOTSTRAP: "${{ contains(matrix.target, 'win7') && '1' || '' }}"
-      run: cargo test --all --exclude mla-fuzz-afl --release --verbose ${{ matrix.cargo_arg }}
+      run: cargo test --all --exclude mla-fuzz-afl --exclude mla-oss-fuzz --release --verbose ${{ matrix.cargo_arg }}
 
   long-tests:
     runs-on: ubuntu-26.04
@@ -101,7 +101,7 @@ jobs:
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
     - name: Run long tests
-      run: cargo test --all-features --all --exclude mla-fuzz-afl --exclude mla-bindings-c --release
+      run: cargo test --all-features --all --exclude mla-fuzz-afl --exclude mla-bindings-c --exclude mla-oss-fuzz --release
 
   test-bindings-c-cpp-linux:
     runs-on: ubuntu-26.04
@@ -161,7 +161,7 @@ jobs:
       - name: Test AFL build
         env:
           RUSTFLAGS: -D warnings
-        run: cargo afl build
+        run: cargo afl build --workspace --exclude mla-oss-fuzz
 
   fmt:
     runs-on: ubuntu-26.04

@@ -10,3 +10,6 @@ __pycache__/
 # mdbook
 index.html
 doc/book/
+
+# pi
+.pi-subagents/
