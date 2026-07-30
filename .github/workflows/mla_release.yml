@@ -104,6 +104,12 @@ jobs:
 
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+    - name: Install Rust toolchain (Windows)
+      if: matrix.container == null
+      run: rustup toolchain install 1.96.1
+    - name: Set default toolchain (Windows)
+      if: matrix.container == null
+      run: rustup default 1.96.1
     - uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3.0.0
       if: matrix.msvc_platform
     - name: Set target if any
