@@ -2,17 +2,17 @@ use ed25519_dalek::{
     SECRET_KEY_LENGTH, SigningKey as Ed25519SigningKey, VerifyingKey as Ed25519VerifyingKey,
 };
 use hkdf::Hkdf;
-use ml_dsa::{B32, EncodedVerifyingKey, KeyGen as _, KeyPair, MlDsa87, SigningKey, VerifyingKey};
+use ml_dsa::{B32, EncodedVerifyingKey, ExpandedSigningKey, MlDsa87, VerifyingKey};
+use rand::CryptoRng;
 use rand::SeedableRng as _;
 use rand_chacha::ChaCha20Rng;
-use rand_chacha::rand_core::CryptoRngCore;
 use subtle::ConstantTimeEq as _;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use std::io::{Cursor, ErrorKind, Read, Write};
 
 use curve25519_dalek::montgomery::MontgomeryPoint;
-use ml_kem::EncodedSizeUser;
+use ml_kem::{KeyExport as _, TryKeyInit as _};
 use sha2::Sha512;
 use x25519_dalek::{PublicKey, StaticSecret};
 
@@ -267,42 +267,10 @@ impl MLDSASeed {
         self.xi.as_slice()
     }
 
-    fn generate_from_csprng(mut csprng: impl CryptoRngCore) -> Self {
+    fn generate_from_csprng(mut csprng: impl CryptoRng) -> Self {
         let mut xi_array = [0u8; 32];
         csprng.fill_bytes(&mut xi_array);
         Self::from_xi_32(xi_array)
-    }
-
-    // Linked to issue https://github.com/RustCrypto/signatures/issues/1024 : Windows stack overflow when using ML-DSA
-    fn key_gen_internal(xi: &B32) -> KeyPair<MlDsa87> {
-        #[cfg(windows)]
-        {
-            use std::thread;
-
-            // Clone `xi` because the closure must own its data
-            #[allow(clippy::clone_on_copy)]
-            let mut xi = xi.clone();
-
-            let builder = thread::Builder::new().stack_size(8 * 1024 * 1024); // 8 MB stack
-
-            let handle = builder
-                .spawn(move || {
-                    let result = MlDsa87::key_gen_internal(&xi);
-
-                    // Zeroize cloned sensitive material AFTER use
-                    xi.zeroize();
-
-                    result
-                })
-                .expect("Failed to spawn thread with increased stack");
-
-            handle.join().expect("Thread panicked")
-        }
-
-        #[cfg(not(windows))]
-        {
-            MlDsa87::key_gen_internal(xi)
-        }
     }
 
     /// Creates an `MLDSASeed` from a 32-byte array.
@@ -311,12 +279,12 @@ impl MLDSASeed {
         Self { xi }
     }
 
-    pub(crate) fn to_signing_key(&self) -> SigningKey<MlDsa87> {
-        Self::key_gen_internal(&self.xi).signing_key().clone()
+    pub(crate) fn to_expanded_signing_key(&self) -> ExpandedSigningKey<MlDsa87> {
+        ExpandedSigningKey::<MlDsa87>::from_seed(&self.xi)
     }
 
     pub(crate) fn to_signing_verification_key(&self) -> VerifyingKey<MlDsa87> {
-        Self::key_gen_internal(&self.xi).verifying_key().clone()
+        self.to_expanded_signing_key().verifying_key()
     }
 }
 
@@ -524,12 +492,8 @@ impl MLAEncryptionPublicKey {
         cursor
             .read_to_end(&mut serialized_mlkem_key)
             .map_err(|_| Error::DeserializationError)?;
-        let public_key_ml = MLKEMEncapsulationKey::from_bytes(
-            serialized_mlkem_key
-                .as_slice()
-                .try_into()
-                .map_err(|_| Error::DeserializationError)?,
-        );
+        let public_key_ml = MLKEMEncapsulationKey::new_from_slice(&serialized_mlkem_key)
+            .map_err(|_| Error::DeserializationError)?;
 
         Ok(Self {
             public_key_ecc,
@@ -543,7 +507,7 @@ impl MLAEncryptionPublicKey {
         b64data.extend_from_slice(ENC_METHOD_ID_0_PUB);
         b64data.extend_from_slice(EMPTY_OPTS_SERIALIZATION); // key opts, empty length for the moment
         b64data.extend_from_slice(&self.public_key_ecc.to_bytes());
-        b64data.extend_from_slice(&self.public_key_ml.as_bytes());
+        b64data.extend_from_slice(self.public_key_ml.to_bytes().as_slice());
         dst.write_all(&(base64_encode(&b64data)?))?;
         dst.write_all(b"\r\n")?;
         Ok(())
@@ -686,7 +650,7 @@ impl MLAPublicKey {
 }
 
 fn generate_signature_keypair_from_rng(
-    mut csprng: impl CryptoRngCore,
+    mut csprng: impl CryptoRng,
 ) -> (MLASigningPrivateKey, MLASignatureVerificationPublicKey) {
     let private_key_ed25519 = Ed25519SigningKey::generate(&mut csprng);
     let public_key_ed25519 = private_key_ed25519.verifying_key();
@@ -720,7 +684,7 @@ pub fn generate_mla_keypair_from_seed(seed: [u8; 32]) -> (MLAPrivateKey, MLAPubl
     generate_mla_keypair_from_rng(csprng)
 }
 
-fn generate_mla_keypair_from_rng(mut csprng: impl CryptoRngCore) -> (MLAPrivateKey, MLAPublicKey) {
+fn generate_mla_keypair_from_rng(mut csprng: impl CryptoRng) -> (MLAPrivateKey, MLAPublicKey) {
     let (decryption_private_key, encryption_public_key) = generate_keypair_from_rng(&mut csprng);
     let (signing_private_key, signature_verification_public_key) =
         generate_signature_keypair_from_rng(&mut csprng);
@@ -830,16 +794,14 @@ mod tests {
 
         // Check the public ML-KEM key correspond to the private one
         assert_eq!(
-            pub_key.public_key_ml.as_bytes().len(),
+            pub_key.public_key_ml.to_bytes().len(),
             MLKEM_1024_PUBKEY_SIZE
         );
-        let mut rng = rand::rngs::OsRng {};
-        let (encap, key) = pub_key.public_key_ml.encapsulate(&mut rng).unwrap();
+        let (encap, key) = pub_key.public_key_ml.encapsulate_with_rng(&mut rand::rng());
         let key_decap = priv_key
             .private_key_seed_ml
             .to_privkey()
-            .decapsulate(&encap)
-            .unwrap();
+            .decapsulate(&encap);
         assert_eq!(key, key_decap);
     }
 

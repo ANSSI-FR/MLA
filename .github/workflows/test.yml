@@ -47,7 +47,7 @@ jobs:
     container: ${{matrix.container}}
 
     steps:
-    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
     - name: Set target if any
       # Skip rustup target add for win7 targets — rustup doesn't support these tier-3 targets
       if: matrix.target && !contains(matrix.target, 'win7')
@@ -59,7 +59,7 @@ jobs:
     - name: Cache build-std artifacts (only for win7)
       # Only apply caching to Win7 tier-3 targets that require build-std
       if: contains(matrix.target, 'win7')
-      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         # Cache the parts of target/ that contain compiled std artifacts for the given target
         path: |
@@ -78,24 +78,19 @@ jobs:
         # Required because win7 targets aren't officially supported in stable
         RUSTC_BOOTSTRAP: "${{ contains(matrix.target, 'win7') && '1' || '' }}"
       run: cargo build --release --all --exclude mla-fuzz-afl --exclude mla-oss-fuzz --verbose ${{ matrix.cargo_arg }}
-    - name: Run tests (Windows)
-      # as rustdoc.exe has stack overflows with current tests (likely due to ml-dsa expansion) in mla/lib.rs
-      if: matrix.os == 'windows-2025-vs2026'
+    - name: Run tests
       env:
         # RUSTC_BOOTSTRAP=1 allows use of -Z build-std on stable toolchain
         # Required because win7 targets aren't officially supported in stable
-        RUSTC_BOOTSTRAP: "${{ contains(matrix.target, 'win7') && '1' || '' }}"     
-      run: cargo test --all --lib --bins --tests --exclude mla-fuzz-afl --exclude mla-oss-fuzz --release --verbose ${{ matrix.cargo_arg }}
-    - name: Run tests (Linux/macOS)
-      if: matrix.os != 'windows-2025-vs2026'    
-      run: cargo test --all --exclude mla-fuzz-afl --exclude mla-oss-fuzz --release --verbose
+        RUSTC_BOOTSTRAP: "${{ contains(matrix.target, 'win7') && '1' || '' }}"
+      run: cargo test --all --exclude mla-fuzz-afl --exclude mla-oss-fuzz --release --verbose ${{ matrix.cargo_arg }}
 
   long-tests:
     runs-on: ubuntu-26.04
     container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1 : pin to known-good previous stable release for increased stability and security
 
     steps:
-    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
     - name: Run long tests
       run: cd mla && cargo test --release -- --ignored
 
@@ -104,7 +99,7 @@ jobs:
     container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1 : pin to known-good previous stable release for increased stability and security
 
     steps:
-    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
     - name: Run long tests
       run: cargo test --all-features --all --exclude mla-fuzz-afl --exclude mla-bindings-c --exclude mla-oss-fuzz --release
 
@@ -113,7 +108,7 @@ jobs:
     container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1 : pin to known-good previous stable release for increased stability and security
 
     steps:
-    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
     - name: Run C bindings tests on Linux
       working-directory: bindings/C/tests/linux-gcc-g++/
       run: make CC=gcc
@@ -142,7 +137,7 @@ jobs:
     runs-on: windows-2025-vs2026
 
     steps:
-    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
     - name: Set target if any
       run: rustup target add ${{ matrix.target }}
     - uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3.0.0
@@ -158,7 +153,7 @@ jobs:
     container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1 : pin to known-good previous stable release for increased stability and security
 
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install dependencies
         run: apt-get update && apt-get install -y llvm
       - name: Install cargo-afl binary crate
@@ -173,7 +168,7 @@ jobs:
     container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1 : pin to known-good previous stable release for increased stability and security
 
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install rustfmt
         run: rustup component add rustfmt
       - name: Check format
@@ -186,12 +181,10 @@ jobs:
     runs-on: ubuntu-26.04
 
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Security audit
         uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998 # v2.0.0
         with:
-          # As documented in README, we do not care enough for side channel attacks to update to an rc version of ml-dsa. Will update when final ml-dsa version is released.
-          ignore: RUSTSEC-2025-0144
           token: ${{ secrets.GITHUB_TOKEN }}
 
   clippy:
@@ -199,7 +192,7 @@ jobs:
     container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1 : pin to known-good previous stable release for increased stability and security
 
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install dependencies
         run: apt-get update && apt-get install -y llvm
       - name: Install cargo-afl binary crate
@@ -214,9 +207,9 @@ jobs:
     container: rust@sha256:ecbe59a8408895edd02d9ef422504b8501dd9fa1526de27a45b73406d734d659 # v1.93.1 : pin to known-good previous stable release for increased stability and security
 
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Dry-run publish mla
         run: cd mla && cargo publish --dry-run
       - name: Dry-run publish mlar
         run: cd mlar && cargo publish --dry-run
-      
+

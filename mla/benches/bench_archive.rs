@@ -11,9 +11,9 @@ use mla::entry::EntryName;
 use mla::helpers::linear_extract;
 use mla::{ArchiveReader, ArchiveWriter};
 use rand::SeedableRng;
-use rand::distributions::{Alphanumeric, Distribution};
+use rand::distr::{Alphanumeric, Distribution};
 use rand::seq::index::sample;
-use rand_chacha::ChaChaRng;
+use rand_chacha::ChaCha20Rng;
 use std::collections::HashMap;
 use std::io::{self, Cursor, Read};
 use std::time::{Duration, Instant};
@@ -47,7 +47,7 @@ fn build_archive(
     pubkey: &MLAPublicKey,
 ) -> (Vec<u8>, ArchiveReaderConfig) {
     // Setup
-    let mut rng = ChaChaRng::seed_from_u64(0);
+    let mut rng = ChaCha20Rng::seed_from_u64(0);
     let file = Vec::new();
 
     let config = match (encryption, signature) {
@@ -115,7 +115,7 @@ fn build_truncated_archive(
     pubkey: &MLAPublicKey,
 ) -> (Vec<u8>, TruncatedReaderConfig) {
     // Setup
-    let mut rng = ChaChaRng::seed_from_u64(0);
+    let mut rng = ChaCha20Rng::seed_from_u64(0);
     let file = Vec::new();
 
     let config = match (encryption, signature) {
@@ -225,7 +225,7 @@ fn layers_to_config(
 /// Big blocks (> 4MB) are also use to force the use of several blocks inside boundaries
 pub fn writer_multiple_layers_multiple_block_size(c: &mut Criterion) {
     // Setup
-    let mut rng = ChaChaRng::seed_from_u64(0);
+    let mut rng = ChaCha20Rng::seed_from_u64(0);
     let (privkey, pubkey) = generate_mla_keypair_from_seed([0; 32]);
 
     let mut group = c.benchmark_group("writer_multiple_layers_multiple_block_size");
@@ -273,7 +273,7 @@ pub fn writer_multiple_layers_multiple_block_size(c: &mut Criterion) {
 pub fn multiple_compression_quality(c: &mut Criterion) {
     let size = 256 * KB;
 
-    let mut rng = ChaChaRng::seed_from_u64(0);
+    let mut rng = ChaCha20Rng::seed_from_u64(0);
 
     let mut group = c.benchmark_group("multiple_compression_quality");
     group.measurement_time(Duration::from_secs(10));
@@ -399,7 +399,7 @@ fn iter_read_multifiles_random(
         pubkey,
     );
 
-    let mut rng = ChaChaRng::seed_from_u64(0);
+    let mut rng = ChaCha20Rng::seed_from_u64(0);
     // Measure the time needed to get and read a file
     let start = Instant::now();
     for i in sample(

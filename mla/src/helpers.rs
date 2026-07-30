@@ -349,9 +349,9 @@ pub mod shared_secret {
 mod tests {
     use crypto::hybrid::generate_keypair_from_seed;
     use rand::SeedableRng;
-    use rand::distributions::Standard;
+    use rand::distr::StandardUniform;
     use rand::prelude::Distribution;
-    use rand_chacha::ChaChaRng;
+    use rand_chacha::ChaCha20Rng;
 
     use super::*;
     use crate::entry::ENTRY_NAME_RAW_CONTENT_ALLOWED_BYTES;
@@ -423,13 +423,16 @@ mod tests {
         // --------- SETUP ----------
         let file = Vec::new();
         // Use a deterministic RNG in tests, for reproducibility. DO NOT DO THIS IS IN ANY RELEASED BINARY!
-        let mut rng = ChaChaRng::seed_from_u64(0);
+        let mut rng = ChaCha20Rng::seed_from_u64(0);
         let (private_key, public_key) = generate_keypair_from_seed([0; 32]);
         let config = ArchiveWriterConfig::with_encryption_without_signature(&[public_key]).unwrap();
         let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
 
         let entry = EntryName::from_arbitrary_bytes(b"my_file").unwrap();
-        let data: Vec<u8> = Standard.sample_iter(&mut rng).take(file_length).collect();
+        let data: Vec<u8> = StandardUniform
+            .sample_iter(&mut rng)
+            .take(file_length)
+            .collect();
         assert_eq!(data.len(), file_length);
         mla.add_entry(entry.clone(), data.len() as u64, data.as_slice())
             .unwrap();
