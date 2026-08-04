@@ -87,24 +87,35 @@ Replay a specific input:
 
 ### Local Testing with ASan
 
-To test with AddressSanitizer enabled (matching OSS-Fuzz behavior), you need:
+To test with AddressSanitizer and **coverage instrumentation** enabled (matching
+OSS-Fuzz behavior), you need:
 - Rust nightly with ASan support
-- clang with ASan support
-- libstdc++ with ASan support
+- clang/clang++ with ASan support (set `CC=clang CXX=clang++`)
+
+The `RUSTFLAGS` below include the SanitizerCoverage flags that give libFuzzer
+coverage feedback. **Coverage is required** -- without it libFuzzer reports
+`WARNING: no interesting inputs were found` and cannot guide mutations; it can
+only stumble on crashes by luck.
 
 Run from the workspace root:
 
 ```sh
-cd fuzz
-# Set the same flags as OSS-Fuzz build.sh
-# Note: These are the flags used in projects/mla/build.sh
-export RUSTFLAGS="--cfg fuzzing -Zsanitizer=address -Cdebuginfo=1 -Cforce-frame-pointers"
+export CC=clang
+export CXX=clang++
+# SanitizerCoverage flags on the Rust side give libFuzzer coverage feedback.
+# LTO is disabled in the `fuzzing` profile (lto=false) so sancov-module's
+# per-crate __sancov_gen_* symbols link cleanly (cargo-fuzz#384).
+export RUSTFLAGS="--cfg fuzzing -Zsanitizer=address -Cdebuginfo=1 -Cforce-frame-pointers -Cpasses=sancov-module -Cllvm-args=-sanitizer-coverage-level=4 -Cllvm-args=-sanitizer-coverage-inline-8bit-counters -Cllvm-args=-sanitizer-coverage-pc-table -Cllvm-args=-sanitizer-coverage-trace-compares -Ccodegen-units=1"
 export CFLAGS="-fsanitize=address -fsanitize-address-use-after-scope -fno-sanitize-coverage"
-export CXXFLAGS="-fsanitize=address -fsanitize-address-use-after-scope -fno-sanitize-coverage -stdlib=libc++"
+export CXXFLAGS="-fsanitize=address -fsanitize-address-use-after-scope -fno-sanitize-coverage"
 
-cargo build --profile fuzzing --bins
+cargo build --manifest-path fuzz/Cargo.toml --target x86_64-unknown-linux-gnu --profile fuzzing --bin mla_fuzz
 ./target/x86_64-unknown-linux-gnu/fuzzing/mla_fuzz
 ```
+
+`-fno-sanitize-coverage` on `CFLAGS`/`CXXFLAGS` ensures the C/C++ libFuzzer
+runtime (built by `libfuzzer-sys`) is not self-instrumented; only the Rust
+crates get coverage (via `RUSTFLAGS`).
 
 **Note:** The `fuzzing` profile disables symbol stripping (`strip=false`) which is
 required for ASan to work correctly. Using the standard `release` profile will strip
@@ -159,32 +170,55 @@ python3 infra/helper.py run_fuzzer mla mla_fuzz
 
 **Multi-crate Workspace Consideration:**
 
-MLA uses a Rust workspace with multiple crates (`mla`, `mla-fuzz`, `mla-oss-fuzz`, etc.). This structure can cause issues with OSS-Fuzz default configuration because:
+MLA uses a Rust workspace with multiple crates (`mla`, `mla-fuzz`,
+`mla-oss-fuzz`). Two things must hold for libFuzzer to receive coverage
+feedback:
 
-1. `cargo-fuzz` 0.13.2 (2026-06-10 version) automatically adds ASAN coverage instrumentation flags (`-Cpasses=sancov-module`, `-Cllvm-args=-sanitizer-coverage-*`)
-2. Each crate in the workspace generates its own coverage symbols (`__sancov_gen_.*`)
-3. When linking multiple crates together with ASAN, symbol conflicts occur (undefined reference to `__sancov_gen_.*`)
+1. **Coverage instrumentation must be present.** The SanitizerCoverage flags
+   (`-Cpasses=sancov-module -Cllvm-args=-sanitizer-coverage-*`) must be passed
+   to the Rust crates via `RUSTFLAGS`. Without them, libFuzzer emits
+   `WARNING: no interesting inputs were found so far. Is the code instrumented
+   for coverage?`, reports `INITED` with no `cov:` field, and adds zero new
+   units. The fuzzer is then blind: it can still detect crashes (panics,
+   SIGSEGV, OOM) but cannot systematically explore new code paths. The earlier
+   crashes (compress.rs:199 panic, infinite recursion, OOM) were lucky hits
+   from the custom mutator's random-corruption pass, not coverage-guided finds.
+
+2. **LTO must be disabled for the fuzz build.** `sancov-module` emits a
+   per-crate constructor `__sancov_gen_<N>`. With LTO (`lto = true`, which the
+   `release` profile enables and `fuzzing` inherits), crate merging turns these
+   into undefined references at link time:
+   `rust-lld: error: undefined symbol: __sancov_gen_.1599` (referenced by
+   `asan.module_dtor`). This is a known cargo-fuzz issue ([#384]) and is NOT
+   caused by the coverage flags themselves or by the multi-crate workspace.
+   The `fuzzing` profile sets `lto = false` to resolve it.
+
+   [#384]: https://github.com/rust-fuzz/cargo-fuzz/issues/384
+
+**Why not just use `cargo fuzz build`?**
+
+`cargo fuzz build` injects the SanitizerCoverage flags automatically, but it
+builds with the `release` profile, which has `lto = true` in this workspace.
+That triggers the `__sancov_gen_*` link error described above. To use
+`cargo-fuzz` locally you must set `lto = false` on the `release` profile (or a
+cargo-fuzz-compatible profile), which is undesirable for production release
+builds. The direct `cargo build --profile fuzzing` approach used by `build.sh`
+avoids this: the `fuzzing` profile is dedicated to fuzzing and can safely keep
+`lto = false` without affecting the production `release` profile.
 
 **Solution Implemented:**
 
-The `build.sh` script in `projects/mla/` addresses this by:
-- Using `/rust/bin/cargo` directly instead of the OSS-Fuzz wrapper (`/usr/local/bin/cargo`)
-- Defining custom `RUSTFLAGS` without coverage instrumentation: `--cfg fuzzing -Zsanitizer=address -Cdebuginfo=1 -Cforce-frame-pointers`
-- Disabling coverage in C/C++ flags: `-fno-sanitize-coverage`
-- Building with a custom `fuzzing` profile that disables symbol stripping: `cargo build --manifest-path fuzz/Cargo.toml --target x86_64-unknown-linux-gnu --profile fuzzing --bins`
-- The fuzzer binary is produced at: `target/x86_64-unknown-linux-gnu/fuzzing/mla_fuzz`
+The `build.sh` script in `projects/mla/`:
+- Uses `/rust/bin/cargo` directly (bypassing the OSS-Fuzz wrapper that rewrites
+  `RUSTFLAGS`) and adds the SanitizerCoverage flags to `RUSTFLAGS` explicitly.
+- Disables coverage in C/C++ flags (`-fno-sanitize-coverage`) so the libFuzzer
+  C++ runtime is not self-instrumented.
+- Builds with the `fuzzing` profile (`lto = false`, `strip = false`) which is
+  defined in both `Cargo.toml` (workspace root) and `fuzz/Cargo.toml`.
+- Produces: `target/x86_64-unknown-linux-gnu/fuzzing/mla_fuzz` (ASan + coverage).
 
-The `fuzzing` profile (defined in both `Cargo.toml` at workspace root and `fuzz/Cargo.toml`)
-inherits from `release` but sets `strip = false` to preserve symbols required by ASan.
-
-This produces a working fuzzer binary with `AddressSanitizer` enabled but without the
-coverage instrumentation that causes symbol conflicts.
-
-**Note:** This approach differs from using `cargo fuzz build` which would provide
-additional features (automatic corpus management, etc.), but the standard `cargo-fuzz`
-approach currently does not work with MLA's multi-crate workspace structure due to
-symbol conflicts. The OSS-Fuzz infrastructure handles corpus management and coverage
-separately at runtime, so this direct cargo build approach is fully supported.
+This produces a working fuzzer binary with AddressSanitizer **and**
+SanitizerCoverage, so libFuzzer can guide mutations toward new code paths.
 
 This workflow reproduces the environment used by OSS-Fuzz and can help diagnose
 build, linker, sanitizer, or environment-specific issues.
