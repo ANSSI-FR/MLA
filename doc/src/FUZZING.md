@@ -37,6 +37,11 @@ Warning: The stability is quite low, likely due to the process used for the scen
 
 An OSS-Fuzz-compatible libFuzzer harness is available in fuzz/. The fuzzing logic is shared with the AFL-based fuzzer through the `mla-fuzz/` crate.
 
+The `run()` entry point dispatches between two paths based on the input's first bytes:
+
+- **TestInput roundtrip path**: input starts with a byte 0-7 (`FuzzMode`), serialized as a `TestInput` struct. Exercises the writer->reader roundtrip (archive creation, interleaved files, layers, truncation repair, alteration).
+- **Raw archive parser path**: input starts with `MLAFAAAA` magic. Exercises `ArchiveReader::from_config` -> `list_entries` -> `get_hash` -> `get_entry` -> `read_to_end` on untrusted bytes. Decompressed output is capped at 64 MB per entry and 128 MB aggregate to prevent OOM via decompression bombs.
+
 ### OSS-Fuzz Integration
 
 The OSS-Fuzz configuration files for MLA integration are located in the OSS-Fuzz repository under:
@@ -63,26 +68,27 @@ All commands below are expected to be run from the root of the MLA repository.
 Build the fuzz target:
 
 ```sh
-cd fuzz
-cargo build --profile fuzzing --bins
+cargo build --manifest-path fuzz/Cargo.toml --profile fuzzing --bin mla_fuzz
 ```
 
 Run the fuzzer:
 
 ```sh
-./target/x86_64-unknown-linux-gnu/fuzzing/mla_fuzz
+./target/fuzzing/mla_fuzz
 ```
 
-Run the fuzzer against an existing corpus:
+Run the fuzzer against the seed corpus with the dictionary:
 
 ```sh
-./target/x86_64-unknown-linux-gnu/fuzzing/mla_fuzz corpus/
+./target/fuzzing/mla_fuzz \
+    -dict=fuzz/mla_fuzz.dict \
+    fuzz/mla_fuzz_seed_corpus/
 ```
 
 Replay a specific input:
 
 ```sh
-./target/x86_64-unknown-linux-gnu/fuzzing/mla_fuzz path/to/input
+./target/fuzzing/mla_fuzz path/to/input
 ```
 
 ### Local Testing with ASan
@@ -222,3 +228,25 @@ SanitizerCoverage, so libFuzzer can guide mutations toward new code paths.
 
 This workflow reproduces the environment used by OSS-Fuzz and can help diagnose
 build, linker, sanitizer, or environment-specific issues.
+
+### Seed Corpus and Dictionary
+
+A seed corpus and a libFuzzer dictionary are provided to help the fuzzer discover
+interesting inputs quickly:
+
+- `fuzz/mla_fuzz_seed_corpus/`: 21 pre-generated seeds (16 TestInput + 5 raw MLA archives)
+- `fuzz/mla_fuzz.dict`: dictionary with MLA format magic constants and tokens
+
+To regenerate the seed corpus (e.g. after changing the MLA format or `TestInput`):
+
+```sh
+cargo run --manifest-path fuzz/Cargo.toml --profile fuzzing --bin generate_seeds
+```
+
+This overwrites `fuzz/mla_fuzz_seed_corpus/` with fresh seeds. The generator is an
+auto-discovered binary in `fuzz/src/bin/generate_seeds.rs`; it is not a fuzz target
+and is excluded from OSS-Fuzz builds (`build.sh` builds only `--bin mla_fuzz`).
+
+In OSS-Fuzz, `build.sh` packages the seed corpus as `$OUT/mla_fuzz_seed_corpus.zip`
+and the dictionary as `$OUT/mla_fuzz.dict`, following the standard OSS-Fuzz naming
+convention.

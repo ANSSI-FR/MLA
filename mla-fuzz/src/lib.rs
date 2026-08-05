@@ -308,6 +308,37 @@ pub fn run(data: &[u8]) {
         return;
     }
 
+    // Raw MLA archive -> parser path.
+    // TestInput starts with a byte 0-7 (FuzzMode). MLA archives start with
+    // "MLAFAAAA" (first byte = 0x4D = 77). Detection is unambiguous.
+    if data.starts_with(b"MLAFAAAA") {
+        let config = ArchiveReaderConfig::without_signature_verification().without_encryption();
+        if let Ok((mut reader, _)) = ArchiveReader::from_config(Cursor::new(data), config) {
+            // Collect entry names first to release the immutable borrow on `reader`,
+            // so we can call `get_hash` / `get_entry` (which need `&mut self`).
+            let entry_names: Vec<EntryName> = reader
+                .list_entries()
+                .map(|i| i.cloned().collect())
+                .unwrap_or_default();
+            let mut total_decompressed: usize = 0;
+            for name in entry_names {
+                let _ = reader.get_hash(&name);
+                if let Ok(Some(file)) = reader.get_entry(name) {
+                    // Per-entry decompression cap (input is pre-limited to 10 MB).
+                    // An aggregate budget prevents multi-entry OOM.
+                    let mut limited = file.data.take(64 * 1024 * 1024);
+                    let mut buf = Vec::new();
+                    let _ = limited.read_to_end(&mut buf);
+                    total_decompressed = total_decompressed.saturating_add(buf.len());
+                    if total_decompressed > 128 * 1024 * 1024 {
+                        break;
+                    }
+                }
+            }
+        }
+        return;
+    }
+
     // load public and private keys
     let (pub_enc_key, pub_sig_verif_key) = MLAPublicKey::deserialize_public_key(PUB_KEY)
         .unwrap()
