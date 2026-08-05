@@ -9,6 +9,9 @@ libfuzzer-sys = "0.4"
 mla = { path = "../mla" }
 mla-fuzz = { path = "../mla-fuzz" }
 
+[lib]
+path = "src/lib.rs"
+
 [[bin]]
 name = "mla_fuzz"
 path = "fuzz_targets/mla_fuzz.rs"

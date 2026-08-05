@@ -299,12 +299,25 @@ impl<R: Read> MLADeserialize<R> for TestInput {
     }
 }
 
+fn verbose() -> bool {
+    use std::sync::OnceLock;
+    static V: OnceLock<bool> = OnceLock::new();
+    *V.get_or_init(|| std::env::var("MLA_FUZZ_VERBOSE").is_ok())
+}
+
+macro_rules! vprintln {
+    ($($arg:tt)*) => {
+        if verbose() {
+            eprintln!($($arg)*);
+        }
+    };
+}
+
 /// Main fuzzing entry point - processes input data and tests MLA archive operations
 pub fn run(data: &[u8]) {
     // limit data size to avoid OOM
     // 10 Mo max
     if data.len() > 10 * 1024 * 1024 {
-        eprintln!("Input too large, skipping");
         return;
     }
 
@@ -350,12 +363,8 @@ pub fn run(data: &[u8]) {
     let mut cursor = Cursor::new(data);
 
     // skip invalid inputs
-    let test_case = match TestInput::deserialize(&mut cursor) {
-        Ok(test_case) => test_case,
-        Err(e) => {
-            eprintln!("Deserialization failed: {e:?}");
-            return;
-        }
+    let Ok(test_case) = TestInput::deserialize(&mut cursor) else {
+        return;
     };
 
     if test_case.filenames.is_empty() || test_case.filenames.len() >= 256 {
@@ -363,15 +372,11 @@ pub fn run(data: &[u8]) {
     }
 
     // archive writer configuration
-    let archive_config = match test_case
+    let Ok(archive_config) = test_case
         .config
         .to_writer_config(&[pub_enc_key], &[priv_sig_key])
-    {
-        Ok(cfg) => cfg,
-        Err(e) => {
-            eprintln!("Invalid config: {e:?}");
-            return;
-        }
+    else {
+        return;
     };
 
     // Create archive writer buffer
@@ -513,7 +518,7 @@ pub fn run(data: &[u8]) {
 
                 match tr.convert_to_archive(mla_out) {
                     Ok(result) => {
-                        eprintln!("Repair finished with: {result:?}");
+                        vprintln!("Repair finished with: {result:?}");
 
                         // Re-parse the `clean-truncated` archive to ensure it's valid
                         let reader_cfg = ArchiveReaderConfig::without_signature_verification()
@@ -536,7 +541,7 @@ pub fn run(data: &[u8]) {
                                     .is_err()
                                 {
                                     // Log and skip unexpected `clean-truncated` files (possibly corrupted/mangled)
-                                    eprintln!(
+                                    vprintln!(
                                         "Warning: unexpected `clean-truncated` archive file: {clean_truncated_file}"
                                     );
                                 }
@@ -560,7 +565,7 @@ pub fn run(data: &[u8]) {
                                     let expected = entry_name2content.get(name).unwrap_or(&empty);
 
                                     if clean_truncated_data != *expected {
-                                        eprintln!(
+                                        vprintln!(
                                             "Data mismatch after clean truncation for file `{name}`.\nExpected: {expected:02x?}\nRecovered: {clean_truncated_data:02x?}"
                                         );
                                         // Don't panic during clean truncation verification as it is expected to be imperfect
@@ -570,13 +575,12 @@ pub fn run(data: &[u8]) {
                         }
                     }
                     Err(err) => {
-                        eprintln!("Repair failed: {err:?}");
+                        vprintln!("Repair failed: {err:?}");
                     }
                 }
             }
             Err(e) => {
-                // Invalid structure; skip. TruncatedArchiveReader may reject unparseable data
-                eprintln!("TruncatedArchiveReader creation failed: {e:?}");
+                vprintln!("TruncatedArchiveReader creation failed: {e:?}");
             }
         }
     }

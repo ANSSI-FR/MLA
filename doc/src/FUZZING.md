@@ -172,6 +172,54 @@ Run the fuzz target:
 python3 infra/helper.py run_fuzzer mla mla_fuzz
 ```
 
+### Custom Mutator
+
+Without a custom mutator, libFuzzer wastes most runs on `Deserialization
+Error`: raw byte mutations almost never produce valid `TestInput` structs or
+valid `MLAFAAAA`-prefixed archives. A custom mutator solves this with a
+model-based approach. The dispatch logic (archive/promote/raw paths) lives in
+`fuzz/fuzz_targets/mla_fuzz.rs`; the archive mutation logic lives in
+`fuzz/src/mutator.rs`.
+
+### Verbose Output
+
+By default, `run()` is silent. Only crashes (panics, SIGSEGV) are visible,
+as libFuzzer reports them.
+
+Set `MLA_FUZZ_VERBOSE` to restore repair-path debug output:
+
+```sh
+MLA_FUZZ_VERBOSE=1 ./target/fuzzing/mla_fuzz
+```
+
+### Mutator Unit Tests
+
+The mutator has unit tests that verify magic preservation, above-80%
+validity, max-size compliance, and magic preservation when re-mutating a
+valid archive. These tests are cheap (under 2s) and do not require libFuzzer:
+
+```sh
+cargo test --manifest-path fuzz/Cargo.toml --lib
+```
+
+**Note:** `cargo test --all` will launch the `mla_fuzz` binary as a libFuzzer
+harness and start fuzzing indefinitely. To run the full test suite without
+triggering the fuzzer, exclude the `mla-oss-fuzz` package:
+
+```sh
+cargo test --all --exclude mla-oss-fuzz --release
+```
+
+### Long-Running Fuzzing
+
+For long runs on multi-core machines, use libFuzzer fork mode. Each worker
+runs in a subprocess, so crashes (including SIGSEGV from stack overflows) are
+recorded as reproducers without stopping the master:
+
+```sh
+./target/fuzzing/mla_fuzz -fork=4 -max_total_time=3600
+```
+
 ### Technical Details
 
 **Multi-crate Workspace Consideration:**
