@@ -26,6 +26,11 @@ pub const COMPRESSION_LAYER_MAGIC: &[u8; 8] = b"COMLAAAA";
 /// to be a good choice
 const UNCOMPRESSED_DATA_SIZE: u32 = 4 * 1024 * 1024;
 
+/// Input buffer cap for the brotli decompressor, bounded by a constant so a
+/// corrupted footer claiming `u32::MAX` compressed bytes cannot drive the
+/// allocation (the `.take()` call still enforces the real per-block limit)
+const MAX_DECOMPRESSOR_INPUT_BUF: usize = UNCOMPRESSED_DATA_SIZE as usize;
+
 /// A bigger value means a better compression ratio, but a slower compression
 ///
 /// According to benchmarking on compression of representative data, level 5
@@ -267,7 +272,7 @@ impl<'a, R: 'a + InnerReaderTrait> CompressionLayerReader<'a, R> {
                 Ok(brotli::Decompressor::new(
                     // Make the Decompressor work only on the compressed block's bytes, no more
                     inner.take(compressed_block_size as u64),
-                    compressed_block_size,
+                    std::cmp::min(compressed_block_size, MAX_DECOMPRESSOR_INPUT_BUF),
                 ))
             }
             None => Err(Error::MissingMetadata),
@@ -1612,5 +1617,49 @@ mod tests {
         decomp.initialize().unwrap();
         decomp.read_to_end(&mut buf_2_out).unwrap();
         assert_eq!(buf_out, buf_2_out);
+    }
+    #[test]
+    fn corrupted_compressed_size_in_footer_does_not_oom() {
+        // Regression test: a corrupted archive can declare an arbitrarily
+        // large compressed_block_size in the SizesInfo footer (up to u32::MAX).
+        // Before the fix, this value was passed directly as the buffer size
+        // to brotli::Decompressor::new(), triggering a multi-GB allocation.
+        // The fix caps the buffer to UNCOMPRESSED_DATA_SIZE (4 MB).
+
+        // 1. Create a valid compressed layer (one block)
+        let bytes = b"Hello, compression layer!".repeat(100);
+        let file = Vec::new();
+        let mut comp = Box::new(CompressionLayerWriter::new_skip_header(
+            Box::new(RawLayerWriter::new(file)),
+            &CompressionConfig::default(),
+        ));
+        comp.write_all(&bytes).unwrap();
+        let file = comp.finalize().unwrap();
+
+        // 2. Patch compressed_sizes[0] to u32::MAX. The file trailer layout is:
+        //    [u64 count][u32 size_0]...[u32 size_n-1][u32 last_block_size][u64 SizesInfo_len]
+        let mut corrupted = file.clone();
+        let total_len = corrupted.len();
+        let footer_len =
+            u64::from_le_bytes(corrupted[total_len - 8..total_len].try_into().unwrap());
+        let footer_start = total_len - 8 - usize::try_from(footer_len).unwrap();
+        let size_0_offset = footer_start + 8; // skip u64 count
+        corrupted[size_0_offset..size_0_offset + 4].copy_from_slice(&u32::MAX.to_le_bytes());
+
+        // 3. Initialize -- footer is still structurally valid
+        let buf = Cursor::new(corrupted.as_slice());
+        let mut decomp = Box::new(
+            CompressionLayerReader::new_skip_header(Box::new(RawLayerReader::new(buf))).unwrap(),
+        );
+        decomp.initialize().unwrap();
+
+        // 4. A 4 GB declared size must not OOM -- buffer is capped to 4 MB.
+        // The read must terminate with the original content: the cap only
+        // bounds the refill buffer, the output is unchanged.
+        let mut out = Vec::new();
+        decomp
+            .read_to_end(&mut out)
+            .expect("read_to_end should not fail");
+        assert_eq!(out, bytes, "decompressed content must be preserved");
     }
 }
