@@ -419,10 +419,13 @@ impl<'a, R: 'a + InnerReaderTrait> Read for CompressionLayerReader<'a, R> {
                         return Err(e.into());
                     }
                 };
-                // All validation passed; safe to consume inner
+                // Cap the brotli input buffer so corrupt metadata (up to u32::MAX)
+                // cannot force a huge allocation; .take() keeps the true read limit.
+                let buf_size =
+                    std::cmp::min(compressed_block_size, UNCOMPRESSED_DATA_SIZE as usize);
                 let decompressor = Box::new(brotli::Decompressor::new(
                     inner.take(compressed_block_size as u64),
-                    compressed_block_size,
+                    buf_size,
                 ));
                 self.state = CompressionLayerReaderState::InData {
                     read: 0,
@@ -548,10 +551,12 @@ impl<R: InnerReaderTrait> Seek for CompressionLayerReader<'_, R> {
                                 return Err(e.into());
                             }
                         };
-                        // All validation passed; safe to consume inner
+                        // Cap input buffer to avoid OOM on corrupt metadata.
+                        let buf_size =
+                            std::cmp::min(compressed_block_size, UNCOMPRESSED_DATA_SIZE as usize);
                         let mut decompressor = brotli::Decompressor::new(
                             inner.take(compressed_block_size as u64),
-                            compressed_block_size,
+                            buf_size,
                         );
 
                         // Move forward inside the block to reach the expected position
@@ -1696,5 +1701,45 @@ mod tests {
             seek_result.is_err(),
             "seek into corrupted block should return Err, not Ok"
         );
+    }
+
+    #[test]
+    fn corrupted_compressed_size_in_footer_does_not_oom() {
+        // Regression test: a corrupted archive can declare an arbitrarily
+        // large compressed_block_size in the SizesInfo footer (up to u32::MAX).
+        // Before the fix, this value was passed directly as the buffer size
+        // to brotli::Decompressor::new(), triggering a multi-GB allocation.
+        // The fix caps the buffer to UNCOMPRESSED_DATA_SIZE (4 MB).
+
+        // 1. Create a valid compressed layer (one block)
+        let bytes = b"Hello, compression layer!".repeat(100);
+        let file = Vec::new();
+        let mut comp = Box::new(CompressionLayerWriter::new_skip_header(
+            Box::new(RawLayerWriter::new(file)),
+            &CompressionConfig::default(),
+        ));
+        comp.write_all(&bytes).unwrap();
+        let file = comp.finalize().unwrap();
+
+        // 2. Patch compressed_sizes[0] to u32::MAX. The file trailer layout is:
+        //    [u64 count][u32 size_0]...[u32 size_n-1][u32 last_block_size][u64 SizesInfo_len]
+        let mut corrupted = file.clone();
+        let total_len = corrupted.len();
+        let footer_len =
+            u64::from_le_bytes(corrupted[total_len - 8..total_len].try_into().unwrap());
+        let footer_start = total_len - 8 - usize::try_from(footer_len).unwrap();
+        let size_0_offset = footer_start + 8; // skip u64 count
+        corrupted[size_0_offset..size_0_offset + 4].copy_from_slice(&u32::MAX.to_le_bytes());
+
+        // 3. Initialize -- footer is still structurally valid
+        let buf = Cursor::new(corrupted.as_slice());
+        let mut decomp = Box::new(
+            CompressionLayerReader::new_skip_header(Box::new(RawLayerReader::new(buf))).unwrap(),
+        );
+        decomp.initialize().unwrap();
+
+        // 4. A 4 GB declared size must not OOM -- buffer is capped to 4 MB
+        let mut out = Vec::new();
+        let _ = decomp.read_to_end(&mut out);
     }
 }

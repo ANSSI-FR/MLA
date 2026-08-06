@@ -16,4 +16,5 @@ doc/book/
 
 # fuzzer artifacts
 crash-*
+oom-*
 *.profraw
