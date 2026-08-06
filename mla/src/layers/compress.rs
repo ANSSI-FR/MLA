@@ -238,40 +238,24 @@ impl<'a, R: 'a + InnerReaderTrait> CompressionLayerReader<'a, R> {
         })
     }
 
-    /// Instantiate a new decompressor at position `uncompressed_pos`
-    /// `uncompressed_pos` must be a compressed block's starting position
-    fn new_decompressor_at<S: InnerReaderTrait>(
-        &self,
-        inner: S,
-        uncompressed_pos: u64,
-    ) -> Result<brotli::Decompressor<Take<S>>, Error> {
+    /// Validate block parameters at `uncompressed_pos` and return the
+    /// compressed block size. Does not consume any reader.
+    fn validate_block(&self, uncompressed_pos: u64) -> Result<usize, Error> {
         // Ensure it's a starting position
         if !uncompressed_pos.is_multiple_of(u64::from(UNCOMPRESSED_DATA_SIZE)) {
             return Err(Error::BadAPIArgument(
-                "[new_decompressor_at] not a starting position".to_string(),
+                "[validate_block] not a starting position".to_string(),
             ));
         }
 
         // Check we are still in the stream
         if !self.pos_in_stream(uncompressed_pos)? {
-            // No more in the compressed stream -> nothing to read
             return Err(Error::EndOfStream);
         }
 
-        match &self.sizes_info {
-            Some(sizes_info) => {
-                // Use index for faster decompression
-                let compressed_block_size =
-                    usize::try_from(sizes_info.compressed_block_size_at(uncompressed_pos)?)
-                        .or(Err(Error::DeserializationError))?;
-                Ok(brotli::Decompressor::new(
-                    // Make the Decompressor work only on the compressed block's bytes, no more
-                    inner.take(compressed_block_size as u64),
-                    compressed_block_size,
-                ))
-            }
-            None => Err(Error::MissingMetadata),
-        }
+        let sizes_info = self.sizes_info.as_ref().ok_or(Error::MissingMetadata)?;
+        usize::try_from(sizes_info.compressed_block_size_at(uncompressed_pos)?)
+            .or(Err(Error::DeserializationError))
     }
 
     // TODO add regression test
@@ -391,6 +375,20 @@ impl<'a, R: 'a + InnerReaderTrait> LayerReader<'a, R> for CompressionLayerReader
     }
 }
 
+impl<'a, R: 'a + InnerReaderTrait> CompressionLayerReader<'a, R> {
+    /// Reset the reader to Ready state at `block_start`, extracting the inner
+    /// reader from a failed decompressor. Used on every error path in the
+    /// `InData` arm so the next `read()`/`seek()` can re-sync cleanly.
+    fn reset_to_block_start(
+        &mut self,
+        block_start: u64,
+        decompressor: Box<brotli::Decompressor<Take<Box<dyn 'a + LayerReader<'a, R>>>>>,
+    ) {
+        self.underlayer_pos = block_start;
+        self.state = CompressionLayerReaderState::Ready(decompressor.into_inner().into_inner());
+    }
+}
+
 impl<'a, R: 'a + InnerReaderTrait> Read for CompressionLayerReader<'a, R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         if !self
@@ -406,9 +404,26 @@ impl<'a, R: 'a + InnerReaderTrait> Read for CompressionLayerReader<'a, R> {
         let old_state = std::mem::replace(&mut self.state, CompressionLayerReaderState::Empty);
         match old_state {
             CompressionLayerReaderState::Ready(mut inner) => {
-                self.sync_inner_with_uncompressed_pos(&mut inner, self.underlayer_pos)?;
-                let decompressor = Box::new(self.new_decompressor_at(inner, self.underlayer_pos)?);
-                let uncompressed_size = self.uncompressed_block_size_at(self.underlayer_pos)?;
+                // Validate before consuming inner so we can restore state on error
+                let validated = (|| {
+                    self.sync_inner_with_uncompressed_pos(&mut inner, self.underlayer_pos)?;
+                    let cbs = self.validate_block(self.underlayer_pos)?;
+                    let us = self.uncompressed_block_size_at(self.underlayer_pos)?;
+                    Ok::<_, Error>((cbs, us))
+                })();
+                let (compressed_block_size, uncompressed_size) = match validated {
+                    Ok(v) => v,
+                    Err(e) => {
+                        // underlayer_pos already correct; only state needs restoring
+                        self.state = CompressionLayerReaderState::Ready(inner);
+                        return Err(e.into());
+                    }
+                };
+                // All validation passed; safe to consume inner
+                let decompressor = Box::new(brotli::Decompressor::new(
+                    inner.take(compressed_block_size as u64),
+                    compressed_block_size,
+                ));
                 self.state = CompressionLayerReaderState::InData {
                     read: 0,
                     uncompressed_size,
@@ -421,7 +436,14 @@ impl<'a, R: 'a + InnerReaderTrait> Read for CompressionLayerReader<'a, R> {
                 uncompressed_size,
                 mut decompressor,
             } => {
+                // On error, snap underlayer_pos to the current block start so
+                // the next read()/seek() can re-sync via sync_inner_with_uncompressed_pos.
+                // Safe: block_size is a non-zero constant, so % <= dividend, no underflow.
+                #[allow(clippy::arithmetic_side_effects)]
+                let block_start =
+                    self.underlayer_pos - self.underlayer_pos % u64::from(UNCOMPRESSED_DATA_SIZE);
                 if read > uncompressed_size {
+                    self.reset_to_block_start(block_start, decompressor);
                     return Err(Error::WrongReaderState(
                         "[Compression Layer] Too much data read".to_string(),
                     )
@@ -433,32 +455,43 @@ impl<'a, R: 'a + InnerReaderTrait> Read for CompressionLayerReader<'a, R> {
                     // Start a new block, fill it with new values!
                     return self.read(buf);
                 }
-                let size = std::cmp::min(
-                    usize::try_from(
-                        uncompressed_size
-                            .checked_sub(read)
-                            .ok_or(Error::DeserializationError)?,
-                    )
-                    .or(Err(Error::DeserializationError))?,
-                    buf.len(),
-                );
-                let read_add = decompressor.read(&mut buf[..size])?;
-                self.underlayer_pos = self
-                    .underlayer_pos
-                    .checked_add(u64::try_from(read_add).or(Err(Error::DeserializationError))?)
-                    .ok_or(Error::DeserializationError)?;
-                self.state = CompressionLayerReaderState::InData {
-                    read: read
-                        .checked_add(u32::try_from(read_add).or(Err(Error::DeserializationError))?)
-                        .ok_or(Error::DeserializationError)?,
-                    uncompressed_size,
-                    decompressor,
+                let size = if let Some(d) = uncompressed_size
+                    .checked_sub(read)
+                    .and_then(|d| usize::try_from(d).ok())
+                {
+                    std::cmp::min(d, buf.len())
+                } else {
+                    self.reset_to_block_start(block_start, decompressor);
+                    return Err(Error::DeserializationError.into());
                 };
-                Ok(read_add)
+                let read_add = match decompressor.read(&mut buf[..size]) {
+                    Ok(n) => n,
+                    Err(e) => {
+                        self.reset_to_block_start(block_start, decompressor);
+                        return Err(e);
+                    }
+                };
+                let new_underlayer_pos = u64::try_from(read_add)
+                    .ok()
+                    .and_then(|n| self.underlayer_pos.checked_add(n));
+                let new_read = u32::try_from(read_add)
+                    .ok()
+                    .and_then(|n| read.checked_add(n));
+                if let (Some(upos), Some(nread)) = (new_underlayer_pos, new_read) {
+                    self.underlayer_pos = upos;
+                    self.state = CompressionLayerReaderState::InData {
+                        read: nread,
+                        uncompressed_size,
+                        decompressor,
+                    };
+                    Ok(read_add)
+                } else {
+                    self.reset_to_block_start(block_start, decompressor);
+                    Err(Error::DeserializationError.into())
+                }
             }
             CompressionLayerReaderState::Empty => Err(Error::WrongReaderState(
-                "[Compression Layer] Should never happens, unless an error already occurs before"
-                    .to_string(),
+                "[Compression Layer] Should never happen; errors restore Ready state".to_string(),
             )
             .into()),
         }
@@ -485,15 +518,49 @@ impl<R: InnerReaderTrait> Seek for CompressionLayerReader<'_, R> {
                         // Move the underlayer at the start of the block
                         let old_state =
                             std::mem::replace(&mut self.state, CompressionLayerReaderState::Empty);
-                        let mut inner = old_state.into_inner();
-                        self.sync_inner_with_uncompressed_pos(&mut inner, rounded_pos)?;
-
-                        // New decompressor at the start of the block
-                        let mut decompressor = self.new_decompressor_at(inner, rounded_pos)?;
-                        let uncompressed_size = self.uncompressed_block_size_at(rounded_pos)?;
+                        // Extract inner without panicking on Empty (left by a
+                        // previous failed read/seek on corrupted data)
+                        let mut inner = match old_state {
+                            CompressionLayerReaderState::Ready(inner) => inner,
+                            CompressionLayerReaderState::InData { decompressor, .. } => {
+                                decompressor.into_inner().into_inner()
+                            }
+                            CompressionLayerReaderState::Empty => {
+                                return Err(Error::WrongReaderState(
+                                    "[Compression Layer] Cannot seek: reader in error state"
+                                        .to_string(),
+                                )
+                                .into());
+                            }
+                        };
+                        // Validate before consuming inner so we can restore state on error
+                        let validated = (|| {
+                            self.sync_inner_with_uncompressed_pos(&mut inner, rounded_pos)?;
+                            let cbs = self.validate_block(rounded_pos)?;
+                            let us = self.uncompressed_block_size_at(rounded_pos)?;
+                            Ok::<_, Error>((cbs, us))
+                        })();
+                        let (compressed_block_size, uncompressed_size) = match validated {
+                            Ok(v) => v,
+                            Err(e) => {
+                                // underlayer_pos already correct; only state needs restoring
+                                self.state = CompressionLayerReaderState::Ready(inner);
+                                return Err(e.into());
+                            }
+                        };
+                        // All validation passed; safe to consume inner
+                        let mut decompressor = brotli::Decompressor::new(
+                            inner.take(compressed_block_size as u64),
+                            compressed_block_size,
+                        );
 
                         // Move forward inside the block to reach the expected position
-                        io::copy(&mut (&mut decompressor).take(inside_block), &mut io::sink())?;
+                        if let Err(e) =
+                            io::copy(&mut (&mut decompressor).take(inside_block), &mut io::sink())
+                        {
+                            self.reset_to_block_start(rounded_pos, Box::new(decompressor));
+                            return Err(e);
+                        }
                         self.state = CompressionLayerReaderState::InData {
                             read: u32::try_from(inside_block)
                                 .expect("Failed to convert inside block to u32"),
@@ -1558,5 +1625,76 @@ mod tests {
         decomp.initialize().unwrap();
         decomp.read_to_end(&mut buf_2_out).unwrap();
         assert_eq!(buf_out, buf_2_out);
+    }
+
+    #[test]
+    fn corrupted_compressed_archive_does_not_panic() {
+        // Regression test: when read() or seek() hit corrupted compressed
+        // data, a bug in the state machine left the reader in an
+        // unrecoverable internal state, causing a panic on the next
+        // operation. The fix ensures all error paths restore a usable
+        // state and return Err instead of panicking.
+
+        // 1. Create a valid compressed layer
+        let bytes = get_data();
+        let file = Vec::new();
+        let mut comp = Box::new(CompressionLayerWriter::new_skip_header(
+            Box::new(RawLayerWriter::new(file)),
+            &CompressionConfig::default(),
+        ));
+        comp.write_all(bytes.as_slice()).unwrap();
+        let file = comp.finalize().unwrap();
+
+        // 2. Corrupt 8 bytes in the middle (SizesInfo footer at end stays intact)
+        let mut corrupted = file.clone();
+        let mid = corrupted.len() / 2;
+        for byte in corrupted.iter_mut().take(mid + 8).skip(mid) {
+            *byte ^= 0xFF;
+        }
+
+        // 3. Initialize -- succeeds because the SizesInfo at the end is intact
+        let buf = Cursor::new(corrupted.as_slice());
+        let mut decomp = Box::new(
+            CompressionLayerReader::new_skip_header(Box::new(RawLayerReader::new(buf))).unwrap(),
+        );
+        decomp.initialize().unwrap();
+
+        // 4. read() fails on the corrupted block, returning Err (not panic)
+        let mut out = Vec::new();
+        let read_result = decomp.read_to_end(&mut out);
+        assert!(
+            read_result.is_err(),
+            "read_to_end should fail on corrupted data"
+        );
+
+        // 5. After the failed read(), seek() must not panic. Before the fix,
+        //    the reader was left in an unrecoverable state and seek() panicked.
+        //    Here, seeking to offset 0 targets the first (intact) block and
+        //    requires no decompression, so it should succeed.
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            decomp.seek(SeekFrom::Start(0))
+        }));
+        assert!(
+            result.is_ok(),
+            "seek panicked after a failed read -- state was not restored"
+        );
+        let seek_result = result.unwrap();
+        assert!(
+            seek_result.is_ok(),
+            "seek to Start(0) should succeed (first block intact, no decompression needed)"
+        );
+
+        // 6. Seeking into the corrupted block triggers decompression during
+        //    the seek itself. This must return Err, not panic.
+        let target = u64::from(UNCOMPRESSED_DATA_SIZE) + 100;
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            decomp.seek(SeekFrom::Start(target))
+        }));
+        assert!(result.is_ok(), "seek into corrupted block panicked");
+        let seek_result = result.unwrap();
+        assert!(
+            seek_result.is_err(),
+            "seek into corrupted block should return Err, not Ok"
+        );
     }
 }
