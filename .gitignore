@@ -16,4 +16,10 @@ doc/book/
 
 # fuzzer artifacts
 crash-*
+oom-*
 *.profraw
+
+# fuzzer-generated corpus entries (libFuzzer hash names: 40 hex chars).
+# Five hex chars are anchored so the pattern cannot match the committed
+# seeds (archive_*.mla: 2nd char 'r' is not hex; testinput_*: 't' is not hex).
+fuzz/mla_fuzz_seed_corpus/[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]*
