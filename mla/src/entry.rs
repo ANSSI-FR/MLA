@@ -519,6 +519,9 @@ pub struct ArchiveEntryDataReader<'a, R> {
     current_offsets_and_sizes_index: usize,
     /// List of offsets of continuous blocks corresponding to where the file can be read
     offsets_and_sizes: &'a [(u64, u64)],
+    /// Recursion depth guard: prevents infinite recursion when a corrupted
+    /// archive causes `read` to repeatedly seek to the same wrong-id block.
+    read_depth: usize,
 }
 
 impl<'a, R: Read + Seek> ArchiveEntryDataReader<'a, R> {
@@ -543,6 +546,7 @@ impl<'a, R: Read + Seek> ArchiveEntryDataReader<'a, R> {
             id,
             current_offsets_and_sizes_index: 1,
             offsets_and_sizes,
+            read_depth: 0,
         })
     }
 
@@ -571,6 +575,18 @@ impl<'a, R: Read + Seek> ArchiveEntryDataReader<'a, R> {
 
 impl<T: Read + Seek> Read for ArchiveEntryDataReader<'_, T> {
     fn read(&mut self, into: &mut [u8]) -> std::io::Result<usize> {
+        // Guard against infinite recursion: if a corrupted archive causes
+        // repeated seeks to wrong-id blocks, bail out instead of overflowing
+        // the stack. The maximum meaningful depth is the number of blocks.
+        self.read_depth = self.read_depth.saturating_add(1);
+        if self.read_depth > self.offsets_and_sizes.len().saturating_add(1) {
+            return Err(Error::WrongReaderState(
+                "[ArchiveEntryDataReader] Too many block skips, possibly corrupted archive"
+                    .to_string(),
+            )
+            .into());
+        }
+
         let (remaining, count) = match self.state {
             ArchiveEntryDataReaderState::Ready => {
                 // Start a new block EntryContent
@@ -626,6 +642,7 @@ impl<T: Read + Seek> Read for ArchiveEntryDataReader<'_, T> {
                 )
             }
             ArchiveEntryDataReaderState::Finish => {
+                self.read_depth = 0;
                 return Ok(0);
             }
         };
@@ -639,6 +656,7 @@ impl<T: Read + Seek> Read for ArchiveEntryDataReader<'_, T> {
                 .ok_or(Error::DeserializationError)?;
             self.state = ArchiveEntryDataReaderState::Ready;
         }
+        self.read_depth = 0;
         Ok(count)
     }
 }
