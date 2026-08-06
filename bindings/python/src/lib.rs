@@ -813,7 +813,7 @@ impl ReaderConfig {
         } else if inner.accept_unencrypted {
             incomplete_config.without_encryption()
         } else {
-            panic!("Given ReaderConfig API this should not happen. Please report bug")
+            unreachable!("Given ReaderConfig API this should not happen. Please report bug")
         }
     }
 }
