@@ -2344,7 +2344,6 @@ pub(crate) mod tests {
         }
     }
 
-    // cargo test update_completions -- --ignored
     #[test]
     #[ignore = "run manually to regenerate completion scripts"]
     fn update_completions() {
