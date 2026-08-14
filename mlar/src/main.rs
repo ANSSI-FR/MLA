@@ -1653,6 +1653,22 @@ fn handle_shared_secret_command(matches: &ArgMatches) -> Result<(), MlarError> {
     }
 }
 
+fn completions(matches: &ArgMatches) -> Result<(), MlarError> {
+    // Safe to use unwrap() because the option is required()
+    let shell = matches.get_one::<String>("shell").unwrap();
+    let script = match shell.as_str() {
+        "bash" => include_str!("../completions/mlar.bash"),
+        "zsh" => include_str!("../completions/mlar.zsh"),
+        "fish" => include_str!("../completions/mlar.fish"),
+        "elvish" => include_str!("../completions/_mlar.elv"),
+        "powershell" => include_str!("../completions/_mlar.ps1"),
+        _ => return Err(MlarError::Other(format!("Unknown shell: {shell}"))),
+    };
+    print!("{script}");
+    io::stdout().flush()?;
+    Ok(())
+}
+
 fn app() -> clap::Command {
     // Common arguments list, for homogeneity
     let verbose = Arg::new("verbose")
@@ -2032,6 +2048,18 @@ fn app() -> clap::Command {
                         .arg(output_arg.clone())
                 )
         )
+        .subcommand(
+            Command::new("completions")
+                .about("Generate shell completion scripts")
+                .arg(
+                    Arg::new("shell")
+                        .long("shell")
+                        .short('s')
+                        .help("Shell to generate completions for")
+                        .value_parser(["bash", "zsh", "fish", "elvish", "powershell"])
+                        .required(true),
+                ),
+        )
 }
 
 fn main() -> Result<(), MlarError> {
@@ -2090,6 +2118,8 @@ fn main() -> Result<(), MlarError> {
         info(matches)
     } else if let Some(matches) = matches.subcommand_matches("shared-secret") {
         handle_shared_secret_command(matches)
+    } else if let Some(matches) = matches.subcommand_matches("completions") {
+        completions(matches)
     } else {
         let msg = "[ERROR] At least one command is required.";
         eprintln!("{help}");
@@ -2285,5 +2315,49 @@ pub(crate) mod tests {
         let data = b"irrelevant";
         // if it doesn't panic, it's fine
         apply_quarantine_os(dummy_path, data).unwrap();
+    }
+
+    const COMPLETION_SHELLS: &[(clap_complete::Shell, &str)] = &[
+        (clap_complete::Shell::Bash, "completions/mlar.bash"),
+        (clap_complete::Shell::Zsh, "completions/mlar.zsh"),
+        (clap_complete::Shell::Fish, "completions/mlar.fish"),
+        (clap_complete::Shell::Elvish, "completions/_mlar.elv"),
+        (clap_complete::Shell::PowerShell, "completions/_mlar.ps1"),
+    ];
+
+    #[test]
+    fn ensure_completions_up_to_date() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        for (shell, rel_path) in COMPLETION_SHELLS {
+            let path = dir.join(rel_path);
+            let mut buf = Vec::new();
+            clap_complete::generate(*shell, &mut app(), "mlar", &mut buf);
+            let generated =
+                String::from_utf8(buf).expect("Generated completion should be valid UTF-8");
+            let committed = std::fs::read_to_string(&path)
+                .unwrap_or_else(|_| panic!("Failed to read committed completion file: {path:?}"));
+            assert_eq!(
+                generated, committed,
+                "Completions for {shell:?} are out of date.\n\
+                 Run: cargo test --package mlar update_completions -- --ignored\n\
+                 Then commit the updated files in mlar/completions/"
+            );
+        }
+    }
+
+    // cargo test update_completions -- --ignored
+    #[test]
+    #[ignore = "run manually to regenerate completion scripts"]
+    fn update_completions() {
+        // Regenerate when bumping clap_complete (e.g. via dependabot) changes the output format
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        for (shell, rel_path) in COMPLETION_SHELLS {
+            let path = dir.join(rel_path);
+            let mut buf = Vec::new();
+            clap_complete::generate(*shell, &mut app(), "mlar", &mut buf);
+            std::fs::write(&path, &buf)
+                .unwrap_or_else(|_| panic!("Failed to write completion file: {path:?}"));
+            println!("Updated: {path:?}");
+        }
     }
 }

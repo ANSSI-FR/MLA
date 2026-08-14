@@ -40,3 +40,4 @@ permutate = "0.3"
 rand = "0.10"
 rand_chacha = "0.10"
 winapi = { version = "0.3", features = ["winbase"] }
+clap_complete = "4.6"
