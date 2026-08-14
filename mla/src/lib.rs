@@ -300,6 +300,9 @@ const ENTRY_NAME_MAX_SIZE: u64 = 1024;
 
 const ENTRIES_LAYER_MAGIC: &[u8; 8] = b"MLAENAAA";
 
+// from http://cgit.git.savannah.gnu.org/cgit/coreutils.git/tree/src/ioblksize.h#n25
+const DEFAULT_BUFFER_SIZE: usize = 256 * 1024;
+
 const EMPTY_OPTS_SERIALIZATION: &[u8; 1] = &[0];
 const EMPTY_TAIL_OPTS_SERIALIZATION: &[u8; 9] = &[0, 1, 0, 0, 0, 0, 0, 0, 0];
 
