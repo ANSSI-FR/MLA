@@ -1603,6 +1603,13 @@ fn info(matches: &ArgMatches) -> Result<(), MlarError> {
     Ok(())
 }
 
+fn check(matches: &ArgMatches) -> Result<(), MlarError> {
+    let mut reader = open_mla_file(matches)?;
+    reader.verify_archive_integrity()?;
+    println!("Archive verification succeeded");
+    Ok(())
+}
+
 fn handle_get_decryption_metadata_command(matches: &ArgMatches) -> Result<(), MlarError> {
     // Safe to use unwrap() because the option is required()
     let mla_file_path = matches.get_one::<PathBuf>("input").unwrap();
@@ -1800,6 +1807,13 @@ fn app() -> clap::Command {
                         .action(ArgAction::SetTrue)
                         .help("Do not try to interpret entry names as paths and encode everything not alphanumeric, dash, underscore or dot"),
                 )
+                .arg(shared_secret_arg.clone())
+        )
+        .subcommand(
+            Command::new("check")
+                .about("Verify the integrity of a MLA Archive")
+                .args(&input_args)
+                .args(&both_args)
                 .arg(shared_secret_arg.clone())
         )
         .subcommand(
@@ -2070,6 +2084,8 @@ fn main() -> Result<(), MlarError> {
         list(matches)
     } else if let Some(matches) = matches.subcommand_matches("extract") {
         extract(matches)
+    } else if let Some(matches) = matches.subcommand_matches("check") {
+        check(matches)
     } else if let Some(matches) = matches.subcommand_matches("cat") {
         cat(matches)
     } else if let Some(matches) = matches.subcommand_matches("to-tar") {

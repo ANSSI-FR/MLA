@@ -610,6 +610,70 @@ pub fn truncated_multiple_layers_clean_truncated(c: &mut Criterion) {
     }
 }
 
+/// Measure the time needed to run `verify_archive_integrity` on an archive
+/// with `iters` files of `size` bytes
+fn verify_archive_integrity(
+    iters: u64,
+    size: u64,
+    compression: bool,
+    encryption: bool,
+    signature: bool,
+    privkey: &MLAPrivateKey,
+    pubkey: &MLAPublicKey,
+) -> Duration {
+    let mut mla_read = build_archive_reader(
+        iters,
+        size,
+        compression,
+        encryption,
+        signature,
+        privkey,
+        pubkey,
+    );
+
+    let start = Instant::now();
+    mla_read.verify_archive_integrity().unwrap();
+    start.elapsed()
+}
+
+/// Benchmark `verify_archive_integrity` across all layer permutations and
+/// multiple block sizes.
+pub fn verify_archive_integrity_multiple_layers(c: &mut Criterion) {
+    let mut group = c.benchmark_group("verify_archive_integrity_multiple_layers");
+    group.sample_size(SAMPLE_SIZE);
+
+    let (privkey, pubkey) = generate_mla_keypair_from_seed([0; 32]);
+
+    for size in SIZE_LIST {
+        group.throughput(Throughput::Bytes(size as u64));
+
+        for (compression, encryption, signature) in &LAYERS_POSSIBILITIES {
+            let privkey = privkey.clone();
+            let pubkey = pubkey.clone();
+            group.bench_function(
+                BenchmarkId::new(
+                    format!("compression: {compression}, encryption: {encryption}, signature: {signature}"),
+                    size,
+                ),
+                move |b| {
+                    b.iter_custom(|iters| {
+                        verify_archive_integrity(
+                            iters,
+                            size as u64,
+                            *compression,
+                            *encryption,
+                            *signature,
+                            &privkey,
+                            &pubkey,
+                        )
+                    });
+                },
+            );
+        }
+    }
+    group.finish();
+}
+
 criterion_group!(
     benches,
     writer_multiple_layers_multiple_block_size,
@@ -617,6 +681,7 @@ criterion_group!(
     reader_multiple_layers_multiple_block_size_multifiles_random,
     reader_multiple_layers_multiple_block_size_multifiles_linear,
     truncated_multiple_layers_clean_truncated,
+    verify_archive_integrity_multiple_layers,
     // Was used to determine the best default compression quality ratio
     //
     // multiple_compression_quality,

@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::hash::BuildHasher;
 use std::io::{self, Read, Seek, Write};
 
-const DEFAULT_BUFFER_SIZE: usize = 128 * 1024;
+use crate::DEFAULT_BUFFER_SIZE;
 
 /// Escaping function used by MLA, but may be useful for others
 ///
