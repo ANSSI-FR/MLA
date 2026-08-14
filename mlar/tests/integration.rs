@@ -2478,3 +2478,25 @@ fn test_keygen_public_from_private() {
     cmd.current_dir(derived_dir3.path());
     cmd.assert().failure();
 }
+
+#[test]
+fn test_completions_all_shells() {
+    for (shell, marker) in [
+        ("bash", "_mlar() {"),
+        ("zsh", "#compdef mlar"),
+        ("fish", "__fish_mlar_"),
+        ("elvish", "arg-completer[mlar]"),
+        ("powershell", "Register-ArgumentCompleter"),
+    ] {
+        let assert = Command::cargo_bin(UTIL)
+            .unwrap()
+            .args(["completions", "--shell", shell])
+            .assert()
+            .success();
+        let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+        assert!(
+            stdout.contains(marker),
+            "Completion output for '{shell}' should serve the {shell} script (missing '{marker}')"
+        );
+    }
+}
