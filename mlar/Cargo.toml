@@ -28,7 +28,7 @@ windows = { version = "0.62", default-features = false, features = [
     "Win32_Storage_FileSystem",
     "Win32_Security",
 ] }
-windows-result = "0.4"
+windows-result = "0.100"
 
 [lints]
 workspace = true
