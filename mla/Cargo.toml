@@ -14,7 +14,7 @@ readme = "../README.md"
 [dependencies]
 rand = { version = "0.10", default-features = false, features = ["sys_rng", "std", "thread_rng"]}
 rand_chacha = { version = "0.10", default-features = false}
-brotli = { version = "8.0", default-features = false, features = ["std"]}
+brotli = { version = "9.0", default-features = false, features = ["std"]}
 bitflags = { version = "2.13", default-features = false }
 # Crypto needs
 hybrid-array = { version = "0.4", default-features = false}
