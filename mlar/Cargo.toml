@@ -24,11 +24,13 @@ tar = "0.4"
 clru = "0.6"
 
 [target.'cfg(windows)'.dependencies]
+# `std` is required to enable windows-core/std -> windows-result/std, which provides
+# the `impl From<windows_result::Error> for std::io::Error` needed by privkey.rs.
 windows = { version = "0.62", default-features = false, features = [
+    "std",
     "Win32_Storage_FileSystem",
     "Win32_Security",
 ] }
-windows-result = "0.100"
 
 [lints]
 workspace = true
