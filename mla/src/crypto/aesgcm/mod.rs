@@ -121,10 +121,10 @@ impl AesGcm256 {
             buffer = out_block;
         }
 
-        let mut chunks = buffer.chunks_exact_mut(BLOCK_SIZE);
+        let (chunks, rem) = buffer.as_chunks_mut::<BLOCK_SIZE>();
 
         // Interleaved ghash update
-        for chunk in &mut chunks {
+        for chunk in chunks {
             self.cipher.apply_keystream(chunk);
             self.ghash.update(slice::from_ref(
                 <&Array<u8, U16>>::try_from(&chunk[..]).unwrap(),
@@ -132,7 +132,6 @@ impl AesGcm256 {
         }
 
         // Encrypt and save extra encrypted bytes for further GHash computation
-        let rem = chunks.into_remainder();
         if !rem.is_empty() {
             self.cipher.apply_keystream(rem);
             self.current_block.extend_from_slice(rem);
@@ -174,17 +173,16 @@ impl AesGcm256 {
                 < AES256_GCM_MAX_PLAINTEXT_LENGTH,
             "Attempted to decrypt more than what AES-GCM is secure for"
         );
-        let mut chunks = buffer.chunks_exact_mut(BLOCK_SIZE);
+        let (chunks, rem) = buffer.as_chunks_mut::<BLOCK_SIZE>();
 
         // Interleaved ghash update
-        for chunk in &mut chunks {
+        for chunk in chunks {
             self.ghash.update(slice::from_ref(
                 <&Array<u8, U16>>::try_from(&chunk[..]).unwrap(),
             ));
             self.cipher.apply_keystream(chunk);
         }
 
-        let rem = chunks.into_remainder();
         if !rem.is_empty() {
             self.ghash.update_padded(rem);
             self.cipher.apply_keystream(rem);
