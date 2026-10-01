@@ -10,7 +10,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-26.04
-    container: rust@sha256:1f0dbad1df66647807e6952d1db85d0b2bda7606cb2139d82517e4f009967376 # v1.96.1 : pin to known-good previous stable release for increased stability and security
+    container: rust@sha256:a8a5f0a1e5fe7dfe1d352591e4a1c7dd2c08fd70475cae872cf3458ba0df0546 # v1.98.1 : pin to known-good previous stable release for increased stability and security
     permissions:
       contents: read
 
