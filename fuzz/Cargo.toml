@@ -9,6 +9,9 @@ libfuzzer-sys = "0.4"
 mla = { path = "../mla" }
 mla-fuzz = { path = "../mla-fuzz" }
 
+[lib]
+path = "src/lib.rs"
+
 [[bin]]
 name = "mla_fuzz"
 path = "fuzz_targets/mla_fuzz.rs"
@@ -23,8 +26,13 @@ opt-level = 3
 strip = true
 
 # Custom profile for fuzzing - inherits from release but disables stripping.
-# Stripping symbols breaks sanitizer idetection (ASan), as the sanitizer 
+# Stripping symbols breaks sanitizer detection (ASan), as the sanitizer
 # runtime needs to access certain symbols.
+#
+# LTO MUST be disabled here: sancov-module coverage instrumentation (required
+# for libFuzzer feedback) produces per-crate `__sancov_gen_*` symbols that
+# become undefined references when LTO merges crates (cargo-fuzz#384).
+# `lto = false` overrides the inherited `lto = true` from `release`.
 #
 # NOTE: This profile must also be defined in the workspace root Cargo.toml because:
 # - When building as part of the workspace, cargo uses profiles from the root.
@@ -34,3 +42,4 @@ strip = true
 [profile.fuzzing]
 inherits = "release"
 strip = false
+lto = false
