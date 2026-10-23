@@ -345,10 +345,7 @@ impl<'a, R: 'a + InnerReaderTrait> CompressionLayerReader<'a, R> {
                 // Move the underlayer at the start of the block
                 let start_position = compressed_sizes
                     .iter()
-                    .take(
-                        usize::try_from(block_num)
-                            .expect("Failed to convert block number to usize"),
-                    )
+                    .take(usize::try_from(block_num).or(Err(Error::DeserializationError))?)
                     .map(|size| u64::from(*size))
                     .sum();
                 inner.seek(SeekFrom::Start(start_position))?;
