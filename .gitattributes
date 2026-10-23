@@ -1,0 +1,3 @@
+# Completion scripts must use LF line endings to ensure CI sync tests
+# pass consistently across platforms (Windows uses CRLF by default)
+mlar/completions/* text eol=lf

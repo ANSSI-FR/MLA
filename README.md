@@ -131,6 +131,46 @@ RUSTFLAGS="-Ctarget-cpu=native" cargo build --release --target x86_64-unknown-li
 
 Note: Native builds are optimized for your machine's CPU and **are not portable**. Use them only when running on the same machine you build on.
 
+# Shell completions
+
+`mlar` supports shell completions for bash, zsh, fish, elvish, and PowerShell.
+
+### Bash
+
+```sh
+mlar completions --shell bash | sudo tee /etc/bash_completion.d/mlar
+# or for user-level:
+mlar completions --shell bash >> ~/.bash_completion
+```
+
+### Zsh
+
+```sh
+mlar completions --shell zsh > "${fpath[1]}/_mlar"
+```
+
+### Fish
+
+```sh
+mlar completions --shell fish > ~/.config/fish/completions/mlar.fish
+```
+
+### Elvish
+
+```sh
+mlar completions --shell elvish > ~/.config/elvish/lib/mlar.elv
+# Then add the following to ~/.config/elvish/rc.elv:
+use mlar
+```
+
+### PowerShell
+
+```powershell
+mlar completions --shell powershell | Out-String | Invoke-Expression
+# or for persistent installation:
+Add-Content $PROFILE 'mlar completions --shell powershell | Out-String | Invoke-Expression'
+```
+
 # API usage
 
 See [https://docs.rs/mla](https://docs.rs/mla/2.0.0-beta/mla/index.html)

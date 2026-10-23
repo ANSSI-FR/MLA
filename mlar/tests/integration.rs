@@ -2478,3 +2478,18 @@ fn test_keygen_public_from_private() {
     cmd.current_dir(derived_dir3.path());
     cmd.assert().failure();
 }
+
+#[test]
+fn test_completions_all_shells() {
+    for shell in ["bash", "zsh", "fish", "elvish", "powershell"] {
+        let assert = Command::cargo_bin(UTIL)
+            .unwrap()
+            .args(["completions", "--shell", shell])
+            .assert()
+            .success();
+        assert!(
+            !assert.get_output().stdout.is_empty(),
+            "Completion output for shell '{shell}' should not be empty"
+        );
+    }
+}
