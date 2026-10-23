@@ -232,7 +232,7 @@
 //! }
 //! ```
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::io;
 use std::io::{Read, Seek, SeekFrom, Write};
@@ -299,6 +299,9 @@ const END_MLA_MAGIC: &[u8; 8] = b"EMLAAAAA";
 const ENTRY_NAME_MAX_SIZE: u64 = 1024;
 
 const ENTRIES_LAYER_MAGIC: &[u8; 8] = b"MLAENAAA";
+
+// from http://cgit.git.savannah.gnu.org/cgit/coreutils.git/tree/src/ioblksize.h#n25
+const DEFAULT_BUFFER_SIZE: usize = 256 * 1024;
 
 const EMPTY_OPTS_SERIALIZATION: &[u8; 1] = &[0];
 const EMPTY_TAIL_OPTS_SERIALIZATION: &[u8; 9] = &[0, 1, 0, 0, 0, 0, 0, 0, 0];
@@ -1209,6 +1212,226 @@ impl<'b, R: 'b + InnerReaderTrait> ArchiveReader<'b, R> {
             Err(Error::MissingMetadata)
         }
     }
+
+    /// Verify the integrity of an archive by performing a comprehensive set of
+    /// security checks.
+    ///
+    /// # Security checks performed
+    ///
+    /// 1. **Entry hash verification**: Each entry's SHA-256 hash is recomputed
+    ///    by streaming the entry content and compared against the hash stored in
+    ///    the `EndOfEntry` block.
+    /// 2. **Duplicate ID detection**: No two entries may share the same
+    ///    `ArchiveEntryId`, even non-overlapping duplicates (an entry reusing an
+    ///    ID after the original was closed).
+    /// 3. **Duplicate name detection**: No two entries in the stream may share
+    ///    the same name.
+    /// 4. **Unfinished entry detection**: No `EntryStart` may lack a matching
+    ///    `EndOfEntry` block.
+    /// 5. **Phantom entry detection**: Every entry in the footer's
+    ///    `entries_info` must have a corresponding `EntryStart` in the stream.
+    /// 6. **Offset bounds validation against `EndOfArchiveData`**: Each
+    ///    `(offset, size)` range in the footer's `offsets_and_sizes` must end
+    ///    at or before the `EndOfArchiveData` block, with overflow-safe
+    ///    arithmetic.
+    /// 7. **Offset -> entry correspondence**: Each footer entry's offsets
+    ///    must follow the `EntryStart -> EntryContent* -> EndOfEntry` shape,
+    ///    with all blocks referencing the matching `ArchiveEntryId`.
+    ///    The first offset must point to an `EntryStart` with the matching
+    ///    name; the last offset must point to an `EndOfEntry`.
+    ///
+    /// # Limitations
+    ///
+    /// This function verifies **integrity**, not **authenticity**. An attacker
+    /// who can craft a valid archive with correct hashes and a self-consistent
+    /// footer can inject entirely new entries (new ID, new name, correct hash)
+    /// that will pass all checks. Detecting this requires the **signature
+    /// layer**, which cryptographically authenticates the archive's origin.
+    ///
+    /// The reader's cursor position is unspecified after this call. Callers
+    /// that need a known position should seek explicitly afterwards.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(Error::MissingMetadata)` if the reader has no footer
+    /// metadata, or `Err(Error::InvalidArchiveStructure(msg))` if any check
+    /// fails.
+    pub fn verify_archive_integrity(&mut self) -> Result<(), Error> {
+        let footer = self.metadata.as_ref().ok_or(Error::MissingMetadata)?;
+
+        self.src.rewind()?;
+        read_mla_entries_header(&mut self.src)?;
+
+        let mut src = io::BufReader::with_capacity(DEFAULT_BUFFER_SIZE, &mut self.src);
+
+        // SHA-256 state for each started-but-unfinished entry (keyed by id).
+        let mut hashes: HashMap<ArchiveEntryId, Sha256> = HashMap::new();
+
+        // Unlike `hashes`, not cleared on EndOfEntry — catches reused IDs.
+        let mut seen_ids: HashSet<ArchiveEntryId> = HashSet::new();
+
+        let mut stream_names: HashSet<EntryName> = HashSet::new();
+
+        let data_region_end = 'read_block: loop {
+            let block_start_pos = src.stream_position()?;
+            match ArchiveEntryBlock::from(&mut src)? {
+                ArchiveEntryBlock::EntryStart { name, id, .. } => {
+                    if !seen_ids.insert(id) {
+                        return Err(Error::InvalidArchiveStructure(format!(
+                            "Duplicate entry ID {id:?}"
+                        )));
+                    }
+                    if !stream_names.insert(name.clone()) {
+                        return Err(Error::InvalidArchiveStructure(format!(
+                            "Duplicate entry name '{name:?}' in stream"
+                        )));
+                    }
+                    hashes.insert(id, Sha256::new());
+                }
+                ArchiveEntryBlock::EntryContent { length, id, .. } => {
+                    let hash = hashes.get_mut(&id).ok_or_else(|| {
+                        Error::InvalidArchiveStructure(format!(
+                            "EntryContent block references unknown entry id: {id:?}"
+                        ))
+                    })?;
+
+                    let mut copy_src = HashWrapperReader::new((&mut src).take(length), hash);
+                    let bytes_read = io::copy(&mut copy_src, &mut io::sink())?;
+                    if bytes_read != length {
+                        return Err(Error::InvalidArchiveStructure(
+                            "Unexpected EOF while reading archive entry content".to_string(),
+                        ));
+                    }
+                }
+                ArchiveEntryBlock::EndOfEntry { id, hash, .. } => {
+                    let entry_hash = hashes.remove(&id).ok_or_else(|| {
+                        Error::InvalidArchiveStructure(format!(
+                            "EndOfEntry block references unknown entry id: {id:?}"
+                        ))
+                    })?;
+                    let computed_hash = entry_hash.finalize();
+                    if computed_hash.as_slice() != hash {
+                        return Err(Error::InvalidArchiveStructure(format!(
+                            "Hash mismatch for entry id {id:?}"
+                        )));
+                    }
+                }
+                ArchiveEntryBlock::EndOfArchiveData => {
+                    break 'read_block block_start_pos;
+                }
+            }
+        };
+
+        if !hashes.is_empty() {
+            return Err(Error::InvalidArchiveStructure(
+                "Archive ended with unfinished entries (EntryStart without matching EndOfEntry)"
+                    .to_string(),
+            ));
+        }
+
+        for (name, info) in &footer.entries_info {
+            if !stream_names.contains(name) {
+                return Err(Error::InvalidArchiveStructure(format!(
+                    "Phantom entry '{name:?}' in footer but absent from stream"
+                )));
+            }
+            for (offset, size) in &info.offsets_and_sizes {
+                let end = offset.checked_add(*size).ok_or_else(|| {
+                    Error::InvalidArchiveStructure(
+                        "Offset arithmetic overflow in footer entries_info".to_string(),
+                    )
+                })?;
+                if end > data_region_end {
+                    return Err(Error::InvalidArchiveStructure(format!(
+                        "Entry '{name:?}' offset {offset} + size {size} = {end} exceeds data region end {data_region_end}"
+                    )));
+                }
+            }
+        }
+
+        // Offset -> entry correspondence: verify that each footer entry's
+        // offsets point to the correct block types in the correct order:
+        //   EntryStart -> EntryContent* -> EndOfEntry
+        // All offsets must reference the matching ArchiveEntryId. The expected
+        // id is read from the EntryStart at offset[0] (unique because duplicate
+        // names are rejected above).
+        for (name, info) in &footer.entries_info {
+            let offsets = &info.offsets_and_sizes;
+            if offsets.is_empty() {
+                return Err(Error::InvalidArchiveStructure(format!(
+                    "Entry '{name:?}' has empty offsets_and_sizes in footer"
+                )));
+            }
+            let last_idx = offsets.len().saturating_sub(1);
+
+            // Chunk 0: must be EntryStart with matching name.
+            let (start_offset, _) = offsets[0];
+            self.src.seek(SeekFrom::Start(start_offset))?;
+            let expected_id = match ArchiveEntryBlock::from(&mut self.src)? {
+                ArchiveEntryBlock::EntryStart {
+                    id,
+                    name: stream_name,
+                    ..
+                } => {
+                    if stream_name != *name {
+                        return Err(Error::InvalidArchiveStructure(format!(
+                            "Footer entry '{name:?}' offset {start_offset} points to entry '{stream_name:?}'"
+                        )));
+                    }
+                    id
+                }
+                _ => {
+                    return Err(Error::InvalidArchiveStructure(format!(
+                        "Footer entry '{name:?}' offset {start_offset} points to non-EntryStart block"
+                    )));
+                }
+            };
+
+            // Chunks 1..: EntryContent for middle, EndOfEntry for last.
+            for (i, &(offset, _)) in offsets.iter().enumerate().skip(1) {
+                self.src.seek(SeekFrom::Start(offset))?;
+                let block = ArchiveEntryBlock::from(&mut self.src)?;
+                match &block {
+                    ArchiveEntryBlock::EntryContent { id, .. } => {
+                        if i == last_idx {
+                            return Err(Error::InvalidArchiveStructure(format!(
+                                "Footer entry '{name:?}' offset {offset} points to EntryContent but expected EndOfEntry (last offset)"
+                            )));
+                        }
+                        if *id != expected_id {
+                            return Err(Error::InvalidArchiveStructure(format!(
+                                "Footer entry '{name:?}' offset {offset} (chunk {i}) references id {id:?} but expected {expected_id:?}"
+                            )));
+                        }
+                    }
+                    ArchiveEntryBlock::EndOfEntry { id, .. } => {
+                        if i != last_idx {
+                            return Err(Error::InvalidArchiveStructure(format!(
+                                "Footer entry '{name:?}' offset {offset} (chunk {i}) points to EndOfEntry but expected EntryContent"
+                            )));
+                        }
+                        if *id != expected_id {
+                            return Err(Error::InvalidArchiveStructure(format!(
+                                "Footer entry '{name:?}' offset {offset} (chunk {i}) references id {id:?} but expected {expected_id:?}"
+                            )));
+                        }
+                    }
+                    ArchiveEntryBlock::EntryStart { .. } => {
+                        return Err(Error::InvalidArchiveStructure(format!(
+                            "Footer entry '{name:?}' offset {offset} (chunk {i}) points to EntryStart but expected EntryContent or EndOfEntry"
+                        )));
+                    }
+                    ArchiveEntryBlock::EndOfArchiveData => {
+                        return Err(Error::InvalidArchiveStructure(format!(
+                            "Footer entry '{name:?}' offset {offset} points to EndOfArchiveData"
+                        )));
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
 }
 
 // This code is very similar with MLAArchiveReader
@@ -1990,6 +2213,103 @@ pub(crate) mod tests {
             entries_info,
             ids_info,
         )
+    }
+
+    /// Build a raw (no layers) MLA archive from hand-crafted entry blocks and
+    /// a forged footer. This bypasses `ArchiveWriter` to produce malformed
+    /// archives that the writer API refuses to create.
+    ///
+    /// `entries` is a list of `(name, id, content)` tuples. Each entry is
+    /// serialized as `[EntryStart][EntryContent][EndOfEntry]`. The SHA-256
+    /// hash in `EndOfEntry` is computed from the content.
+    ///
+    /// Returns the archive bytes. The footer is faithful: each entry gets
+    /// three offsets — `(EntryStart, 0)`, `(EntryContent, N)`,
+    /// `(EndOfEntry, 0)` — matching what `ArchiveWriter` produces.
+    #[allow(clippy::type_complexity)]
+    fn build_raw_archive(
+        entries: Vec<(EntryName, ArchiveEntryId, Vec<u8>)>,
+        // Optional: omit EndOfEntry for the entry at this index
+        omit_end_of_entry: Option<usize>,
+    ) -> Vec<u8> {
+        use std::io::Write;
+
+        let mut buf = Vec::new();
+
+        // -- Archive header --
+        buf.write_all(MLA_MAGIC).unwrap();
+        buf.extend_from_slice(&MLA_FORMAT_VERSION.to_le_bytes());
+        buf.write_all(EMPTY_OPTS_SERIALIZATION).unwrap(); // Opts
+
+        // -- Entries layer magic --
+        // Offsets in the footer are relative to position 0 of the entries
+        // layer (= start of entries layer magic), matching the writer's
+        // `PositionLayerWriter::reset_position()` call which happens BEFORE
+        // writing the magic.
+        let entries_layer_start = buf.len() as u64;
+        buf.write_all(ENTRIES_LAYER_MAGIC).unwrap();
+        buf.write_all(EMPTY_OPTS_SERIALIZATION).unwrap(); // Opts
+
+        let mut entries_info: HashMap<EntryName, ArchiveEntryId> = HashMap::new();
+        let mut ids_info: HashMap<ArchiveEntryId, EntryInfo> = HashMap::new();
+
+        for (i, (name, id, content)) in entries.into_iter().enumerate() {
+            // Record the EntryStart position (relative to entries layer start)
+            let start_offset = (buf.len() as u64).saturating_sub(entries_layer_start);
+            let mut offsets_and_sizes = vec![(start_offset, 0u64)];
+
+            // EntryStart block
+            let mut block: ArchiveEntryBlock<std::io::Empty> = ArchiveEntryBlock::EntryStart {
+                name: name.clone(),
+                id,
+                opts: Opts,
+            };
+            block.dump(&mut buf).unwrap();
+
+            // EntryContent block
+            let content_offset = (buf.len() as u64).saturating_sub(entries_layer_start);
+            offsets_and_sizes.push((content_offset, content.len() as u64));
+            let mut block = ArchiveEntryBlock::EntryContent {
+                length: content.len() as u64,
+                data: Some(std::io::Cursor::new(content.clone())),
+                id,
+                opts: Opts,
+            };
+            block.dump(&mut buf).unwrap();
+
+            // EndOfEntry block (optionally omitted)
+            if omit_end_of_entry != Some(i) {
+                let end_offset = (buf.len() as u64).saturating_sub(entries_layer_start);
+                offsets_and_sizes.push((end_offset, 0u64));
+                let mut hasher = Sha256::new();
+                hasher.update(&content);
+                let hash: Sha256Hash = hasher.finalize().into();
+                let mut block: ArchiveEntryBlock<std::io::Empty> = ArchiveEntryBlock::EndOfEntry {
+                    id,
+                    hash,
+                    opts: Opts,
+                };
+                block.dump(&mut buf).unwrap();
+            }
+
+            entries_info.insert(name.clone(), id);
+            ids_info.insert(id, EntryInfo { offsets_and_sizes });
+        }
+
+        // EndOfArchiveData
+        let mut eoad = ArchiveEntryBlock::EndOfArchiveData::<std::io::Empty> {};
+        eoad.dump(&mut buf).unwrap();
+
+        // -- Footer --
+        buf.write_all(&[1]).unwrap(); // index present
+        ArchiveFooter::serialize_into(&mut buf, &entries_info, &ids_info).unwrap();
+
+        // Tail options
+        buf.write_all(EMPTY_TAIL_OPTS_SERIALIZATION).unwrap();
+        buf.write_all(EMPTY_TAIL_OPTS_SERIALIZATION).unwrap();
+        buf.write_all(END_MLA_MAGIC).unwrap();
+
+        buf
     }
 
     #[test]
@@ -2983,6 +3303,473 @@ pub(crate) mod tests {
         assert!(
             matches!(reader_result, Err(Error::NoValidSignatureFound)),
             "Verification should fail if MlDsa87 signature is corrupted"
+        );
+    }
+
+    // Test that `verify_archive_integrity` succeeds on an empty archive
+    // (zero entries). An empty archive has only the entries header, an
+    // `EndOfArchiveData` block, and the footer.
+    #[test]
+    fn verify_archive_integrity_empty_archive() {
+        let config = ArchiveWriterConfig::without_encryption_without_signature()
+            .unwrap()
+            .without_compression();
+        let mut buf = Vec::new();
+        let writer = ArchiveWriter::from_config(&mut buf, config).unwrap();
+        writer.finalize().unwrap();
+
+        let (mut reader, _) = ArchiveReader::from_config(
+            Cursor::new(&buf),
+            ArchiveReaderConfig::without_signature_verification().without_encryption(),
+        )
+        .unwrap();
+        assert!(
+            reader.verify_archive_integrity().is_ok(),
+            "Empty archive should pass integrity verification"
+        );
+    }
+
+    // Test that `verify_archive_integrity` detects content corruption.
+    //
+    // A byte in the entry content is flipped, which should cause the
+    // recomputed SHA-256 hash to differ from the stored hash.
+    #[test]
+    fn verify_corrupted_archive_integrity() {
+        let config = ArchiveWriterConfig::without_encryption_without_signature()
+            .unwrap()
+            .without_compression();
+        let mut buf = Vec::new();
+        let mut writer = ArchiveWriter::from_config(&mut buf, config).unwrap();
+        let entry_name = EntryName::from_arbitrary_bytes(b"test").unwrap();
+        writer
+            .add_entry(entry_name, b"hello world".len() as u64, &b"hello world"[..])
+            .unwrap();
+        writer.finalize().unwrap();
+
+        let mut corrupted = buf.clone();
+        let content_offset = corrupted
+            .windows(b"hello world".len())
+            .position(|w| w == b"hello world")
+            .expect("content should be present in archive");
+        corrupted[content_offset] ^= 0xFF;
+
+        let (mut reader, _) = ArchiveReader::from_config(
+            Cursor::new(corrupted),
+            ArchiveReaderConfig::without_signature_verification().without_encryption(),
+        )
+        .unwrap();
+        let result = reader.verify_archive_integrity();
+        assert!(
+            matches!(result, Err(Error::InvalidArchiveStructure(ref msg))
+                if msg.contains("Hash mismatch")),
+            "Corrupted archive should fail with hash mismatch, got: {result:?}"
+        );
+    }
+
+    // Threat model for the following footer-tamper tests:
+    //
+    // MLA supports random-access extraction: the reader can seek directly to
+    // the positions indicated by `offsets_and_sizes` in the footer, without
+    // scanning the stream linearly. This is fast, but it trusts the footer's
+    // offsets and `entries_info` as the authoritative index. The following
+    // tests verify that `verify_archive_integrity` detects crafted footers
+    // that would cause random-access extraction to read attacker-chosen data.
+
+    // Test that `verify_archive_integrity` blocks injection of entries after
+    // `EndOfArchiveData` with repointed footer offsets.
+    //
+    // Attack: append data past EndOfArchiveData and repoint a footer offset
+    // to it. The file layout is:
+    //
+    //   [entries stream ...] [EndOfArchiveData] [footer options] [footer_len: u64] [END_MAGIC: 8B]
+    //                        ^-- data_region_end
+    //                                                                              ^-- stream_size - 1
+    //
+    // We set offset = stream_size - 1, size = 1, so offset + size = stream_size
+    // > data_region_end -> must be rejected by the bounds check.
+    #[test]
+    fn test_injected_entry_after_end_of_archive_detected() {
+        let (archive, _sender_keys, _receiver_keys, entries) =
+            build_archive(false, false, false, false);
+
+        let target_name = &entries[0].0;
+        let stream_size = archive.len() as u64;
+
+        let config = || ArchiveReaderConfig::without_signature_verification().without_encryption();
+
+        // -- Baseline: the archive is valid --
+        let (mut reader, _) = ArchiveReader::from_config(Cursor::new(&archive), config()).unwrap();
+        assert!(
+            reader.verify_archive_integrity().is_ok(),
+            "Baseline: the archive must pass verification before tampering"
+        );
+
+        // -- Repoint footer offsets past EndOfArchiveData --
+        let (mut reader, _) = ArchiveReader::from_config(Cursor::new(&archive), config()).unwrap();
+        if let Some(ref mut footer) = reader.metadata
+            && let Some(info) = footer.entries_info.get_mut(target_name)
+        {
+            info.offsets_and_sizes[0].0 = stream_size - 1;
+            info.offsets_and_sizes[0].1 = 1;
+        }
+        let result = reader.verify_archive_integrity();
+        assert!(
+            matches!(result, Err(Error::InvalidArchiveStructure(ref msg))
+                if msg.contains("exceeds data region end")),
+            "Footer offset pointing past EndOfArchiveData must be rejected, got: {result:?}"
+        );
+    }
+
+    // Test that `verify_archive_integrity` blocks phantom footer entries —
+    // entries present in the footer's `entries_info` but with no corresponding
+    // `EntryStart` block in the stream.
+    //
+    // Attack: insert a fabricated entry into `footer.entries_info` with a
+    // crafted offset. No matching `EntryStart` exists in the stream.
+    // `stream_names` (populated during the linear scan) will not contain it ->
+    // rejection.
+    #[test]
+    fn test_phantom_footer_entry_detected() {
+        let (archive, _sender_keys, _receiver_keys, _entries) =
+            build_archive(false, false, false, false);
+
+        let config = || ArchiveReaderConfig::without_signature_verification().without_encryption();
+
+        // -- Baseline: the archive is valid --
+        let (mut reader, _) = ArchiveReader::from_config(Cursor::new(&archive), config()).unwrap();
+        assert!(
+            reader.verify_archive_integrity().is_ok(),
+            "Baseline: the archive must pass verification before tampering"
+        );
+
+        // -- Phantom footer entry (no stream counterpart) --
+        let (mut reader, _) = ArchiveReader::from_config(Cursor::new(&archive), config()).unwrap();
+        let phantom_name = EntryName::from_arbitrary_bytes(b"E1_evil").unwrap();
+        if let Some(ref mut footer) = reader.metadata {
+            footer.entries_info.insert(
+                phantom_name,
+                EntryInfo {
+                    offsets_and_sizes: vec![(1u64, 0u64)],
+                },
+            );
+        }
+        let result = reader.verify_archive_integrity();
+        assert!(
+            matches!(result, Err(Error::InvalidArchiveStructure(ref msg))
+                if msg.contains("Phantom entry")),
+            "Phantom footer entry with no stream counterpart must be rejected, got: {result:?}"
+        );
+    }
+
+    // Test that `verify_archive_integrity` detects a duplicate entry ID in
+    // the stream. The writer enforces monotonic IDs, so this requires a
+    // crafted archive with raw blocks: two EntryStart blocks sharing the
+    // same ID but with different names. Without this check, an attacker
+    // could substitute content by reusing an ID.
+    #[test]
+    fn test_duplicate_entry_id_detected() {
+        let name1 = EntryName::from_arbitrary_bytes(b"E1").unwrap();
+        let name2 = EntryName::from_arbitrary_bytes(b"E2").unwrap();
+        let archive = build_raw_archive(
+            vec![
+                (name1.clone(), ArchiveEntryId(0), b"good".to_vec()),
+                (name2.clone(), ArchiveEntryId(0), b"evil".to_vec()),
+            ],
+            None,
+        );
+
+        let config = ArchiveReaderConfig::without_signature_verification().without_encryption();
+        let (mut reader, _) = ArchiveReader::from_config(Cursor::new(&archive), config).unwrap();
+        let result = reader.verify_archive_integrity();
+        assert!(
+            matches!(result, Err(Error::InvalidArchiveStructure(ref msg))
+                if msg.contains("Duplicate entry ID")),
+            "Duplicate entry ID must be rejected, got: {result:?}"
+        );
+    }
+
+    // Test that `verify_archive_integrity` detects a duplicate entry name in
+    // the stream. The writer rejects duplicate names, so this requires a
+    // crafted archive: two EntryStart blocks with the same name but different
+    // IDs. An attacker could make the footer point to the second (evil)
+    // EntryStart, causing content substitution via random-access extraction.
+    #[test]
+    fn test_duplicate_entry_name_detected() {
+        let name = EntryName::from_arbitrary_bytes(b"E1").unwrap();
+        let archive = build_raw_archive(
+            vec![
+                (name.clone(), ArchiveEntryId(0), b"good".to_vec()),
+                (name.clone(), ArchiveEntryId(1), b"evil".to_vec()),
+            ],
+            None,
+        );
+
+        let config = ArchiveReaderConfig::without_signature_verification().without_encryption();
+        let (mut reader, _) = ArchiveReader::from_config(Cursor::new(&archive), config).unwrap();
+        let result = reader.verify_archive_integrity();
+        assert!(
+            matches!(result, Err(Error::InvalidArchiveStructure(ref msg))
+                if msg.contains("Duplicate entry name")),
+            "Duplicate entry name must be rejected, got: {result:?}"
+        );
+    }
+
+    // Test that `verify_archive_integrity` detects an unfinished entry —
+    // an EntryStart + EntryContent with no matching EndOfEntry. Without this
+    // check, the hash for that entry is never verified, allowing an attacker
+    // to inject arbitrary content that bypasses hash verification entirely.
+    #[test]
+    fn test_unfinished_entry_detected() {
+        let name = EntryName::from_arbitrary_bytes(b"E1").unwrap();
+        let archive = build_raw_archive(
+            vec![(name, ArchiveEntryId(0), b"evil_unchecked".to_vec())],
+            Some(0), // omit EndOfEntry for entry 0
+        );
+
+        let config = ArchiveReaderConfig::without_signature_verification().without_encryption();
+        let (mut reader, _) = ArchiveReader::from_config(Cursor::new(&archive), config).unwrap();
+        let result = reader.verify_archive_integrity();
+        assert!(
+            matches!(result, Err(Error::InvalidArchiveStructure(ref msg))
+                if msg.contains("unfinished entries")),
+            "Unfinished entry must be rejected, got: {result:?}"
+        );
+    }
+
+    // Test that `verify_archive_integrity` detects an integer overflow in
+    // footer offsets. An attacker sets offset = u64::MAX and size = 1; without
+    // checked_add, offset + size wraps to 0, bypassing the bounds check.
+    #[test]
+    fn test_offset_overflow_detected() {
+        let (archive, _sender_keys, _receiver_keys, entries) =
+            build_archive(false, false, false, false);
+
+        let target_name = &entries[0].0;
+        let config = || ArchiveReaderConfig::without_signature_verification().without_encryption();
+
+        let (mut reader, _) = ArchiveReader::from_config(Cursor::new(&archive), config()).unwrap();
+        if let Some(ref mut footer) = reader.metadata
+            && let Some(info) = footer.entries_info.get_mut(target_name)
+        {
+            info.offsets_and_sizes[0] = (u64::MAX, 1);
+        }
+        let result = reader.verify_archive_integrity();
+        assert!(
+            matches!(result, Err(Error::InvalidArchiveStructure(ref msg))
+                if msg.contains("overflow")),
+            "Offset overflow must be rejected, got: {result:?}"
+        );
+    }
+
+    // Test that `verify_archive_integrity` detects when a footer entry's
+    // offset points to an EntryStart with a different name. This is the
+    // cross-reference attack: both entries are legitimate (correct hashes,
+    // no duplicates, in bounds), but the footer's offset for "E1" is swapped
+    // to point to E2's EntryStart. Without this check, random-access
+    // extraction via `get_entry("E1")` would read E2's content.
+    #[test]
+    fn test_footer_offset_points_to_wrong_entry() {
+        let (archive, _sender_keys, _receiver_keys, entries) =
+            build_archive(false, false, false, false);
+
+        let name1 = entries[0].0.clone();
+        let name2 = entries[1].0.clone();
+        let config = || ArchiveReaderConfig::without_signature_verification().without_encryption();
+
+        // -- Baseline: the archive is valid --
+        let (mut reader, _) = ArchiveReader::from_config(Cursor::new(&archive), config()).unwrap();
+        assert!(
+            reader.verify_archive_integrity().is_ok(),
+            "Baseline: the archive must pass verification before tampering"
+        );
+
+        // -- Swap offsets between E1 and E2 --
+        let (mut reader, _) = ArchiveReader::from_config(Cursor::new(&archive), config()).unwrap();
+        if let Some(ref mut footer) = reader.metadata {
+            let offset1 = footer.entries_info.get(&name1).unwrap().offsets_and_sizes[0];
+            let offset2 = footer.entries_info.get(&name2).unwrap().offsets_and_sizes[0];
+            footer
+                .entries_info
+                .get_mut(&name1)
+                .unwrap()
+                .offsets_and_sizes[0] = offset2;
+            footer
+                .entries_info
+                .get_mut(&name2)
+                .unwrap()
+                .offsets_and_sizes[0] = offset1;
+        }
+        let result = reader.verify_archive_integrity();
+        assert!(
+            matches!(result, Err(Error::InvalidArchiveStructure(ref msg))
+                if msg.contains("points to entry")),
+            "Footer offset pointing to wrong entry must be rejected, got: {result:?}"
+        );
+    }
+
+    // Test that `verify_archive_integrity` detects when a multi-chunk entry's
+    // subsequent offset is repointed to another entry's data. In an
+    // interleaved archive, entries are split into multiple chunks. The footer
+    // stores one offset per chunk. An attacker can swap a subsequent offset
+    // to point into another entry's content, causing `get_entry` to read
+    // foreign data for that chunk.
+    #[test]
+    fn test_multi_chunk_offset_points_to_wrong_entry() {
+        // build_archive with interleaved=true produces multi-chunk entries
+        let (archive, _sender_keys, _receiver_keys, entries) =
+            build_archive(false, false, false, true);
+
+        let name1 = entries[0].0.clone();
+        let name2 = entries[1].0.clone();
+        let config = || ArchiveReaderConfig::without_signature_verification().without_encryption();
+
+        // -- Baseline: the interleaved archive is valid --
+        let (mut reader, _) = ArchiveReader::from_config(Cursor::new(&archive), config()).unwrap();
+        assert!(
+            reader.verify_archive_integrity().is_ok(),
+            "Baseline: interleaved archive must pass verification before tampering"
+        );
+
+        // -- Repoint a subsequent offset of E1 to an EntryContent offset from E2 --
+        let (mut reader, _) = ArchiveReader::from_config(Cursor::new(&archive), config()).unwrap();
+        {
+            let footer = reader.metadata.as_ref().expect("footer present");
+            let info1 = &footer.entries_info[&name1];
+            let info2 = &footer.entries_info[&name2];
+            assert!(
+                info1.offsets_and_sizes.len() > 1,
+                "E1 should have multiple chunks in an interleaved archive"
+            );
+            assert!(
+                info2.offsets_and_sizes.len() > 1,
+                "E2 should have multiple chunks in an interleaved archive"
+            );
+            let evil_offset = info2.offsets_and_sizes[1].0;
+            reader
+                .metadata
+                .as_mut()
+                .unwrap()
+                .entries_info
+                .get_mut(&name1)
+                .unwrap()
+                .offsets_and_sizes[1]
+                .0 = evil_offset;
+        }
+        let result = reader.verify_archive_integrity();
+        assert!(
+            matches!(result, Err(Error::InvalidArchiveStructure(ref msg))
+                if msg.contains("references id")),
+            "Multi-chunk offset pointing to wrong entry must be rejected, got: {result:?}"
+        );
+    }
+
+    // Test that `verify_archive_integrity` rejects an entry whose
+    // `offsets_and_sizes[0]` points to an EntryContent block instead of an
+    // EntryStart. `ArchiveEntryDataReader::new` requires the first offset to
+    // be an EntryStart, so verify must reject this to avoid a false positive.
+    #[test]
+    fn test_first_offset_not_entry_start() {
+        let name = EntryName::from_arbitrary_bytes(b"E1").unwrap();
+        let archive = build_raw_archive(
+            vec![(name.clone(), ArchiveEntryId(0), b"hello".to_vec())],
+            None,
+        );
+
+        let config = ArchiveReaderConfig::without_signature_verification().without_encryption();
+        let (mut reader, _) = ArchiveReader::from_config(Cursor::new(&archive), config).unwrap();
+
+        // Swap offset[0] and offset[1] so offset[0] points to EntryContent
+        if let Some(ref mut footer) = reader.metadata
+            && let Some(info) = footer.entries_info.get_mut(&name)
+        {
+            let (start_off, _) = info.offsets_and_sizes[0];
+            let (content_off, content_size) = info.offsets_and_sizes[1];
+            info.offsets_and_sizes[0] = (content_off, content_size);
+            info.offsets_and_sizes[1] = (start_off, 0);
+        }
+        let result = reader.verify_archive_integrity();
+        assert!(
+            matches!(result, Err(Error::InvalidArchiveStructure(ref msg))
+                if msg.contains("non-EntryStart")),
+            "First offset pointing to EntryContent must be rejected, got: {result:?}"
+        );
+    }
+
+    // Test that `verify_archive_integrity` rejects an entry whose
+    // last offset points to an EntryContent block instead of EndOfEntry.
+    #[test]
+    fn test_last_offset_not_end_of_entry() {
+        let name = EntryName::from_arbitrary_bytes(b"E1").unwrap();
+        let archive = build_raw_archive(
+            vec![(name.clone(), ArchiveEntryId(0), b"hello".to_vec())],
+            None,
+        );
+
+        let config = ArchiveReaderConfig::without_signature_verification().without_encryption();
+        let (mut reader, _) = ArchiveReader::from_config(Cursor::new(&archive), config).unwrap();
+
+        // Replace the last offset (EndOfEntry) with the EntryContent offset
+        if let Some(ref mut footer) = reader.metadata
+            && let Some(info) = footer.entries_info.get_mut(&name)
+        {
+            let (content_off, content_size) = info.offsets_and_sizes[1];
+            info.offsets_and_sizes[2] = (content_off, content_size);
+        }
+        let result = reader.verify_archive_integrity();
+        assert!(
+            matches!(result, Err(Error::InvalidArchiveStructure(ref msg))
+                if msg.contains("expected EndOfEntry")),
+            "Last offset pointing to EntryContent must be rejected, got: {result:?}"
+        );
+    }
+
+    // Test that `verify_archive_integrity` rejects an entry with empty
+    // `offsets_and_sizes`. `get_entry` requires at least one offset, so
+    // verify must reject this to avoid a verify↔extract divergence.
+    #[test]
+    fn test_empty_offsets_rejected() {
+        let (archive, _sender_keys, _receiver_keys, entries) =
+            build_archive(false, false, false, false);
+
+        let target_name = entries[0].0.clone();
+        let config = || ArchiveReaderConfig::without_signature_verification().without_encryption();
+
+        let (mut reader, _) = ArchiveReader::from_config(Cursor::new(&archive), config()).unwrap();
+        if let Some(ref mut footer) = reader.metadata
+            && let Some(info) = footer.entries_info.get_mut(&target_name)
+        {
+            info.offsets_and_sizes.clear();
+        }
+        let result = reader.verify_archive_integrity();
+        assert!(
+            matches!(result, Err(Error::InvalidArchiveStructure(ref msg))
+                if msg.contains("empty offsets_and_sizes")),
+            "Empty offsets_and_sizes must be rejected, got: {result:?}"
+        );
+    }
+
+    // Test that `verify_archive_integrity` succeeds on a zero-length entry.
+    // The writer skips the EntryContent block for zero-length entries, so the
+    // footer has only two offsets: [(EntryStart, 0), (EndOfEntry, 0)].
+    #[test]
+    fn verify_archive_integrity_zero_length_entry() {
+        let config = ArchiveWriterConfig::without_encryption_without_signature()
+            .unwrap()
+            .without_compression();
+        let mut buf = Vec::new();
+        let mut writer = ArchiveWriter::from_config(&mut buf, config).unwrap();
+        let entry_name = EntryName::from_arbitrary_bytes(b"empty").unwrap();
+        writer.add_entry(entry_name, 0, &b""[..]).unwrap();
+        writer.finalize().unwrap();
+
+        let (mut reader, _) = ArchiveReader::from_config(
+            Cursor::new(&buf),
+            ArchiveReaderConfig::without_signature_verification().without_encryption(),
+        )
+        .unwrap();
+        assert!(
+            reader.verify_archive_integrity().is_ok(),
+            "Zero-length entry should pass integrity verification"
         );
     }
 

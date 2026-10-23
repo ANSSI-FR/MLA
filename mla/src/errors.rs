@@ -67,17 +67,19 @@ pub enum Error {
     EncryptionAskedButNotMarkedPresent,
     /// MLA archive must be terminated by EMLAAAAA
     WrongEndMagic,
-    // Cannot validate any signature
+    /// Cannot validate any signature
     NoValidSignatureFound,
-    // Signature verification was asked but no signature layer was found
+    /// Signature verification was asked but no signature layer was found
     SignatureVerificationAskedButNoSignatureLayerFound,
-    // MissingEndOfEncryptedInnerLayerMagic
+    /// `MissingEndOfEncryptedInnerLayerMagic`
     MissingEndOfEncryptedInnerLayerMagic,
-    // TruncatedTag
+    /// `TruncatedTag`
     TruncatedTag,
-    // UnknownTagPosition
+    /// `UnknownTagPosition`
     UnknownTagPosition,
-    // Arbitrary String error
+    /// Invalid archive structure
+    InvalidArchiveStructure(String),
+    /// Arbitrary String error
     Other(String),
 }
 
