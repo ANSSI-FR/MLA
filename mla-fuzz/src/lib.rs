@@ -14,7 +14,7 @@ use mla::{ArchiveReader, ArchiveWriter, TruncatedArchiveReader};
 
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{Cursor, Read, Write};
+use std::io::{Cursor, Read, Seek as _, Write};
 
 // Static keys for fuzzing
 static PUB_KEY: &[u8] = include_bytes!("../../samples/test_mlakey.mlapub");
@@ -308,13 +308,11 @@ pub fn run(data: &[u8]) {
     }
 
     // Raw MLA archive -> parser path
-    // TestInput starts with a byte 0-7 (FuzzMode). MLA archives start with
-    // "MLAFAAAA" (first byte = 0x4D = 77). Detection is unambiguous.
+    // TestInput starts with a FuzzMode byte (0-7); archives start with MLAFAAAA
     if data.starts_with(b"MLAFAAAA") {
         let config = ArchiveReaderConfig::without_signature_verification().without_encryption();
         if let Ok((mut reader, _)) = ArchiveReader::from_config(Cursor::new(data), config) {
-            // Collect entry names first to release the immutable borrow on `reader`,
-            // so we can call `get_hash` / `get_entry` (which need `&mut self`).
+            // get_hash/get_entry need &mut reader
             let entry_names: Vec<EntryName> = reader
                 .list_entries()
                 .map(|i| i.cloned().collect())
@@ -322,13 +320,27 @@ pub fn run(data: &[u8]) {
             let mut total_decompressed: usize = 0;
             for name in entry_names {
                 let _ = reader.get_hash(&name);
-                if let Ok(Some(file)) = reader.get_entry(name) {
+                if let Ok(Some(mut file)) = reader.get_entry(name) {
+                    // Seek like mlar does: a corrupted footer must error cleanly
+                    let _ = file.data.seek(std::io::SeekFrom::End(0));
+                    let _ = file.data.seek(std::io::SeekFrom::Start(0));
                     // Per-entry decompression cap (input is pre-limited to 10 MB)
                     // An aggregate budget prevents multi-entry OOM
-                    let mut limited = file.data.take(64 * 1024 * 1024);
+                    let mut limited = file.data.by_ref().take(64 * 1024 * 1024);
                     let mut buf = Vec::new();
                     let _ = limited.read_to_end(&mut buf);
                     total_decompressed = total_decompressed.saturating_add(buf.len());
+                    if total_decompressed > 128 * 1024 * 1024 {
+                        break;
+                    }
+                    // Boundary seeks stay block-aligned; this one resumes mid-block
+                    let _ = file
+                        .data
+                        .seek(std::io::SeekFrom::Start((buf.len() / 2) as u64));
+                    let mut limited = file.data.take(64 * 1024 * 1024);
+                    let mut tail = Vec::new();
+                    let _ = limited.read_to_end(&mut tail);
+                    total_decompressed = total_decompressed.saturating_add(tail.len());
                     if total_decompressed > 128 * 1024 * 1024 {
                         break;
                     }
@@ -486,6 +498,48 @@ pub fn run(data: &[u8]) {
         for &idx in &test_case.byteflip {
             if let Some(b) = corrupted.get_mut(idx as usize) {
                 *b ^= 0xFF;
+            }
+        }
+
+        // Re-parse the byteflip-corrupted archive as the bindings would;
+        // no catch_unwind: panics and allocation aborts are findings
+        let reader_config = test_case.config.to_reader_config(
+            std::slice::from_ref(&pub_sig_verif_key),
+            std::slice::from_ref(&priv_dec_key),
+        );
+        if let Ok((mut reader, _)) =
+            ArchiveReader::from_config(Cursor::new(corrupted.as_slice()), reader_config)
+        {
+            let entry_names: Vec<EntryName> = reader
+                .list_entries()
+                .map(|i| i.cloned().collect())
+                .unwrap_or_default();
+            // Same aggregate decompression budget as the raw archive path above
+            let mut total_decompressed: usize = 0;
+            for name in entry_names {
+                let _ = reader.get_hash(&name);
+                if let Ok(Some(mut file)) = reader.get_entry(name) {
+                    let _ = file.data.seek(std::io::SeekFrom::End(0));
+                    let _ = file.data.seek(std::io::SeekFrom::Start(0));
+                    let mut limited = file.data.by_ref().take(64 * 1024 * 1024);
+                    let mut buf = Vec::new();
+                    let _ = limited.read_to_end(&mut buf);
+                    total_decompressed = total_decompressed.saturating_add(buf.len());
+                    if total_decompressed > 128 * 1024 * 1024 {
+                        break;
+                    }
+                    // Boundary seeks stay block-aligned; this one resumes mid-block
+                    let _ = file
+                        .data
+                        .seek(std::io::SeekFrom::Start((buf.len() / 2) as u64));
+                    let mut limited = file.data.take(64 * 1024 * 1024);
+                    let mut tail = Vec::new();
+                    let _ = limited.read_to_end(&mut tail);
+                    total_decompressed = total_decompressed.saturating_add(tail.len());
+                    if total_decompressed > 128 * 1024 * 1024 {
+                        break;
+                    }
+                }
             }
         }
 
