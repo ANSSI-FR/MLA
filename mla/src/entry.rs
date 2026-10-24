@@ -668,6 +668,27 @@ impl<T: Read + Seek> Read for ArchiveEntryDataReader<'_, T> {
     }
 }
 
+/// Page-sized, stack-allocated buffer used to discard bytes while
+/// resynchronizing the reader position during a seek.
+const SEEK_DISCARD_BUFFER_SIZE: usize = 4096;
+
+impl<T: Read + Seek> ArchiveEntryDataReader<'_, T> {
+    /// Consume and discard exactly `amount` bytes through the layers, using a
+    /// bounded buffer. Used by `seek` to resynchronize the layers state at a
+    /// block start without pre-allocating the gap: on a corrupted archive the
+    /// in-block offset is unvalidated, so allocating it up front would
+    /// allow an unbounded allocation (OOM) before the read can fail.
+    fn discard_exact(&mut self, mut amount: usize) -> io::Result<()> {
+        let mut buf = [0u8; SEEK_DISCARD_BUFFER_SIZE];
+        while amount > 0 {
+            let chunk = amount.min(buf.len());
+            self.read_exact(&mut buf[..chunk])?;
+            amount = amount.saturating_sub(chunk);
+        }
+        Ok(())
+    }
+}
+
 impl<T: Read + Seek> Seek for ArchiveEntryDataReader<'_, T> {
     fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
         match pos {
@@ -701,7 +722,6 @@ impl<T: Read + Seek> Seek for ArchiveEntryDataReader<'_, T> {
                     self.src.seek(SeekFrom::Start(offset))?;
                     self.state = ArchiveEntryDataReaderState::Ready;
                     self.current_offsets_and_sizes_index = index;
-                    let mut v = Vec::new();
                     let offset_from_block_start = usize::try_from(
                         asked_seek_offset
                             .checked_sub(
@@ -711,8 +731,7 @@ impl<T: Read + Seek> Seek for ArchiveEntryDataReader<'_, T> {
                             .ok_or(io::Error::from(ErrorKind::InvalidInput))?,
                     )
                     .map_err(|_| io::Error::from(ErrorKind::InvalidInput))?;
-                    v.resize(offset_from_block_start, 0);
-                    self.read_exact(&mut v)?;
+                    self.discard_exact(offset_from_block_start)?;
                     Ok(asked_seek_offset)
                 } else {
                     Err(ErrorKind::InvalidInput.into())
@@ -752,14 +771,12 @@ impl<T: Read + Seek> Seek for ArchiveEntryDataReader<'_, T> {
                     self.src.seek(SeekFrom::Start(offset))?;
                     self.state = ArchiveEntryDataReaderState::Ready;
                     self.current_offsets_and_sizes_index = index;
-                    let mut v = Vec::new();
                     let offset_from_block_start = usize::try_from(
                         sum.checked_sub(offset_from_end)
                             .ok_or(io::Error::from(ErrorKind::InvalidInput))?,
                     )
                     .map_err(|_| io::Error::from(ErrorKind::InvalidInput))?;
-                    v.resize(offset_from_block_start, 0);
-                    self.read_exact(&mut v)?;
+                    self.discard_exact(offset_from_block_start)?;
 
                     Ok(self.offsets_and_sizes.iter().map(|p| p.1).sum())
                 } else {
@@ -1068,6 +1085,45 @@ mod tests {
             ),
             "Expected Ready or Finish after SeekFrom::End(0), got {:?}",
             reader.state
+        );
+    }
+
+    #[test]
+    /// Regression: an oversized declared block size in the footer index must
+    /// not make `seek()` allocate the claimed offset (OOM on a 46-byte file,
+    /// found by fuzzing). The seek must fail cleanly instead.
+    fn test_seek_does_not_allocate_declared_block_size() {
+        let (mut data_source, offsets) = create_normal_entry();
+        // Forge the index: every block claims 16 TiB bytes of content while
+        // the real source holds a few tens of bytes.
+        let mut declared: Vec<(u64, u64)> = offsets.to_vec();
+        for pair in declared.iter_mut().skip(1) {
+            pair.1 = 1u64 << 44;
+        }
+        let mut reader = ArchiveEntryDataReader::new(&mut data_source, &declared)
+            .expect("Failed to create ArchiveEntryDataReader");
+
+        // The claimed end position does not exist in the real source: the
+        // seek must return an error, bounded in memory, without aborting
+        // (pre-fix: Vec::resize(16 TiB) from a 46 byte file).
+        let res = reader.seek(std::io::SeekFrom::End(0));
+        assert!(
+            res.is_err(),
+            "seek must fail on an oversized declared block size"
+        );
+
+        // Same for SeekFrom::Start deep into a declared block span
+        let res = reader.seek(std::io::SeekFrom::Start(1 << 40));
+        assert!(
+            res.is_err(),
+            "seek must fail on an oversized declared block size"
+        );
+
+        // And for SeekFrom::Current (delegates to Start internally)
+        let res = reader.seek(std::io::SeekFrom::Current(1 << 40));
+        assert!(
+            res.is_err(),
+            "seek must fail on an oversized declared block size"
         );
     }
 
