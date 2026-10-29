@@ -316,12 +316,19 @@ mod tests {
         // Key derivation for sender (ephemeral keypair)
         let (sender_privkey, sender_pubkey) = X25519HkdfSha256::derive_keypair(&RFC_IKME);
         assert_eq!(&sender_pubkey.to_bytes().as_ref(), &RFC_PKEM);
-        assert_eq!(&sender_privkey.to_bytes().as_ref(), &RFC_SKEM);
+        // hpke 0.15 serializes X25519 private keys clamped (RFC 9180 §7.1.2); the RFC A.1.1 vectors list the raw scalar
+        assert_eq!(
+            sender_privkey.to_bytes().as_ref(),
+            curve25519_dalek::scalar::clamp_integer(RFC_SKEM)
+        );
 
         // Key derivation for receiver (static keypair)
         let (receiver_privkey, receiver_pubkey) = X25519HkdfSha256::derive_keypair(&RFC_IKMR);
         assert_eq!(&receiver_pubkey.to_bytes().as_ref(), &RFC_PKRM);
-        assert_eq!(&receiver_privkey.to_bytes().as_ref(), &RFC_SKRM);
+        assert_eq!(
+            receiver_privkey.to_bytes().as_ref(),
+            curve25519_dalek::scalar::clamp_integer(RFC_SKRM)
+        );
 
         // DHKEM Encapsulation (sender side)
         let mut rng = MockRng::new(&RFC_IKME);
