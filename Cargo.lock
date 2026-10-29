@@ -959,12 +959,13 @@ dependencies = [
 
 [[package]]
 name = "hpke"
-version = "0.14.1"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5324110b02044183df000f0bd7d2d7e61f1000631508627e77f63983b6fdffb"
+checksum = "92041268e41ff204ac89aac70ea9ad4cdaf7b04625a1cc2fa785b100c77f3c9e"
 dependencies = [
  "aead",
  "aes-gcm",
+ "curve25519-dalek 5.0.0",
  "hkdf",
  "hybrid-array",
  "rand_core 0.10.1",
