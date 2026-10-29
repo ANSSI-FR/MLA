@@ -1,0 +1,19 @@
+# MLA archive format magic constants
+"MLAFAAAA"
+"EMLAAAAA"
+"COMLAAAA"
+"ENCMLAAA"
+"SIGMLAAA"
+"MLAENAAA"
+
+# MLA format version (u32 LE = 2)
+"\x02\x00\x00\x00"
+
+# Encryption layer chunk magic
+"M0ENCCNK"
+"M0FNLBLK"
+"ENCMLAAB"
+"FINALBLOCK"
+
+# Entry block magic
+"MAEB"

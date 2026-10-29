@@ -13,3 +13,11 @@ doc/book/
 
 # pi
 .pi-subagents/
+
+# fuzzer artifacts
+crash-*
+oom-*
+*.profraw
+
+# fuzzer-generated corpus entries (SHA1 hashes)
+fuzz/mla_fuzz_seed_corpus/[0-9a-f]*
