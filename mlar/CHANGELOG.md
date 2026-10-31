@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added / Changed
+
+- Add `mlar check` subcommand: verify the structural integrity of an archive (duplicate/phantom/hidden entries, content hash mismatches, unfinished entries, out-of-bounds offsets, footer/stream divergence) via `ArchiveReader::verify_archive_integrity()`
+
 ## [2.1.0] - 2026-06-23
 
 ### Added / Changed
