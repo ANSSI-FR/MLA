@@ -181,7 +181,8 @@ For instance (from the understanding of the author):
 
 * `tar` format needs to know the size of files before adding them, and is not
   seekable
-* `zip` format could lose information about files if the footer is removed
+* `zip` format keeps Unix permission bits in the central directory, at the end
+  of the file; removing it loses them for still-present data
 * `7zip` format requires to rebuild the entire archive while adding files to it
   (not streamable). It is also quite complex, and so harder to audit / trust
   when unpacking unknown archive
