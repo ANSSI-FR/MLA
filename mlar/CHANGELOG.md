@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- `mlar-upgrader upgrade`: refuse when input and output refer to the same file, as writing the output would truncate and destroy the input archive (reported by @Darshan060224)
+
 ## [2.1.0] - 2026-06-23
 
 ### Added / Changed
