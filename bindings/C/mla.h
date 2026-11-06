@@ -340,6 +340,8 @@ MLAStatus mla_archive_close(MLAArchiveHandle *archive);
  * Open and extract an existing MLA archive, using the given configuration.
  * `read_callback` and `seek_callback` are used to read the archive data.
  * `file_callback` is used to convert each archive entry's name to `FileWriter`s.
+ * `number_of_keys_with_valid_signature`, if not NULL, receives the number of keys
+ * with a valid signature found in the archive; passing NULL returns `MLAStatus::BadAPIArgument`.
  * WARNING, The caller is responsible of all security checks related to callback provided paths.
  * If `give_raw_name_as_arbitrary_bytes_to_file_callback` is true, then entry name's raw content (arbitrary bytes)
  * are given as argument to `file_callback`. This is dangerous, see Rust lib `EntryName::raw_content_as_bytes` documentation.
