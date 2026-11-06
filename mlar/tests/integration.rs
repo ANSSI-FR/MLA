@@ -139,6 +139,27 @@ fn test_help() {
 }
 
 #[test]
+fn test_check_valid_archive() {
+    let archive = Path::new("../samples/archive_v2.mla");
+    let public_key = Path::new("../samples/test_mlakey_archive_v2_sender.mlapub");
+    let private_key = Path::new("../samples/test_mlakey_archive_v2_receiver.mlapriv");
+
+    #[allow(deprecated)]
+    let mut cmd = Command::cargo_bin(UTIL).unwrap();
+    cmd.arg("check")
+        .arg("-i")
+        .arg(archive)
+        .arg("-p")
+        .arg(public_key)
+        .arg("-k")
+        .arg(private_key);
+
+    cmd.assert()
+        .success()
+        .stdout("Archive verification succeeded\n");
+}
+
+#[test]
 fn test_create_from_dir() {
     let mlar_file = NamedTempFile::new("output.mla").unwrap();
     let public_key = Path::new("../samples/test_mlakey.mlapub");
