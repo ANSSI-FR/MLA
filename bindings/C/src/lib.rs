@@ -1049,6 +1049,8 @@ impl Seek for CallbackInputRead {
 /// Open and extract an existing MLA archive, using the given configuration.
 /// `read_callback` and `seek_callback` are used to read the archive data.
 /// `file_callback` is used to convert each archive entry's name to `FileWriter`s.
+/// `number_of_keys_with_valid_signature`, if not NULL, receives the number of keys
+/// with a valid signature found in the archive; passing NULL returns `MLAStatus::BadAPIArgument`.
 /// WARNING, The caller is responsible of all security checks related to callback provided paths.
 /// If `give_raw_name_as_arbitrary_bytes_to_file_callback` is true, then entry name's raw content (arbitrary bytes)
 /// are given as argument to `file_callback`. This is dangerous, see Rust lib `EntryName::raw_content_as_bytes` documentation.
@@ -1077,6 +1079,9 @@ pub extern "C" fn mla_roarchive_extract(
     let Some(file_callback) = file_callback else {
         return MLAStatus::BadAPIArgument;
     };
+    if number_of_keys_with_valid_signature.is_null() {
+        return MLAStatus::BadAPIArgument;
+    }
 
     let reader = CallbackInputRead {
         read_callback,
@@ -1223,4 +1228,202 @@ fn _mla_roarchive_info<R: Read>(src: &mut R, info_out: *mut ArchiveInfo) -> MLAS
         (*info_out).is_signature_enabled = u8::from(is_signature_enabled);
     }
     MLAStatus::Success
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ptr::null;
+
+    extern "C" fn read_cb(
+        _buffer: *mut u8,
+        _length: u32,
+        _context: *mut c_void,
+        _bytes_read: *mut u32,
+    ) -> i32 {
+        0
+    }
+    extern "C" fn seek_cb(
+        _offset: i64,
+        _whence: i32,
+        _context: *mut c_void,
+        _new_position: *mut u64,
+    ) -> i32 {
+        0
+    }
+    extern "C" fn file_cb(
+        _context: *mut c_void,
+        _name: *const u8,
+        _name_length: usize,
+        _writer: *mut FileWriter,
+    ) -> i32 {
+        0
+    }
+
+    /// Every exported function must reject NULL required pointers with
+    /// `MLAStatus::BadAPIArgument` instead of dereferencing them.
+    #[test]
+    fn exported_functions_reject_null_required_pointers() {
+        let rejects = |status: MLAStatus| matches!(status, MLAStatus::BadAPIArgument);
+
+        // Writer configs
+        assert!(rejects(
+            create_mla_writer_config_with_encryption_with_signature(
+                null_mut(),
+                null(),
+                0,
+                null(),
+                0
+            )
+        ));
+        assert!(rejects(
+            create_mla_writer_config_with_encryption_without_signature(null_mut(), null(), 0)
+        ));
+        assert!(rejects(
+            create_mla_writer_config_without_encryption_with_signature(null_mut(), null(), 0)
+        ));
+        assert!(rejects(
+            create_mla_writer_config_without_encryption_without_signature(null_mut())
+        ));
+
+        // Writer config variations
+        assert!(rejects(mla_writer_config_with_compression_level(
+            null_mut(),
+            0
+        )));
+        assert!(rejects(mla_writer_config_without_compression(null_mut())));
+
+        // Reader configs
+        assert!(rejects(
+            create_mla_reader_config_with_encryption_with_signature_verification(
+                null_mut(),
+                null(),
+                0,
+                null(),
+                0
+            )
+        ));
+        assert!(rejects(
+            create_mla_reader_config_with_encryption_accept_unencrypted_with_signature_verification(
+                null_mut(),
+                null(),
+                0,
+                null(),
+                0
+            )
+        ));
+        assert!(rejects(
+            create_mla_reader_config_with_encryption_without_signature_verification(
+                null_mut(),
+                null(),
+                0
+            )
+        ));
+        assert!(rejects(
+            create_mla_reader_config_with_encryption_accept_unencrypted_without_signature_verification(
+                null_mut(), null(), 0
+            )
+        ));
+
+        // Archive
+        assert!(rejects(mla_archive_new(
+            null_mut(),
+            None,
+            None,
+            null_mut(),
+            null_mut()
+        )));
+        assert!(rejects(mla_archive_start_entry_with_arbitrary_bytes_name(
+            null_mut(),
+            null(),
+            0,
+            null_mut()
+        )));
+        assert!(rejects(mla_archive_start_entry_with_path_as_name(
+            null_mut(),
+            null(),
+            null_mut()
+        )));
+        assert!(rejects(mla_archive_file_append(
+            null_mut(),
+            null_mut(),
+            null(),
+            0
+        )));
+        assert!(rejects(mla_archive_flush(null_mut())));
+        assert!(rejects(mla_archive_file_close(null_mut(), null_mut())));
+        assert!(rejects(mla_archive_close(null_mut())));
+
+        // Read-only archive
+        assert!(rejects(mla_roarchive_extract(
+            null_mut(),
+            None,
+            None,
+            None,
+            null_mut(),
+            false,
+            null_mut()
+        )));
+        assert!(rejects(mla_roarchive_info(None, null_mut(), null_mut())));
+
+        // The number_of_keys_with_valid_signature out-param must be rejected
+        // even with a valid config handle, before reader initialization.
+        let key = std::fs::read_to_string("../../samples/test_mlakey_archive_v2_receiver.mlapriv")
+            .expect("failed to read receiver private key sample");
+        let key = std::ffi::CString::new(key.trim()).unwrap();
+        let keys = [key.as_ptr()];
+        let mut handle: MLAReaderConfigHandle = null_mut();
+        assert!(matches!(
+            create_mla_reader_config_with_encryption_accept_unencrypted_without_signature_verification(
+                std::ptr::addr_of_mut!(handle), keys.as_ptr(), 1
+            ),
+            MLAStatus::Success
+        ));
+        assert!(rejects(mla_roarchive_extract(
+            std::ptr::addr_of_mut!(handle),
+            Some(read_cb),
+            Some(seek_cb),
+            Some(file_cb),
+            null_mut(),
+            false,
+            null_mut()
+        )));
+    }
+
+    /// Keeps `exported_functions_reject_null_required_pointers` in sync with
+    /// the exports: an added, renamed or removed export must update the test.
+    #[test]
+    fn null_rejection_test_covers_every_export() {
+        let mut exports: Vec<String> = include_str!("lib.rs")
+            .lines()
+            .filter_map(|line| {
+                line.trim_start()
+                    .strip_prefix("pub extern \"C\" fn ")
+                    .map(|rest| rest.split('(').next().unwrap().to_string())
+            })
+            .collect();
+        exports.sort();
+        let covered = vec![
+            "create_mla_reader_config_with_encryption_accept_unencrypted_with_signature_verification",
+            "create_mla_reader_config_with_encryption_accept_unencrypted_without_signature_verification",
+            "create_mla_reader_config_with_encryption_with_signature_verification",
+            "create_mla_reader_config_with_encryption_without_signature_verification",
+            "create_mla_writer_config_with_encryption_with_signature",
+            "create_mla_writer_config_with_encryption_without_signature",
+            "create_mla_writer_config_without_encryption_with_signature",
+            "create_mla_writer_config_without_encryption_without_signature",
+            "mla_archive_close",
+            "mla_archive_file_append",
+            "mla_archive_file_close",
+            "mla_archive_flush",
+            "mla_archive_new",
+            "mla_archive_start_entry_with_arbitrary_bytes_name",
+            "mla_archive_start_entry_with_path_as_name",
+            "mla_roarchive_extract",
+            "mla_roarchive_info",
+            "mla_writer_config_with_compression_level",
+            "mla_writer_config_without_compression",
+        ];
+        assert_eq!(exports, covered);
+    }
 }
