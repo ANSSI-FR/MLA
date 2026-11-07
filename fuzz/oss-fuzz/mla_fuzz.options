@@ -1,0 +1,4 @@
+[libfuzzer]
+# The custom mutator models archives up to 64 KiB (MAX_MODEL_SIZE); the
+# libFuzzer default max_len (4096) would cap most of that search space.
+max_len = 65536

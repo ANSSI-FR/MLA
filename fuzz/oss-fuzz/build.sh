@@ -40,3 +40,4 @@ if compgen -G "fuzz/mla_fuzz_seed_corpus/*" > /dev/null; then
     zip -j "$OUT/mla_fuzz_seed_corpus.zip" fuzz/mla_fuzz_seed_corpus/*
 fi
 cp fuzz/mla_fuzz.dict "$OUT/mla_fuzz.dict"
+cp fuzz/oss-fuzz/mla_fuzz.options "$OUT/mla_fuzz.options"
