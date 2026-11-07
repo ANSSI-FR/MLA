@@ -571,75 +571,100 @@ impl<'a, R: Read + Seek> ArchiveEntryDataReader<'a, R> {
 
 impl<T: Read + Seek> Read for ArchiveEntryDataReader<'_, T> {
     fn read(&mut self, into: &mut [u8]) -> std::io::Result<usize> {
-        let (remaining, count) = match self.state {
-            ArchiveEntryDataReaderState::Ready => {
-                // Start a new block EntryContent
-                match ArchiveEntryBlock::from(&mut self.src)? {
-                    ArchiveEntryBlock::EntryContent { length, id, .. } => {
-                        if id == self.id {
-                            let count = self.src.by_ref().take(length).read(into)?;
-                            let count_as_u64 = usize_as_u64(count)?;
-                            (
-                                length
-                                    .checked_sub(count_as_u64)
-                                    .ok_or(Error::DeserializationError)?,
-                                count,
-                            )
-                        } else {
-                            self.move_to_block_at_current_offsets_and_sizes_index()?;
-                            return self.read(into);
-                        }
-                    }
-                    ArchiveEntryBlock::EndOfEntry { id, .. } => {
-                        if id == self.id {
-                            self.state = ArchiveEntryDataReaderState::Finish;
-                            return Ok(0);
-                        }
+        // Maximum number of wrong-id block skips within a single `read()`
+        // call. An honest archive never skips (block ids always match), so
+        // any skip is the sign of a corrupted footer or stream. The bound
+        // must be a constant: one derived from `offsets_and_sizes.len()`
+        // would depend on unvalidated footer data. The cap guarantees
+        // that read() terminates: the wrong-id skip paths never advance
+        // the block index, so an unbounded loop would re-read the same
+        // block forever. 128 matches the recursion limit of serde_json
+        // (remaining_depth in src/de.rs, pinned to
+        // https://github.com/serde-rs/json/blob/8c535a260ce561eaab4111aafc29038eb9f77ff3/src/de.rs#L63).
+        const MAX_READ_DEPTH: usize = 128;
+        let mut depth = 0usize;
+        loop {
+            if depth >= MAX_READ_DEPTH {
+                return Err(Error::WrongReaderState(
+                    "[ArchiveEntryDataReader] Too many block skips, possibly corrupted archive"
+                        .to_string(),
+                )
+                .into());
+            }
 
-                        self.move_to_block_at_current_offsets_and_sizes_index()?;
-                        return self.read(into);
-                    }
-                    ArchiveEntryBlock::EntryStart { id, .. } => {
-                        if id == self.id {
-                            self.increment_current_offsets_and_sizes_index()?;
+            let (remaining, count) = match self.state {
+                ArchiveEntryDataReaderState::Ready => {
+                    // Start a new block EntryContent
+                    match ArchiveEntryBlock::from(&mut self.src)? {
+                        ArchiveEntryBlock::EntryContent { length, id, .. } => {
+                            if id == self.id {
+                                let count = self.src.by_ref().take(length).read(into)?;
+                                let count_as_u64 = usize_as_u64(count)?;
+                                (
+                                    length
+                                        .checked_sub(count_as_u64)
+                                        .ok_or(Error::DeserializationError)?,
+                                    count,
+                                )
+                            } else {
+                                self.move_to_block_at_current_offsets_and_sizes_index()?;
+                                depth = depth.saturating_add(1);
+                                continue;
+                            }
                         }
-                        self.move_to_block_at_current_offsets_and_sizes_index()?;
-                        return self.read(into);
-                    }
-                    ArchiveEntryBlock::EndOfArchiveData => {
-                        return Err(Error::WrongReaderState(
-                            "[ArchiveEntryDataReader] Try to read the end of the archive"
-                                .to_string(),
-                        )
-                        .into());
+                        ArchiveEntryBlock::EndOfEntry { id, .. } => {
+                            if id == self.id {
+                                self.state = ArchiveEntryDataReaderState::Finish;
+                                return Ok(0);
+                            }
+
+                            self.move_to_block_at_current_offsets_and_sizes_index()?;
+                            depth = depth.saturating_add(1);
+                            continue;
+                        }
+                        ArchiveEntryBlock::EntryStart { id, .. } => {
+                            if id == self.id {
+                                self.increment_current_offsets_and_sizes_index()?;
+                            }
+                            self.move_to_block_at_current_offsets_and_sizes_index()?;
+                            depth = depth.saturating_add(1);
+                            continue;
+                        }
+                        ArchiveEntryBlock::EndOfArchiveData => {
+                            return Err(Error::WrongReaderState(
+                                "[ArchiveEntryDataReader] Try to read the end of the archive"
+                                    .to_string(),
+                            )
+                            .into());
+                        }
                     }
                 }
+                ArchiveEntryDataReaderState::InEntryContent(remaining) => {
+                    let count = self.src.by_ref().take(remaining).read(into)?;
+                    let count_as_u64 = usize_as_u64(count)?;
+                    (
+                        remaining
+                            .checked_sub(count_as_u64)
+                            .ok_or(Error::DeserializationError)?,
+                        count,
+                    )
+                }
+                ArchiveEntryDataReaderState::Finish => {
+                    return Ok(0);
+                }
+            };
+            if remaining > 0 {
+                self.state = ArchiveEntryDataReaderState::InEntryContent(remaining);
+            } else {
+                // remaining is 0 (> never happens thanks to take)
+                self.current_offsets_and_sizes_index = self
+                    .current_offsets_and_sizes_index
+                    .checked_add(1)
+                    .ok_or(Error::DeserializationError)?;
+                self.state = ArchiveEntryDataReaderState::Ready;
             }
-            ArchiveEntryDataReaderState::InEntryContent(remaining) => {
-                let count = self.src.by_ref().take(remaining).read(into)?;
-                let count_as_u64 = usize_as_u64(count)?;
-                (
-                    remaining
-                        .checked_sub(count_as_u64)
-                        .ok_or(Error::DeserializationError)?,
-                    count,
-                )
-            }
-            ArchiveEntryDataReaderState::Finish => {
-                return Ok(0);
-            }
-        };
-        if remaining > 0 {
-            self.state = ArchiveEntryDataReaderState::InEntryContent(remaining);
-        } else {
-            // remaining is 0 (> never happens thanks to take)
-            self.current_offsets_and_sizes_index = self
-                .current_offsets_and_sizes_index
-                .checked_add(1)
-                .ok_or(Error::DeserializationError)?;
-            self.state = ArchiveEntryDataReaderState::Ready;
+            return Ok(count);
         }
-        Ok(count)
     }
 }
 

@@ -3023,4 +3023,72 @@ pub(crate) mod tests {
         static_assertions::assert_impl_all!(ArchiveWriter<File>: Send);
         static_assertions::assert_impl_all!(ArchiveReader<File>: Send);
     }
+
+    #[test]
+    fn test_read_depth_guard_is_not_offsets_count_bounded() {
+        // Regression: the anti-recursion guard used to be bounded by
+        // `offsets_and_sizes.len()`, an unvalidated value. A
+        // corrupted footer listing 200k offsets all pointing at the same
+        // wrong-id block drove `read()` recursion past the guard and
+        // overflowed the stack. The guard is now a constant: reading must
+        // fail cleanly with `WrongReaderState` instead.
+        let (mut archive, _sk, _rk, entries) = build_archive(false, false, false, false);
+        let config = || ArchiveReaderConfig::without_signature_verification().without_encryption();
+
+        // Locate the first entry's first content block through the footer
+        let first_name = entries[0].0.clone();
+        let (start, wrong) = {
+            let (reader, _) =
+                ArchiveReader::from_config(Cursor::new(&archive[..]), config()).unwrap();
+            let info = &reader.metadata.as_ref().unwrap().entries_info[&first_name];
+            (
+                info.offsets_and_sizes[0],
+                *info
+                    .offsets_and_sizes
+                    .get(1)
+                    .expect("entry must have a content block"),
+            )
+        };
+
+        // Forge the stream: flip the id field of the content block.
+        // Footer offsets are expressed in the LAYERED stream coordinates
+        // (after the layer header magics), so locate the first block in the
+        // file to compute the file-vs-layered offset delta.
+        let first_block_file_pos = archive
+            .windows(4)
+            .position(|w| w == b"MAEB")
+            .expect("archive must contain blocks") as u64;
+        let layer_delta = first_block_file_pos
+            .checked_sub(start.0)
+            .expect("blocks start after the header");
+        // 4B magic + 1B type, then u64 id
+        let id_pos_u64 = wrong
+            .0
+            .checked_add(layer_delta)
+            .and_then(|p| p.checked_add(5))
+            .expect("offset within archive");
+        let id_pos = usize::try_from(id_pos_u64).expect("offset within archive");
+        archive[id_pos] ^= 0xFF;
+
+        // Forge the footer: index = real EntryStart, then 200k times the
+        // same wrong-id block (move_to_block never advances past it)
+        let declared: Vec<(u64, u64)> = std::iter::once(start)
+            .chain(std::iter::repeat_n(wrong, 200_000))
+            .collect();
+
+        let (mut reader, _) =
+            ArchiveReader::from_config(Cursor::new(&archive[..]), config()).unwrap();
+        if let Some(ArchiveFooter { entries_info, .. }) = &mut reader.metadata {
+            entries_info.get_mut(&first_name).unwrap().offsets_and_sizes = declared;
+        }
+
+        let mut entry = reader.get_entry(first_name).unwrap().unwrap();
+        let mut out = Vec::new();
+        let res = entry.data.read_to_end(&mut out);
+        let err = res.expect_err("self-referencing footer must fail, not recurse unbounded");
+        assert!(
+            err.to_string().contains("Too many block skips"),
+            "expected the depth guard error, got: {err}"
+        );
+    }
 }
