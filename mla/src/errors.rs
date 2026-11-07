@@ -61,23 +61,22 @@ pub enum Error {
     HKDFInvalidKeyLength,
     /// Error during HPKE computation
     HPKEError,
-    /// Invalid last tag
+    /// The final block of an encrypted stream fails authentication or is truncated
     InvalidLastTag,
     /// User asked for encryption but archive was not marked as encrypted
     EncryptionAskedButNotMarkedPresent,
     /// MLA archive must be terminated by EMLAAAAA
     WrongEndMagic,
-    // Cannot validate any signature
+    /// Cannot validate any signature
     NoValidSignatureFound,
-    // Signature verification was asked but no signature layer was found
+    /// Signature verification was asked but no signature layer was found
     SignatureVerificationAskedButNoSignatureLayerFound,
-    // MissingEndOfEncryptedInnerLayerMagic
     MissingEndOfEncryptedInnerLayerMagic,
-    // TruncatedTag
+    /// The encrypted stream ends in the middle of an authentication tag
     TruncatedTag,
-    // UnknownTagPosition
+    /// No valid authentication tag position was found at the end of the encrypted stream
     UnknownTagPosition,
-    // Arbitrary String error
+    InvalidArchiveStructure(String),
     Other(String),
 }
 

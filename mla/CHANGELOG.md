@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added / Changed
+
+- Add `ArchiveReader::verify_archive_integrity()`: structural integrity verification of an archive (duplicate/unknown entry IDs and names, unfinished entries, content hash mismatches, unexpected end of data, phantom entries present in the footer but absent from the stream, hidden stream entries absent from the footer, out-of-bounds offsets/blocks, footer offsets not pointing to the matching block)
+- Add benchmark `verify_archive_integrity_multiple_layers`
+- Raise the default read buffer size from 128 KiB to 256 KiB (coreutils ioblksize.h recommendation for modern Linux)
+
 ## [2.1.0] - 2026-06-23
 
 ### Added / Changed
