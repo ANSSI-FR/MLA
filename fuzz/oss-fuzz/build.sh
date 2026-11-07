@@ -28,9 +28,9 @@
 
 cd $SRC/MLA
 
-export RUSTFLAGS="--cfg fuzzing -Zsanitizer=address -Cdebuginfo=1 -Cforce-frame-pointers -Cpasses=sancov-module -Cllvm-args=-sanitizer-coverage-level=4 -Cllvm-args=-sanitizer-coverage-inline-8bit-counters -Cllvm-args=-sanitizer-coverage-pc-table -Cllvm-args=-sanitizer-coverage-trace-compares -Ccodegen-units=1"
+export RUSTFLAGS="--cfg fuzzing -Zsanitizer=address -Cdebug-assertions=on -Coverflow-checks=on -Cdebuginfo=1 -Cforce-frame-pointers -Cpasses=sancov-module -Cllvm-args=-sanitizer-coverage-level=4 -Cllvm-args=-sanitizer-coverage-inline-8bit-counters -Cllvm-args=-sanitizer-coverage-pc-table -Cllvm-args=-sanitizer-coverage-trace-compares -Ccodegen-units=1"
 
-/rust/bin/cargo build --manifest-path fuzz/Cargo.toml --target x86_64-unknown-linux-gnu --profile fuzzing --bin mla_fuzz
+/rust/bin/cargo build --manifest-path fuzz/Cargo.toml --target x86_64-unknown-linux-gnu --profile fuzzing --bin mla_fuzz --locked
 
 cp target/x86_64-unknown-linux-gnu/fuzzing/mla_fuzz "$OUT/"
 
