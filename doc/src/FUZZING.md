@@ -40,7 +40,7 @@ An OSS-Fuzz-compatible libFuzzer harness is available in fuzz/. The fuzzing logi
 The `run()` entry point dispatches between two paths based on the input's first bytes:
 
 - **TestInput roundtrip path**: input starts with a byte 0-7 (`FuzzMode`), serialized as a `TestInput` struct. Exercises the writer->reader roundtrip (archive creation, interleaved files, layers, truncation repair, alteration).
-- **Raw archive parser path**: input starts with `MLAFAAAA` magic. Exercises `ArchiveReader::from_config` -> `list_entries` -> `get_hash` -> `get_entry` -> `read_to_end` on untrusted bytes. Decompressed output is capped at 64 MB per entry and 128 MB aggregate to prevent OOM via decompression bombs.
+- **Raw archive parser path**: input starts with `MLAFAAAA` magic. Exercises `ArchiveReader::from_config` -> `list_entries` -> `get_hash` -> `get_entry` -> `seek` -> `read_to_end` on untrusted bytes. Decompressed output is capped at 64 MB per read (two reads per entry) and 128 MB aggregate soft cap to prevent OOM via decompression bombs. Note: the truncated-reader repair path (`CompressionLayerTruncatedReader`) is exercised only through the TestInput byteflip/repair flow, not this dispatch.
 
 ### OSS-Fuzz Integration
 
@@ -111,23 +111,23 @@ export CXX=clang++
 # SanitizerCoverage flags on the Rust side give libFuzzer coverage feedback.
 # LTO is disabled in the `fuzzing` profile (lto=false) so sancov-module's
 # per-crate __sancov_gen_* symbols link cleanly (cargo-fuzz#384).
-export RUSTFLAGS="--cfg fuzzing -Zsanitizer=address -Cdebuginfo=1 -Cforce-frame-pointers -Cpasses=sancov-module -Cllvm-args=-sanitizer-coverage-level=4 -Cllvm-args=-sanitizer-coverage-inline-8bit-counters -Cllvm-args=-sanitizer-coverage-pc-table -Cllvm-args=-sanitizer-coverage-trace-compares -Ccodegen-units=1"
-export CFLAGS="-fsanitize=address -fsanitize-address-use-after-scope -fno-sanitize-coverage"
-export CXXFLAGS="-fsanitize=address -fsanitize-address-use-after-scope -fno-sanitize-coverage"
+export RUSTFLAGS="--cfg fuzzing -Zsanitizer=address -Cdebug-assertions=on -Coverflow-checks=on -Cdebuginfo=1 -Cforce-frame-pointers -Cpasses=sancov-module -Cllvm-args=-sanitizer-coverage-level=4 -Cllvm-args=-sanitizer-coverage-inline-8bit-counters -Cllvm-args=-sanitizer-coverage-pc-table -Cllvm-args=-sanitizer-coverage-trace-compares -Ccodegen-units=1"
+export CFLAGS="-fsanitize=address -fsanitize-address-use-after-scope"
+export CXXFLAGS="-fsanitize=address -fsanitize-address-use-after-scope"
 
-cargo build --manifest-path fuzz/Cargo.toml --target x86_64-unknown-linux-gnu --profile fuzzing --bin mla_fuzz
+cargo build --locked --manifest-path fuzz/Cargo.toml --target x86_64-unknown-linux-gnu --profile fuzzing --bin mla_fuzz
 ./target/x86_64-unknown-linux-gnu/fuzzing/mla_fuzz
 ```
 
-`-fno-sanitize-coverage` on `CFLAGS`/`CXXFLAGS` ensures the C/C++ libFuzzer
-runtime (built by `libfuzzer-sys`) is not self-instrumented; only the Rust
-crates get coverage (via `RUSTFLAGS`).
+Do **not** add `-fno-sanitize-coverage` to `CFLAGS`/`CXXFLAGS`: recent clang
+rejects the bare flag ("unknown argument"). The libFuzzer C++ runtime keeps the
+standard OSS-Fuzz instrumentation; the Rust crates get coverage (via `RUSTFLAGS`).
 
 **Note:** The `fuzzing` profile disables symbol stripping (`strip=false`) which is
 required for ASan to work correctly. Using the standard `release` profile will strip
 symbols and cause "BAD BUILD: does not seem to be compiled with ASan" errors.
 
-**Easiest method:** The simplest way to test with full ASan support is via OSS-Fuzz:
+The simplest full-ASan setup is via OSS-Fuzz:
 
 ```sh
 python3 infra/helper.py run_fuzzer mla mla_fuzz
@@ -174,34 +174,26 @@ python3 infra/helper.py run_fuzzer mla mla_fuzz
 
 Crash reports stay in the OSS-Fuzz tracker, where project maintainers have
 full access (`file_github_issue: False` in `project.yaml`); they are not
-mirrored as public GitHub issues, like other security-sensitive projects
-(e.g. Tink-Go).
+mirrored as public GitHub issues.
 
 ### Custom Mutator
 
 Without a custom mutator, libFuzzer wastes most runs on `Deserialization
 Error`: raw byte mutations almost never produce valid `TestInput` structs or
 valid `MLAFAAAA`-prefixed archives. A custom mutator solves this with a
-model-based approach. The dispatch logic (archive/promote/raw paths) lives in
-`fuzz/fuzz_targets/mla_fuzz.rs`; the archive mutation logic lives in
-`fuzz/src/mutator.rs`.
-
-### Verbose Output
-
-By default, `run()` is silent. Only crashes (panics, SIGSEGV) are visible,
-as libFuzzer reports them.
-
-Set `MLA_FUZZ_VERBOSE` to restore repair-path debug output:
-
-```sh
-MLA_FUZZ_VERBOSE=1 ./target/fuzzing/mla_fuzz
-```
+model-based approach. The dispatch between the two paths above lives in
+`fuzz/fuzz_targets/mla_fuzz.rs`: archives are mutated through the model,
+non-archive inputs fall back to byte mutation with the first byte clamped
+to a valid `FuzzMode`, and about one third of non-archive rounds are
+replaced with a fresh archive from the default model. With 16 `TestInput`
+and 5 archive seeds, that rate brings the two paths to near-parity. The
+archive mutation logic lives in `fuzz/src/mutator.rs`.
 
 ### Mutator Unit Tests
 
-The mutator has unit tests that verify magic preservation, above-80%
-validity, max-size compliance, and magic preservation when re-mutating a
-valid archive. These tests are cheap (under 2s) and do not require libFuzzer:
+The mutator has unit tests that verify magic preservation (including when
+re-mutating an already-valid archive), above-80% validity, and max-size
+compliance. These tests are cheap (under 2s) and do not require libFuzzer:
 
 ```sh
 cargo test --manifest-path fuzz/Cargo.toml --lib
@@ -239,9 +231,7 @@ feedback:
    `WARNING: no interesting inputs were found so far. Is the code instrumented
    for coverage?`, reports `INITED` with no `cov:` field, and adds zero new
    units. The fuzzer is then blind: it can still detect crashes (panics,
-   SIGSEGV, OOM) but cannot systematically explore new code paths. The earlier
-   crashes (compress.rs:199 panic, infinite recursion, OOM) were lucky hits
-   from the custom mutator's random-corruption pass, not coverage-guided finds.
+   SIGSEGV, OOM), but any find is accidental rather than coverage-guided.
 
 2. **LTO must be disabled for the fuzz build.** `sancov-module` emits a
    per-crate constructor `__sancov_gen_<N>`. With LTO (`lto = true`, which the
@@ -265,19 +255,16 @@ builds. The direct `cargo build --profile fuzzing` approach used by `build.sh`
 avoids this: the `fuzzing` profile is dedicated to fuzzing and can safely keep
 `lto = false` without affecting the production `release` profile.
 
-**Solution Implemented:**
-
 The `build.sh` script in `projects/mla/`:
 - Uses `/rust/bin/cargo` directly (bypassing the OSS-Fuzz wrapper that rewrites
   `RUSTFLAGS`) and adds the SanitizerCoverage flags to `RUSTFLAGS` explicitly.
-- Disables coverage in C/C++ flags (`-fno-sanitize-coverage`) so the libFuzzer
-  C++ runtime is not self-instrumented.
+- Leaves the C/C++ flags untouched: recent clang rejects the bare
+  `-fno-sanitize-coverage` flag ("unknown argument"), so the libFuzzer C++
+  runtime keeps the standard OSS-Fuzz `-fsanitize=fuzzer-no-link`
+  (light instrumentation, harmless).
 - Builds with the `fuzzing` profile (`lto = false`, `strip = false`) which is
   defined in both `Cargo.toml` (workspace root) and `fuzz/Cargo.toml`.
 - Produces: `target/x86_64-unknown-linux-gnu/fuzzing/mla_fuzz` (ASan + coverage).
-
-This produces a working fuzzer binary with AddressSanitizer **and**
-SanitizerCoverage, so libFuzzer can guide mutations toward new code paths.
 
 This workflow reproduces the environment used by OSS-Fuzz and can help diagnose
 build, linker, sanitizer, or environment-specific issues.
@@ -303,3 +290,13 @@ and is excluded from OSS-Fuzz builds (`build.sh` builds only `--bin mla_fuzz`).
 In OSS-Fuzz, `build.sh` packages the seed corpus as `$OUT/mla_fuzz_seed_corpus.zip`
 and the dictionary as `$OUT/mla_fuzz.dict`, following the standard OSS-Fuzz naming
 convention.
+
+### Coverage and known gaps
+
+The fuzz target exercises all layer combinations (compression, encryption,
+signature), hashing, and re-parsing of corrupted archives with `ArchiveReader`
+and `TruncatedArchiveReader`. Reads are both sequential and random-access:
+seeks to the start, the end, and an offset inside the entry (half the bytes
+read), which also goes through the intra-block resynchronization paths.
+Fuzzing `ArchiveWriter` against corrupted streams and the `mlar-upgrader` v1
+reader is not covered by this target.
