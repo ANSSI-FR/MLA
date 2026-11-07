@@ -15,29 +15,18 @@
 #
 ################################################################################
 
-# /rust/bin/cargo bypasses the OSS-Fuzz wrapper that rewrites RUSTFLAGS, so we
-# must add the SanitizerCoverage flags ourselves. Without them libFuzzer gets
-# no coverage feedback ("no interesting inputs were found"; the fuzzer is blind
-# and can only find crashes by luck).
-#
-# The flags are the same libFuzzer-pairing flags cargo-fuzz injects. They used
-# to fail at link time with `undefined symbol: __sancov_gen_*`, but that was
-# caused by LTO interacting with sancov-module (cargo-fuzz#384), NOT by the
-# coverage flags themselves. The `fuzzing` profile sets `lto = false`, which
-# resolves the conflict -- so coverage instrumentation now links cleanly.
-#
-# `-fno-sanitize-coverage` stays on CFLAGS/CXXFLAGS so the C/C++ libFuzzer
-# runtime (built by libfuzzer-sys) is NOT self-instrumented; only the Rust
-# crates (mla, mla-fuzz, mla-oss-fuzz) get coverage via RUSTFLAGS.
+# /rust/bin/cargo bypasses the OSS-Fuzz wrapper that rewrites RUSTFLAGS, so
+# the SanitizerCoverage flags are added explicitly (libFuzzer is blind
+# without them). LTO must stay disabled: it breaks sancov-module linking
+# (cargo-fuzz#384, cf. the `fuzzing` profile). Do NOT add GCC's bare
+# `-fno-sanitize-coverage` to CFLAGS/CXXFLAGS: recent clang rejects it, and
+# the OSS-Fuzz CFLAGS already give the C++ runtime -fsanitize=fuzzer-no-link
 #
 # Build only the fuzz target (--bin mla_fuzz), not generate_seeds. The latter
 # is a dev-only seed generator (fuzz/src/bin/generate_seeds.rs), not a fuzz
 # target. Seeds are pre-generated and committed in fuzz/mla_fuzz_seed_corpus/
 
 cd $SRC/MLA
-
-export CFLAGS="$CFLAGS -fno-sanitize-coverage"
-export CXXFLAGS="$CXXFLAGS -fno-sanitize-coverage"
 
 export RUSTFLAGS="--cfg fuzzing -Zsanitizer=address -Cdebuginfo=1 -Cforce-frame-pointers -Cpasses=sancov-module -Cllvm-args=-sanitizer-coverage-level=4 -Cllvm-args=-sanitizer-coverage-inline-8bit-counters -Cllvm-args=-sanitizer-coverage-pc-table -Cllvm-args=-sanitizer-coverage-trace-compares -Ccodegen-units=1"
 
