@@ -6,3 +6,6 @@ sanitizers:
 fuzzing_engines:
   - libfuzzer
 language: rust
+# Keep crash reports in the OSS-Fuzz tracker only, where project maintainers
+# have full access: do not mirror them as public GitHub issues.
+file_github_issue: False

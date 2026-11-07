@@ -172,6 +172,11 @@ Run the fuzz target:
 python3 infra/helper.py run_fuzzer mla mla_fuzz
 ```
 
+Crash reports stay in the OSS-Fuzz tracker, where project maintainers have
+full access (`file_github_issue: False` in `project.yaml`); they are not
+mirrored as public GitHub issues, like other security-sensitive projects
+(e.g. Tink-Go).
+
 ### Custom Mutator
 
 Without a custom mutator, libFuzzer wastes most runs on `Deserialization
