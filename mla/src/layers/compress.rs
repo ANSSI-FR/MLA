@@ -457,7 +457,8 @@ impl<'a, R: 'a + InnerReaderTrait> Read for CompressionLayerReader<'a, R> {
                 Ok(read_add)
             }
             CompressionLayerReaderState::Empty => Err(Error::WrongReaderState(
-                "[Compression Layer] Should never happens, unless an error already occurs before"
+                "[Compression Layer] Unexpected Empty state (a previous failed read or seek \
+                 left the reader Empty)"
                     .to_string(),
             )
             .into()),
@@ -485,7 +486,21 @@ impl<R: InnerReaderTrait> Seek for CompressionLayerReader<'_, R> {
                         // Move the underlayer at the start of the block
                         let old_state =
                             std::mem::replace(&mut self.state, CompressionLayerReaderState::Empty);
-                        let mut inner = old_state.into_inner();
+                        // Extract inner without panicking on Empty (left by a
+                        // previous failed read/seek on corrupted data)
+                        let mut inner = match old_state {
+                            CompressionLayerReaderState::Ready(inner) => inner,
+                            CompressionLayerReaderState::InData { decompressor, .. } => {
+                                decompressor.into_inner().into_inner()
+                            }
+                            CompressionLayerReaderState::Empty => {
+                                return Err(Error::WrongReaderState(
+                                    "[Compression Layer] Cannot seek: reader in error state"
+                                        .to_string(),
+                                )
+                                .into());
+                            }
+                        };
                         self.sync_inner_with_uncompressed_pos(&mut inner, rounded_pos)?;
 
                         // New decompressor at the start of the block
@@ -1158,6 +1173,48 @@ mod tests {
         let data: Vec<u8> = StandardUniform.sample_iter(&mut rng).take(SIZE).collect();
         assert_eq!(data.len(), SIZE);
         data
+    }
+
+    #[test]
+    fn corrupted_compressed_archive_does_not_panic() {
+        // Regression test: when read() hit corrupted compressed data, the
+        // reader was left in the Empty state and the next seek panicked
+        // in into_inner(). Every later operation must return an error
+        // instead of panicking; the reader stays unusable after an error
+        // (repair flows stop reconstruction at the first error).
+
+        // 1. Create a valid compressed layer
+        let bytes = get_data();
+        let file = Vec::new();
+        let mut comp = Box::new(CompressionLayerWriter::new_skip_header(
+            Box::new(RawLayerWriter::new(file)),
+            &CompressionConfig::default(),
+        ));
+        comp.write_all(bytes.as_slice()).unwrap();
+        let file = comp.finalize().unwrap();
+
+        // 2. Corrupt 8 bytes in the middle (SizesInfo footer at end stays intact)
+        let mut corrupted = file.clone();
+        let mid = corrupted.len() / 2;
+        for byte in corrupted.iter_mut().take(mid + 8).skip(mid) {
+            *byte ^= 0xFF;
+        }
+
+        // 3. Initialize -- succeeds because the SizesInfo at the end is intact
+        let buf = Cursor::new(corrupted.as_slice());
+        let mut decomp = Box::new(
+            CompressionLayerReader::new_skip_header(Box::new(RawLayerReader::new(buf))).unwrap(),
+        );
+        decomp.initialize().unwrap();
+
+        // 4. read() fails on the corrupted block, returning Err (not panic)
+        let mut out = Vec::new();
+        assert!(decomp.read_to_end(&mut out).is_err());
+
+        // 5. Every later operation returns Err instead of panicking
+        assert!(decomp.read(&mut out).is_err());
+        assert!(decomp.seek(SeekFrom::Start(0)).is_err());
+        assert!(decomp.read(&mut out).is_err());
     }
 
     #[test]
