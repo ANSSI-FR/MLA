@@ -14,7 +14,7 @@ use mla::{ArchiveReader, ArchiveWriter, TruncatedArchiveReader};
 
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{Cursor, Read, Write};
+use std::io::{Cursor, Read, Seek as _, Write};
 
 // Static keys for fuzzing
 static PUB_KEY: &[u8] = include_bytes!("../../samples/test_mlakey.mlapub");
@@ -304,7 +304,49 @@ pub fn run(data: &[u8]) {
     // limit data size to avoid OOM
     // 10 Mo max
     if data.len() > 10 * 1024 * 1024 {
-        eprintln!("Input too large, skipping");
+        return;
+    }
+
+    // Raw MLA archive -> parser path
+    // TestInput starts with a FuzzMode byte (0-7); archives start with MLAFAAAA
+    if data.starts_with(b"MLAFAAAA") {
+        let config = ArchiveReaderConfig::without_signature_verification().without_encryption();
+        if let Ok((mut reader, _)) = ArchiveReader::from_config(Cursor::new(data), config) {
+            // get_hash/get_entry need &mut reader
+            let entry_names: Vec<EntryName> = reader
+                .list_entries()
+                .map(|i| i.cloned().collect())
+                .unwrap_or_default();
+            let mut total_decompressed: usize = 0;
+            for name in entry_names {
+                let _ = reader.get_hash(&name);
+                if let Ok(Some(mut file)) = reader.get_entry(name) {
+                    // Seek like mlar does: a corrupted footer must error cleanly
+                    let _ = file.data.seek(std::io::SeekFrom::End(0));
+                    let _ = file.data.seek(std::io::SeekFrom::Start(0));
+                    // Per-entry decompression cap (input is pre-limited to 10 MB)
+                    // An aggregate budget prevents multi-entry OOM
+                    let mut limited = file.data.by_ref().take(64 * 1024 * 1024);
+                    let mut buf = Vec::new();
+                    let _ = limited.read_to_end(&mut buf);
+                    total_decompressed = total_decompressed.saturating_add(buf.len());
+                    if total_decompressed > 128 * 1024 * 1024 {
+                        break;
+                    }
+                    // Boundary seeks stay block-aligned; this one resumes mid-block
+                    let _ = file
+                        .data
+                        .seek(std::io::SeekFrom::Start((buf.len() / 2) as u64));
+                    let mut limited = file.data.take(64 * 1024 * 1024);
+                    let mut tail = Vec::new();
+                    let _ = limited.read_to_end(&mut tail);
+                    total_decompressed = total_decompressed.saturating_add(tail.len());
+                    if total_decompressed > 128 * 1024 * 1024 {
+                        break;
+                    }
+                }
+            }
+        }
         return;
     }
 
@@ -319,12 +361,8 @@ pub fn run(data: &[u8]) {
     let mut cursor = Cursor::new(data);
 
     // skip invalid inputs
-    let test_case = match TestInput::deserialize(&mut cursor) {
-        Ok(test_case) => test_case,
-        Err(e) => {
-            eprintln!("Deserialization failed: {e:?}");
-            return;
-        }
+    let Ok(test_case) = TestInput::deserialize(&mut cursor) else {
+        return;
     };
 
     if test_case.filenames.is_empty() || test_case.filenames.len() >= 256 {
@@ -332,15 +370,11 @@ pub fn run(data: &[u8]) {
     }
 
     // archive writer configuration
-    let archive_config = match test_case
+    let Ok(archive_config) = test_case
         .config
         .to_writer_config(&[pub_enc_key], &[priv_sig_key])
-    {
-        Ok(cfg) => cfg,
-        Err(e) => {
-            eprintln!("Invalid config: {e:?}");
-            return;
-        }
+    else {
+        return;
     };
 
     // Create archive writer buffer
@@ -467,85 +501,83 @@ pub fn run(data: &[u8]) {
             }
         }
 
-        // Try to read the corrupted archive with TruncatedArchiveReader
-        let truncated_config = test_case.config.to_truncated_reader_config(&[priv_dec_key]);
-
-        match TruncatedArchiveReader::from_config(
-            Cursor::new(corrupted.as_slice()),
-            truncated_config,
-        ) {
-            Ok(mut tr) => {
-                // We'll try to salvage it into a new buffer
-                let mut clean_truncated = Vec::new();
-                let out_cfg = ArchiveWriterConfig::without_encryption_without_signature().unwrap();
-                let mla_out = ArchiveWriter::from_config(&mut clean_truncated, out_cfg).unwrap();
-
-                match tr.convert_to_archive(mla_out) {
-                    Ok(result) => {
-                        eprintln!("Repair finished with: {result:?}");
-
-                        // Re-parse the `clean-truncated` archive to ensure it's valid
-                        let reader_cfg = ArchiveReaderConfig::without_signature_verification()
-                            .without_encryption();
-                        if let Ok((mut clean_truncated_read, _)) = ArchiveReader::from_config(
-                            Cursor::new(clean_truncated.as_slice()),
-                            reader_cfg,
-                        ) {
-                            // Verify `clean-truncated` entries list and contents
-                            let mut clean_truncated_list: Vec<String> = clean_truncated_read
-                                .list_entries()
-                                .unwrap()
-                                .map(mla::entry::EntryName::raw_content_to_escaped_string)
-                                .collect();
-                            clean_truncated_list.sort();
-
-                            for clean_truncated_file in &clean_truncated_list {
-                                if expected_entry_names
-                                    .binary_search(clean_truncated_file)
-                                    .is_err()
-                                {
-                                    // Log and skip unexpected `clean-truncated` files (possibly corrupted/mangled)
-                                    eprintln!(
-                                        "Warning: unexpected `clean-truncated` archive file: {clean_truncated_file}"
-                                    );
-                                }
-                            }
-
-                            for name in &expected_entry_names {
-                                let Ok(entry_name) =
-                                    EntryName::from_arbitrary_bytes(name.as_bytes())
-                                else {
-                                    continue;
-                                };
-
-                                let Ok(Some(mut mla_file)) =
-                                    clean_truncated_read.get_entry(entry_name)
-                                else {
-                                    continue;
-                                };
-
-                                let mut clean_truncated_data = Vec::new();
-                                if mla_file.data.read_to_end(&mut clean_truncated_data).is_ok() {
-                                    let expected = entry_name2content.get(name).unwrap_or(&empty);
-
-                                    if clean_truncated_data != *expected {
-                                        eprintln!(
-                                            "Data mismatch after clean truncation for file `{name}`.\nExpected: {expected:02x?}\nRecovered: {clean_truncated_data:02x?}"
-                                        );
-                                        // Don't panic during clean truncation verification as it is expected to be imperfect
-                                    }
-                                }
-                            }
-                        }
+        // Re-parse the byteflip-corrupted archive as the bindings would;
+        // no catch_unwind: panics and allocation aborts are findings
+        let reader_config = test_case.config.to_reader_config(
+            std::slice::from_ref(&pub_sig_verif_key),
+            std::slice::from_ref(&priv_dec_key),
+        );
+        if let Ok((mut reader, _)) =
+            ArchiveReader::from_config(Cursor::new(corrupted.as_slice()), reader_config)
+        {
+            let entry_names: Vec<EntryName> = reader
+                .list_entries()
+                .map(|i| i.cloned().collect())
+                .unwrap_or_default();
+            // Same aggregate decompression budget as the raw archive path above
+            let mut total_decompressed: usize = 0;
+            for name in entry_names {
+                let _ = reader.get_hash(&name);
+                if let Ok(Some(mut file)) = reader.get_entry(name) {
+                    let _ = file.data.seek(std::io::SeekFrom::End(0));
+                    let _ = file.data.seek(std::io::SeekFrom::Start(0));
+                    let mut limited = file.data.by_ref().take(64 * 1024 * 1024);
+                    let mut buf = Vec::new();
+                    let _ = limited.read_to_end(&mut buf);
+                    total_decompressed = total_decompressed.saturating_add(buf.len());
+                    if total_decompressed > 128 * 1024 * 1024 {
+                        break;
                     }
-                    Err(err) => {
-                        eprintln!("Repair failed: {err:?}");
+                    // Boundary seeks stay block-aligned; this one resumes mid-block
+                    let _ = file
+                        .data
+                        .seek(std::io::SeekFrom::Start((buf.len() / 2) as u64));
+                    let mut limited = file.data.take(64 * 1024 * 1024);
+                    let mut tail = Vec::new();
+                    let _ = limited.read_to_end(&mut tail);
+                    total_decompressed = total_decompressed.saturating_add(tail.len());
+                    if total_decompressed > 128 * 1024 * 1024 {
+                        break;
                     }
                 }
             }
-            Err(e) => {
-                // Invalid structure; skip. TruncatedArchiveReader may reject unparseable data
-                eprintln!("TruncatedArchiveReader creation failed: {e:?}");
+        }
+
+        // Try to read the corrupted archive with TruncatedArchiveReader
+        let truncated_config = test_case.config.to_truncated_reader_config(&[priv_dec_key]);
+
+        if let Ok(mut tr) =
+            TruncatedArchiveReader::from_config(Cursor::new(corrupted.as_slice()), truncated_config)
+        {
+            // We'll try to salvage it into a new buffer
+            let mut clean_truncated = Vec::new();
+            let out_cfg = ArchiveWriterConfig::without_encryption_without_signature().unwrap();
+            let mla_out = ArchiveWriter::from_config(&mut clean_truncated, out_cfg).unwrap();
+
+            if tr.convert_to_archive(mla_out).is_ok() {
+                // Re-parse the `clean-truncated` archive to ensure it's valid
+                let reader_cfg =
+                    ArchiveReaderConfig::without_signature_verification().without_encryption();
+                if let Ok((mut clean_truncated_read, _)) =
+                    ArchiveReader::from_config(Cursor::new(clean_truncated.as_slice()), reader_cfg)
+                {
+                    for name in &expected_entry_names {
+                        let Ok(entry_name) = EntryName::from_arbitrary_bytes(name.as_bytes())
+                        else {
+                            continue;
+                        };
+
+                        let Ok(Some(mut mla_file)) = clean_truncated_read.get_entry(entry_name)
+                        else {
+                            continue;
+                        };
+
+                        // Content check is informational only: clean truncation
+                        // is expected to be imperfect, so mismatches are ignored
+                        let mut clean_truncated_data = Vec::new();
+                        let _ = mla_file.data.read_to_end(&mut clean_truncated_data);
+                    }
+                }
             }
         }
     }
