@@ -155,7 +155,21 @@ Run the fuzz target:
 python3 infra/helper.py run_fuzzer mla mla_fuzz
 ```
 
-### Technical Details
+## Coverage and limitations
+
+The harnesses exercise the library through writer-produced archives
+corrupted by the fuzzer's mutations (byte flips, structural edits), and
+through a raw-input path parsing untrusted bytes directly; no harness
+constructs metadata to be adversarially coherent, and duplicate entry
+names reach the reader only through unguided raw inputs (the writer
+rejects them). Fuzzing asserts crash- and sanitizer-based properties and
+a writer-to-reader roundtrip on well-formed archives; it does not check
+semantic guarantees on adversarially crafted archives, where silent
+corruption could go undetected. Other crates, including the language
+bindings, are not fuzzed; vulnerability reports follow the
+[security policy](https://github.com/ANSSI-FR/MLA/blob/main/.github/SECURITY.md).
+
+## Technical Details
 
 **Multi-crate Workspace Consideration:**
 
