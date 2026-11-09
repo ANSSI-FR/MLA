@@ -26,6 +26,11 @@ pub const COMPRESSION_LAYER_MAGIC: &[u8; 8] = b"COMLAAAA";
 /// to be a good choice
 const UNCOMPRESSED_DATA_SIZE: u32 = 4 * 1024 * 1024;
 
+/// Input buffer cap for the brotli decompressor, bounded by a constant so a
+/// corrupted footer claiming `u32::MAX` compressed bytes cannot drive the
+/// allocation (the `.take()` call still enforces the real per-block limit)
+const MAX_DECOMPRESSOR_INPUT_BUF: usize = UNCOMPRESSED_DATA_SIZE as usize;
+
 /// A bigger value means a better compression ratio, but a slower compression
 ///
 /// According to benchmarking on compression of representative data, level 5
@@ -267,7 +272,7 @@ impl<'a, R: 'a + InnerReaderTrait> CompressionLayerReader<'a, R> {
                 Ok(brotli::Decompressor::new(
                     // Make the Decompressor work only on the compressed block's bytes, no more
                     inner.take(compressed_block_size as u64),
-                    compressed_block_size,
+                    std::cmp::min(compressed_block_size, MAX_DECOMPRESSOR_INPUT_BUF),
                 ))
             }
             None => Err(Error::MissingMetadata),
@@ -345,10 +350,7 @@ impl<'a, R: 'a + InnerReaderTrait> CompressionLayerReader<'a, R> {
                 // Move the underlayer at the start of the block
                 let start_position = compressed_sizes
                     .iter()
-                    .take(
-                        usize::try_from(block_num)
-                            .expect("Failed to convert block number to usize"),
-                    )
+                    .take(usize::try_from(block_num).or(Err(Error::DeserializationError))?)
                     .map(|size| u64::from(*size))
                     .sum();
                 inner.seek(SeekFrom::Start(start_position))?;
@@ -457,7 +459,8 @@ impl<'a, R: 'a + InnerReaderTrait> Read for CompressionLayerReader<'a, R> {
                 Ok(read_add)
             }
             CompressionLayerReaderState::Empty => Err(Error::WrongReaderState(
-                "[Compression Layer] Should never happens, unless an error already occurs before"
+                "[Compression Layer] Unexpected Empty state (a previous failed read or seek \
+                 left the reader Empty)"
                     .to_string(),
             )
             .into()),
@@ -485,7 +488,21 @@ impl<R: InnerReaderTrait> Seek for CompressionLayerReader<'_, R> {
                         // Move the underlayer at the start of the block
                         let old_state =
                             std::mem::replace(&mut self.state, CompressionLayerReaderState::Empty);
-                        let mut inner = old_state.into_inner();
+                        // Extract inner without panicking on Empty (left by a
+                        // previous failed read/seek on corrupted data)
+                        let mut inner = match old_state {
+                            CompressionLayerReaderState::Ready(inner) => inner,
+                            CompressionLayerReaderState::InData { decompressor, .. } => {
+                                decompressor.into_inner().into_inner()
+                            }
+                            CompressionLayerReaderState::Empty => {
+                                return Err(Error::WrongReaderState(
+                                    "[Compression Layer] Cannot seek: reader in error state"
+                                        .to_string(),
+                                )
+                                .into());
+                            }
+                        };
                         self.sync_inner_with_uncompressed_pos(&mut inner, rounded_pos)?;
 
                         // New decompressor at the start of the block
@@ -833,139 +850,181 @@ impl<'a, R: 'a + Read> CompressionLayerTruncatedReader<'a, R> {
         let _ = Opts::from_reader(&mut inner)?; // No option handled at the moment
         Ok(Self::new_skip_header(inner))
     }
+}
 
-    fn truncated_reader_decompress_stream(
-        &mut self,
-        mut args: TruncatedReaderDecompressStreamParams,
-        buf: &mut [u8],
-    ) -> io::Result<usize> {
-        match brotli::BrotliDecompressStream(
-            &mut args.available_in,
-            &mut args.input_offset,
-            &self.cache[self.read_offset..self.cache_filled_len],
-            &mut args.available_out,
-            &mut args.output_offset,
-            buf,
-            &mut args.written,
-            &mut self.brotli_state,
-        ) {
-            brotli::BrotliResult::ResultSuccess => {
-                // End of stream reached
+impl<'a, R: 'a + Read> LayerTruncatedReader<'a, R> for CompressionLayerTruncatedReader<'a, R> {}
 
-                // Seek in the cache to the actual start of the new block
-                // input_offset \in [0; cache_filled_offset - read_offset[
-                self.read_offset = self
-                    .read_offset
-                    .checked_add(args.input_offset)
-                    .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))?;
+const TRUNCATED_READER_BUFFER_INITIAL_SIZE: usize = 4096;
 
-                // Reset others
-                *self.brotli_state = BrotliState::new(
-                    StandardAlloc::default(),
-                    StandardAlloc::default(),
-                    StandardAlloc::default(),
-                );
+impl<'a, R: 'a + Read> Read for CompressionLayerTruncatedReader<'a, R> {
+    /// This `read` may end by failing.
+    /// Even in the best configuration, when the inner layer is not broken, the
+    /// decompression will fail if attempting to read not-compressed data such as
+    /// `CompressionLayerReader` footer.
+    /// This is OK right now because the only usage is `TruncatedArchiveReader::convert_to_archive`
+    /// which stops reading when `EndOfArchiveData` is encountered.
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        // Checked before the is_empty early-return: an empty-buf call on an
+        // over-limit state must error instead of returning Ok(0).
+        if self.uncompressed_read > UNCOMPRESSED_DATA_SIZE {
+            return Err(Error::WrongReaderState(
+                "[Compress FailSafe Layer] Too much data read".to_string(),
+            )
+            .into());
+        }
 
-                self.uncompressed_read = 0;
+        if buf.is_empty() {
+            return Ok(0);
+        }
 
-                let remaining_cached = self
-                    .cache_filled_len
-                    .checked_sub(self.read_offset)
-                    .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))?;
-                self.inner.new_brotli_stream(remaining_cached)?;
+        // Iterative form: stream boundaries and cache refills are handled in
+        // the loop instead of tail-calling `self.read(buf)`, so the stack
+        // depth no longer grows with the number of brotli streams in a
+        // possibly corrupted truncated stream.
+        loop {
+            // Number of bytes available in the source
+            let available_in = self
+                .cache_filled_len
+                .checked_sub(self.read_offset)
+                .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))?;
+            let mut params = TruncatedReaderDecompressStreamParams {
+                available_in,
+                // IN: Offset in the source
+                input_offset: 0,
+                // Available space in the output
+                available_out: buf.len(),
+                // IN: Offset in the output
+                output_offset: 0,
+                // OUT: total number of byte written for the current stream (cumulative)
+                written: 0,
+            };
+            match brotli::BrotliDecompressStream(
+                &mut params.available_in,
+                &mut params.input_offset,
+                &self.cache[self.read_offset..self.cache_filled_len],
+                &mut params.available_out,
+                &mut params.output_offset,
+                buf,
+                &mut params.written,
+                &mut self.brotli_state,
+            ) {
+                brotli::BrotliResult::ResultSuccess => {
+                    // End of stream reached
 
-                if args.output_offset == 0 {
-                    return self.read(buf);
+                    // Seek in the cache to the actual start of the new block
+                    // input_offset \in [0; cache_filled_offset - read_offset[
+                    self.read_offset = self
+                        .read_offset
+                        .checked_add(params.input_offset)
+                        .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))?;
+
+                    // Reset others
+                    *self.brotli_state = BrotliState::new(
+                        StandardAlloc::default(),
+                        StandardAlloc::default(),
+                        StandardAlloc::default(),
+                    );
+
+                    self.uncompressed_read = 0;
+
+                    let remaining_cached = self
+                        .cache_filled_len
+                        .checked_sub(self.read_offset)
+                        .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))?;
+                    self.inner.new_brotli_stream(remaining_cached)?;
+
+                    if params.output_offset == 0 {
+                        continue;
+                    }
+
+                    return Ok(params.output_offset);
                 }
+                brotli::BrotliResult::NeedsMoreInput => {
+                    // Bytes may have been read and produced
+                    self.read_offset = self
+                        .read_offset
+                        .checked_add(params.input_offset)
+                        .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))?;
+                    let output_offset_u32 = u32::try_from(params.output_offset)
+                        .map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))?;
+                    self.uncompressed_read = self
+                        .uncompressed_read
+                        .checked_add(output_offset_u32)
+                        .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))?;
 
-                Ok(args.output_offset)
-            }
-            brotli::BrotliResult::NeedsMoreInput => {
-                // Bytes may have been read and produced
-                self.read_offset = self
-                    .read_offset
-                    .checked_add(args.input_offset)
-                    .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))?;
-                let output_offset_u32 = u32::try_from(args.output_offset)
-                    .map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))?;
-                self.uncompressed_read = self
-                    .uncompressed_read
-                    .checked_add(output_offset_u32)
-                    .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))?;
-
-                if args.output_offset == 0 {
-                    // (NeedsMoreInput && output_offset == 0) means we can't produce output without more input
-                    //
-                    // if cache is full
-                    if self.read_offset == 0 && self.cache_filled_len == self.cache.len() {
-                        let new_cache_len = self
-                            .cache
-                            .len()
-                            .checked_add(1)
-                            .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))?;
-                        self.cache.resize(new_cache_len, 0);
-                    } else {
-                        // move cache content at offset zero to make room for other input
-                        self.cache
-                            .copy_within(self.read_offset..self.cache_filled_len, 0);
-                        self.cache_filled_len = self
-                            .cache_filled_len
-                            .checked_sub(self.read_offset)
-                            .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))?;
-                        self.read_offset = 0;
-                        if self.byte_by_byte_decompression {
-                            // Revert to one byte cache length if it was previously increased
-                            if self.cache.len() != 1 {
-                                self.cache.resize(1, 0);
+                    if params.output_offset == 0 {
+                        // (NeedsMoreInput && output_offset == 0) means we can't produce output without more input
+                        //
+                        // if cache is full
+                        if self.read_offset == 0 && self.cache_filled_len == self.cache.len() {
+                            let new_cache_len = self
+                                .cache
+                                .len()
+                                .checked_add(1)
+                                .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))?;
+                            self.cache.resize(new_cache_len, 0);
+                        } else {
+                            // move cache content at offset zero to make room for other input
+                            self.cache
+                                .copy_within(self.read_offset..self.cache_filled_len, 0);
+                            self.cache_filled_len = self
+                                .cache_filled_len
+                                .checked_sub(self.read_offset)
+                                .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))?;
+                            self.read_offset = 0;
+                            if self.byte_by_byte_decompression {
+                                // Revert to one byte cache length if it was previously increased
+                                if self.cache.len() != 1 {
+                                    self.cache.resize(1, 0);
+                                }
                             }
                         }
-                    }
 
-                    let read = self.inner.read(&mut self.cache[self.cache_filled_len..])?;
-                    if read == 0 {
-                        // No more data from inner and the cache has been fully read
-                        // -> return either an error or Ok(0)
-                        if self.uncompressed_read > 0 {
-                            // Inside a stream and no more data available
-                            return Err(io::Error::new(
-                                io::ErrorKind::UnexpectedEof,
-                                "No more data from the inner layer",
-                            ));
+                        let read = self.inner.read(&mut self.cache[self.cache_filled_len..])?;
+                        if read == 0 {
+                            // No more data from inner and the cache has been fully read
+                            // -> return either an error or Ok(0)
+                            if self.uncompressed_read > 0 {
+                                // Inside a stream and no more data available
+                                return Err(io::Error::new(
+                                    io::ErrorKind::UnexpectedEof,
+                                    "No more data from the inner layer",
+                                ));
+                            }
+                            // No more data available but not in a stream
+                            return Ok(0);
                         }
-                        // No more data available but not in a stream
-                        return Ok(0);
+                        self.cache_filled_len = self
+                            .cache_filled_len
+                            .checked_add(read)
+                            .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))?;
+                        continue;
                     }
-                    self.cache_filled_len = self
-                        .cache_filled_len
-                        .checked_add(read)
-                        .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))?;
-                    return self.read(buf);
+                    return Ok(params.output_offset);
                 }
-                Ok(args.output_offset)
-            }
-            brotli::BrotliResult::NeedsMoreOutput => {
-                // Bytes may have been read and produced
-                self.read_offset = self
-                    .read_offset
-                    .checked_add(args.input_offset)
-                    .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))?;
-                let output_offset_u32 = u32::try_from(args.output_offset)
-                    .map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))?;
-                self.uncompressed_read = self
-                    .uncompressed_read
-                    .checked_add(output_offset_u32)
-                    .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))?;
+                brotli::BrotliResult::NeedsMoreOutput => {
+                    // Bytes may have been read and produced
+                    self.read_offset = self
+                        .read_offset
+                        .checked_add(params.input_offset)
+                        .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))?;
+                    let output_offset_u32 = u32::try_from(params.output_offset)
+                        .map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))?;
+                    self.uncompressed_read = self
+                        .uncompressed_read
+                        .checked_add(output_offset_u32)
+                        .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))?;
 
-                Ok(args.output_offset)
-            }
-            brotli::BrotliResult::ResultFailure => {
-                if self.byte_by_byte_decompression {
-                    // byte by byte reading fails: we cannot recover anymore data
-                    Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        "Invalid data while decompressing",
-                    ))
-                } else {
+                    return Ok(params.output_offset);
+                }
+                brotli::BrotliResult::ResultFailure => {
+                    if self.byte_by_byte_decompression {
+                        // byte by byte reading fails: we cannot recover anymore data
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            "Invalid data while decompressing",
+                        ));
+                    }
                     // we retry with a cache size of 1 because BrotliDecompressStream
                     // may hold unreturned decompressed data in its internal state otherwise
                     self.byte_by_byte_decompression = true;
@@ -987,60 +1046,9 @@ impl<'a, R: 'a + Read> CompressionLayerTruncatedReader<'a, R> {
                         &mut self.take(u64::from(number_of_already_decompressed_bytes)),
                         &mut io::sink(),
                     )?;
-                    self.read(buf)
                 }
             }
         }
-    }
-}
-
-impl<'a, R: 'a + Read> LayerTruncatedReader<'a, R> for CompressionLayerTruncatedReader<'a, R> {}
-
-const TRUNCATED_READER_BUFFER_INITIAL_SIZE: usize = 4096;
-
-impl<'a, R: 'a + Read> Read for CompressionLayerTruncatedReader<'a, R> {
-    /// This `read` may end by failing.
-    /// Even in the best configuration, when the inner layer is not broken, the
-    /// decompression will fail if attempting to read not-compressed data such as
-    /// `CompressionLayerReader` footer.
-    /// This is OK right now because the only usage is `TruncatedArchiveReader::convert_to_archive`
-    /// which stops reading when `EndOfArchiveData` is encountered.
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        if self.uncompressed_read > UNCOMPRESSED_DATA_SIZE {
-            return Err(Error::WrongReaderState(
-                "[Compress FailSafe Layer] Too much data read".to_string(),
-            )
-            .into());
-        }
-
-        if buf.is_empty() {
-            return Ok(0);
-        }
-
-        // Number of bytes available in the source
-        let available_in = self
-            .cache_filled_len
-            .checked_sub(self.read_offset)
-            .ok_or_else(|| io::Error::from(ErrorKind::InvalidInput))?;
-        // IN: Offset in the source
-        // OUT: Offset in the source after the decompression pass
-        let input_offset = 0;
-        // Available space in the output
-        let available_out = buf.len();
-        // IN: Offset in the output
-        // OUT: number of bytes written in the output
-        let output_offset = 0;
-        // OUT: total number of byte written for the current stream (cumulative)
-        let written = 0;
-
-        let params = TruncatedReaderDecompressStreamParams {
-            available_in,
-            input_offset,
-            available_out,
-            output_offset,
-            written,
-        };
-        self.truncated_reader_decompress_stream(params, buf)
     }
 }
 
@@ -1158,6 +1166,48 @@ mod tests {
         let data: Vec<u8> = StandardUniform.sample_iter(&mut rng).take(SIZE).collect();
         assert_eq!(data.len(), SIZE);
         data
+    }
+
+    #[test]
+    fn corrupted_compressed_archive_does_not_panic() {
+        // Regression test: when read() hit corrupted compressed data, the
+        // reader was left in the Empty state and the next seek panicked
+        // in into_inner(). Every later operation must return an error
+        // instead of panicking; the reader stays unusable after an error
+        // (repair flows stop reconstruction at the first error).
+
+        // 1. Create a valid compressed layer
+        let bytes = get_data();
+        let file = Vec::new();
+        let mut comp = Box::new(CompressionLayerWriter::new_skip_header(
+            Box::new(RawLayerWriter::new(file)),
+            &CompressionConfig::default(),
+        ));
+        comp.write_all(bytes.as_slice()).unwrap();
+        let file = comp.finalize().unwrap();
+
+        // 2. Corrupt 8 bytes in the middle (SizesInfo footer at end stays intact)
+        let mut corrupted = file.clone();
+        let mid = corrupted.len() / 2;
+        for byte in corrupted.iter_mut().take(mid + 8).skip(mid) {
+            *byte ^= 0xFF;
+        }
+
+        // 3. Initialize -- succeeds because the SizesInfo at the end is intact
+        let buf = Cursor::new(corrupted.as_slice());
+        let mut decomp = Box::new(
+            CompressionLayerReader::new_skip_header(Box::new(RawLayerReader::new(buf))).unwrap(),
+        );
+        decomp.initialize().unwrap();
+
+        // 4. read() fails on the corrupted block, returning Err (not panic)
+        let mut out = Vec::new();
+        assert!(decomp.read_to_end(&mut out).is_err());
+
+        // 5. Every later operation returns Err instead of panicking
+        assert!(decomp.read(&mut out).is_err());
+        assert!(decomp.seek(SeekFrom::Start(0)).is_err());
+        assert!(decomp.read(&mut out).is_err());
     }
 
     #[test]
@@ -1558,5 +1608,49 @@ mod tests {
         decomp.initialize().unwrap();
         decomp.read_to_end(&mut buf_2_out).unwrap();
         assert_eq!(buf_out, buf_2_out);
+    }
+    #[test]
+    fn corrupted_compressed_size_in_footer_does_not_oom() {
+        // Regression test: a corrupted archive can declare an arbitrarily
+        // large compressed_block_size in the SizesInfo footer (up to u32::MAX).
+        // Before the fix, this value was passed directly as the buffer size
+        // to brotli::Decompressor::new(), triggering a multi-GB allocation.
+        // The fix caps the buffer to UNCOMPRESSED_DATA_SIZE (4 MB).
+
+        // 1. Create a valid compressed layer (one block)
+        let bytes = b"Hello, compression layer!".repeat(100);
+        let file = Vec::new();
+        let mut comp = Box::new(CompressionLayerWriter::new_skip_header(
+            Box::new(RawLayerWriter::new(file)),
+            &CompressionConfig::default(),
+        ));
+        comp.write_all(&bytes).unwrap();
+        let file = comp.finalize().unwrap();
+
+        // 2. Patch compressed_sizes[0] to u32::MAX. The file trailer layout is:
+        //    [u64 count][u32 size_0]...[u32 size_n-1][u32 last_block_size][u64 SizesInfo_len]
+        let mut corrupted = file.clone();
+        let total_len = corrupted.len();
+        let footer_len =
+            u64::from_le_bytes(corrupted[total_len - 8..total_len].try_into().unwrap());
+        let footer_start = total_len - 8 - usize::try_from(footer_len).unwrap();
+        let size_0_offset = footer_start + 8; // skip u64 count
+        corrupted[size_0_offset..size_0_offset + 4].copy_from_slice(&u32::MAX.to_le_bytes());
+
+        // 3. Initialize -- footer is still structurally valid
+        let buf = Cursor::new(corrupted.as_slice());
+        let mut decomp = Box::new(
+            CompressionLayerReader::new_skip_header(Box::new(RawLayerReader::new(buf))).unwrap(),
+        );
+        decomp.initialize().unwrap();
+
+        // 4. A 4 GB declared size must not OOM -- buffer is capped to 4 MB.
+        // The read must terminate with the original content: the cap only
+        // bounds the refill buffer, the output is unchanged.
+        let mut out = Vec::new();
+        decomp
+            .read_to_end(&mut out)
+            .expect("read_to_end should not fail");
+        assert_eq!(out, bytes, "decompressed content must be preserved");
     }
 }
