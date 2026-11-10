@@ -7,7 +7,8 @@ This guide can help you upgrade code through breaking changes from one MLA versi
 ### Deprecation of MLA 1
 
 - MLA 2 is now the default and is incompatible with MLA 1.
-- MLA 1 enters low maintenance mode (no new features, only critical bug fixes).
+- The `v1` branch is frozen at release 1.5.0, its final release: it receives
+  no security fixes. Migrate v1 archives to v2 with `mlar-upgrader`.
 
 ### Generate new keys
 
