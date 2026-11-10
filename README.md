@@ -53,6 +53,12 @@ This repository contains:
 * `fuzz` : OSS-Fuzz targets and configuration
 * `.github`: Continuous Integration needs
 
+## Support
+
+The `v1` branch (MLA 1 format) is frozen at release 1.5.0: it receives no
+security fixes. Migrate v1 archives to v2 with `mlar-upgrader` (see
+[SUPPORT.md](.github/SUPPORT.md)).
+
 # Quick command-line usage
 
 Here are some commands to use ``mlar`` in order to work with archives in MLA format.

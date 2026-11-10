@@ -32,3 +32,11 @@ quickly address the issue.
   against you in regard to your report.
 - We will handle your report with strict confidentiality, and not pass on your
   personal details to third parties without your permission.
+
+### Scope: v1 branch
+
+The `v1` branch is frozen at release 1.5.0, its final release, and
+receives no security fixes. Vulnerability reports are still welcome when
+they show that a v1 archive cannot be read by the frozen `mla` 1.5.0 or
+that `mlar-upgrader` fails to convert a valid v1 archive; open them
+against `main` (see [SUPPORT.md](SUPPORT.md)).
