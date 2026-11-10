@@ -4,3 +4,11 @@
 rustflags = [
     "-C", "target-feature=+crt-static",
 ]
+
+# Frozen v1 branch: dependencies are vendored so builds work offline,
+# without relying on crates.io availability (see vendor/).
+[source.crates-io]
+replace-with = "vendored-sources"
+
+[source.vendored-sources]
+directory = "vendor"

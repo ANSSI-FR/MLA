@@ -1,0 +1,42 @@
+name: Documentation
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      - uses: dtolnay/rust-toolchain@nightly
+
+      - name: Build docs
+        run: cargo doc --no-deps --all-features
+      - name: Prepare docs
+        run: |
+          mkdir -p _site
+          echo '<meta http-equiv="refresh" content="0;url=xdg/index.html">' > _site/index.html
+          mv target/doc/* _site
+
+      - uses: actions/upload-pages-artifact@v3
+
+  deploy:
+    needs: build
+
+    permissions:
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
