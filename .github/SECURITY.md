@@ -7,6 +7,12 @@ vulnerability, however small, we would like to know about it to address it with
 appropriate measures as quickly as possible. This document outlines the method
 we use to work with the security research community to address runtime security.
 
+### Supported versions
+
+The `v1` branch is frozen and does not receive security fixes (see
+[SUPPORT.md](SUPPORT.md)). Reports affecting only v1 will be documented;
+the remediation is migrating archives to v2 with `mlar-upgrader`.
+
 ## Reporting a vulnerability
 
 Please open a new [Security advisory](https://github.com/ANSSI-FR/MLA/security/advisories/new) with your findings. Alternatively, if you wish to report anonymously, you can send an email to `opensource@ssi.gouv.fr`. We strive to resolve all problems as quickly as possible. If appropriate, we may assist in the publication of writeups after the problem is resolved.

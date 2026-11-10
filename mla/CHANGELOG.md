@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-11-09
+
+### Added/Changed
+
+- Final v1 release: branch frozen, no security fixes, migrate archives to v2 with `mlar-upgrader`
+- Pin rust toolchain to 1.98.1, update CI
+- Vendor dependencies for offline builds
+- Statically link windows msvc binaries against the CRT
+- Release profile: opt-level 3 (backported from the main branch)
+- Documentation improvements (repair and compression details, layers and main documentation)
+- Remove the bench workflow, the Python bindings workflow and the dependabot config
+- Python bindings: not buildable from this branch (root vendored dependencies), use the PyPI wheels or the main branch
+- C bindings: regenerate `mla.h`; `MLAStatus` is now a 64-bit based enum (C23, with `typedef` fallback) and the unused `MLA_STATUS_RAND_ERROR` is removed
+- Fix clippy 1.98 warnings on all targets (pedantic and nursery lints)
+- `SHA256SUMS`: signed with the release manager GPG key (Ed25519, fingerprint `FF5A 2354 5CBA DD41 8D9F  674F B11A EB48 F579 6F65`, on keys.openpgp.org)
+
+### Fixed
+
+- Fix #226: repair a compressed archive losing data on truncated compressed streams
+
 ## [1.4.0] - 2023-10-02
 
 ### Added/Changed

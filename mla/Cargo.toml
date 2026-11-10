@@ -1,8 +1,9 @@
 [package]
 name = "mla"
-version = "1.4.0"
-authors = ["Camille Mougey <camille.mougey@ssi.gouv.fr>"]
+version = "1.5.0"
+authors = ["ANSSI <opensource@ssi.gouv.fr>"]
 edition = "2024"
+rust-version = "1.88"
 license = "LGPL-3.0-only"
 description = "Multi Layer Archive - A pure rust encrypted and compressed archive file format"
 homepage = "https://github.com/ANSSI-FR/MLA"

@@ -33,6 +33,6 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
 
 [profile.release]
 codegen-units = 1   # Use minimum codegen units for best size and runtime performances
-opt-level = 'z'     # Size optimization
+opt-level = 3       # Optimize for maximum runtime performance (backport from v2)
 lto = true          # Enable Link Time Optimization
 strip = true        # Removes symbols, reducing size

@@ -2109,7 +2109,7 @@ pub(crate) mod tests {
             let mut mla_read = ArchiveReader::from_config(buf, config).unwrap();
 
             for (fname, data) in &files {
-                let mla_file = mla_read.get_file(fname.to_string()).unwrap().unwrap();
+                let mla_file = mla_read.get_file(fname.clone()).unwrap().unwrap();
                 assert_eq!(mla_file.size, data.len() as u64);
             }
         }
@@ -2153,7 +2153,7 @@ pub(crate) mod tests {
                 stopping_error,
             } => {
                 // We expect to ends with a HashDiffers on first file
-                assert_eq!(filenames, vec![files[0].0.to_string()]);
+                assert_eq!(filenames, vec![files[0].0.clone()]);
                 match *stopping_error {
                     FailSafeReadError::HashDiffers { .. } => {}
                     _ => {

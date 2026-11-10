@@ -41,6 +41,43 @@ This repository contains:
 * `bindings` : bindings for other languages
 * `.github`: Continuous Integration needs
 
+Building from source (frozen v1 branch)
+=
+
+v1.5.0 (2026-11-09) is the final v1 release. The v1 branch is frozen:
+no security fixes. Migrate archives to v2 with `mlar-upgrader`
+([main branch](https://github.com/ANSSI-FR/MLA)). Install it with
+`cargo install mlar-upgrader --git https://github.com/ANSSI-FR/MLA`
+or build it from a clone of the main branch. The v1 private key
+(`-k`) still decrypts the archives; re-encrypt with the v2 public key
+(`-p`) of your choice.
+
+Archives written in format v1 remain readable over time: `mlar-upgrader`
+reads them, and a sample is committed in `samples/` to guarantee this
+property is tested.
+
+The pinned Rust toolchain (see `rust-toolchain.toml`) and the vendored
+dependencies (see `vendor/`) are installed and used automatically, so the
+build does not depend on the crates.io state at build time:
+
+```sh
+cargo build --locked --release --package mlar
+cargo test --all --locked
+```
+
+`rustup` reads `rust-toolchain.toml` and installs the pinned `rustc` version
+automatically. Example conversion:
+
+```sh
+mlar-upgrader -i archive.mla -o archive-v2.mla -k private_key.pem -p mla2_public_key.mlapub
+```
+
+`mlar convert` below stays in the v1 format; only `mlar-upgrader`
+produces v2 archives.
+
+Python bindings cannot be built from this branch (vendored root
+dependencies). Use the PyPI wheels or the main branch.
+
 Quick command-line usage
 =
 
@@ -74,8 +111,8 @@ mlar create -p archive.pub -p client1.pub -o my_archive.mla ...
 
 `mlar` can be obtained:
 
-* through Cargo: `cargo install mlar`
-* using the [latest release](https://github.com/ANSSI-FR/MLA/releases) for supported operating systems
+* through Cargo: `cargo install mlar@1.5.0` (the v1 branch ships no newer version)
+* using the [mlar-v1.5.0 release](https://github.com/ANSSI-FR/MLA/releases/tag/mlar-v1.5.0) for supported operating systems
 
 
 Quick API usage
