@@ -19,11 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Python bindings: not buildable from this branch (root vendored dependencies), use the PyPI wheels or the main branch
 - C bindings: regenerate `mla.h` and `mla.hpp`; `MLAStatus` is now a 64-bit based enum (C23, with `typedef` fallback)
 - Fix clippy 1.98 warnings on all targets (pedantic and nursery lints)
-- `SHA256SUMS`: signed with the release manager GPG key (Ed25519, fingerprint `FF5A 2354 5CBA DD41 8D9F  674F B11A EB48 F579 6F65`, on keys.openpgp.org)
+- `SHA256SUMS`: signed with the release manager GPG key (Ed25519, fingerprint `E916 A5EB 4522 83C8 6D95  3F3D B865 7076 4321 8D81`, on keys.openpgp.org)
 
 ### Fixed
 
 - Fix #226: repair a compressed archive losing data on truncated compressed streams
+- Reject corrupted archives instead of panicking: compression and archive footer lengths larger than the available bytes (integer underflow), and encrypted streams truncated inside the last authentication tag, on the read and seek paths (read paths reported by Matthieu Buffet)
+- Validate the compression footer SizesInfo before use: reject empty or short compressed block size lists, and cap the brotli input buffer to prevent a multi-GB allocation on a forged block size
+- Return an error instead of panicking when a caller retries a seek after a failure on a corrupted footer
 
 ## [1.4.0] - 2023-10-02
 
