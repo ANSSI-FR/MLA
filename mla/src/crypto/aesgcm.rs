@@ -99,17 +99,16 @@ impl AesGcm256 {
             buffer = out_block;
         }
 
-        let mut chunks = buffer.chunks_exact_mut(BLOCK_SIZE);
+        let (chunks, rem) = buffer.as_chunks_mut::<BLOCK_SIZE>();
 
         // Interleaved ghash update
-        for chunk in &mut chunks {
+        for chunk in chunks {
             self.cipher.apply_keystream(chunk);
             self.ghash
                 .update(slice::from_ref(GenericArray::from_slice(chunk)));
         }
 
         // Encrypt and save extra encrypted bytes for further GHash computation
-        let rem = chunks.into_remainder();
         if !rem.is_empty() {
             self.cipher.apply_keystream(rem);
             self.current_block.extend_from_slice(rem);
@@ -145,16 +144,15 @@ impl AesGcm256 {
 
     /// Decrypt and compute the associated tag
     pub fn decrypt(&mut self, buffer: &mut [u8]) -> Tag {
-        let mut chunks = buffer.chunks_exact_mut(BLOCK_SIZE);
+        let (chunks, rem) = buffer.as_chunks_mut::<BLOCK_SIZE>();
 
         // Interleaved ghash update
-        for chunk in &mut chunks {
+        for chunk in chunks {
             self.ghash
                 .update(slice::from_ref(GenericArray::from_slice(chunk)));
             self.cipher.apply_keystream(chunk);
         }
 
-        let rem = chunks.into_remainder();
         if !rem.is_empty() {
             self.ghash.update_padded(rem);
             self.cipher.apply_keystream(rem);

@@ -2,6 +2,10 @@
 
 This project provides C and CPP bindings for the MLA format.
 
+> Frozen v1 branch: mla 1.5.0 is the final release and receives no
+> security fixes; migrate archives to v2 with `mlar-upgrader` (see the
+> repository README).
+
 ## How-to
 
 The last version of libraries are available in the [Release section](https://github.com/ANSSI-FR/MLA/releases).
@@ -22,7 +26,7 @@ cbindgen --config cbindgen_c.toml
 cbindgen --config cbindgen_cpp.toml
 # Install the appropriate target toolchain
 # For instance, with rustup:
-rustup add target ...
+rustup target add ...
 # Compile the Debug version
 cargo build --target ...
 # Compile the Release version
@@ -67,8 +71,7 @@ FILE* f = fopen("test.mla", "w");
 MLAStatus status;
 MLAConfigHandle hConfig = NULL;
 status = mla_config_default_new(&hConfig);
-// Error code can be obtained with MLA_STATUS
-if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
+if (status != MLA_STATUS_SUCCESS)
 {
     fprintf(stderr, " [!] Config creation failed with code %" PRIX64 "\n", (uint64_t)status);
     return (int)status;
@@ -80,7 +83,7 @@ if (status != MLA_STATUS(MLA_STATUS_SUCCESS))
 status = mla_config_add_public_keys(hConfig, szPubkey);
 
 // Create the archive writer
-// `callback_write` and `callback_flush` will received whatever context is given to `mla_archive_new`
+// `callback_write` and `callback_flush` will receive whatever context is given to `mla_archive_new`
 // Here, this is `f`, the output file descriptor
 MLAArchiveHandle hArchive = NULL;
 status = mla_archive_new(&hConfig, &callback_write, &callback_flush, f, &hArchive);
@@ -105,9 +108,10 @@ fclose(f);
 
 ## API
 
-The API is available in [mla.h](mla.h) and [mla.hpp](mla.hpp).
-
-For now, only the writer API is available.
+Writer and reader APIs are available in [mla.h](mla.h) and
+[mla.hpp](mla.hpp). Reader examples:
+[tests/linux-gcc-g++/open.c](tests/linux-gcc-g%2B%2B/open.c),
+[info.c](tests/linux-gcc-g%2B%2B/info.c).
 
 ### Guidelines
 

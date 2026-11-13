@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-11-09
+
+### Added/Changed
+
+- Final v1 release: branch frozen, no security fixes, migrate archives to v2 with `mlar-upgrader`
+- Pin rust toolchain to 1.98.1, update CI
+- Bump dependencies (fix RUSTSEC-2026-0204 crossbeam-epoch, RUSTSEC-2026-0067 and RUSTSEC-2026-0068 tar, RUSTSEC-2026-0253 lru)
+- Vendor dependencies for offline builds
+- Statically link windows msvc binaries against the CRT
+- Release profile: opt-level 3 (backported from the main branch)
+- Repair of truncated compressed streams (#226), via `mla` 1.5.0
+- Add a `--allow-unauthenticated-data` flag to `mlar repair`, to extract unauthenticated data
+- Clippy hardening (pedantic and nursery lints, all targets)
+- Remove the bench workflow, the Python bindings workflow and the dependabot config
+- `SHA256SUMS`: signed with the release manager GPG key (Ed25519, fingerprint `FF5A 2354 5CBA DD41 8D9F  674F B11A EB48 F579 6F65`, on keys.openpgp.org)
+
+### Fixed
+
+- Reject corrupted archives instead of panicking on integer underflow (reported by Matthieu Buffet), via `mla` 1.5.0: affects `mlar list`, `mlar extract` and `mlar repair` on corrupted or truncated archives
+
+`mlar` 1.4.0 was never released (1.3.0 then 1.5.0, aligned with `mla`)
+
 ## [1.3.0] - 2023-10-06
 
 ### Thanks

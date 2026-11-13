@@ -196,7 +196,7 @@ struct CallbackOutput {
 
 impl Write for CallbackOutput {
     fn write(&mut self, buf: &[u8]) -> Result<usize, std::io::Error> {
-        let len = u32::try_from(buf.len()).map_or(u32::MAX - 1, |n| n); // only write the first 4GB, the callback will get called multiple times
+        let len = u32::try_from(buf.len()).unwrap_or(u32::MAX - 1); // only write the first 4GB, the callback will get called multiple times
         let mut len_written: u32 = 0;
         match (self.write_callback)(buf.as_ptr(), len, self.context, &raw mut len_written) {
             0 => Ok(len_written as usize),
@@ -529,7 +529,7 @@ struct CallbackInputRead {
 
 impl Read for CallbackInputRead {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, std::io::Error> {
-        let len = u32::try_from(buf.len()).map_or(u32::MAX - 1, |n| n); // only read the first 4GB, the callback will get called multiple times
+        let len = u32::try_from(buf.len()).unwrap_or(u32::MAX - 1); // only read the first 4GB, the callback will get called multiple times
         let mut len_read: u32 = 0;
         match (self.read_callback)(buf.as_mut_ptr(), len, self.context, &raw mut len_read) {
             0 => Ok(len_read as usize),

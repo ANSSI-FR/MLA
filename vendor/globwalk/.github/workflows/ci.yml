@@ -1,0 +1,53 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust:
+          - stable
+          - beta
+          - nightly
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+      - name: Run cargo test
+        run: cargo test
+
+  test-msrv:
+    name: Test Suite
+    runs-on: [ubuntu-latest, windows-latest]
+    strategy:
+      matrix:
+        rust:
+          - 1.70.0
+          - stable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+      - name: Run cargo test
+        # Exclude doctests here, as we don't want to clutter docs themselves
+        # with backwards compatibility workarounds.
+        run: cargo test --lib
+
+  style:
+    name: lints and formatting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.70.0 # pin a version for reproducible results
+          components: rustfmt
+      - name: Check warnings
+        run: RUSTFLAGS="-D warnings" cargo check --all-targets
+      - name: Check formatting
+        run: cargo fmt -- --check

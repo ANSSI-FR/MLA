@@ -145,7 +145,7 @@ pub enum FailSafeReadError {
     /// finished (a file can be finished but uncompleted)
     UnfinishedFiles {
         filenames: Vec<String>,
-        stopping_error: Box<FailSafeReadError>,
+        stopping_error: Box<Self>,
     },
     /// End of original archive reached - this is the best case
     EndOfOriginalArchiveData,

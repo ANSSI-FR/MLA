@@ -28,6 +28,11 @@ use super::traits::InnerReaderTrait;
 /// to be a good choice
 const UNCOMPRESSED_DATA_SIZE: u32 = 4 * 1024 * 1024;
 
+/// Input buffer cap for the brotli decompressor, bounded by a constant so a
+/// corrupted footer claiming `u32::MAX` compressed bytes cannot drive the
+/// allocation (the `.take()` call still enforces the real per-block limit)
+const MAX_DECOMPRESSOR_INPUT_BUF: usize = UNCOMPRESSED_DATA_SIZE as usize;
+
 /// A bigger value means a better compression ratio, but a slower compression
 ///
 /// According to benchmarking on compression of representative data, level 5
@@ -114,7 +119,11 @@ impl SizesInfo {
         let block_num = uncompressed_pos / u64::from(UNCOMPRESSED_DATA_SIZE);
         let index = usize::try_from(block_num)
             .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Integer conversion failed"))?;
-        Ok(self.compressed_sizes[index])
+        // A corrupted footer may declare fewer blocks than the position being read
+        Ok(*self
+            .compressed_sizes
+            .get(index)
+            .ok_or(Error::DeserializationError)?)
     }
 
     /// Maximum uncompressed available position
@@ -212,7 +221,7 @@ impl<'a, R: 'a + Read> CompressionLayerReader<'a, R> {
                 Ok(brotli::Decompressor::new(
                     // Make the Decompressor work only on the compressed block's bytes, no more
                     inner.take(compressed_block_size as u64),
-                    compressed_block_size,
+                    std::cmp::min(compressed_block_size, MAX_DECOMPRESSOR_INPUT_BUF),
                 ))
             }
             None => Err(Error::MissingMetadata),
@@ -316,14 +325,24 @@ impl<'a, R: 'a + InnerReaderTrait> LayerReader<'a, R> for CompressionLayerReader
                 let pos = inner.seek(SeekFrom::End(-4))?;
                 let len = u64::from(inner.read_u32::<LittleEndian>()?);
 
-                // Read SizesInfo
+                // Read SizesInfo; `len` is untrusted and a larger value would
+                // underflow `pos - len`
+                if len > pos {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("Archive footer advertises {len} bytes, only {pos} available"),
+                    )
+                    .into());
+                }
                 inner.seek(SeekFrom::Start(pos - len))?;
+                // An empty `compressed_sizes` list breaks downstream
+                // computations (`len() - 1`, slice indexing): reject the footer
                 self.sizes_info = match bincode::options()
                     .with_limit(BINCODE_MAX_DESERIALIZE)
                     .with_fixint_encoding()
-                    .deserialize_from(inner.take(len))
+                    .deserialize_from::<_, SizesInfo>(inner.take(len))
                 {
-                    Ok(sinfo) => Some(sinfo),
+                    Ok(sinfo) if !sinfo.compressed_sizes.is_empty() => Some(sinfo),
                     _ => {
                         return Err(Error::DeserializationError);
                     }
@@ -416,6 +435,14 @@ impl<R: Read + Seek> Seek for CompressionLayerReader<'_, R> {
                         let rounded_pos = pos - inside_block;
 
                         // Move the underlayer at the start of the block
+                        if matches!(self.state, CompressionLayerReaderState::Empty) {
+                            // A previously failed seek drains the state; error
+                            // out consistently instead of panicking
+                            return Err(Error::WrongReaderState(
+                                "[Compression Layer] seek on a drained state".to_string(),
+                            )
+                            .into());
+                        }
                         let old_state =
                             std::mem::replace(&mut self.state, CompressionLayerReaderState::Empty);
                         let mut inner = old_state.into_inner();
@@ -819,11 +846,11 @@ impl<'a, R: 'a + Read> CompressionLayerFailSafeReader<'a, R> {
                 self.read_offset += args.input_offset;
 
                 // Reset others
-                self.brotli_state = Box::new(BrotliState::new(
+                *self.brotli_state = BrotliState::new(
                     StandardAlloc::default(),
                     StandardAlloc::default(),
                     StandardAlloc::default(),
-                ));
+                );
 
                 self.uncompressed_read = 0;
 
@@ -905,11 +932,11 @@ impl<'a, R: 'a + Read> CompressionLayerFailSafeReader<'a, R> {
                     self.cache.resize(1, 0);
                     self.cache_filled_len = 0;
                     self.read_offset = 0;
-                    self.brotli_state = Box::new(BrotliState::new(
+                    *self.brotli_state = BrotliState::new(
                         StandardAlloc::default(),
                         StandardAlloc::default(),
                         StandardAlloc::default(),
-                    ));
+                    );
                     let number_of_already_decompressed_bytes = self.uncompressed_read;
                     self.uncompressed_read = 0;
                     // rewind to brotli stream start

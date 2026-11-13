@@ -1,0 +1,21 @@
+[package]
+name = "globwalk"
+version = "0.9.1"
+description = "Glob-matched recursive file system walking."
+authors = ["Gilad Naaman <gilad@naaman.io>"]
+readme = "README.md"
+license = "MIT"
+repository = "https://github.com/gilnaa/globwalk"
+categories = ["filesystem"]
+keywords = ["regex", "glob", "pattern", "walk", "iterator"]
+edition = "2021"
+resolver = "2"
+
+[dependencies]
+walkdir = "2"
+ignore = "0.4.11"
+bitflags = "2"
+
+[dev-dependencies]
+tempfile = "3"
+docmatic = "0.1.2"

@@ -1,0 +1,14 @@
+# Static linking on Windows msvc targets (avoids requiring Visual Studio
+# runtime DLLs at link time for consumers), backported from the v2 branch.
+[target.'cfg(all(windows, target_env = "msvc"))']
+rustflags = [
+    "-C", "target-feature=+crt-static",
+]
+
+# Frozen v1 branch: dependencies are vendored so builds work offline,
+# without relying on crates.io availability (see vendor/).
+[source.crates-io]
+replace-with = "vendored-sources"
+
+[source.vendored-sources]
+directory = "vendor"
