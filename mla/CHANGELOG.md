@@ -24,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Fix #226: repair a compressed archive losing data on truncated compressed streams
+- Reject corrupted archives instead of panicking or aborting on integer underflow (reported by Matthieu Buffet): compression and archive footer lengths larger than the available bytes, and encrypted streams truncated inside the last authentication tag (read and seek paths)
+- Validate the compression footer SizesInfo before use: reject empty or short compressed block size lists, and cap the brotli input buffer to prevent a multi-GB allocation on a forged block size
 
 ## [1.4.0] - 2023-10-02
 
