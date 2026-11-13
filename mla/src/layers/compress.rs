@@ -329,9 +329,11 @@ impl<'a, R: 'a + InnerReaderTrait> LayerReader<'a, R> for CompressionLayerReader
                 self.sizes_info = match bincode::options()
                     .with_limit(BINCODE_MAX_DESERIALIZE)
                     .with_fixint_encoding()
-                    .deserialize_from(inner.take(len))
+                    .deserialize_from::<_, SizesInfo>(inner.take(len))
                 {
-                    Ok(sinfo) => Some(sinfo),
+                    // An empty `compressed_sizes` list breaks downstream
+                    // computations (`len() - 1`, slice indexing): reject the footer
+                    Ok(sinfo) if !sinfo.compressed_sizes.is_empty() => Some(sinfo),
                     _ => {
                         return Err(Error::DeserializationError);
                     }
