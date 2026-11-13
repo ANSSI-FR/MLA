@@ -507,9 +507,16 @@ impl ArchiveFooter {
 
     /// Parses and instantiates a footer from serialized data
     pub fn deserialize_from<R: Read + Seek>(mut src: R) -> Result<Self, Error> {
-        // Read the footer length
+        // `len` is untrusted; a larger value would underflow `pos - len`
         let pos = src.seek(SeekFrom::End(-4))?;
         let len = u64::from(src.read_u32::<LittleEndian>()?);
+        if len > pos {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Archive footer advertises {len} bytes, only {pos} available"),
+            )
+            .into());
+        }
 
         // Prepare for deserialization
         src.seek(SeekFrom::Start(pos - len))?;
@@ -2518,5 +2525,39 @@ pub(crate) mod tests {
         static_assertions::assert_impl_all!(File: Send);
         static_assertions::assert_impl_all!(ArchiveWriter<File>: Send);
         static_assertions::assert_impl_all!(ArchiveReader<File>: Send);
+    }
+
+    #[test]
+    fn compress_footer_len_overflow() {
+        // The footer advertises a `SizesInfo` length greater than the bytes
+        // actually available: parsing it must yield an error, not an integer
+        // underflow on `pos - len`
+        let file = Vec::new();
+        let mut config = ArchiveWriterConfig::new();
+        config.set_layers(Layers::COMPRESS);
+        let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
+        mla.add_file("test", 3, b"abc".as_slice()).unwrap();
+        mla.finalize().unwrap();
+        let mut buf = mla.into_raw();
+
+        // The footer length is the last 4 bytes of the file: set it to a value
+        // larger than the whole archive
+        let last = buf.len();
+        buf[last - 4..].copy_from_slice(&u32::MAX.to_le_bytes());
+
+        let mut config = ArchiveReaderConfig::new();
+        config.layers_enabled = Layers::COMPRESS;
+        // The footer is parsed eagerly: the rejection must happen here or at
+        // first use, but never panic
+        match ArchiveReader::from_config(Cursor::new(buf), config) {
+            Err(Error::IOError(e)) => {
+                assert_eq!(e.kind(), io::ErrorKind::InvalidData);
+            }
+            Err(_) => {}
+            Ok(mut mla_read) => match mla_read.get_file("test".to_string()) {
+                Ok(None) | Err(_) => {}
+                Ok(Some(_)) => panic!("corrupted footer should not yield a readable file"),
+            },
+        }
     }
 }
