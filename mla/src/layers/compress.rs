@@ -316,8 +316,18 @@ impl<'a, R: 'a + InnerReaderTrait> LayerReader<'a, R> for CompressionLayerReader
                 let pos = inner.seek(SeekFrom::End(-4))?;
                 let len = u64::from(inner.read_u32::<LittleEndian>()?);
 
-                // Read SizesInfo
+                // Read SizesInfo; `len` is untrusted and a larger value would
+                // underflow `pos - len`
+                if len > pos {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("Archive footer advertises {len} bytes, only {pos} available"),
+                    )
+                    .into());
+                }
                 inner.seek(SeekFrom::Start(pos - len))?;
+                // An empty `compressed_sizes` list breaks downstream
+                // computations (`len() - 1`, slice indexing): reject the footer
                 self.sizes_info = match bincode::options()
                     .with_limit(BINCODE_MAX_DESERIALIZE)
                     .with_fixint_encoding()
