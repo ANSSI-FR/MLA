@@ -435,6 +435,14 @@ impl<R: Read + Seek> Seek for CompressionLayerReader<'_, R> {
                         let rounded_pos = pos - inside_block;
 
                         // Move the underlayer at the start of the block
+                        if matches!(self.state, CompressionLayerReaderState::Empty) {
+                            // A previously failed seek drains the state; error
+                            // out consistently instead of panicking
+                            return Err(Error::WrongReaderState(
+                                "[Compression Layer] seek on a drained state".to_string(),
+                            )
+                            .into());
+                        }
                         let old_state =
                             std::mem::replace(&mut self.state, CompressionLayerReaderState::Empty);
                         let mut inner = old_state.into_inner();
