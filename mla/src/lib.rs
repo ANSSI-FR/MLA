@@ -2519,6 +2519,36 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn compressed_size_in_footer_does_not_oom() {
+        // A corrupted footer can declare a compressed block size up to
+        // u32::MAX; before the cap it was passed as the brotli input buffer
+        // size to Decompressor::new (multi-GB allocation, abort under a
+        // memory limit). The cap bounds the allocation; `.take()` keeps the
+        // real read limit.
+        let file = Vec::new();
+        let mut config = ArchiveWriterConfig::new();
+        config.set_layers(Layers::COMPRESS);
+        let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
+        mla.add_file("test", 3, b"abc".as_slice()).unwrap();
+        mla.finalize().unwrap();
+        let mut buf = mla.into_raw();
+
+        // Patch compressed_sizes[0] to u32::MAX. Footer layout for one block:
+        // [u64 count][u32 size_0][u32 last_block_size][u32 footer_len]
+        let n = buf.len();
+        buf[n - 12..n - 8].copy_from_slice(&u32::MAX.to_le_bytes());
+
+        let mut config = ArchiveReaderConfig::new();
+        config.layers_enabled = Layers::COMPRESS;
+        if let Ok(mut mla_read) = ArchiveReader::from_config(Cursor::new(buf), config)
+            && let Ok(Some(mut f)) = mla_read.get_file("test".to_string())
+        {
+            let mut out = Vec::new();
+            let _ = f.data.read_to_end(&mut out);
+        }
+    }
+
+    #[test]
     fn compress_footer_sizesinfo_empty() {
         // A crafted footer can deserialize a `SizesInfo` with an empty
         // `compressed_sizes` vec, which downstream code cannot handle
