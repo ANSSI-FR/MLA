@@ -28,6 +28,11 @@ use super::traits::InnerReaderTrait;
 /// to be a good choice
 const UNCOMPRESSED_DATA_SIZE: u32 = 4 * 1024 * 1024;
 
+/// Input buffer cap for the brotli decompressor, bounded by a constant so a
+/// corrupted footer claiming `u32::MAX` compressed bytes cannot drive the
+/// allocation (the `.take()` call still enforces the real per-block limit)
+const MAX_DECOMPRESSOR_INPUT_BUF: usize = UNCOMPRESSED_DATA_SIZE as usize;
+
 /// A bigger value means a better compression ratio, but a slower compression
 ///
 /// According to benchmarking on compression of representative data, level 5
@@ -114,7 +119,11 @@ impl SizesInfo {
         let block_num = uncompressed_pos / u64::from(UNCOMPRESSED_DATA_SIZE);
         let index = usize::try_from(block_num)
             .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Integer conversion failed"))?;
-        Ok(self.compressed_sizes[index])
+        // A corrupted footer may declare fewer blocks than the position being read
+        Ok(*self
+            .compressed_sizes
+            .get(index)
+            .ok_or(Error::DeserializationError)?)
     }
 
     /// Maximum uncompressed available position
@@ -212,7 +221,7 @@ impl<'a, R: 'a + Read> CompressionLayerReader<'a, R> {
                 Ok(brotli::Decompressor::new(
                     // Make the Decompressor work only on the compressed block's bytes, no more
                     inner.take(compressed_block_size as u64),
-                    compressed_block_size,
+                    std::cmp::min(compressed_block_size, MAX_DECOMPRESSOR_INPUT_BUF),
                 ))
             }
             None => Err(Error::MissingMetadata),
