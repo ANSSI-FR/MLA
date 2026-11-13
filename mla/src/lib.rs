@@ -2519,6 +2519,37 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn compress_footer_sizesinfo_empty() {
+        // A crafted footer can deserialize a `SizesInfo` with an empty
+        // `compressed_sizes` vec, which downstream code cannot handle
+        let file = Vec::new();
+        let mut config = ArchiveWriterConfig::new();
+        config.set_layers(Layers::COMPRESS);
+        let mut mla = ArchiveWriter::from_config(file, config).expect("Writer init failed");
+        mla.add_file("test", 3, b"abc".as_slice()).unwrap();
+        mla.finalize().unwrap();
+        let mut buf = mla.into_raw();
+
+        // Overwrite the footer with `SizesInfo { compressed_sizes: [],
+        // last_block_size: 1 }` (bincode fixint: u64 count + u32) and its
+        // 12-byte length
+        let last = buf.len();
+        buf[last - 16..last - 8].copy_from_slice(&[0u8; 8]);
+        buf[last - 8..last - 4].copy_from_slice(&1u32.to_le_bytes());
+        buf[last - 4..].copy_from_slice(&12u32.to_le_bytes());
+
+        let mut config = ArchiveReaderConfig::new();
+        config.layers_enabled = Layers::COMPRESS;
+        match ArchiveReader::from_config(Cursor::new(buf), config) {
+            Err(_) => {}
+            Ok(mut mla_read) => match mla_read.get_file("test".to_string()) {
+                Ok(None) | Err(_) => {}
+                Ok(Some(_)) => panic!("empty SizesInfo should not yield a readable file"),
+            },
+        }
+    }
+
+    #[test]
     #[cfg(feature = "send")]
     fn test_send() {
         static_assertions::assert_cfg!(feature = "send");
