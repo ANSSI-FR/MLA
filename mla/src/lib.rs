@@ -2986,6 +2986,127 @@ pub(crate) mod tests {
         );
     }
 
+    const ED25519_SIGNATURE_END: usize = 2 + ed25519_dalek::SIGNATURE_LENGTH;
+    const SIGNATURE_DATA_LEN: usize =
+        ED25519_SIGNATURE_END + 2 + crypto::hybrid_signature::ML_DSA87_SIGNATURE_SIZE;
+    const ARCHIVE_FOOTER_LEN: usize = EMPTY_TAIL_OPTS_SERIALIZATION.len() + END_MLA_MAGIC.len();
+
+    fn archive_footer() -> Vec<u8> {
+        [EMPTY_TAIL_OPTS_SERIALIZATION.as_slice(), END_MLA_MAGIC].concat()
+    }
+
+    fn signed_archive_parts(seed: u8) -> (Vec<u8>, Vec<u8>, MLAPublicKey) {
+        let (privkey, pubkey) = generate_mla_keypair_from_seed([seed; 32]);
+        let config = ArchiveWriterConfig::without_encryption_with_signature(&[privkey
+            .get_signing_private_key()
+            .clone()])
+        .unwrap();
+        let mut writer = ArchiveWriter::from_config(Vec::new(), config).unwrap();
+        let data = vec![10, 20, 30, 40];
+        writer
+            .add_entry(
+                EntryName::from_path("entry1").unwrap(),
+                data.len() as u64,
+                data.as_slice(),
+            )
+            .unwrap();
+        let archive = writer.finalize().unwrap();
+
+        let footer_start = archive.len().checked_sub(ARCHIVE_FOOTER_LEN).unwrap();
+        let (body, footer) = archive.split_at(footer_start);
+        assert_eq!(footer, archive_footer().as_slice());
+        let (body, mut tail) = body.split_at(body.len().checked_sub(8).unwrap());
+        let tail_len = usize::try_from(u64::deserialize(&mut tail).unwrap()).unwrap();
+        let (signed_part, mut signature_vec) =
+            body.split_at(body.len().checked_sub(tail_len).unwrap());
+        let signature_data = Vec::<u8>::deserialize(&mut signature_vec).unwrap();
+        assert!(signature_vec.is_empty());
+        assert_eq!(signature_data.len(), SIGNATURE_DATA_LEN);
+        assert_eq!(
+            archive_with_signature_data(signed_part, &signature_data),
+            archive
+        );
+        (signed_part.to_vec(), signature_data, pubkey)
+    }
+
+    fn archive_with_signature_data(signed_part: &[u8], signature_data: &[u8]) -> Vec<u8> {
+        let mut signature_vec = Vec::new();
+        signature_data
+            .to_vec()
+            .serialize(&mut signature_vec)
+            .unwrap();
+        let mut archive = signed_part.to_vec();
+        archive.extend_from_slice(&signature_vec);
+        (signature_vec.len() as u64)
+            .serialize(&mut archive)
+            .unwrap();
+        archive.extend_from_slice(&archive_footer());
+        archive
+    }
+
+    fn read_signed(archive: Vec<u8>, pubkeys: &[&MLAPublicKey]) -> Result<(), Error> {
+        let keys: Vec<_> = pubkeys
+            .iter()
+            .map(|key| key.get_signature_verification_public_key().clone())
+            .collect();
+        let config = ArchiveReaderConfig::with_signature_verification(&keys).without_encryption();
+        ArchiveReader::from_config(Cursor::new(archive), config).map(|_| ())
+    }
+
+    #[test]
+    fn signature_verification_accepts_rebuilt_signature_block() {
+        let (signed_part, signature_data, pubkey) = signed_archive_parts(9);
+        let archive = archive_with_signature_data(&signed_part, &signature_data);
+        assert!(read_signed(archive, &[&pubkey]).is_ok());
+    }
+
+    #[test]
+    fn signature_verification_requires_both_signatures() {
+        let (signed_part, signature_data, pubkey) = signed_archive_parts(9);
+        let ed25519_only = &signature_data[..ED25519_SIGNATURE_END];
+        let mldsa87_only = &signature_data[ED25519_SIGNATURE_END..];
+        for partial in [ed25519_only, mldsa87_only, &[]] {
+            let archive = archive_with_signature_data(&signed_part, partial);
+            assert!(matches!(
+                read_signed(archive, &[&pubkey]),
+                Err(Error::NoValidSignatureFound)
+            ));
+        }
+    }
+
+    #[test]
+    fn signature_verification_rejects_signatures_from_two_keys() {
+        let (signed_part, signature_data_a, pubkey_a) = signed_archive_parts(9);
+        let (signed_part_b, signature_data_b, pubkey_b) = signed_archive_parts(10);
+        assert_eq!(signed_part, signed_part_b);
+        let mixed = [
+            &signature_data_a[..ED25519_SIGNATURE_END],
+            &signature_data_b[ED25519_SIGNATURE_END..],
+        ]
+        .concat();
+        for pubkeys in [&[&pubkey_a][..], &[&pubkey_b], &[&pubkey_a, &pubkey_b]] {
+            let archive = archive_with_signature_data(&signed_part, &mixed);
+            assert!(matches!(
+                read_signed(archive, pubkeys),
+                Err(Error::NoValidSignatureFound)
+            ));
+        }
+    }
+
+    #[test]
+    fn signature_verification_fails_on_flipped_signature_byte() {
+        let (signed_part, signature_data, pubkey) = signed_archive_parts(9);
+        for position in [12, ED25519_SIGNATURE_END + 12] {
+            let mut corrupted = signature_data.clone();
+            corrupted[position] ^= 0x01;
+            let archive = archive_with_signature_data(&signed_part, &corrupted);
+            assert!(matches!(
+                read_signed(archive, &[&pubkey]),
+                Err(Error::NoValidSignatureFound)
+            ));
+        }
+    }
+
     #[test]
     fn test_footer_deserialization_none() {
         let data = vec![0u8]; // 0x00 tag = no index
