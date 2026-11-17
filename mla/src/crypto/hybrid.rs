@@ -751,4 +751,49 @@ mod tests {
         assert_eq!(privkey, expected_privkey);
         assert_eq!(pubkey, expected_pubkey);
     }
+
+    /// NIST ACVP ML-KEM-keyGen-FIPS203, ML-KEM-1024 tcId 51 to 53, as SHA-256 of ek and dk
+    #[test]
+    #[allow(deprecated)]
+    fn test_seed_matches_fips203_keygen_vectors() {
+        use hex_literal::hex;
+        use ml_kem::{ExpandedKeyEncoding as _, KeyExport as _};
+        use sha2::{Digest as _, Sha256};
+
+        let vectors = [
+            (
+                hex!("f3a706faf090c03db506863ab0b20bd8a1627956318e88c67eb875e8e7266009"),
+                hex!("35d2bc43dd1cc879f765bf2a0c5e297889dde910e57e2bb0eae417b90ab7a275"),
+                hex!("b78619e4fceeeb86dee3fedb945eca6da61dae312771ef8fa871951d391bd7b6"),
+                hex!("925ed6f1cf0379ede29d8209432d6e08c73ed0423883febf85416343f4fa1f86"),
+            ),
+            (
+                hex!("52f2df12173088140ca73333d1db4341949be452049028ef0dd904bc7e0ddef7"),
+                hex!("cc96de9e1f0506bf490a154a6db46bd2bd1413c3d1dc163190ff171ef0d11e22"),
+                hex!("a5de1425ea855091c848e1ae423b8d51e5514db52b5df12142e3d4836f2cccaa"),
+                hex!("f04f9c44dace43240b6ebb8e7bb2d59edb3c7c56e013a04481c901cd550d457c"),
+            ),
+            (
+                hex!("f2a1e83cad0055a85eb52f1bc1b9ee24f7f58d9c2fd099b5d38c9f75ad657578"),
+                hex!("26d7035cd963c74ab142936a91eabd3074c583654945f9f5fdc29f754b06ebf2"),
+                hex!("0162a6f9d7b7357cc6a17ed00d0e6ec48784035ba5af5ce514671c352d1bffa9"),
+                hex!("2c57f7bf79e50a23da33345f3979f2576f5b74698e739bea97de677e53dfdf94"),
+            ),
+        ];
+
+        for (d, z, ek_sha256, dk_sha256) in vectors {
+            let mut dz = [0u8; 64];
+            dz[..32].copy_from_slice(&d);
+            dz[32..].copy_from_slice(&z);
+            let seed = MLKEMSeed::from_d_z_64(dz);
+            assert!(seed == MLKEMSeed::from_d_z_32(d, z));
+
+            let ek = seed.to_pubkey().to_bytes();
+            let dk = seed.to_privkey().to_expanded_bytes();
+            assert_eq!(ek.len(), 1568);
+            assert_eq!(dk.len(), 3168);
+            assert_eq!(Sha256::digest(ek.as_slice()).as_slice(), ek_sha256);
+            assert_eq!(Sha256::digest(dk.as_slice()).as_slice(), dk_sha256);
+        }
+    }
 }
