@@ -1,0 +1,6 @@
+# Static linking on Windows msvc targets (avoids requiring Visual Studio
+# runtime DLLs at link time for consumers), backported from the v2 branch.
+[target.'cfg(all(windows, target_env = "msvc"))']
+rustflags = [
+    "-C", "target-feature=+crt-static",
+]

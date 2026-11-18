@@ -400,7 +400,7 @@ fn create_file<P1: AsRef<Path>>(
     let Some(containing_directory) = extracted_path.parent() else {
         eprintln!(
             "[!] Skipping file \"{}\" because it does not have a parent (from {})",
-            &fname,
+            fname,
             extracted_path.display()
         );
         return Ok(None);
@@ -558,7 +558,7 @@ fn list(matches: &ArgMatches) -> Result<(), MlarError> {
                 println!("{filename} - {size}");
             } else if matches.get_count("verbose") >= 2 {
                 let hash = mla.get_hash(&filename)?.expect("Unable to get the hash");
-                println!("{} - {} ({})", filename, size, hex::encode(hash),);
+                println!("{} - {} ({})", filename, size, hex::encode(hash));
             }
         }
     }
@@ -675,7 +675,7 @@ fn cat(matches: &ArgMatches) -> Result<(), MlarError> {
                 if !pat.matches(fname) {
                     continue;
                 }
-                match mla.get_file(fname.to_string()) {
+                match mla.get_file(fname.clone()) {
                     Err(err) => {
                         eprintln!(" [!] Error while looking up file \"{fname}\" ({err:?})");
                     }
@@ -696,7 +696,7 @@ fn cat(matches: &ArgMatches) -> Result<(), MlarError> {
     } else {
         // Retrieve all the files that are specified
         for fname in files_values {
-            match mla.get_file(fname.to_string()) {
+            match mla.get_file(fname.clone()) {
                 Err(err) => {
                     eprintln!(" [!] Error while looking up file \"{fname}\" ({err:?})");
                 }
@@ -1244,7 +1244,7 @@ fn main() {
     let res = matches.subcommand().map_or_else(
         || {
             eprintln!("Error: at least one command required.");
-            eprintln!("{}", &help);
+            eprintln!("{help}");
             std::process::exit(1);
         },
         |(cmd, matches)| match cmd {
@@ -1260,7 +1260,7 @@ fn main() {
             "info" => info(matches),
             _ => {
                 eprintln!("Error: unknown command.");
-                eprintln!("{}", &help);
+                eprintln!("{help}");
                 std::process::exit(1);
             }
         },

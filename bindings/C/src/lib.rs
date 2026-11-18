@@ -34,9 +34,9 @@ pub enum MLAStatus {
     AssertionError = 0x0009_0000,
     WrongReaderState = 0x000A_0000,
     WrongWriterState = 0x000B_0000,
-    // Keep 0x0C0000, 0x0D0000 slots, for backward compatibility
+    // Keep 0x0C0000 slot, for backward compatibility
     //  InvalidCipherInit = 0x0C0000,
-    //  RandError = 0x0D0000,
+    RandError = 0x000D_0000,
     PrivateKeyNeeded = 0x000E_0000,
     DeserializationError = 0x000F_0000,
     SerializationError = 0x0010_0000,
@@ -196,7 +196,7 @@ struct CallbackOutput {
 
 impl Write for CallbackOutput {
     fn write(&mut self, buf: &[u8]) -> Result<usize, std::io::Error> {
-        let len = u32::try_from(buf.len()).map_or(u32::MAX - 1, |n| n); // only write the first 4GB, the callback will get called multiple times
+        let len = u32::try_from(buf.len()).unwrap_or(u32::MAX - 1); // only write the first 4GB, the callback will get called multiple times
         let mut len_written: u32 = 0;
         match (self.write_callback)(buf.as_ptr(), len, self.context, &raw mut len_written) {
             0 => Ok(len_written as usize),
@@ -529,7 +529,7 @@ struct CallbackInputRead {
 
 impl Read for CallbackInputRead {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, std::io::Error> {
-        let len = u32::try_from(buf.len()).map_or(u32::MAX - 1, |n| n); // only read the first 4GB, the callback will get called multiple times
+        let len = u32::try_from(buf.len()).unwrap_or(u32::MAX - 1); // only read the first 4GB, the callback will get called multiple times
         let mut len_read: u32 = 0;
         match (self.read_callback)(buf.as_mut_ptr(), len, self.context, &raw mut len_read) {
             0 => Ok(len_read as usize),

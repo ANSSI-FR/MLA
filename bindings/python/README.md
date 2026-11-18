@@ -8,10 +8,14 @@ The last version of the wheel is available at [pypi.org/mla-archive](https://pyp
 
 One can also compile them using the Rust toolchain:
 
+> Frozen v1 branch: these bindings are not maintained here and cannot be
+> built (the vendored dependencies do not include `pyo3`). Use the PyPI
+> wheels or the main (v2) branch.
+
 ```sh
 # Install the appropriate target toolchain
 # For instance, with rustup:
-rustup add target ...
+rustup target add ...
 # Compile the Debug version
 cargo build --target ...
 # Compile the Release version
@@ -52,5 +56,4 @@ Both writer and reader API are available.
 
 The bindings are [tested](tests). These tests might also provides some example of use.
 
-They are launched by the CI.
-One can locally launch them using `pytest`.
+They can be launched locally with `pytest`.
