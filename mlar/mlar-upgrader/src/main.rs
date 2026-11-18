@@ -1,7 +1,7 @@
 use std::{
     error, fmt,
     fs::{self, File},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
@@ -215,7 +215,51 @@ fn reader_from_matches(
     })
 }
 
+/// Returns whether two paths refer to the same underlying file; writing
+/// the output would then destroy the input. The comparison is textual,
+/// then on canonical paths, with a dev/ino identity check on Unix that
+/// also covers hardlinks (Windows has no stable file-identity API in std).
+fn paths_refer_to_same_file(input: &Path, output: &Path) -> bool {
+    if input == output {
+        return true;
+    }
+    #[cfg(unix)]
+    let same_identity = match (fs::metadata(input), fs::metadata(output)) {
+        (Ok(input_meta), Ok(output_meta)) => {
+            use std::os::unix::fs::MetadataExt;
+            (input_meta.dev(), input_meta.ino()) == (output_meta.dev(), output_meta.ino())
+        }
+        _ => false,
+    };
+    #[cfg(windows)]
+    let same_identity = false;
+    match (input.canonicalize(), output.canonicalize()) {
+        (Ok(input), Ok(output)) => input == output || same_identity,
+        _ => same_identity,
+    }
+}
+
 fn upgrade(matches: &ArgMatches) -> Result<(), MlarError> {
+    let in_path = matches.get_one::<PathBuf>("input").ok_or_else(|| {
+        MlarError::IO(io::Error::other(
+            "[ERROR] Missing required input file argument",
+        ))
+    })?;
+    let out_path = matches.get_one::<PathBuf>("output").ok_or_else(|| {
+        MlarError::IO(io::Error::other(
+            "[ERROR] Missing required output file argument",
+        ))
+    })?;
+    if paths_refer_to_same_file(in_path, out_path) {
+        eprintln!(
+            "[ERROR] Input and output refer to the same file (\"{}\"); the upgrade would destroy the input archive. Use a different --output path.",
+            in_path.display()
+        );
+        return Err(MlarError::IO(io::Error::other(
+            "Input and output refer to the same file",
+        )));
+    }
+
     let mut mla_in = reader_from_matches(matches)?;
     let mut mla_out = writer_from_matches(matches)?;
 
@@ -325,21 +369,18 @@ pub(crate) mod tests {
                 .expect("[ERROR] Failed to copy test file");
         }
 
-        // Change current dir to the temp test directory
-        env::set_current_dir(&base_temp).expect("[ERROR] Failed to set current directory");
-
-        // Helper function for running upgrade with arguments
+        // Absolute paths: tests run in parallel and must not mutate the current directory.
         let run_upgrade = |input: &str, output: &str, private_key: &str, public_key: &str| {
             let matches = app().get_matches_from([
                 "mlar-upgrader",
                 "-k",
-                private_key,
+                base_temp.join(private_key).to_str().unwrap(),
                 "-i",
-                input,
+                base_temp.join(input).to_str().unwrap(),
                 "-o",
-                output,
+                base_temp.join(output).to_str().unwrap(),
                 "-p",
-                public_key,
+                base_temp.join(public_key).to_str().unwrap(),
             ]);
             let _ = upgrade(&matches);
         };
@@ -367,9 +408,9 @@ pub(crate) mod tests {
         let mut cmd = Command::cargo_bin("mlar").expect("[ERROR] Failed to find mlar binary");
         cmd.arg("list")
             .arg("-k")
-            .arg("test_mlakey_archive_v2_receiver.mlapriv")
+            .arg(base_temp.join("test_mlakey_archive_v2_receiver.mlapriv"))
             .arg("-i")
-            .arg("archive_v2_windows.mla")
+            .arg(base_temp.join("archive_v2_windows.mla"))
             .arg("--skip-signature-verification");
 
         let output = cmd.assert().success().get_output().stdout.clone();
@@ -388,5 +429,27 @@ pub(crate) mod tests {
         }
         fs::remove_file(base_temp.join("archive_v2_v1.mla")).unwrap();
         fs::remove_file(base_temp.join("archive_v2_windows.mla")).unwrap();
+    }
+
+    #[test]
+    fn upgrade_refuses_aliased_paths_and_keeps_input_intact() {
+        let archive = env::temp_dir().join("mlar_upgrader_alias_refusal.mla");
+        fs::copy("test-data/archive_v1.mla", &archive).unwrap();
+        let before = fs::read(&archive).unwrap();
+
+        let matches = app().get_matches_from([
+            "mlar-upgrader",
+            "-k",
+            "test-data/test_x25519_archive_v1.pem",
+            "-i",
+            archive.to_str().unwrap(),
+            "-o",
+            archive.to_str().unwrap(),
+            "-p",
+            "../../samples/test_mlakey_archive_v2_receiver.mlapub",
+        ]);
+        assert!(upgrade(&matches).is_err());
+        assert_eq!(fs::read(&archive).unwrap(), before);
+        fs::remove_file(&archive).unwrap();
     }
 }
