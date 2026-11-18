@@ -153,7 +153,7 @@ jobs:
               --bundle attestation.json \
               --type https://slsa.dev/provenance/v1 \
               --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-              --certificate-identity https://github.com/ANSSI-FR/MLA/.github/workflows/mlar_release.yml@refs/tags/mlar-${{ steps.get_version.outputs.VERSION }} \
+              --certificate-identity https://github.com/ANSSI-FR/MLA/.github/workflows/mlar_release.yml@${{ github.ref }} \
               <asset-path>
             ```
 
@@ -161,7 +161,7 @@ jobs:
             
             Changelog
             
-            https://github.com/ANSSI-FR/MLA/blob/mlar-${{ steps.get_version.outputs.VERSION }}/mlar/CHANGELOG.md
+            https://github.com/ANSSI-FR/MLA/blob/${{ github.ref_name }}/mlar/CHANGELOG.md
       - name: Download Linux artifact
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
