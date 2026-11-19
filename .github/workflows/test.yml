@@ -18,63 +18,54 @@ jobs:
         include:
           - build: linux
             os: ubuntu-latest
+            container: rust@sha256:a8a5f0a1e5fe7dfe1d352591e4a1c7dd2c08fd70475cae872cf3458ba0df0546 # v1.98.1 : pin to known-good previous stable release for increased stability and security
           - build: macos
             os: macos-latest
+            container: null
           - build: windows
             os: windows-latest
+            container: null
             extension: .exe
 
     runs-on: ${{matrix.os}}
+    container: ${{matrix.container}}
 
     steps:
-    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-    - uses: actions-rs/toolchain@b2417cde72dcf67f306c0ae8e0828a81bf0b189f # v1.0.6
-      with:
-        toolchain: stable
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
     - name: Build
       env:
         RUSTFLAGS: -D warnings
-      uses: actions-rs/cargo@ae10961054e4aa8b4aa7dffede299aaf087aa33b # v1.0.1
-      with:
-        command: build
-        args: --release --all --exclude mla-fuzz-afl --verbose
+      run: cargo build --release --all --exclude mla-fuzz-afl --verbose
     - name: Run tests
       run: cargo test --all --exclude mla-fuzz-afl --release --verbose
     - name: Upload resulting 'mlar'
-      uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5.0
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:
         name: ${{ matrix.build }}
         path: ./target/release/mlar${{ matrix.extension }}
 
   long-tests:
     runs-on: ubuntu-latest
+    container: rust@sha256:a8a5f0a1e5fe7dfe1d352591e4a1c7dd2c08fd70475cae872cf3458ba0df0546 # v1.98.1 : pin to known-good previous stable release for increased stability and security
 
     steps:
-    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-    - uses: actions-rs/toolchain@b2417cde72dcf67f306c0ae8e0828a81bf0b189f # v1.0.6
-      with:
-        toolchain: stable
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
     - name: Run long tests
       run: cd mla && cargo test --release -- --ignored
 
   all-features:
     runs-on: ubuntu-latest
+    container: rust@sha256:a8a5f0a1e5fe7dfe1d352591e4a1c7dd2c08fd70475cae872cf3458ba0df0546 # v1.98.1 : pin to known-good previous stable release for increased stability and security
 
     steps:
-    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-    - uses: actions-rs/toolchain@b2417cde72dcf67f306c0ae8e0828a81bf0b189f # v1.0.6
-      with:
-        toolchain: stable
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
     - name: Run long tests
       run: cargo test --all-features --all --exclude mla-fuzz-afl --exclude mla-bindings-c --release
 
   test-bindings-c-cpp-linux:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-    - uses: actions-rs/toolchain@b2417cde72dcf67f306c0ae8e0828a81bf0b189f # v1.0.6
-      with:
-        toolchain: stable
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
     - name: Run C bindings tests on Linux
       working-directory: bindings/C/tests/linux-gcc-g++/
       run: make CC=gcc
@@ -102,13 +93,8 @@ jobs:
             msvc_platform: x64
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-    - uses: actions-rs/toolchain@b2417cde72dcf67f306c0ae8e0828a81bf0b189f # v1.0.6
-      with:
-        toolchain: stable
-        default: true
-        target: ${{ matrix.target }}
-    - uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce # v2.0.0
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+    - uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3.0.0
     - name: Compile C/CPP bindings test program for Windows
       working-directory: bindings/C/tests/windows-msvc/
       run: msbuild mla-bindings-test.sln /p:Platform=${{ matrix.msvc_platform }} /p:Configuration=${{ matrix.version }}
@@ -118,20 +104,14 @@ jobs:
 
   afl-build:
     runs-on: ubuntu-latest
+    container: rust@sha256:a8a5f0a1e5fe7dfe1d352591e4a1c7dd2c08fd70475cae872cf3458ba0df0546 # v1.98.1 : pin to known-good previous stable release for increased stability and security
 
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: actions-rs/toolchain@b2417cde72dcf67f306c0ae8e0828a81bf0b189f # v1.0.6
-        with:
-          toolchain: stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install dependencies
-        run: sudo apt-get install llvm
+        run: apt-get update && apt-get install -y llvm
       - name: Install cargo-afl binary crate
-        uses: actions-rs/install@9da1d2adcfe5e7c16992e8242ca33a56b6d9b101 # v0.1.2
-        with:
-          crate: cargo-afl
-          version: latest
-          use-tool-cache: true
+        run: cargo install cargo-afl --locked
       - name: Test AFL build
         env:
           RUSTFLAGS: -D warnings
@@ -139,59 +119,61 @@ jobs:
 
   fmt:
     runs-on: ubuntu-latest
+    container: rust@sha256:a8a5f0a1e5fe7dfe1d352591e4a1c7dd2c08fd70475cae872cf3458ba0df0546 # v1.98.1 : pin to known-good previous stable release for increased stability and security
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: actions-rs/toolchain@b2417cde72dcf67f306c0ae8e0828a81bf0b189f # v1.0.6
-        with:
-          toolchain: stable
-          components: rustfmt
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install rustfmt
+        run: rustup component add rustfmt
       - name: Check format
         run: cargo fmt --all -- --check
 
   audit:
     permissions:
       contents: read
+      checks: write
     runs-on: ubuntu-latest
+    container: rust@sha256:a8a5f0a1e5fe7dfe1d352591e4a1c7dd2c08fd70475cae872cf3458ba0df0546 # v1.98.1 : pin to known-good previous stable release for increased stability and security
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Security audit
-        uses: actions-rs/audit-check@35b7b53b1e25b55642157ac01b4adceb5b9ebef3 # v1.2.0
+        uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998 # v2.0.0
         with:
-         token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
   clippy:
     runs-on: ubuntu-latest
+    container: rust@sha256:a8a5f0a1e5fe7dfe1d352591e4a1c7dd2c08fd70475cae872cf3458ba0df0546 # v1.98.1 : pin to known-good previous stable release for increased stability and security
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: actions-rs/toolchain@b2417cde72dcf67f306c0ae8e0828a81bf0b189f # v1.0.6
-        with:
-          toolchain: stable
-          components: clippy
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install dependencies
-        run: sudo apt-get install llvm
+        run: apt-get update && apt-get install -y llvm
       - name: Install cargo-afl binary crate
-        uses: actions-rs/install@9da1d2adcfe5e7c16992e8242ca33a56b6d9b101 # v0.1.2
-        with:
-          crate: cargo-afl
-          version: latest
-          use-tool-cache: true
-      - uses: actions-rs/cargo@ae10961054e4aa8b4aa7dffede299aaf087aa33b # v1.0.1
-        with:
-          command: clippy
-          args: --all-targets -- -D warnings
+        run: cargo install cargo-afl --locked
+      - name: Install clippy
+        run: rustup component add clippy
+      - name: Run clippy
+        run: cargo clippy --all-targets -- -D warnings
 
   publish-dry-run:
       runs-on: ubuntu-latest
+      container: rust@sha256:a8a5f0a1e5fe7dfe1d352591e4a1c7dd2c08fd70475cae872cf3458ba0df0546 # v1.98.1 : pin to known-good previous stable release for increased stability and security
 
       steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: actions-rs/toolchain@b2417cde72dcf67f306c0ae8e0828a81bf0b189f # v1.0.6
-        with:
-          toolchain: stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Dry-run publish curve25519-parser
-        run: cd curve25519-parser && cargo publish --dry-run
+        run: cd curve25519-parser && cargo publish --dry-run --locked --registry crates-io
       - name: Dry-run publish mla
-        run: cd mla && cargo publish --dry-run
+        run: cd mla && cargo publish --dry-run --locked --registry crates-io
+      # curve25519-parser is a path dependency: its version check fails
+      # under the root vendored source replacement, disable it here.
+      # The tarball compiles against the mla version published on
+      # crates.io: skip compilation.
       - name: Dry-run publish mlar
-        run: cd mlar && cargo publish --dry-run
+        run: |
+          mv .cargo/config.toml .cargo/config.toml.vendored
+          cd mlar
+          rc=0
+          cargo publish --dry-run --locked --registry crates-io --no-verify || rc=$?
+          mv ../.cargo/config.toml.vendored ../.cargo/config.toml
+          exit $rc
       

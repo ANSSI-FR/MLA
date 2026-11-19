@@ -353,6 +353,17 @@ impl<T: ?Sized + Read> EncryptionLayerInternal<T> {
         if data_and_tag_read == 0 {
             return Ok(None);
         }
+        // The last chunk always carries `TAG_LENGTH` tag bytes; fewer means a
+        // truncated archive and `data_and_tag_read - TAG_LENGTH` would underflow
+        if data_and_tag_read < TAG_LENGTH {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "{data_and_tag_read} bytes read, expected at least {TAG_LENGTH} bytes (authentication tag)"
+                ),
+            )
+            .into());
+        }
 
         // If it is the last block, we may have read less than `CHUNK_SIZE +
         // TAG_LENGTH` bytes. But the `TAG_LENGTH` last bytes are always the tag
@@ -525,7 +536,22 @@ impl<R: Read + Seek + ?Sized> Seek for EncryptionLayerInternal<R> {
                 let end_inner_pos = self.inner.seek(SeekFrom::End(0))?;
                 let cur_chunk = end_inner_pos / CHUNK_TAG_SIZE;
                 let cur_chunk_pos = end_inner_pos % CHUNK_TAG_SIZE;
-                let end_pos = cur_chunk * CHUNK_SIZE + cur_chunk_pos - TAG_LENGTH as u64;
+                // cur_chunk_pos == 0: the stream ends exactly after a full chunk
+                // (the writer emits the finalize tag at the boundary).
+                // cur_chunk_pos < TAG_LENGTH: truncated archive, subtracting
+                // TAG_LENGTH would underflow
+                let end_pos = if cur_chunk_pos == 0 {
+                    cur_chunk * CHUNK_SIZE
+                } else if cur_chunk_pos < TAG_LENGTH as u64 {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!(
+                            "Truncated archive: {cur_chunk_pos} bytes at stream end, expected at least {TAG_LENGTH}"
+                        ),
+                    ));
+                } else {
+                    cur_chunk * CHUNK_SIZE + cur_chunk_pos - TAG_LENGTH as u64
+                };
                 let pos_adjusted = i64::try_from(end_pos)
                     .map_err(|_| {
                         io::Error::new(io::ErrorKind::InvalidInput, "Integer conversion failed")
@@ -914,5 +940,97 @@ mod tests {
             output.as_slice(),
             &data[usize::try_from(CHUNK_SIZE).unwrap()..]
         );
+    }
+
+    #[test]
+    fn encrypt_truncated_last_chunk_tag_read() {
+        // Truncating the stream inside the last authentication tag (keeping
+        // fewer than `TAG_LENGTH` bytes) must yield an error, not an integer
+        // underflow on `data_and_tag_read - TAG_LENGTH`
+        let out = encrypt_write(Vec::new());
+        // `out` is a single chunk: data (FAKE_FILE.len()) + TAG_LENGTH.
+        // Keep only 5 bytes: less than the tag length
+        let stop = 5;
+        assert!(stop < TAG_LENGTH);
+
+        let config = EncryptionReaderConfig {
+            private_keys: Vec::new(),
+            encrypt_parameters: Some((KEY, NONCE)),
+            failsafe_mode: FailSafeReaderDecryptionMode::OnlyAuthenticatedData,
+        };
+        let mut encrypt_r = EncryptionLayerReader::new(
+            Box::new(RawLayerReader::new(Cursor::new(&out[..stop]))),
+            &config,
+        )
+        .unwrap();
+        // Initialization loads the (truncated) last chunk in cache: must fail,
+        // not panic
+        assert!(encrypt_r.initialize().is_err());
+    }
+
+    #[test]
+    fn encrypt_truncated_last_chunk_tag_seek_end() {
+        // Same truncation, but reached through a `SeekFrom::End`: the
+        // `cur_chunk_pos - TAG_LENGTH` conversion must not underflow
+        let out = encrypt_write(Vec::new());
+        let stop = 5;
+        assert!(stop < TAG_LENGTH);
+
+        let config = EncryptionReaderConfig {
+            private_keys: Vec::new(),
+            encrypt_parameters: Some((KEY, NONCE)),
+            failsafe_mode: FailSafeReaderDecryptionMode::OnlyAuthenticatedData,
+        };
+        let mut encrypt_r = EncryptionLayerReader::new(
+            Box::new(RawLayerReader::new(Cursor::new(&out[..stop]))),
+            &config,
+        )
+        .unwrap();
+        // `cur_chunk_pos` = 5 < TAG_LENGTH: must fail, not panic
+        assert!(encrypt_r.seek(SeekFrom::End(-1)).is_err());
+    }
+
+    #[test]
+    fn encrypt_full_chunk_seek_end() {
+        // A stream whose data length is an exact multiple of CHUNK_SIZE ends
+        // with the finalize tag at the chunk boundary: `SeekFrom::End` must keep
+        // working there (the unfixed code silently returned a position off by
+        // TAG_LENGTH)
+        let mut encrypt_w = Box::new(
+            EncryptionLayerWriter::new(
+                Box::new(RawLayerWriter::new(Vec::new())),
+                &EncryptionConfig {
+                    ecc_keys: Vec::new(),
+                    key: KEY,
+                    nonce: NONCE,
+                },
+            )
+            .unwrap(),
+        );
+        encrypt_w
+            .write_all(&vec![0u8; usize::try_from(CHUNK_SIZE).unwrap()])
+            .unwrap();
+        encrypt_w.finalize().unwrap();
+        let out = encrypt_w.into_raw();
+        // Data + tag, ending exactly at the chunk boundary
+        assert_eq!(out.len() as u64, CHUNK_TAG_SIZE);
+
+        let config = EncryptionReaderConfig {
+            private_keys: Vec::new(),
+            encrypt_parameters: Some((KEY, NONCE)),
+            failsafe_mode: FailSafeReaderDecryptionMode::OnlyAuthenticatedData,
+        };
+        let mut encrypt_r = EncryptionLayerReader::new(
+            Box::new(RawLayerReader::new(Cursor::new(out.as_slice()))),
+            &config,
+        )
+        .unwrap();
+        encrypt_r.initialize().unwrap();
+        // Last data byte of the full chunk
+        let pos = encrypt_r.seek(SeekFrom::End(-1)).unwrap();
+        assert_eq!(pos, CHUNK_SIZE - 1);
+        let mut output = Vec::new();
+        encrypt_r.read_to_end(&mut output).unwrap();
+        assert_eq!(output, vec![0]);
     }
 }

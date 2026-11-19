@@ -1,0 +1,107 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://github.com/ANSSI-FR/MLA/blob/v1.5.0/.openvex/1.5.0.json",
+  "author": "ANSSI-FR",
+  "role": "Document Creator",
+  "version": 1,
+  "statements": [
+    {
+      "vulnerability": {
+        "@id": "https://rustsec.org/advisories/RUSTSEC-2026-0067.html",
+        "name": "RUSTSEC-2026-0067"
+      },
+      "products": [
+        {
+          "@id": "pkg:cargo/mlar"
+        }
+      ],
+      "status": "affected",
+      "action_statement": "Upgrade to 1.5.0, which ships the fixed dependency",
+      "timestamp": "2026-11-09T00:00:00Z"
+    },
+    {
+      "vulnerability": {
+        "@id": "https://rustsec.org/advisories/RUSTSEC-2026-0067.html",
+        "name": "RUSTSEC-2026-0067"
+      },
+      "products": [
+        {
+          "@id": "pkg:cargo/mlar@1.5.0"
+        }
+      ],
+      "status": "fixed",
+      "timestamp": "2026-11-09T00:00:00Z"
+    },
+    {
+      "vulnerability": {
+        "@id": "https://rustsec.org/advisories/RUSTSEC-2026-0068.html",
+        "name": "RUSTSEC-2026-0068"
+      },
+      "products": [
+        {
+          "@id": "pkg:cargo/mlar"
+        }
+      ],
+      "status": "affected",
+      "action_statement": "Upgrade to 1.5.0, which ships the fixed dependency",
+      "timestamp": "2026-11-09T00:00:00Z"
+    },
+    {
+      "vulnerability": {
+        "@id": "https://rustsec.org/advisories/RUSTSEC-2026-0068.html",
+        "name": "RUSTSEC-2026-0068"
+      },
+      "products": [
+        {
+          "@id": "pkg:cargo/mlar@1.5.0"
+        }
+      ],
+      "status": "fixed",
+      "timestamp": "2026-11-09T00:00:00Z"
+    },
+    {
+      "vulnerability": {
+        "@id": "https://rustsec.org/advisories/RUSTSEC-2026-0204.html",
+        "name": "RUSTSEC-2026-0204"
+      },
+      "products": [
+        {
+          "@id": "pkg:cargo/mlar"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "crossbeam-epoch is not a component of the mlar product: it is only reachable through the assert_fs dev-dependency (via globwalk, ignore and crossbeam-deque), which is neither linked into the release binaries nor compiled into builds of the mlar crate by its consumers. mlar 1.5.0 nonetheless lists crossbeam-epoch 0.9.21 in its lockfile for development builds (cargo test).",
+      "timestamp": "2026-11-09T00:00:00Z"
+    },
+    {
+      "vulnerability": {
+        "@id": "https://rustsec.org/advisories/RUSTSEC-2026-0253.html",
+        "name": "RUSTSEC-2026-0253"
+      },
+      "products": [
+        {
+          "@id": "pkg:cargo/mlar"
+        }
+      ],
+      "status": "affected",
+      "action_statement": "Upgrade to 1.5.0, which ships the fixed dependency",
+      "timestamp": "2026-11-09T00:00:00Z"
+    },
+    {
+      "vulnerability": {
+        "@id": "https://rustsec.org/advisories/RUSTSEC-2026-0253.html",
+        "name": "RUSTSEC-2026-0253"
+      },
+      "products": [
+        {
+          "@id": "pkg:cargo/mlar@1.5.0"
+        }
+      ],
+      "status": "fixed",
+      "timestamp": "2026-11-09T00:00:00Z"
+    }
+  ],
+  "timestamp": "2026-11-09T00:00:00Z",
+  "last_updated": "2026-11-09T00:00:00Z"
+}

@@ -1,0 +1,100 @@
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+      - version-0.4
+
+name: tests
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rust:
+          - 1.87.0 # Stable release as of 2025-05-17
+          - 1.80.0 # MSRV
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@master
+        name: Setup rust toolchain
+        with:
+          toolchain: ${{ matrix.rust }}
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        name: Load dependencies from cache
+
+      - name: Build with stable features
+        run: cargo build --features stable
+
+      - name: Build with unstable features
+        if: ${{ matrix.rust == 'nightly' }}
+        run: cargo build --all-features
+
+      - name: Build with minimal features
+        run: cargo build --no-default-features
+
+      - name: Test with stable features
+        run: cargo test --features stable
+
+      - name: Test with minimal features
+        run: cargo test --no-default-features
+
+      - name: Check for non-standard formatting
+        if: ${{ matrix.rust == 'stable' }}
+        run: cargo fmt --all -- --check
+
+      - name: Check for clippy hints
+        if: ${{ matrix.rust == 'stable' }}
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      # This fails on 1.64, but works on 1.66 and later.
+      # https://github.com/rust-lang/rust/issues/103306
+      - name: Test run targeting WASI
+        if: ${{ matrix.rust == 'stable' }}
+        run: |
+          curl https://wasmtime.dev/install.sh -sSf | bash
+          source ~/.bashrc
+          export PATH=$HOME/.wasmtime/bin/:$PATH
+          cargo install cargo-wasi
+          cargo wasi bench --no-default-features -- --test
+
+  nextest-compat:
+    name: Check compatibility with nextest
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust:
+          - stable
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: taiki-e/install-action@nextest
+
+      - run: ci/nextest-compat.sh
+
+  # If this fails, consider changing your text or adding something to .typos.toml
+  typos:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: check typos
+        uses: crate-ci/typos@v1.23.5
