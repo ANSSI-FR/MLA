@@ -4,24 +4,32 @@ build-backend = "maturin"
 
 [project]
 name = "mla-archive"
-description = "Bindings for MLA Archive manipulation"
+description = "Python bindings for MLA (Multi-Layer Archive): compressed, encrypted and signed archives with post-quantum hybridization"
 readme = { file = "README.md", content-type = "text/markdown" }
 authors = [
     { name="ANSSI", email="opensource@ssi.gouv.fr" },
 ]
 requires-python = ">=3.11"
 keywords = ["rust", "compression", "encryption", "signature", "pqc"]
-license = {file = "LICENSE.md"}
+license = "LGPL-3.0-only"
 classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Topic :: Security :: Cryptography",
     "Programming Language :: Rust",
+    "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
 dynamic = ["version"]
 
 [project.urls]
-documentation = "https://github.com/ANSSI-FR/MLA"
-repository = "https://github.com/ANSSI-FR/MLA"
+Homepage = "https://github.com/ANSSI-FR/MLA"
+Download = "https://github.com/ANSSI-FR/MLA/tarball/main"
+Documentation = "https://anssi-fr.github.io/MLA/"
+"Source Code" = "https://github.com/ANSSI-FR/MLA"
+Changelog = "https://github.com/ANSSI-FR/MLA/blob/main/bindings/python/CHANGELOG.md"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
