@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Version aligned with the `mla` Rust crate (2.1.0)**: the Python package now follows the MLA versioning scheme (previously 0.6.x, an independent numbering that did not reflect the bound crate version). Binds mla 2.1.0, same as before; no API change. Users pinning `==0.6.*` must move to `>=2.1`.
+- Packaging metadata: full project URLs (homepage, documentation, repository, changelog).
+- Lock refreshed: `ml-dsa` 0.1.1 → 0.1.2 (heap-offloaded ML-DSA signing; reduces stack usage in Debug builds) + transitive updates (hpke 0.15.1, ctutils 0.4.8, module-lattice 0.2.4).
+
 ## [0.6.2] - 2026-06-23
 
 ### Added / Changed
@@ -42,7 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Updated for compatibility with redesigned Rust APIs and signature handling.
   - Aligned with Python 3.13 support and safety across threads.
   - Improved integration with archive configuration and key signature verification.
-- Python bindings version bumped and aligned with MLA versioning.
+- Python bindings version bumped (numbering still independent at this point; alignment with the `mla` crate version starts at 2.1.0).
 
 ### Fixed
 
