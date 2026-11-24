@@ -14,6 +14,12 @@ Each release provides:
 
 ---
 
+## Versioning
+
+The C bindings version follows the `mla` Rust crate version they are built from. Headers are regenerated per release, so use headers and libraries from the *same* release. Archive format compatibility is independent of this versioning: archives written by MLA 2.x are readable by any 2.x library (see the [MLA book](https://anssi-fr.github.io/MLA) for the format specifications).
+
+---
+
 ## Build from source
 
 You can also compile the libraries manually using the Rust toolchain.

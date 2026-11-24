@@ -2,6 +2,10 @@
 
 Python bindings for the MLA (Multi-Layer Archive) format, enabling secure, compressed, and signed archives from Python.
 
+## Versioning
+
+The PyPI package version follows the `mla` Rust crate version it binds. Before 2.1.0 the package used its own 0.x numbering. Archive format compatibility is independent of this versioning: archives written by MLA 2.x are readable by any 2.x library (see the [MLA book](https://anssi-fr.github.io/MLA) for the format specifications).
+
 ## Installation
 
 Install from PyPI:
@@ -77,22 +81,16 @@ if __name__ == "__main__":
 - `archive[name] = data` — Add a file (write mode)
 - `archive[name]` — Read a file (read mode)
 - `archive.finalize()` — Finalize and close the archive (write mode)
-- Iteration: `for name in archive: ...`
+- Entry listing: `archive.keys()` and `archive.list_entries()`; iterate with `for name in archive.keys(): ...`
 
-See [tests](tests) for more usage examples.
+See the [bindings test suite](https://github.com/ANSSI-FR/MLA/tree/main/bindings/python/tests) for more usage examples.
 
 ## Type stub files
 
-The MLA Python bindings include type stub files (`.pyi`) to provide static type information for tools like `mypy`, IDEs, and linters.
-
-- The bindings expose a native extension module `mla.mla` along with the top-level `mla` package.
-- To support static analysis, there are stub files both for the top-level package (`mla/__init__.pyi`) and the native submodule (`mla/mla.pyi`).
-- These stubs allow type checkers to understand the full API surface, since compiled native modules lack introspectable Python signatures.
-- When developing or modifying the bindings, ensure all `.pyi` files are kept alongside their respective Python or compiled modules so tools can locate them.
-- To verify your stubs correctly match the runtime API (with `mypy` as an example), use:
+The bindings ship as a compiled native module `mla` with a `mla.pyi` stub alongside it, so `import mla` type-checks with mypy and IDEs. To check the stub against the runtime API, run the same command as the [stubtest CI run](https://github.com/ANSSI-FR/MLA/blob/main/.github/workflows/py-bindings.yml):
 
 ```sh
-python3 -m mypy.stubtest mla
+python3 -m mypy.stubtest --ignore-missing-stub mla
 ```
 
 ## Testing
