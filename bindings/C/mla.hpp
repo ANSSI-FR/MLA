@@ -303,4 +303,10 @@ MLAStatus mla_roarchive_extract(MLAReaderConfigHandle *config,
 /// Get info on an existing MLA archive
 MLAStatus mla_roarchive_info(MlaReadCallback read_callback, void *context, ArchiveInfo *info_out);
 
+/// Return a human-readable name for an `MLAStatus` code. The returned string
+/// is statically allocated and must not be freed: it stays valid for the
+/// whole program lifetime. Returns "Unknown" for codes not part of the enum
+/// (callers may pass any `uint64_t`).
+const char *mla_status_to_string(uint64_t status);
+
 }  // extern "C"
