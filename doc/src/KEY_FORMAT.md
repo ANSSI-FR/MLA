@@ -4,6 +4,24 @@ MLA can use cryptography for signature and/or encryption. Thus it needs to opera
 
 The string `||` denotes concatenation.
 
+## Design rationale
+
+The MLA key file format is a custom ASCII envelope rather than a PEM or ASN.1 (DER) representation.
+
+### No key-encoding dependency
+
+Key files contain only fixed ASCII strings and base64 payloads, so serializing or parsing a key requires no external encoding crate: the base64 codec is implemented in-tree (`mla/src/base64.rs`). MLA 1.x keys were PEM/DER, handled through the external `curve25519-parser` crate, which itself relied on the `pem` and `der-parser` crates; MLA 2.0 replaced that implementation with the format described here.
+
+### Strictness
+
+Any input that does not match the specification exactly is rejected as a deserialization error: base64 payloads follow RFC 4648 strictly (standard alphabet, `=` padding, length multiple of 4, no whitespace or line wrapping), every field has an explicit role (versioned header, typed headers, base64 payload fields, footer), and fields are separated by the `Sep` values defined below.
+
+### Versioned envelope
+
+The versioned header and footer let payloads evolve while the file format stays stable: within key file format version 1, the private decryption payload changed from storing the full ML-KEM-1024 private key to storing the ML-KEM-1024 seed.
+
+The remainder of this document is the authoritative, byte-level specification.
+
 ## Relation to MLA archive format
 
 | MLA Version | Key file format |
