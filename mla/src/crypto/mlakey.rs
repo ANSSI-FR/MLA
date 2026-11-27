@@ -1093,4 +1093,40 @@ mod tests {
         // Case 9: Invalid separator (single underscore)
         assert!(split_in_five_parts_without_buffering(b"p1_p2\np3\np4\np5").is_err());
     }
+
+    /// NIST ACVP ML-DSA-keyGen-FIPS204, ML-DSA-87 tcId 51 to 53, as SHA-256 of pk and sk
+    #[test]
+    #[allow(deprecated)]
+    fn mldsa_seed_matches_fips204_keygen_vectors() {
+        use hex_literal::hex;
+        use sha2::{Digest as _, Sha256};
+
+        let vectors = [
+            (
+                hex!("a16f5b0796703e2d1a0140a35cbf36efabe70e752ba59b6a9a0e9c4b05302f73"),
+                hex!("33f49649f05ec2fc3b050007b18ade043bbc8d1c0ded03a269d540486daaa5f4"),
+                hex!("c64e15742f27d7d8e2832f7d55a5c014f2c9536082f3a3181cfc6246908dd649"),
+            ),
+            (
+                hex!("e46d458a660285930d9656a88d14e751730cae7a4975b6e4fbe69e80e3f01e7f"),
+                hex!("f445cbb034fba125d17a8ac1be6ff617ddaca04a3e6b76ccf44e3dbc94cc7946"),
+                hex!("d679b094bb35dfba907e45fc449b5879353d7f32c65c6fe4430f55b2cef7a2f0"),
+            ),
+            (
+                hex!("719bce87e014abdb6a0f77ea1c84eac7dd674d5b03b27ece154ba7fdde8a0458"),
+                hex!("e0e816ae6f6cd0180674efd3191400694ab9a713e2b319de7f54ce9de45cf6ca"),
+                hex!("5c661320f32bed1bc5fe7f732d3e8305c164584a08c04da73b6008682b150387"),
+            ),
+        ];
+
+        for (xi, pk_sha256, sk_sha256) in vectors {
+            let seed = MLDSASeed::from_xi_32(xi);
+            let pk = seed.to_signing_verification_key().encode();
+            let sk = seed.to_expanded_signing_key().to_expanded();
+            assert_eq!(pk.len(), 2592);
+            assert_eq!(sk.len(), 4896);
+            assert_eq!(Sha256::digest(pk.as_slice()).as_slice(), pk_sha256);
+            assert_eq!(Sha256::digest(sk.as_slice()).as_slice(), sk_sha256);
+        }
+    }
 }
