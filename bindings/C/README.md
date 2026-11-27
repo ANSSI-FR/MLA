@@ -121,6 +121,8 @@ Valid levels: 1 (fastest) to 11 (best), 6 is default.
 
 All functions return `MLAStatus`. Use `MLA_STATUS(MLA_STATUS_SUCCESS)` to check for success.
 
+Convert a status code to a printable name with `const char* mla_status_to_string(uint64_t)` (`"Unknown"` for codes outside the enum; see `mla.h` and `mla.hpp` for memory ownership).
+
 ### Guidelines
 
 - Encryption and signing are explicit; choose your config accordingly.

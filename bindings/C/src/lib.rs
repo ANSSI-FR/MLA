@@ -1224,3 +1224,182 @@ fn _mla_roarchive_info<R: Read>(src: &mut R, info_out: *mut ArchiveInfo) -> MLAS
     }
     MLAStatus::Success
 }
+
+/// Single source of truth for the status variants: each entry feeds one
+/// `TryFrom<u64>` arm, one `status_name` arm and one `ALL_VARIANTS` element.
+///
+/// To add a variant: extend the enum, then add one entry here; the build
+/// fails with a non-exhaustive-match error until you do, because
+/// `status_name`'s generated match has no wildcard arm. Never add a wildcard
+/// arm to `status_name_match!`: exhaustiveness is the safety net.
+///
+/// Why the invocations below look the way they do: a `macro_rules!` body
+/// must expand to a whole expression, never to a bare list of match
+/// arms, so each callback builds its match or table from the whole
+/// list; and it cannot use variables from the surrounding code, so the
+/// matched value (`value`, `status`) travels through the invocation.
+/// Worked example, for two entries and one callback:
+///
+/// ```text
+/// for_each_status!(try_from_u64_match value)
+/// // expands to:
+/// match value {
+///     v if v == Self::Success as u64 => Ok(Self::Success),
+///     v if v == Self::IOError as u64 => Ok(Self::IOError),
+///     /* ... the whole list ... */
+///     _ => Err(()),
+/// }
+/// ```
+macro_rules! for_each_status {
+    ($callback:ident $($extra:tt)*) => {
+        $callback!({
+            (Success, c"Success"),
+            (IOError, c"IOError"),
+            (WrongMagic, c"WrongMagic"),
+            (UnsupportedVersion, c"UnsupportedVersion"),
+            (InvalidKeyFormat, c"InvalidKeyFormat"),
+            (WrongBlockSubFileType, c"WrongBlockSubFileType"),
+            (UTF8ConversionError, c"UTF8ConversionError"),
+            (EntryNameTooLong, c"EntryNameTooLong"),
+            (WrongArchiveWriterState, c"WrongArchiveWriterState"),
+            (AssertionError, c"AssertionError"),
+            (WrongReaderState, c"WrongReaderState"),
+            (WrongWriterState, c"WrongWriterState"),
+            (RandError, c"RandError"),
+            (PrivateKeyNeeded, c"PrivateKeyNeeded"),
+            (DeserializationError, c"DeserializationError"),
+            (SerializationError, c"SerializationError"),
+            (MissingMetadata, c"MissingMetadata"),
+            (BadAPIArgument, c"BadAPIArgument"),
+            (EndOfStream, c"EndOfStream"),
+            (ConfigErrorIncoherentPersistentConfig, c"ConfigErrorIncoherentPersistentConfig"),
+            (ConfigErrorCompressionLevelOutOfRange, c"ConfigErrorCompressionLevelOutOfRange"),
+            (ConfigErrorEncryptionKeyIsMissing, c"ConfigErrorEncryptionKeyIsMissing"),
+            (ConfigErrorPrivateKeyNotSet, c"ConfigErrorPrivateKeyNotSet"),
+            (ConfigErrorPrivateKeyNotFound, c"ConfigErrorPrivateKeyNotFound"),
+            (ConfigErrorDHKEMComputationError, c"ConfigErrorDHKEMComputationError"),
+            (ConfigErrorKeyCommitmentComputationError, c"ConfigErrorKeyCommitmentComputationError"),
+            (ConfigErrorKeyCommitmentCheckingError, c"ConfigErrorKeyCommitmentCheckingError"),
+            (ConfigErrorNoRecipients, c"ConfigErrorNoRecipients"),
+            (ConfigErrorMLKEMComputationError, c"ConfigErrorMLKEMComputationError"),
+            (ConfigErrorKeyWrappingComputationError, c"ConfigErrorKeyWrappingComputationError"),
+            (DuplicateEntryName, c"DuplicateEntryName"),
+            (AuthenticatedDecryptionWrongTag, c"AuthenticatedDecryptionWrongTag"),
+            (HKDFInvalidKeyLength, c"HKDFInvalidKeyLength"),
+            (HPKEError, c"HPKEError"),
+            (InvalidLastTag, c"InvalidLastTag"),
+            (EncryptionAskedButNotMarkedPresent, c"EncryptionAskedButNotMarkedPresent"),
+            (WrongEndMagic, c"WrongEndMagic"),
+            (NoValidSignatureFound, c"NoValidSignatureFound"),
+            (SignatureVerificationAskedButNoSignatureLayerFound, c"SignatureVerificationAskedButNoSignatureLayerFound"),
+            (MissingEndOfEncryptedInnerLayerMagic, c"MissingEndOfEncryptedInnerLayerMagic"),
+            (TruncatedTag, c"TruncatedTag"),
+            (UnknownTagPosition, c"UnknownTagPosition"),
+            (Other, c"Other"),
+            (MlaKeyParserError, c"MlaKeyParserError"),
+        } $($extra)*)
+    };
+}
+
+/// Callback for `for_each_status!`: expands the list into the match of
+/// `TryFrom<u64>`. The matched value is a raw `u64`: its 2^64 possible
+/// codes cannot be listed arm by arm, so this one carries the
+/// `_ => Err(())` fallback and no exhaustiveness check.
+macro_rules! try_from_u64_match {
+    ({ $(($variant:ident, $name:expr)),* $(,)? } $value:ident) => {
+        match $value {
+            $(v if v == Self::$variant as u64 => Ok(Self::$variant),)*
+            _ => Err(()),
+        }
+    };
+}
+
+impl TryFrom<u64> for MLAStatus {
+    type Error = ();
+
+    fn try_from(value: u64) -> Result<Self, Self::Error> {
+        for_each_status!(try_from_u64_match value)
+    }
+}
+
+/// Callback for `for_each_status!`: expands the list into the exhaustive
+/// variant-to-name match of `status_name`. No wildcard arm here: this is
+/// what makes a variant missing from the list fail the build.
+macro_rules! status_name_match {
+    ({ $(($variant:ident, $name:expr)),* $(,)? } $status:ident) => {
+        match $status {
+            $(MLAStatus::$variant => $name,)*
+        }
+    };
+}
+
+/// Human-readable name for each `MLAStatus` variant (no wildcard arm: see
+/// `for_each_status!` for why that matters).
+fn status_name(status: &MLAStatus) -> &'static CStr {
+    for_each_status!(status_name_match status)
+}
+
+/// Return a human-readable name for an `MLAStatus` code. The returned string
+/// is statically allocated and must not be freed: it stays valid for the
+/// whole program lifetime. Returns "Unknown" for codes not part of the enum
+/// (callers may pass any `uint64_t`).
+#[unsafe(no_mangle)]
+pub extern "C" fn mla_status_to_string(status: u64) -> *const c_char {
+    match MLAStatus::try_from(status) {
+        Ok(status) => status_name(&status).as_ptr(),
+        Err(()) => c"Unknown".as_ptr(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Callback for `for_each_status!`: expands the list into the test
+    /// table of (code, identifier, name) tuples iterated by
+    /// `every_registered_variant_round_trips_and_is_named`, so the
+    /// runtime coverage cannot drift from the data list.
+    macro_rules! all_variants {
+        ({ $(($variant:ident, $name:expr)),* $(,)? }) => {
+            &[$((MLAStatus::$variant as u64, stringify!($variant), $name),)*]
+        };
+    }
+    const ALL_VARIANTS: &[(u64, &str, &CStr)] = for_each_status!(all_variants);
+
+    #[test]
+    fn unknown_codes_fall_back_to_unknown() {
+        // 0x000C_0000 and 0x00F1_0000 are retired compatibility slots that
+        // old clients may still send. 0x0099_0000 was never assigned and
+        // u64::MAX probes an extreme value.
+        for code in [0x000C_0000u64, 0x00F1_0000, 0x0099_0000, u64::MAX] {
+            let name = unsafe { CStr::from_ptr(mla_status_to_string(code)) };
+            assert_eq!(name, c"Unknown");
+        }
+    }
+
+    /// Runtime coverage: every variant from `for_each_status!` round-trips
+    /// through `TryFrom<u64>`, and `mla_status_to_string` returns a real name
+    /// (not the "Unknown" fallback) that matches the variant's identifier,
+    /// so a copy-pasted wrong name in `for_each_status!` fails this test.
+    #[test]
+    fn every_registered_variant_round_trips_and_is_named() {
+        for &(raw, ident, name) in ALL_VARIANTS {
+            assert_eq!(
+                MLAStatus::try_from(raw).map(|parsed| parsed as u64),
+                Ok(raw),
+                "variant {raw:#010x} missing from for_each_status!"
+            );
+            assert_eq!(
+                name.to_str(),
+                Ok(ident),
+                "variant {raw:#010x} is not named as declared"
+            );
+            let returned = unsafe { CStr::from_ptr(mla_status_to_string(raw)) };
+            assert_eq!(
+                returned, name,
+                "variant {raw:#010x} is not returned as declared"
+            );
+            assert_ne!(name, c"Unknown", "variant {raw:#010x} has no name");
+        }
+    }
+}

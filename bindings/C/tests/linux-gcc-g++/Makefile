@@ -4,7 +4,7 @@ BUILDDIR ?= ../../../../target
 TARGET ?= x86_64-unknown-linux-gnu
 MLAR ?= $(BUILDDIR)/$(TARGET)/debug/mlar
 
-tests: test_create test_create_manykeys test_create_set_compression_level test_create_set_compression_level_fail_invalid test_create_interleaved test_create_no_early_close test_create_unicode test_create_stream test_create_write_byte_by_byte test_open test_info
+tests: test_create test_create_manykeys test_create_set_compression_level test_create_set_compression_level_fail_invalid test_create_interleaved test_create_no_early_close test_create_unicode test_create_stream test_create_write_byte_by_byte test_open test_info test_status_to_string
 
 test_create: $(MLAR) create.elf
 	./create.elf
@@ -46,6 +46,12 @@ test_create_stream: $(MLAR) create_stream.elf
 test_create_write_byte_by_byte: $(MLAR) create_write_byte_by_byte.elf
 	./create_write_byte_by_byte.elf
 	$(MLAR) cat test.txt --skip-signature-verification --input ./test.mla -k ../../../../samples/test_mlakey.mlapriv | grep -E '^Hello, World!$$'
+
+test_status_to_string: status_to_string.elf
+	./status_to_string.elf
+
+status_to_string.elf: status_to_string.c $(BUILDDIR)/$(TARGET)/debug/libmla.a
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 test_open: $(MLAR) open.elf
 	./open.elf
